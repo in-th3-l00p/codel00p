@@ -5,9 +5,11 @@ use crate::{
     events::HarnessEvent,
     session::{SessionId, SessionState, TurnId, UserMessage},
     tool_registry::ToolRegistry,
-    turn::{HarnessInferenceRequest, ModelClient, TurnOutcome},
+    tool_result::ToolResult,
+    turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TurnOutcome},
     workspace::Workspace,
 };
+use serde_json::json;
 
 pub struct AgentHarness {
     model_client: Arc<dyn ModelClient>,
@@ -37,38 +39,86 @@ impl AgentHarness {
             message_count: session_state.messages().len(),
         });
 
-        let response = self
-            .model_client
-            .infer(
-                HarnessInferenceRequest::new(session_state.clone()).with_runtime_context(
-                    self.workspace.root().display().to_string(),
-                    self.tools.names().into_iter().map(str::to_string).collect(),
-                ),
-            )
-            .await?;
+        let mut executed_tool_calls = Vec::new();
 
-        events.push(HarnessEvent::InferenceRequested {
-            provider: response.provider().to_string(),
-            model: response.model().to_string(),
-        });
-        events.push(HarnessEvent::InferenceCompleted {
-            finish_reason: response.finish_reason().map(str::to_string),
-        });
+        for iteration in 1..=self.max_iterations {
+            let response = self
+                .model_client
+                .infer(
+                    HarnessInferenceRequest::new(session_state.clone()).with_runtime_context(
+                        self.workspace.root().display().to_string(),
+                        self.tools.names().into_iter().map(str::to_string).collect(),
+                    ),
+                )
+                .await?;
 
-        let assistant_message = response.assistant_message().map(str::to_string);
-        if let Some(content) = &assistant_message {
-            session_state.push_assistant(content);
+            events.push(HarnessEvent::InferenceRequested {
+                provider: response.provider().to_string(),
+                model: response.model().to_string(),
+            });
+            events.push(HarnessEvent::InferenceCompleted {
+                finish_reason: response.finish_reason().map(str::to_string),
+            });
+
+            if response.tool_calls().is_empty() {
+                let assistant_message = response.assistant_message().map(str::to_string);
+                if let Some(content) = &assistant_message {
+                    session_state.push_assistant(content);
+                }
+
+                events.push(HarnessEvent::TurnCompleted {
+                    iterations: iteration,
+                });
+
+                return Ok(TurnOutcome {
+                    assistant_message,
+                    tool_calls: executed_tool_calls,
+                    events,
+                    session_state,
+                });
+            }
+
+            for tool_call in response.tool_calls() {
+                events.push(HarnessEvent::ToolCallRequested {
+                    name: tool_call.name().to_string(),
+                });
+
+                let result = match self
+                    .tools
+                    .execute(tool_call.name(), &self.workspace, tool_call.input().clone())
+                    .await
+                {
+                    Ok(result) => {
+                        events.push(HarnessEvent::ToolCallCompleted {
+                            name: tool_call.name().to_string(),
+                        });
+                        result
+                    }
+                    Err(error) => {
+                        let message = error.to_string();
+                        events.push(HarnessEvent::ToolCallFailed {
+                            name: tool_call.name().to_string(),
+                            message: message.clone(),
+                        });
+                        ToolResult::json(json!({ "error": message }))
+                    }
+                };
+
+                session_state.push_tool_result(
+                    tool_call.id(),
+                    tool_call.name(),
+                    result.content().to_string(),
+                );
+                executed_tool_calls.push(ExecutedToolCall {
+                    id: tool_call.id().to_string(),
+                    name: tool_call.name().to_string(),
+                    result,
+                });
+            }
         }
 
-        events.push(HarnessEvent::TurnCompleted {
-            iterations: 1.min(self.max_iterations),
-        });
-
-        Ok(TurnOutcome {
-            assistant_message,
-            tool_calls: Vec::new(),
-            events,
-            session_state,
+        Err(HarnessError::IterationLimit {
+            limit: self.max_iterations,
         })
     }
 }

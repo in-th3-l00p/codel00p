@@ -326,7 +326,7 @@ pub struct TurnOutcome {
   git commit -m "feat: run basic harness turns"
   ```
 
-- [ ] 8. Implement tool-call turn loop
+- [x] 8. Implement tool-call turn loop
 
   Extend the loop so model-requested tool calls are executed, tool results are
   appended, and inference continues until final text or budget exhaustion.

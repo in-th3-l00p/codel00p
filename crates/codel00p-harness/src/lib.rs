@@ -17,7 +17,8 @@ pub use tool_registry::ToolRegistry;
 pub use tool_result::ToolResult;
 pub use tools::Tool;
 pub use turn::{
-    HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall, TurnOutcome,
+    ExecutedToolCall, HarnessInferenceRequest, HarnessInferenceResponse, ModelClient,
+    ModelToolCall, TurnOutcome,
 };
 pub use workspace::Workspace;
 
