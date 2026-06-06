@@ -1,185 +1,124 @@
-# codel00p Architecture
+# Architecture
 
 codel00p is planned as a local-first agentic coding platform with optional cloud
-collaboration. Its architecture is organized around a local agent harness, a
-developer interface layer, and a cloud web platform for teams.
+collaboration.
 
-The main product promise is growing project memory: durable knowledge about a
-company's projects that improves future agent sessions and helps teammates work
-from shared context.
+At a high level:
 
-## System modules
+```text
+Developer
+  |
+  | CLI / Desktop
+  v
+Local agent harness
+  |
+  | uses
+  v
+Project memory + provider router + workspace tools
+  |
+  | optional sync
+  v
+Cloud organization platform
+```
 
-### Agent harness
+## Local runtime
 
-The agent harness is the runtime core. It owns the agent loop, tool execution,
-provider selection, local project access, and memory retrieval.
+The local runtime is the center of the system.
 
-Planned responsibilities:
+It should:
 
 - run agent sessions against a local workspace;
-- expose tools for reading, editing, testing, searching, and inspecting projects;
-- route inference requests to a selected provider;
-- retrieve relevant project memory before and during work;
-- suggest new memory entries from completed work;
-- operate without a connection to the cloud platform.
+- expose tools for repository work;
+- retrieve relevant project memory;
+- route inference requests to the selected provider;
+- produce traceable session events;
+- propose memory candidates after useful work;
+- continue working without cloud access.
 
-The harness should treat the cloud as optional configuration and synchronization,
-not as the runtime source of truth.
+The cloud platform should never be required for the basic local workflow.
 
-### Interface layer
+## Interfaces
 
-The interface layer gives developers and teams a way to control the harness and
-manage project knowledge.
+codel00p will have two main local interfaces.
 
-Planned surfaces:
+The CLI is the first practical interface. It should support fast developer
+workflows such as connecting a repo, starting a session, inspecting memory,
+choosing a provider, and syncing approved memory.
 
-- **CLI:** fast local workflows for starting sessions, selecting providers,
-  connecting projects, inspecting memory, and triggering sync.
-- **Electron app:** a richer desktop interface for agent sessions, project
-  dashboards, memory review, team activity, and project management.
+The Electron app is the polished local control center. It should make session
+supervision, memory review, project navigation, and team activity easier to
+understand than a terminal-only workflow.
 
-The CLI should be the first practical interface because it keeps the earliest
-implementation close to developer workflows. The Electron app can build on the
-same local harness APIs once the runtime contracts are stable.
+Both interfaces should talk to the same local harness contracts.
 
-### Cloud web platform
+## Cloud platform
 
-The cloud platform adds organization-level collaboration.
+The cloud platform adds team coordination.
 
-Planned responsibilities:
+It should manage:
 
-- organization, team, project, role, and invitation management;
-- organization-provided inference provider configuration;
-- shared project memory sync;
-- access control around projects and memory;
-- team activity, audit history, and agent session visibility;
-- billing-ready boundaries for future hosted services.
+- organizations;
+- teams;
+- users and roles;
+- projects;
+- invitations;
+- organization provider policy;
+- shared memory sync;
+- audit history and team activity.
 
-The cloud platform should not be required for single-user local operation.
-
-## Operating modes
-
-### Local-only mode
-
-In local-only mode, the user runs the harness on their machine and configures
-their own inference provider. Project memory is stored locally and used by local
-agent sessions.
-
-This mode is required for privacy-sensitive projects, offline-friendly workflows,
-and developers who do not want organization-managed infrastructure.
-
-### Cloud-connected mode
-
-In cloud-connected mode, the local harness connects to an organization. The
-organization may provide inference settings, team membership, project
-configuration, and shared memory.
-
-The local harness still executes work locally unless a future hosted execution
-mode is intentionally added.
-
-### Hybrid provider mode
-
-In hybrid mode, a user can choose between local and organization-provided
-inference options when organization policy allows it.
-
-This lets teams balance cost, privacy, speed, and model quality on a
-project-by-project or session-by-session basis.
-
-## Project memory model
-
-Project memory should be compact, reviewable, and useful. It should not be a raw
-archive of every prompt, response, and terminal output.
-
-Recommended memory categories:
-
-- **Codebase facts:** module responsibilities, entry points, important paths,
-  service boundaries, dependency notes.
-- **Architecture decisions:** decisions, rationale, rejected alternatives, and
-  consequences.
-- **Workflows:** setup, test, deploy, debug, release, and rollback procedures.
-- **Team conventions:** coding style, review expectations, naming preferences,
-  documentation preferences.
-- **Task outcomes:** summaries of important completed work and evidence that
-  future agents should know.
-- **Domain glossary:** business terms, product language, customer-specific
-  concepts, and project vocabulary.
-
-## Memory lifecycle
-
-The memory lifecycle should make memory trustworthy:
-
-1. **Observe:** agent sessions, developer actions, code changes, and team
-   decisions produce candidate knowledge.
-2. **Extract:** codel00p turns useful context into compact memory candidates.
-3. **Review:** a developer or team member approves, edits, rejects, or scopes the
-   candidate.
-4. **Store:** approved memory is saved locally and optionally synced to the
-   organization.
-5. **Retrieve:** future agent sessions load relevant memory based on project,
-   task, files, and user intent.
-6. **Refine:** stale or low-value memory is corrected, merged, archived, or
-   deleted.
-
-Review is important. A memory system that stores everything will become noisy; a
-memory system that stores only reviewed knowledge can become a real team asset.
+The cloud platform should provide governance and collaboration. It should not
+replace the local harness as the default runtime.
 
 ## Provider routing
 
-codel00p should support provider choice without binding the whole architecture
-to one vendor.
-
-Initial provider routing should support:
+Inference may come from:
 
 - user-owned local credentials;
-- organization-provided credentials or proxy configuration;
-- per-session provider selection;
-- clear separation between provider configuration and project memory.
+- organization-managed credentials;
+- a proxy configured by the organization;
+- future self-hosted or local model endpoints.
 
-Provider policy belongs to the selected operating mode. In local-only mode, the
-user controls the provider. In cloud-connected mode, the organization may expose
-approved providers and restrictions.
+Provider configuration must stay separate from project memory. A project memory
+entry should remain useful even if the team changes model providers.
 
-## Hermes research spike
+## Hermes decision
 
-Hermes Agent is the preferred reference candidate for the harness, but the
-integration strategy is not settled.
+The harness is intended to be based on or inspired by Hermes Agent, but the
+integration strategy is deliberately unresolved.
 
-The research spike should evaluate four paths:
+The research project should evaluate:
 
-1. **Direct dependency:** use Hermes as the runtime foundation.
-2. **Adapter:** keep codel00p interfaces stable while delegating execution to
-   Hermes.
-3. **Fork:** specialize Hermes where deeper control is required.
-4. **Custom harness:** build a dedicated harness inspired by Hermes concepts.
+- direct dependency;
+- adapter;
+- fork;
+- custom harness inspired by Hermes.
 
 Decision criteria:
 
 - license compatibility;
-- API and project stability;
-- tool registration and execution model;
+- API stability;
+- tool execution model;
 - provider routing flexibility;
-- memory model compatibility;
+- memory integration;
 - local-first operation;
-- extension and plugin design;
-- security boundaries for file and command access;
-- observability and session history;
-- maintenance cost.
+- extension design;
+- security boundaries;
+- observability;
+- long-term maintenance cost.
 
-Until the research spike is complete, public documentation should say that the
-harness is based on or inspired by Hermes, not that Hermes is already integrated.
+Until that research is complete, documentation should avoid claiming that Hermes
+is already integrated.
 
-## Early implementation order
+## Boundaries
 
-Recommended order:
+The clean boundary is:
 
-1. Define the memory model and local storage format.
-2. Research Hermes and decide dependency, adapter, fork, or custom harness.
-3. Build a CLI prototype that can run local sessions and read/write memory.
-4. Add provider selection for local credentials.
-5. Add memory review flows.
-6. Build the Electron app on top of stable local harness APIs.
-7. Add cloud organization, team, provider policy, and memory sync features.
+- `memory` stores and retrieves project knowledge;
+- `harness` runs agent sessions;
+- `providers` routes inference;
+- `protocol` defines shared data contracts;
+- `cli` and `desktop` expose user interfaces;
+- `sync` coordinates local/cloud knowledge;
+- `cloud` manages organizations, teams, policies, and shared state.
 
-This order keeps the core local harness and memory loop useful before the cloud
-platform exists.
+The final `codel00p` product integrates these modules.
