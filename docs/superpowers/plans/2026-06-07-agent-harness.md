@@ -387,7 +387,7 @@ pub struct TurnOutcome {
   git commit -m "feat: connect harness to providers"
   ```
 
-- [ ] 10. Document and verify the crate
+- [x] 10. Document and verify the crate
 
   Update public docs and run full workspace checks.
 

@@ -39,9 +39,9 @@ It should:
 The runtime may be local, cloud-connected, or eventually hosted. The important
 contract is that agent work can use and improve reviewed project knowledge.
 
-The first runtime implementation should be `codel00p-harness`, a Rust crate
-that runs deterministic read-only agent turns through `codel00p-providers`. See
-[Agent Harness](harness.md) for the initial design.
+The first runtime implementation is `codel00p-harness`, a Rust crate that runs
+deterministic read-only agent turns and adapts them to `codel00p-providers`.
+See [Agent Harness](harness.md) for the current harness design.
 
 ## Interfaces
 

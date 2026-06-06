@@ -67,13 +67,17 @@ asset is the project knowledge that codel00p captures and makes reusable.
 
 ## Current implementation
 
-The first Rust module has started: [codel00p-providers](crates/codel00p-providers).
-It currently provides the provider registry, high-level inference client,
-OpenAI-compatible Chat Completions transport, tool calls, route inspection, and
-provider policy enforcement.
+The first Rust modules have started:
+
+- [codel00p-providers](crates/codel00p-providers): provider registry,
+  high-level inference client, OpenAI-compatible Chat Completions transport,
+  tool calls, route inspection, and provider policy enforcement.
+- [codel00p-harness](crates/codel00p-harness): read-only agent turn loop,
+  workspace-safe tools, deterministic events, model-client boundary, and
+  provider adapter.
 
 ## Current status
 
-codel00p is in the blueprint stage. The immediate goal is to make the technical
-direction clear enough for focused implementation, starting with project memory,
-the agent harness, and the CLI.
+codel00p is in early implementation. The immediate goal is to connect provider
+inference, the read-only harness, project memory, and the CLI into a usable
+developer workflow.

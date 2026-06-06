@@ -4,6 +4,11 @@
 loop, tool execution, event stream, workspace boundary, and integration with
 `codel00p-providers`.
 
+The first implementation now exists under
+[`crates/codel00p-harness`](../crates/codel00p-harness). It supports
+deterministic read-only turns, fake model-client tests, workspace-safe tools,
+bounded tool-call loops, and a provider adapter.
+
 The first harness milestone should be intentionally small: read-only repository
 work, deterministic tests, and a clean public interface that future CLI,
 desktop, cloud, and memory modules can share.
@@ -28,7 +33,7 @@ policy, cloud coordination, and module boundaries are product-level concerns.
 
 ## First Milestone
 
-Build a minimal read-only harness:
+The minimal read-only harness:
 
 1. accept a user turn;
 2. build context from session state and workspace metadata;
@@ -39,7 +44,7 @@ Build a minimal read-only harness:
 7. emit typed events for every important step;
 8. return a structured `TurnOutcome`.
 
-Editing tools are deliberately excluded from the first milestone. File mutation
+Editing tools remain deliberately excluded from the first milestone. File mutation
 needs approvals, patch safety, rollback, and stronger audit behavior.
 
 ## Public Interface
@@ -175,4 +180,3 @@ Required tests:
 
 Live provider tests should stay in `codel00p-providers`. Harness tests should
 use fake providers so the harness loop remains deterministic.
-
