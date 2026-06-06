@@ -15,6 +15,9 @@ pub use session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage};
 pub use tool_registry::ToolRegistry;
 pub use tool_result::ToolResult;
 pub use tools::Tool;
+pub use turn::{
+    HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall, TurnOutcome,
+};
 pub use workspace::Workspace;
 
 pub fn crate_name() -> &'static str {

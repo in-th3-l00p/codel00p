@@ -253,7 +253,7 @@ pub struct TurnOutcome {
   git commit -m "feat: add read-only harness tools"
   ```
 
-- [ ] 6. Define model-client boundary and fake test client
+- [x] 6. Define model-client boundary and fake test client
 
   Keep the harness independent from live providers by introducing a small local
   trait that can be implemented by fakes and by the provider adapter.
