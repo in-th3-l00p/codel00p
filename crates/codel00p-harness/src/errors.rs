@@ -11,6 +11,9 @@ pub enum HarnessError {
     #[error("tool not found: {name}")]
     ToolNotFound { name: String },
 
+    #[error("invalid input for tool {name}: {message}")]
+    InvalidToolInput { name: String, message: String },
+
     #[error("tool failed: {name}: {message}")]
     ToolFailed { name: String, message: String },
 

@@ -2,7 +2,12 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use serde_json::Value;
 
-use crate::{errors::HarnessError, tool_result::ToolResult, tools::Tool, workspace::Workspace};
+use crate::{
+    errors::HarnessError,
+    tool_result::ToolResult,
+    tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool},
+    workspace::Workspace,
+};
 
 #[derive(Clone, Default)]
 pub struct ToolRegistry {
@@ -12,6 +17,13 @@ pub struct ToolRegistry {
 impl ToolRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn read_only_defaults() -> Self {
+        Self::new()
+            .with_tool(ListFilesTool)
+            .with_tool(ReadFileTool)
+            .with_tool(SearchTextTool)
     }
 
     pub fn with_tool<T>(mut self, tool: T) -> Self

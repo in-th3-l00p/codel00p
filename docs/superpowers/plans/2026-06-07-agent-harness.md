@@ -223,7 +223,7 @@ pub struct TurnOutcome {
   git commit -m "feat: add harness tool registry"
   ```
 
-- [ ] 5. Implement read-only tools
+- [x] 5. Implement read-only tools
 
   Add `list_files`, `read_file`, and `search_text` behind
   `ToolRegistry::read_only_defaults()`.
