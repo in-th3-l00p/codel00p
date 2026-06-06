@@ -36,5 +36,7 @@ pub use credentials::Credential;
 pub use error::ProviderError;
 pub use profile::{ApiMode, AuthType, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
-pub use request::{ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole};
+pub use request::{
+    ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole, ToolDefinition,
+};
 pub use response::{InferenceResponse, ToolCall, Usage};

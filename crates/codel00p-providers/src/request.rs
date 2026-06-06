@@ -45,6 +45,7 @@ pub struct InferenceRequest {
     pub provider: String,
     pub model: String,
     pub messages: Vec<ChatMessage>,
+    pub tools: Vec<ToolDefinition>,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
     pub base_url: Option<String>,
@@ -60,10 +61,33 @@ impl InferenceRequest {
                 provider: provider.into(),
                 model: model.into(),
                 messages: Vec::new(),
+                tools: Vec::new(),
                 temperature: None,
                 max_output_tokens: None,
                 base_url: None,
             },
+        }
+    }
+}
+
+/// Provider-neutral function tool definition.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: Value,
+}
+
+impl ToolDefinition {
+    pub fn function(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            parameters,
         }
     }
 }
@@ -77,6 +101,11 @@ pub struct InferenceRequestBuilder {
 impl InferenceRequestBuilder {
     pub fn message(mut self, message: ChatMessage) -> Self {
         self.request.messages.push(message);
+        self
+    }
+
+    pub fn tool(mut self, tool: ToolDefinition) -> Self {
+        self.request.tools.push(tool);
         self
     }
 
@@ -99,4 +128,5 @@ impl InferenceRequestBuilder {
         self.request
     }
 }
+use serde_json::Value;
 

@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    Usage,
+    ToolCall, ToolDefinition, Usage,
 };
 
 pub(crate) struct ChatCompletionsTransport {
@@ -74,6 +74,8 @@ struct ChatCompletionsRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<ChatCompletionsTool>,
 }
 
 impl ChatCompletionsRequest {
@@ -87,6 +89,11 @@ impl ChatCompletionsRequest {
                 .collect(),
             temperature: request.temperature,
             max_tokens: request.max_output_tokens,
+            tools: request
+                .tools
+                .into_iter()
+                .map(ChatCompletionsTool::from)
+                .collect(),
         }
     }
 }
@@ -113,6 +120,33 @@ impl From<ChatMessage> for ChatCompletionsMessage {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct ChatCompletionsTool {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: ChatCompletionsFunctionTool,
+}
+
+impl From<ToolDefinition> for ChatCompletionsTool {
+    fn from(tool: ToolDefinition) -> Self {
+        Self {
+            kind: "function",
+            function: ChatCompletionsFunctionTool {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCompletionsFunctionTool {
+    name: String,
+    description: String,
+    parameters: Value,
+}
+
 #[derive(Debug, Deserialize)]
 struct ChatCompletionsResponse {
     choices: Vec<ChatChoice>,
@@ -130,9 +164,18 @@ impl ChatCompletionsResponse {
                 message: "missing choices[0]".to_string(),
             })?;
 
+        let ChatMessageResponse {
+            content,
+            tool_calls,
+        } = choice.message;
+        let tool_calls = tool_calls
+            .into_iter()
+            .map(ChatToolCallResponse::normalize)
+            .collect();
+
         Ok(InferenceResponse {
-            content: choice.message.content,
-            tool_calls: Vec::new(),
+            content,
+            tool_calls,
             finish_reason: choice.finish_reason,
             reasoning: None,
             usage: self.usage.map(ChatUsage::normalize),
@@ -150,6 +193,32 @@ struct ChatChoice {
 #[derive(Debug, Deserialize)]
 struct ChatMessageResponse {
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Vec<ChatToolCallResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatToolCallResponse {
+    id: Option<String>,
+    function: ChatToolFunctionResponse,
+}
+
+impl ChatToolCallResponse {
+    fn normalize(self) -> ToolCall {
+        ToolCall {
+            id: self.id,
+            name: self.function.name,
+            arguments: serde_json::from_str(&self.function.arguments)
+                .unwrap_or(Value::String(self.function.arguments)),
+            provider_data: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatToolFunctionResponse {
+    name: String,
+    arguments: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,4 +251,3 @@ struct PromptTokenDetails {
     #[allow(dead_code)]
     other: Option<Value>,
 }
-
