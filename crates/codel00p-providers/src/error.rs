@@ -15,6 +15,10 @@ pub enum ProviderError {
     #[error("provider `{provider}` requires credentials")]
     MissingCredential { provider: String },
 
+    /// The active policy rejected the provider route.
+    #[error("provider `{provider}` was denied by policy: {reason}")]
+    PolicyDenied { provider: String, reason: String },
+
     /// The provider returned a response that could not be parsed into codel00p's shape.
     #[error("invalid response from provider `{provider}`: {message}")]
     InvalidResponse { provider: String, message: String },

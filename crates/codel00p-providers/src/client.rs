@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderRegistry,
-    ResolvedInferenceRoute, default_registry, transports::chat_completions::ChatCompletionsTransport,
+    ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderPolicy,
+    ProviderRegistry, ResolvedInferenceRoute, default_registry,
+    transports::chat_completions::ChatCompletionsTransport,
 };
 
 /// High-level inference facade used by codel00p modules.
@@ -10,6 +11,7 @@ use crate::{
 pub struct InferenceClient {
     registry: ProviderRegistry,
     credentials: BTreeMap<String, Credential>,
+    policy: ProviderPolicy,
 }
 
 impl InferenceClient {
@@ -17,6 +19,7 @@ impl InferenceClient {
         InferenceClientBuilder {
             registry: default_registry(),
             credentials: BTreeMap::new(),
+            policy: ProviderPolicy::allow_all(),
         }
     }
 
@@ -71,6 +74,8 @@ impl InferenceClient {
             .or_else(|| self.credentials.get(&request.provider))
             .map(|_| "configured".to_string());
 
+        self.policy.check_provider(profile.id)?;
+
         Ok(ResolvedInferenceRoute {
             requested_provider: request.provider.clone(),
             provider: profile.id.to_string(),
@@ -86,6 +91,7 @@ impl InferenceClient {
 pub struct InferenceClientBuilder {
     registry: ProviderRegistry,
     credentials: BTreeMap<String, Credential>,
+    policy: ProviderPolicy,
 }
 
 impl InferenceClientBuilder {
@@ -99,7 +105,13 @@ impl InferenceClientBuilder {
         self
     }
 
+    pub fn policy(mut self, policy: ProviderPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
     pub fn build(self) -> InferenceClient {
+        let policy = self.policy.canonicalize(&self.registry);
         let credentials = self
             .credentials
             .into_iter()
@@ -115,6 +127,7 @@ impl InferenceClientBuilder {
         InferenceClient {
             registry: self.registry,
             credentials,
+            policy,
         }
     }
 }

@@ -25,6 +25,7 @@
 mod client;
 mod credentials;
 mod error;
+mod policy;
 mod profile;
 mod registry;
 mod request;
@@ -35,6 +36,7 @@ mod transports;
 pub use client::{InferenceClient, InferenceClientBuilder};
 pub use credentials::Credential;
 pub use error::ProviderError;
+pub use policy::ProviderPolicy;
 pub use profile::{ApiMode, AuthType, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
 pub use request::{
