@@ -274,6 +274,30 @@ optional API key, model ID, timeout, custom headers, and health-check behavior.
 13. Add conformance tests using captured request/response fixtures for every
     supported API mode.
 
+## Current implementation status
+
+The first implementation now lives in `crates/codel00p-providers`.
+
+Implemented:
+
+- Rust workspace and `codel00p-providers` crate;
+- `InferenceClient` facade;
+- `InferenceRequest` and `InferenceResponse`;
+- chat messages and function tool definitions;
+- normalized tool calls and token usage;
+- `ProviderProfile`, `ProviderRegistry`, `ApiMode`, and `AuthType`;
+- first-wave provider profiles and aliases;
+- inspectable `ResolvedInferenceRoute`;
+- provider allowlist policy;
+- OpenAI-compatible Chat Completions transport with mocked HTTP tests.
+
+Next transports:
+
+- Anthropic Messages;
+- OpenAI Responses;
+- AWS Bedrock Converse;
+- Gemini native.
+
 ## Non-goals for the first pass
 
 - Porting Hermes' Python implementation directly.
@@ -281,4 +305,3 @@ optional API key, model ID, timeout, custom headers, and health-check behavior.
 - Coupling provider state to durable project memory.
 - Building a plugin ABI before the built-in Rust contract is proven.
 - Optimizing cost routing before correctness, policy, and observability work.
-

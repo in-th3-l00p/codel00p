@@ -64,6 +64,13 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Current implementation
+
+The first Rust module has started: [codel00p-providers](crates/codel00p-providers).
+It currently provides the provider registry, high-level inference client,
+OpenAI-compatible Chat Completions transport, tool calls, route inspection, and
+provider policy enforcement.
+
 ## Current status
 
 codel00p is in the blueprint stage. The immediate goal is to make the technical
