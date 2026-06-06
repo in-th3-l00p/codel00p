@@ -1,0 +1,58 @@
+/// Wire protocol used for a provider request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ApiMode {
+    ChatCompletions,
+    AnthropicMessages,
+    Responses,
+    BedrockConverse,
+    Gemini,
+    ExternalProcess,
+}
+
+/// How credentials are resolved for a provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AuthType {
+    ApiKey,
+    OAuthExternal,
+    AwsSdk,
+    GitHubCopilot,
+    CloudProxy,
+    Custom,
+}
+
+/// High-level provider capabilities used by policy and UI layers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ProviderCapabilities {
+    pub tools: bool,
+    pub streaming: bool,
+    pub vision: bool,
+    pub reasoning: bool,
+}
+
+impl ProviderCapabilities {
+    pub const fn agentic() -> Self {
+        Self {
+            tools: true,
+            streaming: true,
+            vision: false,
+            reasoning: true,
+        }
+    }
+}
+
+/// Declarative provider metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderProfile {
+    pub id: &'static str,
+    pub aliases: &'static [&'static str],
+    pub display_name: &'static str,
+    pub description: &'static str,
+    pub api_mode: ApiMode,
+    pub auth_type: AuthType,
+    pub env_vars: &'static [&'static str],
+    pub default_base_url: Option<&'static str>,
+    pub models_url: Option<&'static str>,
+    pub default_aux_model: Option<&'static str>,
+    pub capabilities: ProviderCapabilities,
+}
+

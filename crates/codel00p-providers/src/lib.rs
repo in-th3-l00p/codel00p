@@ -1,0 +1,40 @@
+//! codel00p inference provider abstraction.
+//!
+//! The public facade is intentionally small:
+//!
+//! ```no_run
+//! # use codel00p_providers::{ChatMessage, Credential, InferenceClient, InferenceRequest, default_registry};
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = InferenceClient::builder()
+//!     .registry(default_registry())
+//!     .credential("openai", Credential::api_key("secret"))
+//!     .build();
+//!
+//! let response = client
+//!     .complete(
+//!         InferenceRequest::builder("openai", "gpt-5")
+//!             .message(ChatMessage::user("Summarize this project."))
+//!             .build(),
+//!     )
+//!     .await?;
+//! # let _ = response;
+//! # Ok(())
+//! # }
+//! ```
+
+mod client;
+mod credentials;
+mod error;
+mod profile;
+mod registry;
+mod request;
+mod response;
+
+pub use client::{InferenceClient, InferenceClientBuilder};
+pub use credentials::Credential;
+pub use error::ProviderError;
+pub use profile::{ApiMode, AuthType, ProviderCapabilities, ProviderProfile};
+pub use registry::{ProviderRegistry, default_registry};
+pub use request::{ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole};
+pub use response::{InferenceResponse, ToolCall, Usage};
+
