@@ -42,4 +42,3 @@ fn provider_policy_accepts_aliases_but_enforces_canonical_provider_ids() {
 
     assert_eq!(route.provider, "anthropic");
 }
-

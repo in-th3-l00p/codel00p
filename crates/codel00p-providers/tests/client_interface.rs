@@ -1,6 +1,6 @@
 use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, InferenceResponse,
-    MessageRole, ProviderError, default_registry,
+    ChatMessage, Credential, InferenceClient, InferenceRequest, InferenceResponse, MessageRole,
+    ProviderError, default_registry,
 };
 
 #[tokio::test]
@@ -55,7 +55,10 @@ fn normalized_response_is_provider_neutral_but_keeps_provider_data() {
     assert_eq!(response.content.as_deref(), Some("done"));
     assert_eq!(response.finish_reason.as_deref(), Some("stop"));
     assert_eq!(
-        response.provider_data.get("response_id").and_then(|value| value.as_str()),
+        response
+            .provider_data
+            .get("response_id")
+            .and_then(|value| value.as_str()),
         Some("resp_123")
     );
 }

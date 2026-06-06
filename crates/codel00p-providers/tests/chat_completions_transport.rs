@@ -91,4 +91,3 @@ async fn chat_completions_requires_credentials_for_remote_requests() {
 
     assert!(matches!(error, ProviderError::MissingCredential { provider } if provider == "custom"));
 }
-

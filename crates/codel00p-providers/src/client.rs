@@ -28,12 +28,11 @@ impl InferenceClient {
         request: InferenceRequest,
     ) -> Result<InferenceResponse, ProviderError> {
         let route = self.resolve(&request)?;
-        let credential = self
-            .credentials
-            .get(&route.provider)
-            .ok_or_else(|| ProviderError::MissingCredential {
+        let credential = self.credentials.get(&route.provider).ok_or_else(|| {
+            ProviderError::MissingCredential {
                 provider: route.provider.clone(),
-            })?;
+            }
+        })?;
 
         match route.api_mode {
             ApiMode::ChatCompletions => {
@@ -53,12 +52,11 @@ impl InferenceClient {
         &self,
         request: &InferenceRequest,
     ) -> Result<ResolvedInferenceRoute, ProviderError> {
-        let profile =
-            self.registry
-                .resolve(&request.provider)
-                .ok_or_else(|| ProviderError::UnknownProvider {
-                    provider: request.provider.clone(),
-                })?;
+        let profile = self.registry.resolve(&request.provider).ok_or_else(|| {
+            ProviderError::UnknownProvider {
+                provider: request.provider.clone(),
+            }
+        })?;
 
         let base_url = request
             .base_url

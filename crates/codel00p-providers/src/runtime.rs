@@ -12,4 +12,3 @@ pub struct ResolvedInferenceRoute {
     pub base_url: String,
     pub credential_source: Option<String>,
 }
-

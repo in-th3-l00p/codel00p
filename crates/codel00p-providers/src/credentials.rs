@@ -10,4 +10,3 @@ impl Credential {
         Self::ApiKey(value.into())
     }
 }
-

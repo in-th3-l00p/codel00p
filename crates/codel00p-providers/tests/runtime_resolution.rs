@@ -62,4 +62,3 @@ fn client_resolve_reports_missing_base_url_before_credentials() {
 
     assert!(matches!(error, ProviderError::MissingBaseUrl { provider } if provider == "custom"));
 }
-

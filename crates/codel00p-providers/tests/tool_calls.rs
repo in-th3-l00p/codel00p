@@ -82,4 +82,3 @@ async fn chat_completions_sends_tools_and_normalizes_tool_calls() {
     assert_eq!(response.tool_calls[0].name, "git_status");
     assert_eq!(response.tool_calls[0].arguments, json!({"short": true}));
 }
-

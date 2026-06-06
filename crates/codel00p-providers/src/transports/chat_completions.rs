@@ -53,14 +53,13 @@ impl ChatCompletionsTransport {
             });
         }
 
-        let wire_response =
-            response
-                .json::<ChatCompletionsResponse>()
-                .await
-                .map_err(|error| ProviderError::InvalidResponse {
-                    provider: provider.to_string(),
-                    message: error.to_string(),
-                })?;
+        let wire_response = response
+            .json::<ChatCompletionsResponse>()
+            .await
+            .map_err(|error| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
 
         wire_response.normalize(provider)
     }
@@ -155,14 +154,14 @@ struct ChatCompletionsResponse {
 
 impl ChatCompletionsResponse {
     fn normalize(self, provider: &str) -> Result<InferenceResponse, ProviderError> {
-        let choice = self
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| ProviderError::InvalidResponse {
-                provider: provider.to_string(),
-                message: "missing choices[0]".to_string(),
-            })?;
+        let choice =
+            self.choices
+                .into_iter()
+                .next()
+                .ok_or_else(|| ProviderError::InvalidResponse {
+                    provider: provider.to_string(),
+                    message: "missing choices[0]".to_string(),
+                })?;
 
         let ChatMessageResponse {
             content,

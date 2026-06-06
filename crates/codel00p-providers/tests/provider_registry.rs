@@ -1,6 +1,5 @@
 use codel00p_providers::{
-    ApiMode, AuthType, ChatMessage, Credential, InferenceClient, InferenceRequest,
-    default_registry,
+    ApiMode, AuthType, ChatMessage, Credential, InferenceClient, InferenceRequest, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
@@ -106,4 +105,3 @@ async fn client_credentials_can_be_registered_by_alias() {
     chat.assert_async().await;
     assert_eq!(response.content.as_deref(), Some("ok"));
 }
-

@@ -129,4 +129,3 @@ impl InferenceRequestBuilder {
     }
 }
 use serde_json::Value;
-

@@ -53,7 +53,11 @@ pub fn default_registry() -> ProviderRegistry {
             description: "Anthropic Messages API",
             api_mode: ApiMode::AnthropicMessages,
             auth_type: AuthType::ApiKey,
-            env_vars: &["ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
+            env_vars: &[
+                "ANTHROPIC_API_KEY",
+                "ANTHROPIC_TOKEN",
+                "CLAUDE_CODE_OAUTH_TOKEN",
+            ],
             default_base_url: Some("https://api.anthropic.com"),
             models_url: Some("https://api.anthropic.com/v1/models"),
             default_aux_model: None,
@@ -136,7 +140,14 @@ pub fn default_registry() -> ProviderRegistry {
         })
         .register(ProviderProfile {
             id: "custom",
-            aliases: &["ollama", "local", "vllm", "llamacpp", "llama.cpp", "llama-cpp"],
+            aliases: &[
+                "ollama",
+                "local",
+                "vllm",
+                "llamacpp",
+                "llama.cpp",
+                "llama-cpp",
+            ],
             display_name: "Custom OpenAI-compatible",
             description: "Configured OpenAI-compatible endpoint",
             api_mode: ApiMode::ChatCompletions,

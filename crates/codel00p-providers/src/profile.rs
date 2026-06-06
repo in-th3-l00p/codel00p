@@ -55,4 +55,3 @@ pub struct ProviderProfile {
     pub default_aux_model: Option<&'static str>,
     pub capabilities: ProviderCapabilities,
 }
-
