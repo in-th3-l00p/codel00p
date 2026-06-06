@@ -37,7 +37,13 @@ impl InferenceClient {
         match route.api_mode {
             ApiMode::ChatCompletions => {
                 ChatCompletionsTransport::new()
-                    .complete(&route.provider, &route.base_url, credential, request)
+                    .complete(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        route.output_token_parameter,
+                        request,
+                    )
                     .await
             }
             other => Err(ProviderError::InvalidResponse {
@@ -80,6 +86,7 @@ impl InferenceClient {
             api_mode: profile.api_mode,
             base_url,
             credential_source,
+            output_token_parameter: profile.output_token_parameter,
         })
     }
 }

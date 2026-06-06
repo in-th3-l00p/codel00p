@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::profile::{ApiMode, AuthType, ProviderCapabilities, ProviderProfile};
+use crate::profile::{
+    ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile,
+};
 
 /// In-memory provider registry with canonical IDs and aliases.
 #[derive(Debug, Clone, Default)]
@@ -44,6 +46,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: Some("https://api.openai.com/v1"),
             models_url: Some("https://api.openai.com/v1/models"),
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxCompletionTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {
@@ -61,6 +64,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: Some("https://api.anthropic.com"),
             models_url: Some("https://api.anthropic.com/v1/models"),
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities {
                 tools: true,
                 streaming: true,
@@ -79,6 +83,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: None,
             models_url: None,
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxCompletionTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {
@@ -92,6 +97,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: Some("https://bedrock-runtime.us-east-1.amazonaws.com"),
             models_url: None,
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {
@@ -105,6 +111,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: Some("https://generativelanguage.googleapis.com/v1beta"),
             models_url: None,
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities {
                 tools: true,
                 streaming: true,
@@ -123,6 +130,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: Some("https://api.githubcopilot.com"),
             models_url: None,
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxCompletionTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {
@@ -136,6 +144,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: Some("https://openrouter.ai/api/v1"),
             models_url: Some("https://openrouter.ai/api/v1/models"),
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {
@@ -156,6 +165,7 @@ pub fn default_registry() -> ProviderRegistry {
             default_base_url: None,
             models_url: None,
             default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
 }

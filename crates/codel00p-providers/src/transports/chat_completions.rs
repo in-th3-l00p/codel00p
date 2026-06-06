@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    ToolCall, ToolDefinition, Usage,
+    ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole,
+    OutputTokenParameter, ProviderError, ToolCall, ToolDefinition, Usage,
 };
 
 pub(crate) struct ChatCompletionsTransport {
@@ -22,6 +22,7 @@ impl ChatCompletionsTransport {
         provider: &str,
         base_url: &str,
         credential: &Credential,
+        output_token_parameter: OutputTokenParameter,
         request: InferenceRequest,
     ) -> Result<InferenceResponse, ProviderError> {
         let Credential::ApiKey(api_key) = credential else {
@@ -30,7 +31,7 @@ impl ChatCompletionsTransport {
             });
         };
 
-        let wire_request = ChatCompletionsRequest::from_request(request);
+        let wire_request = ChatCompletionsRequest::from_request(request, output_token_parameter);
         let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
         let response = self
             .http
@@ -73,12 +74,21 @@ struct ChatCompletionsRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<ChatCompletionsTool>,
 }
 
 impl ChatCompletionsRequest {
-    fn from_request(request: InferenceRequest) -> Self {
+    fn from_request(
+        request: InferenceRequest,
+        output_token_parameter: OutputTokenParameter,
+    ) -> Self {
+        let (max_tokens, max_completion_tokens) = match output_token_parameter {
+            OutputTokenParameter::MaxTokens => (request.max_output_tokens, None),
+            OutputTokenParameter::MaxCompletionTokens => (None, request.max_output_tokens),
+        };
         Self {
             model: request.model,
             messages: request
@@ -87,7 +97,8 @@ impl ChatCompletionsRequest {
                 .map(ChatCompletionsMessage::from)
                 .collect(),
             temperature: request.temperature,
-            max_tokens: request.max_output_tokens,
+            max_tokens,
+            max_completion_tokens,
             tools: request
                 .tools
                 .into_iter()

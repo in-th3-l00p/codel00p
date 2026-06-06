@@ -20,6 +20,13 @@ pub enum AuthType {
     Custom,
 }
 
+/// Request field used for output token limits in OpenAI-compatible protocols.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OutputTokenParameter {
+    MaxTokens,
+    MaxCompletionTokens,
+}
+
 /// High-level provider capabilities used by policy and UI layers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ProviderCapabilities {
@@ -53,5 +60,6 @@ pub struct ProviderProfile {
     pub default_base_url: Option<&'static str>,
     pub models_url: Option<&'static str>,
     pub default_aux_model: Option<&'static str>,
+    pub output_token_parameter: OutputTokenParameter,
     pub capabilities: ProviderCapabilities,
 }

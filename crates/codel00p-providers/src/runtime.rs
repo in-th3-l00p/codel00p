@@ -1,4 +1,4 @@
-use crate::ApiMode;
+use crate::{ApiMode, OutputTokenParameter};
 
 /// Resolved runtime route for an inference request.
 ///
@@ -11,4 +11,5 @@ pub struct ResolvedInferenceRoute {
     pub api_mode: ApiMode,
     pub base_url: String,
     pub credential_source: Option<String>,
+    pub output_token_parameter: OutputTokenParameter,
 }

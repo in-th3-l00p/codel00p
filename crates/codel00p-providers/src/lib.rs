@@ -37,7 +37,7 @@ pub use client::{InferenceClient, InferenceClientBuilder};
 pub use credentials::Credential;
 pub use error::ProviderError;
 pub use policy::ProviderPolicy;
-pub use profile::{ApiMode, AuthType, ProviderCapabilities, ProviderProfile};
+pub use profile::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
 pub use request::{
     ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole, ToolDefinition,

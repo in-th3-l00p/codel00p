@@ -91,3 +91,50 @@ async fn chat_completions_requires_credentials_for_remote_requests() {
 
     assert!(matches!(error, ProviderError::MissingCredential { provider } if provider == "custom"));
 }
+
+#[tokio::test]
+async fn github_copilot_uses_max_completion_tokens() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .json_body(json!({
+                    "model": "gpt-5.4-mini",
+                    "messages": [
+                        {"role": "user", "content": "Say hello."}
+                    ],
+                    "max_completion_tokens": 64
+                }));
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello"
+                    }
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("github", Credential::api_key("test-key"))
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("github", "gpt-5.4-mini")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .max_output_tokens(64)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(response.content.as_deref(), Some("hello"));
+}
