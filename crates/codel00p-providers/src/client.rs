@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderRegistry,
-    default_registry, transports::chat_completions::ChatCompletionsTransport,
+    ResolvedInferenceRoute, default_registry, transports::chat_completions::ChatCompletionsTransport,
 };
 
 /// High-level inference facade used by codel00p modules.
@@ -24,6 +24,32 @@ impl InferenceClient {
         &self,
         request: InferenceRequest,
     ) -> Result<InferenceResponse, ProviderError> {
+        let route = self.resolve(&request)?;
+        let credential = self
+            .credentials
+            .get(&route.provider)
+            .ok_or_else(|| ProviderError::MissingCredential {
+                provider: route.provider.clone(),
+            })?;
+
+        match route.api_mode {
+            ApiMode::ChatCompletions => {
+                ChatCompletionsTransport::new()
+                    .complete(&route.provider, &route.base_url, credential, request)
+                    .await
+            }
+            other => Err(ProviderError::InvalidResponse {
+                provider: route.provider,
+                message: format!("api mode {other:?} is not implemented yet"),
+            }),
+        }
+    }
+
+    /// Resolve provider, API mode, base URL, and credential presence without sending a request.
+    pub fn resolve(
+        &self,
+        request: &InferenceRequest,
+    ) -> Result<ResolvedInferenceRoute, ProviderError> {
         let profile =
             self.registry
                 .resolve(&request.provider)
@@ -39,25 +65,19 @@ impl InferenceClient {
                 provider: profile.id.to_string(),
             })?;
 
-        let credential = self
+        let credential_source = self
             .credentials
             .get(profile.id)
             .or_else(|| self.credentials.get(&request.provider))
-            .ok_or_else(|| ProviderError::MissingCredential {
-                provider: profile.id.to_string(),
-            })?;
+            .map(|_| "configured".to_string());
 
-        match profile.api_mode {
-            ApiMode::ChatCompletions => {
-                ChatCompletionsTransport::new()
-                    .complete(profile.id, &base_url, credential, request)
-                    .await
-            }
-            other => Err(ProviderError::InvalidResponse {
-                provider: profile.id.to_string(),
-                message: format!("api mode {other:?} is not implemented yet"),
-            }),
-        }
+        Ok(ResolvedInferenceRoute {
+            requested_provider: request.provider.clone(),
+            provider: profile.id.to_string(),
+            api_mode: profile.api_mode,
+            base_url,
+            credential_source,
+        })
     }
 }
 

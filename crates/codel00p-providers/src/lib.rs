@@ -29,6 +29,7 @@ mod profile;
 mod registry;
 mod request;
 mod response;
+mod runtime;
 mod transports;
 
 pub use client::{InferenceClient, InferenceClientBuilder};
@@ -40,3 +41,4 @@ pub use request::{
     ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole, ToolDefinition,
 };
 pub use response::{InferenceResponse, ToolCall, Usage};
+pub use runtime::ResolvedInferenceRoute;
