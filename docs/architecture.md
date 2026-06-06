@@ -84,6 +84,17 @@ Inference may come from:
 Provider configuration must stay separate from project memory. A project memory
 entry should remain useful even if the team changes model providers.
 
+The provider layer should be implemented in Rust as `codel00p-providers`.
+Hermes Agent is the reference for breadth and transport shape: provider profiles
+describe identity, auth, endpoints, and quirks, while transports handle the wire
+protocol for Chat Completions, Anthropic Messages, Responses, Bedrock Converse,
+Gemini, and external-process paths. codel00p should own this contract directly
+so the harness, CLI, desktop app, and cloud platform all share the same routing,
+policy, credential, usage, and audit semantics.
+
+See [Inference Providers](providers.md) for the initial provider list and
+implementation design.
+
 ## Hermes decision
 
 The harness is intended to be based on or inspired by Hermes Agent, but the

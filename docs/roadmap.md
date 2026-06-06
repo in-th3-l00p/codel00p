@@ -54,6 +54,10 @@ Goal: stabilize contracts between modules.
 
 Work:
 
+- implement the Rust provider contract;
+- add initial corporate providers: Anthropic, OpenAI, Azure AI Foundry, AWS
+  Bedrock, Google Gemini, GitHub Copilot/GitHub Models, OpenRouter, and custom
+  OpenAI-compatible endpoints;
 - define session events;
 - define provider config shapes;
 - define memory candidate shapes;

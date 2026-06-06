@@ -58,6 +58,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Project Description](docs/project.md)
 - [Subprojects](docs/subprojects.md)
 - [Architecture](docs/architecture.md)
+- [Inference Providers](docs/providers.md)
 - [Project Memory](docs/memory.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)

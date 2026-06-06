@@ -128,12 +128,12 @@ concerns.
 
 ## codel00p-providers
 
-The inference provider abstraction.
+The Rust inference provider abstraction.
 
 Purpose:
 
-- adapt user-owned credentials;
-- adapt organization-provided credentials or proxy configuration;
+- adapt user-owned credentials, organization-provided credentials, and cloud
+  proxy configuration;
 - support model selection;
 - expose budget and policy hooks;
 - keep provider configuration separate from project memory.
@@ -142,6 +142,11 @@ Pitch:
 
 > A provider router that lets teams choose where inference comes from: cloud,
 > personal, organization-managed, or self-hosted.
+
+The first supported providers should focus on corporate engineering adoption:
+Anthropic, OpenAI, Azure AI Foundry, AWS Bedrock, Google Gemini, GitHub
+Copilot/GitHub Models, OpenRouter, and custom OpenAI-compatible endpoints. See
+[Inference Providers](providers.md) for the Rust technical design.
 
 ## codel00p-protocol
 
