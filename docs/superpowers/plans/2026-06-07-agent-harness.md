@@ -182,7 +182,7 @@ pub struct TurnOutcome {
   git commit -m "feat: enforce harness workspace boundaries"
   ```
 
-- [ ] 4. Add tool trait, result shape, and registry
+- [x] 4. Add tool trait, result shape, and registry
 
   Write tests for deterministic registration, lookup, dispatch, and unknown
   tool errors.

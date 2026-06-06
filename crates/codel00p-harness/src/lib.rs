@@ -12,6 +12,9 @@ pub mod workspace;
 pub use errors::HarnessError;
 pub use events::HarnessEvent;
 pub use session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage};
+pub use tool_registry::ToolRegistry;
+pub use tool_result::ToolResult;
+pub use tools::Tool;
 pub use workspace::Workspace;
 
 pub fn crate_name() -> &'static str {
