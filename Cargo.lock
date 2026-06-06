@@ -122,6 +122,7 @@ name = "codel00p-harness"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "codel00p-providers",
  "serde",
  "serde_json",
  "tempfile",

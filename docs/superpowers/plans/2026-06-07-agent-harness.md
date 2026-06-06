@@ -356,7 +356,7 @@ pub struct TurnOutcome {
   git commit -m "feat: execute harness tool loops"
   ```
 
-- [ ] 9. Add `codel00p-providers` adapter
+- [x] 9. Add `codel00p-providers` adapter
 
   Implement a harness adapter that maps the local `ModelClient` trait to
   `codel00p-providers::InferenceClient`.

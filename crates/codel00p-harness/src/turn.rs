@@ -91,6 +91,22 @@ impl HarnessInferenceResponse {
         }
     }
 
+    pub fn from_parts(
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        assistant_message: Option<String>,
+        tool_calls: Vec<ModelToolCall>,
+        finish_reason: Option<String>,
+    ) -> Self {
+        Self {
+            provider: provider.into(),
+            model: model.into(),
+            assistant_message,
+            tool_calls,
+            finish_reason,
+        }
+    }
+
     pub fn provider(&self) -> &str {
         &self.provider
     }
