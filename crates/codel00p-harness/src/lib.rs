@@ -9,6 +9,10 @@ pub mod tools;
 pub mod turn;
 pub mod workspace;
 
+pub use errors::HarnessError;
+pub use events::HarnessEvent;
+pub use session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage};
+
 pub fn crate_name() -> &'static str {
     "codel00p-harness"
 }

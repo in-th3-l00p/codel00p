@@ -73,7 +73,7 @@ pub struct TurnOutcome {
 
 ## Tasks
 
-- [ ] 1. Scaffold `codel00p-harness`
+- [x] 1. Scaffold `codel00p-harness`
 
   Add the crate to the workspace and create an empty public module surface.
 
@@ -110,7 +110,7 @@ pub struct TurnOutcome {
   git commit -m "feat: scaffold harness crate"
   ```
 
-- [ ] 2. Add session and event types with tests first
+- [x] 2. Add session and event types with tests first
 
   Write tests for session message accumulation, stable IDs, and JSON
   serialization before implementing the types.
