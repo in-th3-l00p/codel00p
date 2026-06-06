@@ -80,9 +80,21 @@ impl InferenceClientBuilder {
     }
 
     pub fn build(self) -> InferenceClient {
+        let credentials = self
+            .credentials
+            .into_iter()
+            .map(|(provider, credential)| {
+                let canonical = self
+                    .registry
+                    .resolve(&provider)
+                    .map(|profile| profile.id.to_string())
+                    .unwrap_or(provider);
+                (canonical, credential)
+            })
+            .collect();
         InferenceClient {
             registry: self.registry,
-            credentials: self.credentials,
+            credentials,
         }
     }
 }
