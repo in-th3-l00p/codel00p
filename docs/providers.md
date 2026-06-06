@@ -290,6 +290,8 @@ Implemented:
 - inspectable `ResolvedInferenceRoute`;
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests.
+- opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
+  and provider-specific credential environment variables.
 
 Next transports:
 

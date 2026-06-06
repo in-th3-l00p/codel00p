@@ -1,16 +1,20 @@
-use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, default_registry,
-};
+mod support;
+
+use codel00p_providers::{ChatMessage, InferenceClient, InferenceRequest, default_registry};
+use support::IntegrationConfig;
 
 #[tokio::test]
-#[ignore = "requires COPILOT_GITHUB_TOKEN and live GitHub Copilot API access"]
+#[ignore = "requires CODEL00P_INTEGRATION_TESTS=1, GitHub Copilot credentials, and live API access"]
 async fn live_github_copilot_chat_completions_smoke_test() {
-    let token = std::env::var("COPILOT_GITHUB_TOKEN")
-        .expect("COPILOT_GITHUB_TOKEN must be set for the live Copilot smoke test");
+    let config = IntegrationConfig::from_env();
+    if let Some(message) = config.skip_message("github") {
+        eprintln!("{message}");
+        return;
+    }
 
     let client = InferenceClient::builder()
         .registry(default_registry())
-        .credential("github", Credential::api_key(token))
+        .credential("github", config.require_credential("github"))
         .build();
 
     let response = client
