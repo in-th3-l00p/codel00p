@@ -2,6 +2,9 @@ use std::io;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessError {
+    #[error("invalid harness configuration: {message}")]
+    Configuration { message: String },
+
     #[error("workspace path escapes the configured root: {path}")]
     WorkspaceEscape { path: String },
 

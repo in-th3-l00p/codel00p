@@ -9,6 +9,7 @@ pub mod tools;
 pub mod turn;
 pub mod workspace;
 
+pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use errors::HarnessError;
 pub use events::HarnessEvent;
 pub use session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage};

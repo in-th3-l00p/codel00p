@@ -17,15 +17,39 @@ pub trait ModelClient: Send + Sync {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HarnessInferenceRequest {
     session_state: SessionState,
+    workspace_root: Option<String>,
+    tool_names: Vec<String>,
 }
 
 impl HarnessInferenceRequest {
     pub fn new(session_state: SessionState) -> Self {
-        Self { session_state }
+        Self {
+            session_state,
+            workspace_root: None,
+            tool_names: Vec::new(),
+        }
+    }
+
+    pub fn with_runtime_context(
+        mut self,
+        workspace_root: impl Into<String>,
+        tool_names: Vec<String>,
+    ) -> Self {
+        self.workspace_root = Some(workspace_root.into());
+        self.tool_names = tool_names;
+        self
     }
 
     pub fn session_state(&self) -> &SessionState {
         &self.session_state
+    }
+
+    pub fn workspace_root(&self) -> Option<&str> {
+        self.workspace_root.as_deref()
+    }
+
+    pub fn tool_names(&self) -> &[String] {
+        &self.tool_names
     }
 }
 

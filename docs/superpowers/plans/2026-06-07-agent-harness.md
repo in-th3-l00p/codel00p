@@ -293,7 +293,7 @@ pub struct TurnOutcome {
   git commit -m "feat: add harness model client boundary"
   ```
 
-- [ ] 7. Implement no-tool turn execution
+- [x] 7. Implement no-tool turn execution
 
   Write the first harness loop test where a user turn receives a final assistant
   response without tool calls.
