@@ -152,7 +152,7 @@ pub struct TurnOutcome {
   git commit -m "feat: add harness session state"
   ```
 
-- [ ] 3. Implement workspace path safety
+- [x] 3. Implement workspace path safety
 
   Write tests proving valid relative paths resolve under the root and traversal
   attempts fail.
