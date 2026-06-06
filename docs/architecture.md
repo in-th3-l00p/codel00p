@@ -1,59 +1,61 @@
 # Architecture
 
-codel00p is planned as a local-first agentic coding platform with optional cloud
-collaboration.
+codel00p is planned as an agentic coding platform centered on shared project
+knowledge. It should support both cloud and local runtimes, with cloud as the
+strongest path for teams that want shared memory, governance, and provider
+management.
 
 At a high level:
 
 ```text
-Developer
+Developer / Team
   |
   | CLI / Desktop
   v
-Local agent harness
+Agent harness
   |
   | uses
   v
 Project memory + provider router + workspace tools
   |
-  | optional sync
+  | sync / governance / provider policy
   v
 Cloud organization platform
 ```
 
-## Local runtime
+## Runtime
 
-The local runtime is the center of the system.
+The agent runtime is the execution center of the system.
 
 It should:
 
-- run agent sessions against a local workspace;
+- run agent sessions against a software project;
 - expose tools for repository work;
 - retrieve relevant project memory;
 - route inference requests to the selected provider;
 - produce traceable session events;
-- propose memory candidates after useful work;
-- continue working without cloud access.
+- propose memory candidates after useful work.
 
-The cloud platform should never be required for the basic local workflow.
+The runtime may be local, cloud-connected, or eventually hosted. The important
+contract is that agent work can use and improve reviewed project knowledge.
 
 ## Interfaces
 
-codel00p will have two main local interfaces.
+codel00p will have two main developer interfaces.
 
 The CLI is the first practical interface. It should support fast developer
 workflows such as connecting a repo, starting a session, inspecting memory,
-choosing a provider, and syncing approved memory.
+choosing a provider, and syncing approved memory with a team workspace.
 
-The Electron app is the polished local control center. It should make session
+The Electron app is the polished control center. It should make session
 supervision, memory review, project navigation, and team activity easier to
 understand than a terminal-only workflow.
 
-Both interfaces should talk to the same local harness contracts.
+Both interfaces should talk to the same harness and memory contracts.
 
 ## Cloud platform
 
-The cloud platform adds team coordination.
+The cloud platform is the team knowledge layer.
 
 It should manage:
 
@@ -66,8 +68,9 @@ It should manage:
 - shared memory sync;
 - audit history and team activity.
 
-The cloud platform should provide governance and collaboration. It should not
-replace the local harness as the default runtime.
+The cloud platform should make codel00p stronger for organizations: shared
+project memory, provider access, permissions, auditability, and cross-team
+visibility all belong here.
 
 ## Provider routing
 
@@ -100,7 +103,7 @@ Decision criteria:
 - tool execution model;
 - provider routing flexibility;
 - memory integration;
-- local-first operation;
+- cloud and local operation;
 - extension design;
 - security boundaries;
 - observability;

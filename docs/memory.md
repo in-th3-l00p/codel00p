@@ -4,6 +4,9 @@ Project memory is the central differentiator of codel00p.
 
 The goal is not to store every chat, prompt, response, or terminal output. The
 goal is to preserve useful knowledge in a compact, reviewed, reusable form.
+That knowledge may live in a cloud workspace, a local runtime, or both. The
+important thing is that it becomes durable, reviewable, and available where the
+team works.
 
 ## What memory should capture
 
@@ -39,28 +42,32 @@ Memory should move through a deliberate lifecycle:
 1. **Observe:** agent sessions and developer work produce candidate knowledge.
 2. **Extract:** codel00p converts useful context into memory candidates.
 3. **Review:** a human approves, edits, scopes, or rejects each candidate.
-4. **Store:** approved memory is saved locally.
-5. **Sync:** approved memory can be shared with an organization.
+4. **Store:** approved memory is saved in the active workspace.
+5. **Sync:** approved memory can be shared across an organization.
 6. **Retrieve:** future sessions load relevant memory for the current task.
 7. **Refine:** stale or low-value memory is corrected, merged, archived, or
    deleted.
 
 Review is required because unreviewed memory becomes noise quickly.
 
-## Local-first storage
+## Storage and sync
 
-The first memory implementation should work locally. It should not require a
-cloud account, hosted database, or organization workspace.
+The memory system should support both cloud and local storage. Cloud storage is
+the strongest path for teams because it makes reviewed knowledge available
+across developers, projects, and agent sessions.
 
-Local storage should prioritize:
+Storage should prioritize:
 
 - readability;
 - portability;
 - easy review;
 - deterministic retrieval;
-- simple backup and versioning.
+- simple backup and versioning;
+- permission-aware sharing.
 
-Cloud sync can come later once the local memory loop proves useful.
+Local storage is still useful for private work, offline operation, and
+self-managed setups. The product should not make memory quality depend on where
+the runtime happens to execute.
 
 ## Retrieval principles
 
