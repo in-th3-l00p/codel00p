@@ -60,6 +60,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Architecture](docs/architecture.md)
 - [Inference Providers](docs/providers.md)
 - [Project Memory](docs/memory.md)
+- [Memory Development Plan](docs/memory-development.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 

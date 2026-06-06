@@ -82,6 +82,15 @@ Memory retrieval should be:
 The user should be able to understand why memory was used and correct memory
 that is stale or wrong.
 
+## Development approach
+
+The first implementation should be `codel00p-memory`: a Rust memory engine with
+strict schemas, explicit lifecycle transitions, deterministic retrieval, and
+test-driven development from the first commit.
+
+See [codel00p-memory Development Plan](memory-development.md) for the detailed
+engineering approach.
+
 ## Quality bar
 
 Good memory is:

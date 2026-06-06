@@ -10,6 +10,8 @@ Goal: define and validate useful project memory.
 Work:
 
 - design the memory schema;
+- implement the first Rust `codel00p-memory` crate;
+- follow test-driven development for schema, lifecycle, storage, and retrieval;
 - choose initial storage and sync boundaries;
 - define memory categories;
 - build review and edit flows;
