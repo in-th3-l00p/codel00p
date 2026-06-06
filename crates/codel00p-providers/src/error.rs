@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 /// Errors returned by provider resolution, request building, and transports.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error)]
 pub enum ProviderError {
     /// The requested provider is unknown to the active registry.
     #[error("unknown provider `{provider}`")]
@@ -14,5 +14,12 @@ pub enum ProviderError {
     /// A provider request needs credentials and none were available.
     #[error("provider `{provider}` requires credentials")]
     MissingCredential { provider: String },
-}
 
+    /// The provider returned a response that could not be parsed into codel00p's shape.
+    #[error("invalid response from provider `{provider}`: {message}")]
+    InvalidResponse { provider: String, message: String },
+
+    /// HTTP request failed before a provider response could be normalized.
+    #[error("http request to provider `{provider}` failed: {message}")]
+    Http { provider: String, message: String },
+}

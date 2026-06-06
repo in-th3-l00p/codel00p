@@ -29,6 +29,7 @@ mod profile;
 mod registry;
 mod request;
 mod response;
+mod transports;
 
 pub use client::{InferenceClient, InferenceClientBuilder};
 pub use credentials::Credential;
@@ -37,4 +38,3 @@ pub use profile::{ApiMode, AuthType, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
 pub use request::{ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole};
 pub use response::{InferenceResponse, ToolCall, Usage};
-

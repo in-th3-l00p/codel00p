@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderRegistry,
-    default_registry,
+    ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderRegistry,
+    default_registry, transports::chat_completions::ChatCompletionsTransport,
 };
 
 /// High-level inference facade used by codel00p modules.
@@ -31,19 +31,33 @@ impl InferenceClient {
                     provider: request.provider.clone(),
                 })?;
 
-        let _base_url = request
+        let base_url = request
             .base_url
-            .as_deref()
-            .or(profile.default_base_url)
+            .clone()
+            .or_else(|| profile.default_base_url.map(str::to_string))
             .ok_or_else(|| ProviderError::MissingBaseUrl {
                 provider: profile.id.to_string(),
             })?;
 
-        let _credential = self.credentials.get(profile.id);
+        let credential = self
+            .credentials
+            .get(profile.id)
+            .or_else(|| self.credentials.get(&request.provider))
+            .ok_or_else(|| ProviderError::MissingCredential {
+                provider: profile.id.to_string(),
+            })?;
 
-        Err(ProviderError::MissingCredential {
-            provider: profile.id.to_string(),
-        })
+        match profile.api_mode {
+            ApiMode::ChatCompletions => {
+                ChatCompletionsTransport::new()
+                    .complete(profile.id, &base_url, credential, request)
+                    .await
+            }
+            other => Err(ProviderError::InvalidResponse {
+                provider: profile.id.to_string(),
+                message: format!("api mode {other:?} is not implemented yet"),
+            }),
+        }
     }
 }
 
@@ -72,4 +86,3 @@ impl InferenceClientBuilder {
         }
     }
 }
-

@@ -1,0 +1,185 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::{
+    ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
+    Usage,
+};
+
+pub(crate) struct ChatCompletionsTransport {
+    http: reqwest::Client,
+}
+
+impl ChatCompletionsTransport {
+    pub(crate) fn new() -> Self {
+        Self {
+            http: reqwest::Client::new(),
+        }
+    }
+
+    pub(crate) async fn complete(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        request: InferenceRequest,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::ApiKey(api_key) = credential else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let wire_request = ChatCompletionsRequest::from_request(request);
+        let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+        let response = self
+            .http
+            .post(url)
+            .bearer_auth(api_key)
+            .json(&wire_request)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Http {
+                provider: provider.to_string(),
+                message: format!("status {status}: {body}"),
+            });
+        }
+
+        let wire_response =
+            response
+                .json::<ChatCompletionsResponse>()
+                .await
+                .map_err(|error| ProviderError::InvalidResponse {
+                    provider: provider.to_string(),
+                    message: error.to_string(),
+                })?;
+
+        wire_response.normalize(provider)
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCompletionsRequest {
+    model: String,
+    messages: Vec<ChatCompletionsMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+}
+
+impl ChatCompletionsRequest {
+    fn from_request(request: InferenceRequest) -> Self {
+        Self {
+            model: request.model,
+            messages: request
+                .messages
+                .into_iter()
+                .map(ChatCompletionsMessage::from)
+                .collect(),
+            temperature: request.temperature,
+            max_tokens: request.max_output_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCompletionsMessage {
+    role: &'static str,
+    content: String,
+}
+
+impl From<ChatMessage> for ChatCompletionsMessage {
+    fn from(message: ChatMessage) -> Self {
+        let role = match message.role {
+            MessageRole::System => "system",
+            MessageRole::Developer => "developer",
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::Tool => "tool",
+        };
+        Self {
+            role,
+            content: message.content,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatCompletionsResponse {
+    choices: Vec<ChatChoice>,
+    usage: Option<ChatUsage>,
+}
+
+impl ChatCompletionsResponse {
+    fn normalize(self, provider: &str) -> Result<InferenceResponse, ProviderError> {
+        let choice = self
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: "missing choices[0]".to_string(),
+            })?;
+
+        Ok(InferenceResponse {
+            content: choice.message.content,
+            tool_calls: Vec::new(),
+            finish_reason: choice.finish_reason,
+            reasoning: None,
+            usage: self.usage.map(ChatUsage::normalize),
+            provider_data: Default::default(),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatChoice {
+    finish_reason: Option<String>,
+    message: ChatMessageResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatMessageResponse {
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatUsage {
+    prompt_tokens: Option<u64>,
+    completion_tokens: Option<u64>,
+    prompt_tokens_details: Option<PromptTokenDetails>,
+}
+
+impl ChatUsage {
+    fn normalize(self) -> Usage {
+        let prompt_total = self.prompt_tokens.unwrap_or_default();
+        let cache_read = self
+            .prompt_tokens_details
+            .and_then(|details| details.cached_tokens)
+            .unwrap_or_default();
+        Usage {
+            input_tokens: prompt_total.saturating_sub(cache_read),
+            output_tokens: self.completion_tokens.unwrap_or_default(),
+            cache_read_tokens: cache_read,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct PromptTokenDetails {
+    cached_tokens: Option<u64>,
+    #[allow(dead_code)]
+    other: Option<Value>,
+}
+
