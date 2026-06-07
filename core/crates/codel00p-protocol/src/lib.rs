@@ -815,8 +815,20 @@ impl MemoryEntry {
         self.status
     }
 
+    pub fn kind(&self) -> MemoryKind {
+        self.kind
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
     pub fn tags(&self) -> &[String] {
         &self.tags
+    }
+
+    pub fn source(&self) -> Option<&MemorySource> {
+        self.source.as_ref()
     }
 }
 

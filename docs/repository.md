@@ -17,6 +17,7 @@ tools/     repository automation and fixtures
 
 - protocol contracts;
 - storage contracts and backends;
+- project memory lifecycle and retrieval;
 - inference provider routing;
 - session replay;
 - harness runtime behavior;

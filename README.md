@@ -102,6 +102,9 @@ pnpm dev:desktop
 
 The first Rust modules have started:
 
+- [codel00p-memory](core/crates/codel00p-memory): candidate creation, review
+  lifecycle, audit history, and deterministic retrieval for approved project
+  knowledge.
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   tool calls, route inspection, and provider policy enforcement.

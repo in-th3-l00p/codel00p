@@ -179,6 +179,11 @@ Build the Rust crate, public domain types, validation rules, typed errors, and
 candidate-to-approved lifecycle. The output should be an in-memory library with
 tests and JSON serialization.
 
+Status: started in `core/crates/codel00p-memory`. The first implementation
+supports candidate creation, explicit review transitions, audit logs, storage
+backing through `codel00p-storage`, and deterministic retrieval of approved
+memory.
+
 Success criteria:
 
 - candidates can be created, edited, approved, rejected, archived, and deleted;

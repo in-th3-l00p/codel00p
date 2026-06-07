@@ -4,10 +4,11 @@ export type SessionRole = "system" | "user" | "assistant" | "tool";
 
 export type MemoryKind =
   | "architecture"
+  | "convention"
   | "workflow"
   | "decision"
-  | "debugging"
-  | "deployment";
+  | "deployment"
+  | "troubleshooting";
 
 export type MemoryStatus = "candidate" | "approved" | "rejected" | "archived";
 

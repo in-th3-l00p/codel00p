@@ -1,6 +1,13 @@
 {
   "protocolVersion": "codel00p.protocol.v1",
   "sessionRoles": ["system", "user", "assistant", "tool"],
-  "memoryKinds": ["architecture", "workflow", "decision", "debugging", "deployment"],
+  "memoryKinds": [
+    "architecture",
+    "convention",
+    "workflow",
+    "decision",
+    "deployment",
+    "troubleshooting"
+  ],
   "memoryStatuses": ["candidate", "approved", "rejected", "archived"]
 }

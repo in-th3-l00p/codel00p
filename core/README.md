@@ -9,6 +9,8 @@ interface:
   contracts.
 - `codel00p-storage`: backend-neutral storage primitives and local SQLite
   backend.
+- `codel00p-memory`: candidate lifecycle, review audit, and deterministic
+  retrieval for durable project knowledge.
 - `codel00p-providers`: inference provider profiles, policy, credentials, and
   transports.
 - `codel00p-session`: durable session metadata and replay APIs.

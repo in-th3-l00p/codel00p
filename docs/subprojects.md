@@ -24,6 +24,11 @@ Pitch:
 This should be the first core subproject because memory is the product's
 differentiator.
 
+The first Rust implementation exists at
+[`core/crates/codel00p-memory`](../core/crates/codel00p-memory). It currently
+defines candidate creation, explicit review transitions, audit logs, and
+deterministic retrieval for approved memory.
+
 ## codel00p-harness
 
 The agent runtime.
