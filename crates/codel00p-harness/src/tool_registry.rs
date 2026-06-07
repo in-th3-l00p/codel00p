@@ -38,6 +38,13 @@ impl ToolRegistry {
         self.tools.keys().copied().collect()
     }
 
+    pub fn is_concurrency_safe(&self, name: &str, input: &Value) -> bool {
+        self.tools
+            .get(name)
+            .map(|tool| tool.is_concurrency_safe(input))
+            .unwrap_or(false)
+    }
+
     pub async fn execute(
         &self,
         name: &str,

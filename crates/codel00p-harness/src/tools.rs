@@ -16,6 +16,10 @@ pub trait Tool: Send + Sync {
 
     fn input_schema(&self) -> Value;
 
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        false
+    }
+
     async fn execute(
         &self,
         workspace: &Workspace,
@@ -42,6 +46,10 @@ impl Tool for ListFilesTool {
                 "path": { "type": "string" }
             }
         })
+    }
+
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        true
     }
 
     async fn execute(
@@ -83,6 +91,10 @@ impl Tool for ReadFileTool {
         })
     }
 
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        true
+    }
+
     async fn execute(
         &self,
         workspace: &Workspace,
@@ -119,6 +131,10 @@ impl Tool for SearchTextTool {
                 "path": { "type": "string" }
             }
         })
+    }
+
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        true
     }
 
     async fn execute(

@@ -1,14 +1,23 @@
 mod support;
 
-use std::fs;
+use std::{
+    fs,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
+use async_trait::async_trait;
 use codel00p_harness::{
     AgentHarness, HarnessError, HarnessEvent, HarnessInferenceResponse, ModelToolCall, SessionId,
-    SessionMessage, ToolRegistry, UserMessage, Workspace,
+    SessionMessage, Tool, ToolRegistry, ToolResult, UserMessage, Workspace,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use support::ScriptedModelClient;
 use tempfile::tempdir;
+use tokio::time::Instant;
 
 #[tokio::test]
 async fn executes_tool_calls_and_continues_until_final_text() {
@@ -156,4 +165,195 @@ async fn iteration_limit_stops_infinite_tool_call_loop() {
         .expect_err("iteration limit should fail");
 
     assert!(matches!(error, HarnessError::IterationLimit { limit: 1 }));
+}
+
+#[tokio::test]
+async fn concurrency_safe_tool_calls_run_in_parallel_batches() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![
+                ModelToolCall::new("call-slow-a", "slow_a", json!({})),
+                ModelToolCall::new("call-slow-b", "slow_b", json!({})),
+            ],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "Both tools finished."),
+    ]);
+    let tools = ToolRegistry::new()
+        .with_tool(SlowReadOnlyTool("slow_a"))
+        .with_tool(SlowReadOnlyTool("slow_b"));
+
+    let started = Instant::now();
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(tools)
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-concurrent"),
+            UserMessage::new("Run slow tools."),
+        )
+        .await
+        .expect("run turn");
+
+    assert!(
+        started.elapsed() < Duration::from_millis(350),
+        "concurrency-safe tools should run in one batch"
+    );
+    assert_eq!(outcome.tool_calls.len(), 2);
+    assert_eq!(outcome.tool_calls[0].name, "slow_a");
+    assert_eq!(outcome.tool_calls[1].name, "slow_b");
+}
+
+#[tokio::test]
+async fn unsafe_tool_calls_split_parallel_batches() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![
+                ModelToolCall::new("call-safe-a", "safe_a", json!({})),
+                ModelToolCall::new("call-unsafe", "unsafe", json!({})),
+                ModelToolCall::new("call-safe-b", "safe_b", json!({})),
+            ],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "Serial boundary respected."),
+    ]);
+    let tools = ToolRegistry::new()
+        .with_tool(TrackingTool::new(
+            "safe_a",
+            true,
+            active.clone(),
+            max_active.clone(),
+        ))
+        .with_tool(TrackingTool::new(
+            "unsafe",
+            false,
+            active.clone(),
+            max_active.clone(),
+        ))
+        .with_tool(TrackingTool::new(
+            "safe_b",
+            true,
+            active,
+            max_active.clone(),
+        ));
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(tools)
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-serial-boundary"),
+            UserMessage::new("Run mixed tools."),
+        )
+        .await
+        .expect("run turn");
+
+    assert_eq!(outcome.tool_calls.len(), 3);
+    assert_eq!(outcome.tool_calls[0].name, "safe_a");
+    assert_eq!(outcome.tool_calls[1].name, "unsafe");
+    assert_eq!(outcome.tool_calls[2].name, "safe_b");
+    assert_eq!(
+        max_active.load(Ordering::SeqCst),
+        1,
+        "unsafe tools should prevent adjacent safe tools from sharing a batch"
+    );
+}
+
+struct SlowReadOnlyTool(&'static str);
+
+#[async_trait]
+impl Tool for SlowReadOnlyTool {
+    fn name(&self) -> &'static str {
+        self.0
+    }
+
+    fn description(&self) -> &'static str {
+        "Slow read-only test tool."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({ "type": "object" })
+    }
+
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        true
+    }
+
+    async fn execute(
+        &self,
+        _workspace: &Workspace,
+        _input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        Ok(ToolResult::json(json!({ "tool": self.0 })))
+    }
+}
+
+struct TrackingTool {
+    name: &'static str,
+    concurrency_safe: bool,
+    active: Arc<AtomicUsize>,
+    max_active: Arc<AtomicUsize>,
+}
+
+impl TrackingTool {
+    fn new(
+        name: &'static str,
+        concurrency_safe: bool,
+        active: Arc<AtomicUsize>,
+        max_active: Arc<AtomicUsize>,
+    ) -> Self {
+        Self {
+            name,
+            concurrency_safe,
+            active,
+            max_active,
+        }
+    }
+}
+
+#[async_trait]
+impl Tool for TrackingTool {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn description(&self) -> &'static str {
+        "Tracking test tool."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({ "type": "object" })
+    }
+
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        self.concurrency_safe
+    }
+
+    async fn execute(
+        &self,
+        _workspace: &Workspace,
+        _input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+        self.max_active.fetch_max(active, Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        self.active.fetch_sub(1, Ordering::SeqCst);
+
+        Ok(ToolResult::json(json!({ "tool": self.name })))
+    }
 }

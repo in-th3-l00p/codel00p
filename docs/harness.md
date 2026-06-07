@@ -7,8 +7,8 @@ loop, tool execution, event stream, workspace boundary, and integration with
 The first implementation now exists under
 [`crates/codel00p-harness`](../crates/codel00p-harness). It supports
 deterministic read-only turns, fake model-client tests, workspace-safe tools,
-bounded tool-call loops, a provider adapter, and shared public contracts from
-`codel00p-protocol`.
+bounded tool-call loops, concurrency-safe tool batching, a provider adapter, and
+shared public contracts from `codel00p-protocol`.
 
 The first harness milestone should be intentionally small: read-only repository
 work, deterministic tests, and a clean public interface that future CLI,
@@ -48,13 +48,18 @@ The minimal read-only harness:
 Editing tools remain deliberately excluded from the first milestone. File mutation
 needs approvals, patch safety, rollback, and stronger audit behavior.
 
+Consecutive tools marked as concurrency-safe may run in the same batch. Unsafe
+or unknown tools always execute serially and split adjacent safe batches. The
+harness preserves the model's tool-call order when recording events, tool
+results, and session messages.
+
 ## Public Interface
 
 The harness should be easy to embed:
 
 ```rust
 let mut harness = AgentHarness::builder()
-    .providers(provider_client)
+    .model_client(model_client)
     .workspace(workspace)
     .tools(ToolRegistry::read_only_defaults())
     .build();
@@ -122,6 +127,9 @@ The first safe tool set:
 `run_command` should not ship in the first harness milestone. It creates a much
 larger security and determinism surface than file reading/searching.
 
+Read-only defaults are marked concurrency-safe. Custom tools must explicitly opt
+in by implementing `Tool::is_concurrency_safe`; the default is serial execution.
+
 ## Event Stream
 
 Every harness turn should emit deterministic events:
@@ -173,6 +181,8 @@ Required tests:
 - a user turn can return a final assistant message from a fake provider;
 - a tool call from a fake provider executes a registered tool;
 - an unknown tool produces a controlled tool error;
+- concurrency-safe tools run in parallel batches;
+- unsafe tools split parallel batches;
 - iteration budget stops infinite tool-call loops;
 - events are emitted in deterministic order;
 - workspace paths cannot escape the workspace root;

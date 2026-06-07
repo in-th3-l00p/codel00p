@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use futures::future::join_all;
+
 use crate::{
     errors::HarnessError,
     events::HarnessEvent,
@@ -94,51 +96,85 @@ impl AgentHarness {
 
             session_state.push_assistant_tool_calls(response.tool_calls().to_vec());
 
-            for tool_call in response.tool_calls() {
-                events.push(HarnessEvent::ToolCallRequested {
-                    event_id: EventId::new(),
-                    session_id: session_state.session_id().clone(),
-                    turn_id: turn_id.clone(),
-                    tool_name: tool_call.name().to_string(),
-                });
-
-                let result = match self
+            let tool_calls = response.tool_calls();
+            let mut index = 0;
+            while index < tool_calls.len() {
+                let mut end = index + 1;
+                if self
                     .tools
-                    .execute(tool_call.name(), &self.workspace, tool_call.input().clone())
-                    .await
+                    .is_concurrency_safe(tool_calls[index].name(), tool_calls[index].input())
                 {
-                    Ok(result) => {
-                        events.push(HarnessEvent::ToolCallCompleted {
-                            event_id: EventId::new(),
-                            session_id: session_state.session_id().clone(),
-                            turn_id: turn_id.clone(),
-                            tool_name: tool_call.name().to_string(),
-                        });
-                        result
+                    while end < tool_calls.len()
+                        && self
+                            .tools
+                            .is_concurrency_safe(tool_calls[end].name(), tool_calls[end].input())
+                    {
+                        end += 1;
                     }
-                    Err(error) => {
-                        let message = error.to_string();
-                        events.push(HarnessEvent::ToolCallFailed {
-                            event_id: EventId::new(),
-                            session_id: session_state.session_id().clone(),
-                            turn_id: turn_id.clone(),
-                            tool_name: tool_call.name().to_string(),
-                            message: message.clone(),
-                        });
-                        ToolResult::json(json!({ "error": message }))
-                    }
+                }
+
+                let batch = &tool_calls[index..end];
+                for tool_call in batch {
+                    events.push(HarnessEvent::ToolCallRequested {
+                        event_id: EventId::new(),
+                        session_id: session_state.session_id().clone(),
+                        turn_id: turn_id.clone(),
+                        tool_name: tool_call.name().to_string(),
+                    });
+                }
+
+                let results = if batch.len() > 1 {
+                    join_all(batch.iter().map(|tool_call| async {
+                        self.tools
+                            .execute(tool_call.name(), &self.workspace, tool_call.input().clone())
+                            .await
+                    }))
+                    .await
+                } else {
+                    vec![
+                        self.tools
+                            .execute(batch[0].name(), &self.workspace, batch[0].input().clone())
+                            .await,
+                    ]
                 };
 
-                session_state.push_tool_result(
-                    tool_call.id(),
-                    tool_call.name(),
-                    result.content().to_string(),
-                );
-                executed_tool_calls.push(ExecutedToolCall {
-                    id: tool_call.id().to_string(),
-                    name: tool_call.name().to_string(),
-                    result,
-                });
+                for (tool_call, result) in batch.iter().zip(results) {
+                    let result = match result {
+                        Ok(result) => {
+                            events.push(HarnessEvent::ToolCallCompleted {
+                                event_id: EventId::new(),
+                                session_id: session_state.session_id().clone(),
+                                turn_id: turn_id.clone(),
+                                tool_name: tool_call.name().to_string(),
+                            });
+                            result
+                        }
+                        Err(error) => {
+                            let message = error.to_string();
+                            events.push(HarnessEvent::ToolCallFailed {
+                                event_id: EventId::new(),
+                                session_id: session_state.session_id().clone(),
+                                turn_id: turn_id.clone(),
+                                tool_name: tool_call.name().to_string(),
+                                message: message.clone(),
+                            });
+                            ToolResult::json(json!({ "error": message }))
+                        }
+                    };
+
+                    session_state.push_tool_result(
+                        tool_call.id(),
+                        tool_call.name(),
+                        result.content().to_string(),
+                    );
+                    executed_tool_calls.push(ExecutedToolCall {
+                        id: tool_call.id().to_string(),
+                        name: tool_call.name().to_string(),
+                        result,
+                    });
+                }
+
+                index = end;
             }
         }
 
