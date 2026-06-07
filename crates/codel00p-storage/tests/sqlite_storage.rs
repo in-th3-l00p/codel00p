@@ -3,9 +3,16 @@
 use serde_json::json;
 
 use codel00p_storage::{
-    AppendLogStore, DocumentStore, KeyValueStore, SqliteStorage, StorageDocument, StorageScope,
-    StorageValue,
+    AppendLogStore, DocumentStore, KeyValueStore, SqliteStorage, StorageDocument, StorageError,
+    StorageScope, StorageValue,
 };
+
+fn temp_sqlite_path(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "codel00p-storage-{name}-{}.sqlite",
+        std::process::id()
+    ))
+}
 
 #[test]
 fn sqlite_backend_implements_all_storage_primitives() {
@@ -62,8 +69,204 @@ fn sqlite_backend_implements_all_storage_primitives() {
 }
 
 #[test]
+fn sqlite_missing_reads_return_none_or_empty() {
+    let storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let scope = StorageScope::workspace("workspace-1");
+
+    assert!(
+        storage
+            .get_value(&scope, "missing")
+            .expect("get value")
+            .is_none()
+    );
+    assert!(
+        storage
+            .get_document(&scope, "memory", "missing")
+            .expect("get document")
+            .is_none()
+    );
+    assert!(
+        storage
+            .replay_log(&scope, "missing")
+            .expect("replay log")
+            .is_empty()
+    );
+}
+
+#[test]
+fn sqlite_key_values_increment_versions_and_preserve_metadata() {
+    let mut storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let scope = StorageScope::user("user-1");
+
+    let first = storage
+        .put_value(
+            StorageValue::new(scope.clone(), "provider.selected", json!("openai"))
+                .with_metadata("source", "cli"),
+        )
+        .expect("put first value");
+    let second = storage
+        .put_value(
+            StorageValue::new(scope.clone(), "provider.selected", json!("anthropic"))
+                .with_metadata("source", "cloud"),
+        )
+        .expect("put second value");
+    let loaded = storage
+        .get_value(&scope, "provider.selected")
+        .expect("get value")
+        .expect("stored value");
+
+    assert_eq!(first.version(), 1);
+    assert_eq!(second.version(), 2);
+    assert_eq!(loaded.version(), 2);
+    assert_eq!(loaded.payload(), &json!("anthropic"));
+    assert_eq!(
+        loaded.metadata().get("source").map(String::as_str),
+        Some("cloud")
+    );
+}
+
+#[test]
+fn sqlite_documents_increment_versions_and_preserve_metadata() {
+    let mut storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let scope = StorageScope::project("org-1", "project-1");
+
+    let first = storage
+        .put_document(
+            StorageDocument::new(scope.clone(), "memory", "entry-1", json!({ "text": "old" }))
+                .with_metadata("author", "agent"),
+        )
+        .expect("put first document");
+    let second = storage
+        .put_document(
+            StorageDocument::new(scope.clone(), "memory", "entry-1", json!({ "text": "new" }))
+                .with_metadata("author", "human"),
+        )
+        .expect("put second document");
+    let loaded = storage
+        .get_document(&scope, "memory", "entry-1")
+        .expect("get document")
+        .expect("stored document");
+
+    assert_eq!(first.version(), 1);
+    assert_eq!(second.version(), 2);
+    assert_eq!(loaded.version(), 2);
+    assert_eq!(loaded.payload(), &json!({ "text": "new" }));
+    assert_eq!(
+        loaded.metadata().get("author").map(String::as_str),
+        Some("human")
+    );
+}
+
+#[test]
+fn sqlite_isolates_scope_collection_id_and_streams() {
+    let mut storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let global_scope = StorageScope::global();
+    let project_scope = StorageScope::project("org-1", "project-1");
+    let workspace_scope = StorageScope::workspace("workspace-1");
+    let user_scope = StorageScope::user("user-1");
+
+    storage
+        .put_value(StorageValue::new(
+            global_scope.clone(),
+            "same-key",
+            json!("global"),
+        ))
+        .expect("put global value");
+    storage
+        .put_value(StorageValue::new(
+            project_scope.clone(),
+            "same-key",
+            json!("project"),
+        ))
+        .expect("put project value");
+    storage
+        .put_document(StorageDocument::new(
+            project_scope.clone(),
+            "settings",
+            "same-id",
+            json!("settings"),
+        ))
+        .expect("put settings document");
+    storage
+        .put_document(StorageDocument::new(
+            project_scope.clone(),
+            "memory",
+            "same-id",
+            json!("memory"),
+        ))
+        .expect("put memory document");
+    storage
+        .append_log(workspace_scope.clone(), "session/one", json!("workspace"))
+        .expect("append workspace log");
+    storage
+        .append_log(user_scope.clone(), "session/one", json!("user"))
+        .expect("append user log");
+    storage
+        .append_log(
+            workspace_scope.clone(),
+            "session/two",
+            json!("other stream"),
+        )
+        .expect("append other stream");
+
+    assert_eq!(
+        storage
+            .get_value(&global_scope, "same-key")
+            .expect("get global")
+            .expect("global value")
+            .payload(),
+        &json!("global")
+    );
+    assert_eq!(
+        storage
+            .get_value(&project_scope, "same-key")
+            .expect("get project")
+            .expect("project value")
+            .payload(),
+        &json!("project")
+    );
+    assert_eq!(
+        storage
+            .get_document(&project_scope, "settings", "same-id")
+            .expect("get settings")
+            .expect("settings document")
+            .payload(),
+        &json!("settings")
+    );
+    assert_eq!(
+        storage
+            .get_document(&project_scope, "memory", "same-id")
+            .expect("get memory")
+            .expect("memory document")
+            .payload(),
+        &json!("memory")
+    );
+    assert_eq!(
+        storage
+            .replay_log(&workspace_scope, "session/one")
+            .expect("replay workspace")[0]
+            .payload(),
+        &json!("workspace")
+    );
+    assert_eq!(
+        storage
+            .replay_log(&user_scope, "session/one")
+            .expect("replay user")[0]
+            .payload(),
+        &json!("user")
+    );
+    assert_eq!(
+        storage
+            .replay_log(&workspace_scope, "session/two")
+            .expect("replay other stream")[0]
+            .payload(),
+        &json!("other stream")
+    );
+}
+
+#[test]
 fn sqlite_persists_across_reopened_file_connections() {
-    let path = std::env::temp_dir().join(format!("codel00p-storage-{}.sqlite", std::process::id()));
+    let path = temp_sqlite_path("reopen");
     let scope = StorageScope::workspace("workspace-1");
 
     {
@@ -90,4 +293,121 @@ fn sqlite_persists_across_reopened_file_connections() {
         document.payload(),
         &json!({ "text": "Durable project knowledge" })
     );
+}
+
+#[test]
+fn sqlite_append_log_sequence_continues_across_reopened_connections() {
+    let path = temp_sqlite_path("sequence");
+    let scope = StorageScope::project("org-1", "project-1");
+
+    {
+        let mut storage = SqliteStorage::open(&path).expect("open sqlite storage");
+        storage
+            .append_log(scope.clone(), "session/session-1", json!("first"))
+            .expect("append first");
+    }
+
+    let mut storage = SqliteStorage::open(&path).expect("reopen sqlite storage");
+    let second = storage
+        .append_log(scope.clone(), "session/session-1", json!("second"))
+        .expect("append second");
+    let replayed = storage
+        .replay_log(&scope, "session/session-1")
+        .expect("replay log");
+
+    let _ = std::fs::remove_file(path);
+
+    assert_eq!(second.sequence(), 2);
+    assert_eq!(replayed.len(), 2);
+    assert_eq!(replayed[1].payload(), &json!("second"));
+}
+
+#[test]
+fn sqlite_append_log_handles_concurrent_file_connections() {
+    let path = temp_sqlite_path("concurrent-append");
+    let scope = StorageScope::project("org-1", "project-1");
+    let stream = "session/concurrent";
+
+    {
+        let _storage = SqliteStorage::open(&path).expect("initialize sqlite storage");
+    }
+
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let path = path.clone();
+        let scope = scope.clone();
+        workers.push(std::thread::spawn(move || {
+            let mut storage = SqliteStorage::open(&path).expect("open sqlite storage");
+            storage
+                .append_log(scope, stream, json!({ "worker": index }))
+                .expect("append concurrent entry");
+        }));
+    }
+
+    for worker in workers {
+        worker.join().expect("worker should not panic");
+    }
+
+    let storage = SqliteStorage::open(&path).expect("reopen sqlite storage");
+    let replayed = storage.replay_log(&scope, stream).expect("replay log");
+
+    let _ = std::fs::remove_file(path);
+
+    assert_eq!(replayed.len(), 8);
+    assert_eq!(
+        replayed
+            .iter()
+            .map(|entry| entry.sequence())
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3, 4, 5, 6, 7, 8]
+    );
+}
+
+#[test]
+fn sqlite_open_reports_backend_error_for_directory_path() {
+    let result = SqliteStorage::open(std::env::temp_dir());
+    let error = match result {
+        Ok(_) => panic!("directory is not a db file"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(error, StorageError::Backend { .. }));
+}
+
+#[test]
+fn sqlite_reports_serialization_error_for_corrupt_json_payloads() {
+    let path = temp_sqlite_path("corrupt-json");
+    let scope = StorageScope::workspace("workspace-corrupt");
+
+    {
+        let storage = SqliteStorage::open(&path).expect("open sqlite storage");
+        drop(storage);
+    }
+
+    let connection = rusqlite::Connection::open(&path).expect("open raw sqlite connection");
+    connection
+        .execute(
+            "
+            INSERT INTO storage_values (scope, key, version, payload, metadata)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ",
+            rusqlite::params![
+                serde_json::to_string(&scope).expect("serialize scope"),
+                "bad-json",
+                1_u64,
+                "{not-json",
+                "{}"
+            ],
+        )
+        .expect("insert corrupt value");
+    drop(connection);
+
+    let storage = SqliteStorage::open(&path).expect("reopen sqlite storage");
+    let error = storage
+        .get_value(&scope, "bad-json")
+        .expect_err("corrupt json should fail");
+
+    let _ = std::fs::remove_file(path);
+
+    assert!(matches!(error, StorageError::Serialization { .. }));
 }

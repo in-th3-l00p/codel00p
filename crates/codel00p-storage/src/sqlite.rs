@@ -1,6 +1,6 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, time::Duration};
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::Value;
 
 use crate::{
@@ -15,6 +15,7 @@ pub struct SqliteStorage {
 impl SqliteStorage {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let connection = Connection::open(path).map_err(sqlite_error)?;
+        configure_connection(&connection)?;
         let storage = Self { connection };
         storage.initialize()?;
         Ok(storage)
@@ -22,6 +23,7 @@ impl SqliteStorage {
 
     pub fn in_memory() -> Result<Self, StorageError> {
         let connection = Connection::open_in_memory().map_err(sqlite_error)?;
+        configure_connection(&connection)?;
         let storage = Self { connection };
         storage.initialize()?;
         Ok(storage)
@@ -235,7 +237,10 @@ impl AppendLogStore for SqliteStorage {
     ) -> Result<AppendLogEntry, StorageError> {
         let stream = stream.into();
         let scope_key = scope_key(&scope)?;
-        let transaction = self.connection.transaction().map_err(sqlite_error)?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(sqlite_error)?;
         let sequence = transaction
             .query_row(
                 "
@@ -326,6 +331,20 @@ impl AppendLogStore for SqliteStorage {
 
 fn scope_key(scope: &StorageScope) -> Result<String, StorageError> {
     Ok(serde_json::to_string(scope)?)
+}
+
+fn configure_connection(connection: &Connection) -> Result<(), StorageError> {
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(sqlite_error)?;
+    connection
+        .execute_batch(
+            "
+            PRAGMA foreign_keys = ON;
+            PRAGMA journal_mode = WAL;
+            ",
+        )
+        .map_err(sqlite_error)
 }
 
 fn sqlite_error(error: rusqlite::Error) -> StorageError {
