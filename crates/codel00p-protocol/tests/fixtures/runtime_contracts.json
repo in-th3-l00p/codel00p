@@ -1,0 +1,50 @@
+{
+  "compaction": {
+    "after_message_count": 12,
+    "before_message_count": 42,
+    "event_id": "event-compact",
+    "session_id": "session-1",
+    "summary": "Preserved active task, relevant files, and pending work.",
+    "turn_id": "turn-1"
+  },
+  "context_window": {
+    "blocking_threshold_tokens": 197000,
+    "context_limit_tokens": 200000,
+    "model": "gpt-4.1",
+    "used_tokens": 181000,
+    "warning_threshold_tokens": 170000
+  },
+  "error_kind": "context_overflow",
+  "permission_decision": {
+    "message": "write access has not been approved",
+    "mode": "ask",
+    "request_id": "permission-1",
+    "status": "deny"
+  },
+  "permission_request": {
+    "input": {
+      "path": "src/lib.rs"
+    },
+    "reason": "tool wants to modify the workspace",
+    "request_id": "permission-1",
+    "scope": "workspace_write",
+    "session_id": "session-1",
+    "tool_name": "write_file",
+    "turn_id": "turn-1"
+  },
+  "session_persistence": {
+    "event_id": "event-record",
+    "kind": "record_appended",
+    "record_id": "record-1",
+    "sequence": 3,
+    "session_id": "session-1"
+  },
+  "tool_progress": {
+    "event_id": "event-progress",
+    "message": "searching workspace",
+    "phase": "started",
+    "session_id": "session-1",
+    "tool_name": "search_text",
+    "turn_id": "turn-1"
+  }
+}

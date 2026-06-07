@@ -1,6 +1,8 @@
 use codel00p_protocol::{
-    AgentEvent, EventId, MemoryEntry, MemoryKind, MemorySource, MemoryStatus, ProjectRef,
-    SessionId, SessionMessage, ToolCall, ToolResult, TurnId,
+    AgentEvent, CompactionRecord, ContextWindowState, EventId, MemoryEntry, MemoryKind,
+    MemorySource, MemoryStatus, PermissionDecision, PermissionMode, PermissionRequest,
+    PermissionScope, ProjectRef, RuntimeErrorKind, SessionId, SessionMessage,
+    SessionPersistenceEvent, ToolCall, ToolProgress, ToolResult, TurnId,
 };
 use serde_json::json;
 
@@ -59,6 +61,52 @@ fn memory_entry_matches_golden_json() {
     .expect("serialize memory entry");
 
     assert_eq!(value, fixture("memory_entry"));
+}
+
+#[test]
+fn runtime_contracts_match_golden_json() {
+    let value = serde_json::to_value(json!({
+        "error_kind": RuntimeErrorKind::ContextOverflow,
+        "permission_request": PermissionRequest::new(
+            "permission-1",
+            SessionId::from_static("session-1"),
+            TurnId::from_static("turn-1"),
+            "write_file",
+            json!({ "path": "src/lib.rs" }),
+            PermissionScope::WorkspaceWrite,
+        ).with_reason("tool wants to modify the workspace"),
+        "permission_decision": PermissionDecision::deny(
+            "permission-1",
+            PermissionMode::Ask,
+            "write access has not been approved",
+        ),
+        "context_window": ContextWindowState::new("gpt-4.1", 200000, 181000)
+            .with_warning_threshold(170000)
+            .with_blocking_threshold(197000),
+        "compaction": CompactionRecord::new(
+            EventId::from_static("event-compact"),
+            SessionId::from_static("session-1"),
+            TurnId::from_static("turn-1"),
+            42,
+            12,
+        ).with_summary("Preserved active task, relevant files, and pending work."),
+        "tool_progress": ToolProgress::new(
+            EventId::from_static("event-progress"),
+            SessionId::from_static("session-1"),
+            TurnId::from_static("turn-1"),
+            "search_text",
+            "started",
+        ).with_message("searching workspace"),
+        "session_persistence": SessionPersistenceEvent::record_appended(
+            EventId::from_static("event-record"),
+            SessionId::from_static("session-1"),
+            "record-1",
+            3,
+        ),
+    }))
+    .expect("serialize runtime contracts");
+
+    assert_eq!(value, fixture("runtime_contracts"));
 }
 
 fn fixture(name: &str) -> serde_json::Value {

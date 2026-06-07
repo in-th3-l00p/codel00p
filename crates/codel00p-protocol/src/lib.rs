@@ -315,6 +315,359 @@ impl AgentEvent {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeErrorKind {
+    ProviderAuth,
+    ProviderRateLimit,
+    ProviderBilling,
+    ProviderUnavailable,
+    ModelUnavailable,
+    ContextOverflow,
+    PayloadTooLarge,
+    PermissionDenied,
+    ToolExecution,
+    InvalidToolInput,
+    Cancelled,
+    IterationLimit,
+    Storage,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionScope {
+    ReadOnly,
+    WorkspaceWrite,
+    Shell,
+    Network,
+    ExternalConnector,
+    MemoryWrite,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionMode {
+    Allow,
+    Ask,
+    Deny,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionStatus {
+    Allow,
+    Deny,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PermissionRequest {
+    request_id: String,
+    session_id: SessionId,
+    turn_id: TurnId,
+    tool_name: String,
+    input: Value,
+    scope: PermissionScope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+impl PermissionRequest {
+    pub fn new(
+        request_id: impl Into<String>,
+        session_id: SessionId,
+        turn_id: TurnId,
+        tool_name: impl Into<String>,
+        input: Value,
+        scope: PermissionScope,
+    ) -> Self {
+        Self {
+            request_id: request_id.into(),
+            session_id,
+            turn_id,
+            tool_name: tool_name.into(),
+            input,
+            scope,
+            reason: None,
+        }
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = Some(reason.into());
+        self
+    }
+
+    pub fn id(&self) -> &str {
+        &self.request_id
+    }
+
+    pub fn tool_name(&self) -> &str {
+        &self.tool_name
+    }
+
+    pub fn input(&self) -> &Value {
+        &self.input
+    }
+
+    pub fn scope(&self) -> PermissionScope {
+        self.scope
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        self.reason.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermissionDecision {
+    request_id: String,
+    mode: PermissionMode,
+    status: PermissionStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+impl PermissionDecision {
+    pub fn allow(request_id: impl Into<String>, mode: PermissionMode) -> Self {
+        Self {
+            request_id: request_id.into(),
+            mode,
+            status: PermissionStatus::Allow,
+            message: None,
+        }
+    }
+
+    pub fn deny(
+        request_id: impl Into<String>,
+        mode: PermissionMode,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            request_id: request_id.into(),
+            mode,
+            status: PermissionStatus::Deny,
+            message: Some(message.into()),
+        }
+    }
+
+    pub fn request_id(&self) -> &str {
+        &self.request_id
+    }
+
+    pub fn mode(&self) -> PermissionMode {
+        self.mode
+    }
+
+    pub fn status(&self) -> PermissionStatus {
+        self.status
+    }
+
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+
+    pub fn allows_execution(&self) -> bool {
+        self.status == PermissionStatus::Allow
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextWindowState {
+    model: String,
+    context_limit_tokens: u64,
+    used_tokens: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warning_threshold_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blocking_threshold_tokens: Option<u64>,
+}
+
+impl ContextWindowState {
+    pub fn new(model: impl Into<String>, context_limit_tokens: u64, used_tokens: u64) -> Self {
+        Self {
+            model: model.into(),
+            context_limit_tokens,
+            used_tokens,
+            warning_threshold_tokens: None,
+            blocking_threshold_tokens: None,
+        }
+    }
+
+    pub fn with_warning_threshold(mut self, tokens: u64) -> Self {
+        self.warning_threshold_tokens = Some(tokens);
+        self
+    }
+
+    pub fn with_blocking_threshold(mut self, tokens: u64) -> Self {
+        self.blocking_threshold_tokens = Some(tokens);
+        self
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub fn context_limit_tokens(&self) -> u64 {
+        self.context_limit_tokens
+    }
+
+    pub fn used_tokens(&self) -> u64 {
+        self.used_tokens
+    }
+
+    pub fn is_above_warning_threshold(&self) -> bool {
+        self.warning_threshold_tokens
+            .map(|threshold| self.used_tokens >= threshold)
+            .unwrap_or(false)
+    }
+
+    pub fn is_at_blocking_limit(&self) -> bool {
+        self.blocking_threshold_tokens
+            .map(|threshold| self.used_tokens >= threshold)
+            .unwrap_or(false)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompactionRecord {
+    event_id: EventId,
+    session_id: SessionId,
+    turn_id: TurnId,
+    before_message_count: usize,
+    after_message_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+}
+
+impl CompactionRecord {
+    pub fn new(
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        before_message_count: usize,
+        after_message_count: usize,
+    ) -> Self {
+        Self {
+            event_id,
+            session_id,
+            turn_id,
+            before_message_count,
+            after_message_count,
+            summary: None,
+        }
+    }
+
+    pub fn with_summary(mut self, summary: impl Into<String>) -> Self {
+        self.summary = Some(summary.into());
+        self
+    }
+
+    pub fn before_message_count(&self) -> usize {
+        self.before_message_count
+    }
+
+    pub fn after_message_count(&self) -> usize {
+        self.after_message_count
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolProgress {
+    event_id: EventId,
+    session_id: SessionId,
+    turn_id: TurnId,
+    tool_name: String,
+    phase: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+impl ToolProgress {
+    pub fn new(
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        tool_name: impl Into<String>,
+        phase: impl Into<String>,
+    ) -> Self {
+        Self {
+            event_id,
+            session_id,
+            turn_id,
+            tool_name: tool_name.into(),
+            phase: phase.into(),
+            message: None,
+        }
+    }
+
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+
+    pub fn tool_name(&self) -> &str {
+        &self.tool_name
+    }
+
+    pub fn phase(&self) -> &str {
+        &self.phase
+    }
+
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionPersistenceEvent {
+    RecordAppended {
+        event_id: EventId,
+        session_id: SessionId,
+        record_id: String,
+        sequence: u64,
+    },
+    ReplayStarted {
+        event_id: EventId,
+        session_id: SessionId,
+    },
+    ReplayCompleted {
+        event_id: EventId,
+        session_id: SessionId,
+        record_count: u64,
+    },
+}
+
+impl SessionPersistenceEvent {
+    pub fn record_appended(
+        event_id: EventId,
+        session_id: SessionId,
+        record_id: impl Into<String>,
+        sequence: u64,
+    ) -> Self {
+        Self::RecordAppended {
+            event_id,
+            session_id,
+            record_id: record_id.into(),
+            sequence,
+        }
+    }
+
+    pub fn record_id(&self) -> &str {
+        match self {
+            Self::RecordAppended { record_id, .. } => record_id,
+            Self::ReplayStarted { .. } | Self::ReplayCompleted { .. } => "",
+        }
+    }
+
+    pub fn sequence(&self) -> u64 {
+        match self {
+            Self::RecordAppended { sequence, .. } => *sequence,
+            Self::ReplayStarted { .. } | Self::ReplayCompleted { .. } => 0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectRef {
     id: String,

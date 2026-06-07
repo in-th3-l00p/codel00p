@@ -1,6 +1,8 @@
 use codel00p_protocol::{
-    AgentEvent, EventId, MemoryEntry, MemoryKind, MemorySource, MemoryStatus, ProjectRef,
-    ProtocolVersion, ProviderRef, SessionId, SessionMessage, SessionRole, ToolCall, ToolResult,
+    AgentEvent, CompactionRecord, ContextWindowState, EventId, MemoryEntry, MemoryKind,
+    MemorySource, MemoryStatus, PermissionDecision, PermissionMode, PermissionRequest,
+    PermissionScope, ProjectRef, ProtocolVersion, ProviderRef, RuntimeErrorKind, SessionId,
+    SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall, ToolProgress, ToolResult,
     TurnId,
 };
 use serde_json::json;
@@ -102,4 +104,99 @@ fn provider_refs_keep_routing_identity_separate_from_memory() {
     assert_eq!(provider.model(), "gpt-4o-mini-2024-07-18");
     assert_eq!(provider.alias(), Some("copilot"));
     assert_eq!(provider.base_url(), Some("https://api.githubcopilot.com"));
+}
+
+#[test]
+fn runtime_error_kinds_drive_recovery_boundaries() {
+    let kinds = [
+        RuntimeErrorKind::ProviderAuth,
+        RuntimeErrorKind::ProviderRateLimit,
+        RuntimeErrorKind::ContextOverflow,
+        RuntimeErrorKind::PermissionDenied,
+        RuntimeErrorKind::ToolExecution,
+        RuntimeErrorKind::Cancelled,
+    ];
+
+    let encoded = serde_json::to_value(kinds).expect("serialize error kinds");
+
+    assert_eq!(
+        encoded,
+        json!([
+            "provider_auth",
+            "provider_rate_limit",
+            "context_overflow",
+            "permission_denied",
+            "tool_execution",
+            "cancelled"
+        ])
+    );
+}
+
+#[test]
+fn permission_contracts_capture_decision_flow() {
+    let request = PermissionRequest::new(
+        "permission-1",
+        SessionId::from_static("session-1"),
+        TurnId::from_static("turn-1"),
+        "write_file",
+        json!({ "path": "src/lib.rs" }),
+        PermissionScope::WorkspaceWrite,
+    )
+    .with_reason("tool wants to modify the workspace");
+    let decision = PermissionDecision::deny(
+        request.id(),
+        PermissionMode::Ask,
+        "write access has not been approved",
+    );
+
+    assert_eq!(request.tool_name(), "write_file");
+    assert_eq!(request.scope(), PermissionScope::WorkspaceWrite);
+    assert_eq!(decision.request_id(), "permission-1");
+    assert_eq!(decision.mode(), PermissionMode::Ask);
+    assert!(!decision.allows_execution());
+}
+
+#[test]
+fn context_and_compaction_contracts_track_pressure() {
+    let window = ContextWindowState::new("gpt-4.1", 200_000, 181_000)
+        .with_warning_threshold(170_000)
+        .with_blocking_threshold(197_000);
+    let compaction = CompactionRecord::new(
+        EventId::from_static("event-compact"),
+        SessionId::from_static("session-1"),
+        TurnId::from_static("turn-1"),
+        42,
+        12,
+    )
+    .with_summary("Preserved active task, relevant files, and pending work.");
+
+    assert_eq!(window.model(), "gpt-4.1");
+    assert_eq!(window.used_tokens(), 181_000);
+    assert!(window.is_above_warning_threshold());
+    assert!(!window.is_at_blocking_limit());
+    assert_eq!(compaction.before_message_count(), 42);
+    assert_eq!(compaction.after_message_count(), 12);
+}
+
+#[test]
+fn tool_progress_and_session_persistence_are_protocol_events() {
+    let progress = ToolProgress::new(
+        EventId::from_static("event-progress"),
+        SessionId::from_static("session-1"),
+        TurnId::from_static("turn-1"),
+        "search_text",
+        "started",
+    )
+    .with_message("searching workspace");
+    let persisted = SessionPersistenceEvent::record_appended(
+        EventId::from_static("event-record"),
+        SessionId::from_static("session-1"),
+        "record-1",
+        3,
+    );
+
+    assert_eq!(progress.tool_name(), "search_text");
+    assert_eq!(progress.phase(), "started");
+    assert_eq!(persisted.record_id(), "record-1");
+    assert_eq!(persisted.sequence(), 3);
 }
