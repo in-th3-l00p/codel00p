@@ -2,6 +2,7 @@ pub mod agent;
 pub mod context;
 pub mod errors;
 pub mod events;
+pub mod permissions;
 pub mod provider_adapter;
 pub mod session;
 pub mod tool_registry;
@@ -11,8 +12,13 @@ pub mod turn;
 pub mod workspace;
 
 pub use agent::{AgentHarness, AgentHarnessBuilder};
+pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use errors::HarnessError;
 pub use events::HarnessEvent;
+pub use permissions::{
+    AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,
+    PermissionRequest, PermissionScope,
+};
 pub use provider_adapter::ProviderModelClient;
 pub use session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage};
 pub use tool_registry::ToolRegistry;

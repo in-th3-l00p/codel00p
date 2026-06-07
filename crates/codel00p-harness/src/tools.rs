@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 
 use crate::{errors::HarnessError, tool_result::ToolResult, workspace::Workspace};
+use codel00p_protocol::PermissionScope;
 
 const MAX_LISTED_FILES: usize = 1_000;
 const MAX_SEARCH_MATCHES: usize = 200;
@@ -18,6 +19,10 @@ pub trait Tool: Send + Sync {
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
         false
+    }
+
+    fn permission_scope(&self, _input: &Value) -> PermissionScope {
+        PermissionScope::WorkspaceWrite
     }
 
     async fn execute(
@@ -50,6 +55,10 @@ impl Tool for ListFilesTool {
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
         true
+    }
+
+    fn permission_scope(&self, _input: &Value) -> PermissionScope {
+        PermissionScope::ReadOnly
     }
 
     async fn execute(
@@ -95,6 +104,10 @@ impl Tool for ReadFileTool {
         true
     }
 
+    fn permission_scope(&self, _input: &Value) -> PermissionScope {
+        PermissionScope::ReadOnly
+    }
+
     async fn execute(
         &self,
         workspace: &Workspace,
@@ -135,6 +148,10 @@ impl Tool for SearchTextTool {
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
         true
+    }
+
+    fn permission_scope(&self, _input: &Value) -> PermissionScope {
+        PermissionScope::ReadOnly
     }
 
     async fn execute(

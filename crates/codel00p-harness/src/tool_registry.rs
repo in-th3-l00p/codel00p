@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use codel00p_protocol::PermissionScope;
 use serde_json::Value;
 
 use crate::{
@@ -43,6 +44,13 @@ impl ToolRegistry {
             .get(name)
             .map(|tool| tool.is_concurrency_safe(input))
             .unwrap_or(false)
+    }
+
+    pub fn permission_scope(&self, name: &str, input: &Value) -> PermissionScope {
+        self.tools
+            .get(name)
+            .map(|tool| tool.permission_scope(input))
+            .unwrap_or(PermissionScope::ExternalConnector)
     }
 
     pub async fn execute(

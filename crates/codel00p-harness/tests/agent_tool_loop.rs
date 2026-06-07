@@ -11,8 +11,9 @@ use std::{
 
 use async_trait::async_trait;
 use codel00p_harness::{
-    AgentHarness, HarnessError, HarnessEvent, HarnessInferenceResponse, ModelToolCall, SessionId,
-    SessionMessage, Tool, ToolRegistry, ToolResult, UserMessage, Workspace,
+    AgentHarness, ContextWindowState, HarnessError, HarnessEvent, HarnessInferenceResponse,
+    ModelToolCall, PermissionDecision, PermissionMode, PermissionPolicy, PermissionRequest,
+    SessionId, SessionMessage, Tool, ToolRegistry, ToolResult, UserMessage, Workspace,
 };
 use serde_json::{Value, json};
 use support::ScriptedModelClient;
@@ -122,6 +123,89 @@ async fn unknown_tool_call_is_recorded_as_failed_tool_result() {
     assert!(outcome.events.iter().any(|event| {
         matches!(event, HarnessEvent::ToolCallFailed { tool_name, .. } if tool_name == "missing")
     }));
+}
+
+#[tokio::test]
+async fn denied_tool_call_is_recorded_without_executing_tool() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![ModelToolCall::new("call-denied", "counting", json!({}))],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "Tool was denied."),
+    ]);
+    let executions = Arc::new(AtomicUsize::new(0));
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::new().with_tool(CountingTool {
+            executions: executions.clone(),
+        }))
+        .permission_policy(DenyToolPolicy)
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-denied"),
+            UserMessage::new("Try denied tool."),
+        )
+        .await
+        .expect("run turn");
+
+    assert_eq!(executions.load(Ordering::SeqCst), 0);
+    assert_eq!(outcome.tool_calls.len(), 1);
+    assert_eq!(outcome.tool_calls[0].name, "counting");
+    assert_eq!(
+        outcome.tool_calls[0].result.content()["error_kind"],
+        "permission_denied"
+    );
+    assert!(outcome.events.iter().any(|event| {
+        matches!(event, HarnessEvent::PermissionDenied { tool_name, .. } if tool_name == "counting")
+    }));
+}
+
+#[tokio::test]
+async fn context_window_state_is_sent_to_model_client() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github", "gpt-4o", "Done.",
+    )]);
+
+    AgentHarness::builder()
+        .model_client(model.clone())
+        .workspace(workspace)
+        .context_window(
+            ContextWindowState::new("gpt-4o", 128_000, 64_000).with_warning_threshold(100_000),
+        )
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-context-window"),
+            UserMessage::new("Report context."),
+        )
+        .await
+        .expect("run turn");
+
+    let requests = model.requests();
+    assert_eq!(
+        requests[0]
+            .context_window()
+            .expect("context window")
+            .model(),
+        "gpt-4o"
+    );
+    assert_eq!(
+        requests[0]
+            .context_window()
+            .expect("context window")
+            .used_tokens(),
+        64_000
+    );
 }
 
 #[tokio::test]
@@ -355,5 +439,46 @@ impl Tool for TrackingTool {
         self.active.fetch_sub(1, Ordering::SeqCst);
 
         Ok(ToolResult::json(json!({ "tool": self.name })))
+    }
+}
+
+struct CountingTool {
+    executions: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Tool for CountingTool {
+    fn name(&self) -> &'static str {
+        "counting"
+    }
+
+    fn description(&self) -> &'static str {
+        "Counts executions."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({ "type": "object" })
+    }
+
+    async fn execute(
+        &self,
+        _workspace: &Workspace,
+        _input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        self.executions.fetch_add(1, Ordering::SeqCst);
+        Ok(ToolResult::json(json!({ "executed": true })))
+    }
+}
+
+struct DenyToolPolicy;
+
+#[async_trait]
+impl PermissionPolicy for DenyToolPolicy {
+    async fn decide(&self, request: PermissionRequest) -> Result<PermissionDecision, HarnessError> {
+        Ok(PermissionDecision::deny(
+            request.id(),
+            PermissionMode::Deny,
+            format!("{} is blocked in this test", request.tool_name()),
+        ))
     }
 }

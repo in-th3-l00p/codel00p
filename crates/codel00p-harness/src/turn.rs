@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use codel00p_protocol::ContextWindowState;
 pub use codel00p_protocol::ToolCall as ModelToolCall;
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +20,7 @@ pub struct HarnessInferenceRequest {
     session_state: SessionState,
     workspace_root: Option<String>,
     tool_names: Vec<String>,
+    context_window: Option<ContextWindowState>,
 }
 
 impl HarnessInferenceRequest {
@@ -27,6 +29,7 @@ impl HarnessInferenceRequest {
             session_state,
             workspace_root: None,
             tool_names: Vec::new(),
+            context_window: None,
         }
     }
 
@@ -40,6 +43,11 @@ impl HarnessInferenceRequest {
         self
     }
 
+    pub fn with_context_window(mut self, context_window: ContextWindowState) -> Self {
+        self.context_window = Some(context_window);
+        self
+    }
+
     pub fn session_state(&self) -> &SessionState {
         &self.session_state
     }
@@ -50,6 +58,10 @@ impl HarnessInferenceRequest {
 
     pub fn tool_names(&self) -> &[String] {
         &self.tool_names
+    }
+
+    pub fn context_window(&self) -> Option<&ContextWindowState> {
+        self.context_window.as_ref()
     }
 }
 

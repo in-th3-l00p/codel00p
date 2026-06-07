@@ -291,6 +291,31 @@ pub enum AgentEvent {
         tool_name: String,
         message: String,
     },
+    PermissionRequested {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        tool_name: String,
+        request_id: String,
+        scope: PermissionScope,
+    },
+    PermissionDenied {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        tool_name: String,
+        request_id: String,
+        message: String,
+    },
+    ToolProgress {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        tool_name: String,
+        phase: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
     TurnCompleted {
         event_id: EventId,
         session_id: SessionId,
