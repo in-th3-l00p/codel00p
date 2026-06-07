@@ -3,6 +3,7 @@ members = [
     "crates/codel00p-providers",
     "crates/codel00p-harness",
     "crates/codel00p-protocol",
+    "crates/codel00p-session",
 ]
 resolver = "3"
 

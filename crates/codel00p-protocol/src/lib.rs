@@ -25,7 +25,7 @@ impl ProtocolVersion {
 
 macro_rules! id_type {
     ($name:ident, $prefix:literal, $counter:ident) => {
-        #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
         #[serde(transparent)]
         pub struct $name(String);
 
