@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/codel00p-providers", "crates/codel00p-harness"]
+members = [
+    "crates/codel00p-providers",
+    "crates/codel00p-harness",
+    "crates/codel00p-protocol",
+]
 resolver = "3"
 
 [workspace.package]

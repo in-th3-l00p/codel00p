@@ -58,6 +58,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Project Description](docs/project.md)
 - [Subprojects](docs/subprojects.md)
 - [Architecture](docs/architecture.md)
+- [Protocol](docs/protocol.md)
 - [Inference Providers](docs/providers.md)
 - [Agent Harness](docs/harness.md)
 - [Project Memory](docs/memory.md)
@@ -75,6 +76,8 @@ The first Rust modules have started:
 - [codel00p-harness](crates/codel00p-harness): read-only agent turn loop,
   workspace-safe tools, deterministic events, model-client boundary, and
   provider adapter.
+- [codel00p-protocol](crates/codel00p-protocol): shared data contracts for
+  sessions, turns, events, tool calls, providers, projects, and memory entries.
 
 ## Current status
 

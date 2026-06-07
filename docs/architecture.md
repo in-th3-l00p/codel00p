@@ -134,7 +134,8 @@ The clean boundary is:
 - `memory` stores and retrieves project knowledge;
 - `harness` runs agent sessions;
 - `providers` routes inference;
-- `protocol` defines shared data contracts;
+- `protocol` defines shared data contracts for sessions, turns, events, tools,
+  provider references, projects, and memory entries;
 - `cli` and `desktop` expose user interfaces;
 - `sync` coordinates local/cloud knowledge;
 - `cloud` manages organizations, teams, policies, and shared state.

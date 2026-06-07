@@ -167,6 +167,11 @@ Pitch:
 This project prevents the CLI, desktop app, harness, memory layer, and cloud
 platform from inventing incompatible data shapes.
 
+The first Rust implementation exists at
+[`crates/codel00p-protocol`](../crates/codel00p-protocol). It currently defines
+stable contracts for sessions, turns, events, tool calls, provider references,
+projects, and memory entries.
+
 ## codel00p-research
 
 The experimental lab.
