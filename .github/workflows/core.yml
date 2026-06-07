@@ -30,5 +30,7 @@ jobs:
           cargo fmt --all -- --check
           cargo test --workspace
           cargo test -p codel00p-storage --features sqlite
+          cargo test -p codel00p-memory --features sqlite
           cargo clippy --workspace --all-targets -- -D warnings
           cargo clippy -p codel00p-storage --features sqlite --all-targets -- -D warnings
+          cargo clippy -p codel00p-memory --features sqlite --all-targets -- -D warnings

@@ -26,3 +26,15 @@ source turn, and extracted candidate order.
 filters for memory kind, tag, and text. Empty optional filters are ignored.
 Results are sorted by memory id before `with_limit` is applied, which keeps
 prompt-context construction deterministic across storage backends.
+
+## SQLite backend
+
+Enable the `sqlite` feature to use `codel00p-storage`'s SQLite backend with the
+memory repository:
+
+```bash
+cargo test -p codel00p-memory --features sqlite
+```
+
+The feature test covers extracted candidates, review state, audit history, and
+approved-memory retrieval across a reopened SQLite file.

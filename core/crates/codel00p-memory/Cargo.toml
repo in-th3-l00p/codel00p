@@ -11,3 +11,6 @@ codel00p-storage = { path = "../codel00p-storage" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 thiserror = "2.0.18"
+
+[features]
+sqlite = ["codel00p-storage/sqlite"]
