@@ -5,6 +5,7 @@ use futures::future::join_all;
 use crate::{
     errors::HarnessError,
     events::HarnessEvent,
+    iteration_budget::IterationBudget,
     lifecycle::{LifecycleHook, TurnLifecycleContext},
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
     session::{SessionId, SessionState, TurnId, UserMessage},
@@ -63,7 +64,9 @@ impl AgentHarness {
 
         let mut executed_tool_calls = Vec::new();
 
-        for iteration in 1..=self.max_iterations {
+        let budget = IterationBudget::new(self.max_iterations);
+        while budget.consume() {
+            let iteration = budget.used();
             self.run_lifecycle_hook(
                 "pre_inference",
                 TurnLifecycleContext::new(
