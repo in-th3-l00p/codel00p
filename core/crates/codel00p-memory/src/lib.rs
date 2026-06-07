@@ -333,6 +333,47 @@ pub struct MemoryQuery {
     limit: Option<usize>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryListFilter {
+    project: ProjectRef,
+    status: Option<MemoryStatus>,
+    kind: Option<MemoryKind>,
+    tag: Option<String>,
+    limit: Option<usize>,
+}
+
+impl MemoryListFilter {
+    pub fn new(project: ProjectRef) -> Self {
+        Self {
+            project,
+            status: None,
+            kind: None,
+            tag: None,
+            limit: None,
+        }
+    }
+
+    pub fn with_status(mut self, status: MemoryStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    pub fn with_kind(mut self, kind: MemoryKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = non_empty_filter(tag.into());
+        self
+    }
+
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = if limit == 0 { None } else { Some(limit) };
+        self
+    }
+}
+
 impl MemoryQuery {
     pub fn new(project: ProjectRef) -> Self {
         Self {
@@ -416,6 +457,8 @@ pub trait MemoryRepository {
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError>;
 
     fn audit_log(&self, id: &str) -> Result<Vec<MemoryAuditEvent>, MemoryError>;
+
+    fn list(&self, filter: MemoryListFilter) -> Result<Vec<MemoryRecord>, MemoryError>;
 
     fn retrieve(&self, query: MemoryQuery) -> Result<Vec<RetrievedMemory>, MemoryError>;
 }
@@ -506,6 +549,45 @@ where
             .into_iter()
             .map(MemoryAuditEvent::from_log_entry)
             .collect()
+    }
+
+    fn list(&self, filter: MemoryListFilter) -> Result<Vec<MemoryRecord>, MemoryError> {
+        let mut records = Vec::new();
+        for record in self.records()? {
+            if record.entry().project().id() != filter.project.id() {
+                continue;
+            }
+
+            if let Some(status) = filter.status
+                && record.entry().status() != status
+            {
+                continue;
+            }
+
+            if let Some(kind) = filter.kind
+                && record.entry().kind() != kind
+            {
+                continue;
+            }
+
+            if let Some(tag) = &filter.tag
+                && !record
+                    .entry()
+                    .tags()
+                    .iter()
+                    .any(|candidate| candidate == tag)
+            {
+                continue;
+            }
+
+            records.push(record);
+        }
+
+        records.sort_by(|left, right| left.entry().id().cmp(right.entry().id()));
+        if let Some(limit) = filter.limit {
+            records.truncate(limit);
+        }
+        Ok(records)
     }
 
     fn retrieve(&self, query: MemoryQuery) -> Result<Vec<RetrievedMemory>, MemoryError> {

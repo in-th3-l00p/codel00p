@@ -3,8 +3,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use codel00p_memory::{
-    ExplicitMemoryExtractor, MemoryCandidateExtractor, MemoryExtractionInput, MemoryQuery,
-    MemoryRepository, ReviewDecision, StorageBackedMemoryStore,
+    ExplicitMemoryExtractor, MemoryCandidateExtractor, MemoryExtractionInput, MemoryListFilter,
+    MemoryQuery, MemoryRepository, ReviewDecision, StorageBackedMemoryStore,
 };
 use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId};
 use codel00p_storage::{SqliteStorage, StorageScope};
@@ -80,6 +80,19 @@ fn sqlite_memory_store_persists_extracted_candidates_reviews_and_retrieval() {
     assert_eq!(
         retrieved[0].reason(),
         "matched kind workflow and tag verify"
+    );
+    let listed = store
+        .list(
+            MemoryListFilter::new(project())
+                .with_status(MemoryStatus::Approved)
+                .with_kind(MemoryKind::Workflow)
+                .with_tag("verify"),
+        )
+        .expect("list approved memory");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        listed[0].entry().id(),
+        "memory-candidate-session-sqlite-turn-sqlite-1"
     );
 
     let _ = std::fs::remove_file(path);

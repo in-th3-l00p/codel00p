@@ -20,6 +20,13 @@ The default kind is `decision`. Unknown kinds, empty content, and ordinary prose
 are ignored. Extracted candidates use deterministic IDs based on source session,
 source turn, and extracted candidate order.
 
+## Review listing contract
+
+`MemoryListFilter` lists memory records for human review. Unlike inference
+retrieval, listing can return candidates, approved memories, rejected memories,
+and archived memories. It supports project, status, kind, tag, and limit
+filters, with deterministic ordering by memory id.
+
 ## Retrieval contract
 
 `MemoryQuery` currently selects approved memory by project, with optional
