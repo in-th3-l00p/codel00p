@@ -123,6 +123,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "codel00p-providers",
+ "httpmock",
  "serde",
  "serde_json",
  "tempfile",

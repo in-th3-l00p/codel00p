@@ -15,6 +15,7 @@ pub struct ProviderModelClient {
     client: InferenceClient,
     provider: String,
     model: String,
+    base_url: Option<String>,
 }
 
 impl ProviderModelClient {
@@ -27,7 +28,13 @@ impl ProviderModelClient {
             client,
             provider: provider.into(),
             model: model.into(),
+            base_url: None,
         }
+    }
+
+    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = Some(base_url.into());
+        self
     }
 
     pub fn build_provider_request(
@@ -50,6 +57,17 @@ impl ProviderModelClient {
         }
 
         builder.build()
+    }
+
+    pub fn build_provider_request_with_base_url(
+        provider: &str,
+        model: &str,
+        request: &HarnessInferenceRequest,
+        base_url: Option<&str>,
+    ) -> InferenceRequest {
+        let mut request = Self::build_provider_request(provider, model, request);
+        request.base_url = base_url.map(str::to_string);
+        request
     }
 
     pub fn map_provider_response(
@@ -88,7 +106,12 @@ impl ModelClient for ProviderModelClient {
         &self,
         request: HarnessInferenceRequest,
     ) -> Result<HarnessInferenceResponse, HarnessError> {
-        let provider_request = Self::build_provider_request(&self.provider, &self.model, &request);
+        let provider_request = Self::build_provider_request_with_base_url(
+            &self.provider,
+            &self.model,
+            &request,
+            self.base_url.as_deref(),
+        );
         let response = self
             .client
             .complete(provider_request)
