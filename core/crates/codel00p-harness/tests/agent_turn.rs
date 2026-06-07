@@ -135,6 +135,8 @@ async fn run_turn_sends_approved_project_memory_to_model_client() {
         .project_memory_provider(
             MemoryRepositoryProjectMemoryProvider::new(project, store)
                 .with_kind(MemoryKind::Architecture)
+                .with_tag("harness")
+                .with_text("tool execution")
                 .with_limit(4),
         )
         .build()
@@ -157,5 +159,8 @@ async fn run_turn_sends_approved_project_memory_to_model_client() {
         "The harness owns tool execution."
     );
     assert_eq!(memory.items()[0].tags(), ["harness"]);
-    assert_eq!(memory.items()[0].reason(), "matched kind architecture");
+    assert_eq!(
+        memory.items()[0].reason(),
+        "matched kind architecture and tag harness and text tool execution"
+    );
 }

@@ -115,6 +115,8 @@ pub struct MemoryRepositoryProjectMemoryProvider<R> {
     project: ProjectRef,
     repository: R,
     kind: Option<MemoryKind>,
+    tag: Option<String>,
+    text: Option<String>,
     limit: Option<usize>,
 }
 
@@ -124,12 +126,24 @@ impl<R> MemoryRepositoryProjectMemoryProvider<R> {
             project,
             repository,
             kind: None,
+            tag: None,
+            text: None,
             limit: None,
         }
     }
 
     pub fn with_kind(mut self, kind: MemoryKind) -> Self {
         self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = non_empty_filter(tag.into());
+        self
+    }
+
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        self.text = non_empty_filter(text.into());
         self
     }
 
@@ -151,6 +165,12 @@ where
         let mut query = MemoryQuery::new(self.project.clone());
         if let Some(kind) = self.kind {
             query = query.with_kind(kind);
+        }
+        if let Some(tag) = &self.tag {
+            query = query.with_tag(tag);
+        }
+        if let Some(text) = &self.text {
+            query = query.with_text(text);
         }
         if let Some(limit) = self.limit {
             query = query.with_limit(limit);
@@ -175,5 +195,14 @@ where
             .collect();
 
         Ok(ProjectMemoryContext::new(items))
+    }
+}
+
+fn non_empty_filter(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
     }
 }

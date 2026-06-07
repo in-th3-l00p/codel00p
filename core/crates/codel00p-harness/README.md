@@ -44,6 +44,8 @@ Project memory can be supplied through a repository-backed provider:
 ```rust
 let provider = MemoryRepositoryProjectMemoryProvider::new(project, memory_store)
     .with_kind(MemoryKind::Architecture)
+    .with_tag("harness")
+    .with_text("tool execution")
     .with_limit(8);
 
 let outcome = AgentHarness::builder()
