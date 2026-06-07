@@ -68,21 +68,38 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Repository layout
+
+```text
+core/      Rust workspace for the codel00p engine crates
+apps/      deployable user-facing applications
+packages/  shared TypeScript packages
+docs/      product, architecture, and research documentation
+tools/     repository automation and fixtures
+```
+
+Rust development happens from `core/`:
+
+```bash
+cd core
+cargo test --workspace
+```
+
 ## Current implementation
 
 The first Rust modules have started:
 
-- [codel00p-providers](crates/codel00p-providers): provider registry,
+- [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   tool calls, route inspection, and provider policy enforcement.
-- [codel00p-harness](crates/codel00p-harness): read-only agent turn loop,
+- [codel00p-harness](core/crates/codel00p-harness): read-only agent turn loop,
   workspace-safe tools, deterministic events, model-client boundary, and
   provider adapter.
-- [codel00p-protocol](crates/codel00p-protocol): shared data contracts for
+- [codel00p-protocol](core/crates/codel00p-protocol): shared data contracts for
   sessions, turns, events, tool calls, providers, projects, and memory entries.
-- [codel00p-storage](crates/codel00p-storage): backend-neutral storage
+- [codel00p-storage](core/crates/codel00p-storage): backend-neutral storage
   primitives for scoped key-value state, documents, and append logs.
-- [codel00p-session](crates/codel00p-session): durable session metadata and
+- [codel00p-session](core/crates/codel00p-session): durable session metadata and
   replay built on top of `codel00p-storage`.
 
 ## Current status

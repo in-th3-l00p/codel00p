@@ -5,7 +5,7 @@ loop, tool execution, event stream, workspace boundary, and integration with
 `codel00p-providers`.
 
 The first implementation now exists under
-[`crates/codel00p-harness`](../crates/codel00p-harness). It supports
+[`core/crates/codel00p-harness`](../core/crates/codel00p-harness). It supports
 deterministic read-only turns, fake model-client tests, workspace-safe tools,
 bounded tool-call loops, concurrency-safe tool batching, a provider adapter, and
 shared public contracts from `codel00p-protocol`.
@@ -89,7 +89,7 @@ pub struct TurnOutcome {
 ## Crate Layout
 
 ```text
-crates/codel00p-harness/
+core/crates/codel00p-harness/
   src/
     lib.rs
     agent.rs

@@ -72,7 +72,7 @@ harness, desktop app, and cloud services.
 Initial crates:
 
 ```text
-crates/codel00p-memory/
+core/crates/codel00p-memory/
   src/
     lib.rs
     error.rs
@@ -258,4 +258,3 @@ explain durable project knowledge.
 
 Once that exists, the harness and CLI can integrate it without guessing what
 "memory" means.
-

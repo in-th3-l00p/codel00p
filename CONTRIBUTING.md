@@ -32,6 +32,20 @@ Good contributions are:
 Documentation should stay concise and technical. Prefer short files with clear
 boundaries over one large document.
 
+## Development
+
+Rust engine work lives under `core/`:
+
+```bash
+cd core
+cargo fmt --all -- --check
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Application and TypeScript package work lives under `apps/` and `packages/`.
+Use the root package manager workspace for those projects.
+
 ## Git history
 
 Keep commits focused. A good commit should describe one coherent change.

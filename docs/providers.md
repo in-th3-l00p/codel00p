@@ -64,7 +64,7 @@ and policy hooks.
 The provider layer should be implemented as a Rust workspace package:
 
 ```text
-crates/codel00p-providers/
+core/crates/codel00p-providers/
   src/
     lib.rs
     error.rs
@@ -276,7 +276,7 @@ optional API key, model ID, timeout, custom headers, and health-check behavior.
 
 ## Current implementation status
 
-The first implementation now lives in `crates/codel00p-providers`.
+The first implementation now lives in `core/crates/codel00p-providers`.
 
 Implemented:
 

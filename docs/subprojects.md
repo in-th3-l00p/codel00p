@@ -168,7 +168,7 @@ This project prevents the CLI, desktop app, harness, memory layer, and cloud
 platform from inventing incompatible data shapes.
 
 The first Rust implementation exists at
-[`crates/codel00p-protocol`](../crates/codel00p-protocol). It currently defines
+[`core/crates/codel00p-protocol`](../core/crates/codel00p-protocol). It currently defines
 stable contracts for sessions, turns, events, tool calls, provider references,
 projects, and memory entries.
 
@@ -194,7 +194,7 @@ Pitch:
 > rewriting service logic.
 
 The first Rust implementation exists at
-[`crates/codel00p-storage`](../crates/codel00p-storage). It currently defines
+[`core/crates/codel00p-storage`](../core/crates/codel00p-storage). It currently defines
 the storage traits, an in-memory backend used by `codel00p-session` tests, and
 a feature-gated SQLite backend for durable local project state.
 
