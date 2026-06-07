@@ -41,7 +41,10 @@ fn request_builder_preserves_a_clean_message_shape() {
     assert_eq!(request.provider, "openai");
     assert_eq!(request.model, "gpt-5");
     assert_eq!(request.messages[0].role, MessageRole::System);
-    assert_eq!(request.messages[1].content, "Summarize the memory plan.");
+    assert_eq!(
+        request.messages[1].content.as_deref(),
+        Some("Summarize the memory plan.")
+    );
     assert_eq!(request.temperature, Some(0.2));
     assert_eq!(request.max_output_tokens, Some(2048));
 }

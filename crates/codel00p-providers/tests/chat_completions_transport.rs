@@ -1,5 +1,6 @@
 use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, default_registry,
+    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ToolCall,
+    default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
@@ -137,4 +138,76 @@ async fn github_copilot_uses_max_completion_tokens() {
 
     chat.assert_async().await;
     assert_eq!(response.content.as_deref(), Some("hello"));
+}
+
+#[tokio::test]
+async fn chat_completions_sends_tool_call_ids_for_tool_result_messages() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .json_body(json!({
+                    "model": "test-model",
+                    "messages": [
+                        {"role": "user", "content": "Read README."},
+                        {
+                            "role": "assistant",
+                            "content": null,
+                            "tool_calls": [{
+                                "id": "call-readme",
+                                "type": "function",
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": "{\"path\":\"README.md\"}"
+                                }
+                            }]
+                        },
+                        {
+                            "role": "tool",
+                            "content": "{\"content\":\"Agent Harness\"}",
+                            "tool_call_id": "call-readme"
+                        }
+                    ]
+                }));
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "done"
+                    }
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Read README."))
+                .message(ChatMessage::assistant_tool_calls(vec![ToolCall {
+                    id: Some("call-readme".to_string()),
+                    name: "read_file".to_string(),
+                    arguments: json!({ "path": "README.md" }),
+                    provider_data: Default::default(),
+                }]))
+                .message(ChatMessage::tool_result(
+                    "call-readme",
+                    r#"{"content":"Agent Harness"}"#,
+                ))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(response.content.as_deref(), Some("done"));
 }

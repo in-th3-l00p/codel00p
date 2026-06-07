@@ -111,7 +111,11 @@ impl ChatCompletionsRequest {
 #[derive(Debug, Serialize)]
 struct ChatCompletionsMessage {
     role: &'static str,
-    content: String,
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tool_calls: Vec<ChatCompletionsToolCall>,
 }
 
 impl From<ChatMessage> for ChatCompletionsMessage {
@@ -126,7 +130,47 @@ impl From<ChatMessage> for ChatCompletionsMessage {
         Self {
             role,
             content: message.content,
+            tool_call_id: message.tool_call_id,
+            tool_calls: message
+                .tool_calls
+                .into_iter()
+                .map(ChatCompletionsToolCall::from)
+                .collect(),
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCompletionsToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: ChatCompletionsToolCallFunction,
+}
+
+impl From<ToolCall> for ChatCompletionsToolCall {
+    fn from(tool_call: ToolCall) -> Self {
+        Self {
+            id: tool_call.id.unwrap_or_else(|| tool_call.name.clone()),
+            kind: "function",
+            function: ChatCompletionsToolCallFunction {
+                name: tool_call.name,
+                arguments: serialize_tool_arguments(tool_call.arguments),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCompletionsToolCallFunction {
+    name: String,
+    arguments: String,
+}
+
+fn serialize_tool_arguments(arguments: Value) -> String {
+    match arguments {
+        Value::String(value) => value,
+        other => other.to_string(),
     }
 }
 

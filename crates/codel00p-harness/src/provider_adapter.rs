@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use codel00p_providers::{
-    ChatMessage, InferenceClient, InferenceRequest, InferenceResponse, MessageRole, ToolDefinition,
+    ChatMessage, InferenceClient, InferenceRequest, InferenceResponse, ToolDefinition,
 };
 use serde_json::json;
 
@@ -132,9 +132,8 @@ fn map_session_message(message: &SessionMessage) -> ChatMessage {
     match message {
         SessionMessage::User { content } => ChatMessage::user(content.clone()),
         SessionMessage::Assistant { content } => ChatMessage::assistant(content.clone()),
-        SessionMessage::Tool { content, .. } => ChatMessage {
-            role: MessageRole::Tool,
-            content: content.clone(),
-        },
+        SessionMessage::Tool {
+            call_id, content, ..
+        } => ChatMessage::tool_result(call_id.clone(), content.clone()),
     }
 }
