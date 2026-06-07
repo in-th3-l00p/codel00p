@@ -1,0 +1,17 @@
+{
+  "id": "mem-1",
+  "project": {
+    "id": "project-1",
+    "name": "codel00p"
+  },
+  "kind": "architecture",
+  "status": "approved",
+  "content": "The harness owns tool execution; providers own inference.",
+  "tags": [
+    "harness"
+  ],
+  "source": {
+    "session_id": "session-1",
+    "turn_id": "turn-1"
+  }
+}

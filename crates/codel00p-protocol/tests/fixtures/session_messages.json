@@ -1,0 +1,19 @@
+[
+  {
+    "role": "user",
+    "content": "Inspect the repository."
+  },
+  {
+    "role": "assistant",
+    "content": "I will read the README."
+  },
+  {
+    "role": "tool",
+    "content": "{\"content\":\"Agent Harness\"}",
+    "tool_call_id": "call-1",
+    "tool_name": "read_file",
+    "payload": {
+      "content": "Agent Harness"
+    }
+  }
+]

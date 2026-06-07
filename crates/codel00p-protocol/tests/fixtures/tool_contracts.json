@@ -1,0 +1,17 @@
+{
+  "call": {
+    "id": "call-1",
+    "name": "read_file",
+    "input": {
+      "path": "README.md"
+    }
+  },
+  "result": {
+    "call_id": "call-1",
+    "name": "read_file",
+    "output": {
+      "content": "hello"
+    },
+    "success": true
+  }
+}
