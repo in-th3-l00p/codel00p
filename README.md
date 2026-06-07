@@ -35,6 +35,7 @@ The codel00p ecosystem is planned as a set of open-source projects:
 - **codel00p-sync:** memory synchronization.
 - **codel00p-providers:** inference provider abstraction.
 - **codel00p-protocol:** shared contracts between modules.
+- **codel00p-storage:** backend-neutral local and cloud storage contracts.
 - **codel00p-research:** harness and memory experiments.
 - **codel00p:** the final integrated product.
 
@@ -59,6 +60,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Subprojects](docs/subprojects.md)
 - [Architecture](docs/architecture.md)
 - [Protocol](docs/protocol.md)
+- [Storage](docs/storage.md)
 - [Inference Providers](docs/providers.md)
 - [Agent Harness](docs/harness.md)
 - [Project Memory](docs/memory.md)
@@ -78,6 +80,10 @@ The first Rust modules have started:
   provider adapter.
 - [codel00p-protocol](crates/codel00p-protocol): shared data contracts for
   sessions, turns, events, tool calls, providers, projects, and memory entries.
+- [codel00p-storage](crates/codel00p-storage): backend-neutral storage
+  primitives for scoped key-value state, documents, and append logs.
+- [codel00p-session](crates/codel00p-session): durable session metadata and
+  replay built on top of `codel00p-storage`.
 
 ## Current status
 

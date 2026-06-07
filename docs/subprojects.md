@@ -172,6 +172,31 @@ The first Rust implementation exists at
 stable contracts for sessions, turns, events, tool calls, provider references,
 projects, and memory entries.
 
+## codel00p-storage
+
+The backend-neutral persistence layer.
+
+Purpose:
+
+- keep services from depending on SQLite, Redis, cloud APIs, or object stores
+  directly;
+- provide scoped key-value storage for settings, cursors, leases, and runtime
+  state;
+- provide document storage for structured project, session, memory, and team
+  records;
+- provide append-log storage for transcripts, memory evolution, audit history,
+  and sync streams;
+- let local and cloud storage backends expose the same clean API.
+
+Pitch:
+
+> A storage boundary that lets codel00p swap local and cloud backends without
+> rewriting service logic.
+
+The first Rust implementation exists at
+[`crates/codel00p-storage`](../crates/codel00p-storage). It currently defines
+the storage traits and an in-memory backend used by `codel00p-session` tests.
+
 ## codel00p-research
 
 The experimental lab.
@@ -211,10 +236,11 @@ Pitch:
 3. `codel00p-cli`
 4. `codel00p-providers`
 5. `codel00p-protocol`
-6. `codel00p-desktop`
-7. `codel00p-sync`
-8. `codel00p-cloud`
-9. `codel00p`
+6. `codel00p-storage`
+7. `codel00p-desktop`
+8. `codel00p-sync`
+9. `codel00p-cloud`
+10. `codel00p`
 
 This order proves the memory and harness thesis while still treating cloud as a
 first-class path for team-scale value.

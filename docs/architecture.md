@@ -43,11 +43,17 @@ The first runtime implementation is `codel00p-harness`, a Rust crate that runs
 deterministic read-only agent turns and adapts them to `codel00p-providers`.
 See [Agent Harness](harness.md) for the current harness design.
 
-Durable session replay is owned by `codel00p-session`. The first backend is an
-in-memory append log that defines the storage contract: create sessions, append
-messages/events, preserve parent session lineage, and replay durable records in
-order. SQLite, search, compaction boundaries, and remote sidecar metadata should
-arrive as additional backends and record types behind the same trait.
+Durable persistence is split into two layers. `codel00p-storage` owns the
+backend-neutral storage primitives: scoped key-value state, structured
+documents, and ordered append logs. `codel00p-session` owns session-specific
+metadata, lineage, transcript records, and replay semantics on top of those
+primitives.
+
+Services must not call SQLite, Redis, cloud storage, or object stores directly.
+They should expose typed domain repositories and persist through
+`codel00p-storage`. The first backend is in-memory for contract tests. SQLite,
+Redis, and cloud storage should arrive as additional backends behind the same
+capability-based API.
 
 ## Interfaces
 
@@ -142,8 +148,9 @@ The clean boundary is:
 - `providers` routes inference;
 - `protocol` defines shared data contracts for sessions, turns, events, tools,
   provider references, projects, and memory entries;
+- `storage` defines backend-neutral local and cloud persistence primitives;
 - `session` persists durable transcripts, boundary events, lineage, and replay
-  records;
+  records on top of storage;
 - `cli` and `desktop` expose user interfaces;
 - `sync` coordinates local/cloud knowledge;
 - `cloud` manages organizations, teams, policies, and shared state.
