@@ -146,6 +146,7 @@ name = "codel00p-providers"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "codel00p-protocol",
  "httpmock",
  "reqwest",
  "serde",
