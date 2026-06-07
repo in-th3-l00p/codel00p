@@ -53,7 +53,12 @@ async fn executes_tool_calls_and_continues_until_final_text() {
         outcome.session_state.messages(),
         &[
             SessionMessage::user("Read README."),
-            SessionMessage::tool(
+            SessionMessage::assistant_tool_calls(vec![ModelToolCall::new(
+                "call-1",
+                "read_file",
+                json!({ "path": "README.md" }),
+            )]),
+            SessionMessage::tool_result(
                 "call-1",
                 "read_file",
                 r#"{"content":"Agent Harness\n","path":"README.md"}"#,
@@ -62,11 +67,11 @@ async fn executes_tool_calls_and_continues_until_final_text() {
         ]
     );
     assert!(outcome.events.iter().any(|event| {
-        matches!(event, HarnessEvent::ToolCallCompleted { name } if name == "read_file")
+        matches!(event, HarnessEvent::ToolCallCompleted { tool_name, .. } if tool_name == "read_file")
     }));
     assert!(matches!(
         outcome.events.last(),
-        Some(HarnessEvent::TurnCompleted { iterations: 2 })
+        Some(HarnessEvent::TurnCompleted { iterations: 2, .. })
     ));
 }
 
@@ -106,7 +111,7 @@ async fn unknown_tool_call_is_recorded_as_failed_tool_result() {
             .contains("tool not found")
     );
     assert!(outcome.events.iter().any(|event| {
-        matches!(event, HarnessEvent::ToolCallFailed { name, .. } if name == "missing")
+        matches!(event, HarnessEvent::ToolCallFailed { tool_name, .. } if tool_name == "missing")
     }));
 }
 

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
+pub use codel00p_protocol::ToolCall as ModelToolCall;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{
     errors::HarnessError, events::HarnessEvent, session::SessionState, tool_result::ToolResult,
@@ -125,35 +125,6 @@ impl HarnessInferenceResponse {
 
     pub fn finish_reason(&self) -> Option<&str> {
         self.finish_reason.as_deref()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ModelToolCall {
-    id: String,
-    name: String,
-    input: Value,
-}
-
-impl ModelToolCall {
-    pub fn new(id: impl Into<String>, name: impl Into<String>, input: Value) -> Self {
-        Self {
-            id: id.into(),
-            name: name.into(),
-            input,
-        }
-    }
-
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn input(&self) -> &Value {
-        &self.input
     }
 }
 

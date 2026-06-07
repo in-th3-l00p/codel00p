@@ -12,6 +12,9 @@ This crate owns the first read-only harness loop:
 - typed events;
 - bounded tool-call iteration.
 
+Session IDs, turn IDs, session messages, agent events, and model tool calls are
+shared from `codel00p-protocol`.
+
 The harness intentionally does not implement memory, file editing, shell
 execution, cloud sync, or approvals yet. Those belong behind explicit contracts
 so the runtime remains testable and auditable.

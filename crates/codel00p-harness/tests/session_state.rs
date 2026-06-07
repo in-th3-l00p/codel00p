@@ -1,6 +1,7 @@
 use codel00p_harness::{
     HarnessEvent, SessionId, SessionMessage, SessionState, TurnId, UserMessage,
 };
+use codel00p_protocol::EventId;
 
 #[test]
 fn session_state_accumulates_messages_in_order() {
@@ -17,7 +18,7 @@ fn session_state_accumulates_messages_in_order() {
         &[
             SessionMessage::user("Inspect the project."),
             SessionMessage::assistant("The project is a Rust workspace."),
-            SessionMessage::tool("call-1", "read_file", "README.md content"),
+            SessionMessage::tool_result("call-1", "read_file", "README.md content"),
         ]
     );
 }
@@ -53,13 +54,14 @@ fn ids_can_be_generated_or_constructed_for_tests() {
 #[test]
 fn harness_events_are_serializable() {
     let event = HarnessEvent::TurnStarted {
+        event_id: EventId::from_static("event-events"),
         session_id: SessionId::from_static("session-events"),
         turn_id: TurnId::from_static("turn-events"),
     };
 
     let encoded = serde_json::to_string(&event).expect("event should serialize");
 
-    assert!(encoded.contains("TurnStarted"));
+    assert!(encoded.contains("turn_started"));
     assert!(encoded.contains("session-events"));
     assert!(encoded.contains("turn-events"));
 }

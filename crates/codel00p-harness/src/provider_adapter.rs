@@ -9,6 +9,7 @@ use crate::{
     session::SessionMessage,
     turn::{HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall},
 };
+use codel00p_protocol::SessionRole;
 
 #[derive(Clone, Debug)]
 pub struct ProviderModelClient {
@@ -129,11 +130,27 @@ impl ModelClient for ProviderModelClient {
 }
 
 fn map_session_message(message: &SessionMessage) -> ChatMessage {
-    match message {
-        SessionMessage::User { content } => ChatMessage::user(content.clone()),
-        SessionMessage::Assistant { content } => ChatMessage::assistant(content.clone()),
-        SessionMessage::Tool {
-            call_id, content, ..
-        } => ChatMessage::tool_result(call_id.clone(), content.clone()),
+    match message.role() {
+        SessionRole::System => ChatMessage::system(message.content().to_string()),
+        SessionRole::User => ChatMessage::user(message.content().to_string()),
+        SessionRole::Assistant if !message.tool_calls().is_empty() => {
+            ChatMessage::assistant_tool_calls(
+                message
+                    .tool_calls()
+                    .iter()
+                    .map(|tool_call| codel00p_providers::ToolCall {
+                        id: Some(tool_call.id().to_string()),
+                        name: tool_call.name().to_string(),
+                        arguments: tool_call.input().clone(),
+                        provider_data: Default::default(),
+                    })
+                    .collect(),
+            )
+        }
+        SessionRole::Assistant => ChatMessage::assistant(message.content().to_string()),
+        SessionRole::Tool => ChatMessage::tool_result(
+            message.tool_call_id().unwrap_or_default().to_string(),
+            message.content().to_string(),
+        ),
     }
 }

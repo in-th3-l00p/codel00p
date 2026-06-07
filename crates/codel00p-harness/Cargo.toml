@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 async-trait = "0.1.88"
+codel00p-protocol = { path = "../codel00p-protocol" }
 codel00p-providers = { path = "../codel00p-providers" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"

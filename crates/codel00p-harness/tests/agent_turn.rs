@@ -64,21 +64,22 @@ async fn run_turn_returns_final_assistant_message_without_tools() {
         outcome.events.first(),
         Some(HarnessEvent::TurnStarted { session_id: id, .. }) if *id == session_id
     ));
-    assert!(
-        outcome
-            .events
-            .iter()
-            .any(|event| matches!(event, HarnessEvent::ContextBuilt { message_count: 1 }))
-    );
+    assert!(outcome.events.iter().any(|event| matches!(
+        event,
+        HarnessEvent::ContextBuilt {
+            message_count: 1,
+            ..
+        }
+    )));
     assert!(outcome.events.iter().any(|event| {
         matches!(
             event,
-            HarnessEvent::InferenceRequested { provider, model }
+            HarnessEvent::InferenceRequested { provider, model, .. }
                 if provider == "github" && model == "gpt-4o"
         )
     }));
     assert!(matches!(
         outcome.events.last(),
-        Some(HarnessEvent::TurnCompleted { iterations: 1 })
+        Some(HarnessEvent::TurnCompleted { iterations: 1, .. })
     ));
 }

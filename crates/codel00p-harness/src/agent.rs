@@ -9,6 +9,7 @@ use crate::{
     turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TurnOutcome},
     workspace::Workspace,
 };
+use codel00p_protocol::EventId;
 use serde_json::json;
 
 pub struct AgentHarness {
@@ -30,12 +31,16 @@ impl AgentHarness {
     ) -> Result<TurnOutcome, HarnessError> {
         let turn_id = TurnId::new();
         let mut events = vec![HarnessEvent::TurnStarted {
+            event_id: EventId::new(),
             session_id: session_id.clone(),
-            turn_id,
+            turn_id: turn_id.clone(),
         }];
         let mut session_state = SessionState::new(session_id);
         session_state.push_user(user_message);
         events.push(HarnessEvent::ContextBuilt {
+            event_id: EventId::new(),
+            session_id: session_state.session_id().clone(),
+            turn_id: turn_id.clone(),
             message_count: session_state.messages().len(),
         });
 
@@ -53,10 +58,16 @@ impl AgentHarness {
                 .await?;
 
             events.push(HarnessEvent::InferenceRequested {
+                event_id: EventId::new(),
+                session_id: session_state.session_id().clone(),
+                turn_id: turn_id.clone(),
                 provider: response.provider().to_string(),
                 model: response.model().to_string(),
             });
             events.push(HarnessEvent::InferenceCompleted {
+                event_id: EventId::new(),
+                session_id: session_state.session_id().clone(),
+                turn_id: turn_id.clone(),
                 finish_reason: response.finish_reason().map(str::to_string),
             });
 
@@ -67,6 +78,9 @@ impl AgentHarness {
                 }
 
                 events.push(HarnessEvent::TurnCompleted {
+                    event_id: EventId::new(),
+                    session_id: session_state.session_id().clone(),
+                    turn_id,
                     iterations: iteration,
                 });
 
@@ -78,9 +92,14 @@ impl AgentHarness {
                 });
             }
 
+            session_state.push_assistant_tool_calls(response.tool_calls().to_vec());
+
             for tool_call in response.tool_calls() {
                 events.push(HarnessEvent::ToolCallRequested {
-                    name: tool_call.name().to_string(),
+                    event_id: EventId::new(),
+                    session_id: session_state.session_id().clone(),
+                    turn_id: turn_id.clone(),
+                    tool_name: tool_call.name().to_string(),
                 });
 
                 let result = match self
@@ -90,14 +109,20 @@ impl AgentHarness {
                 {
                     Ok(result) => {
                         events.push(HarnessEvent::ToolCallCompleted {
-                            name: tool_call.name().to_string(),
+                            event_id: EventId::new(),
+                            session_id: session_state.session_id().clone(),
+                            turn_id: turn_id.clone(),
+                            tool_name: tool_call.name().to_string(),
                         });
                         result
                     }
                     Err(error) => {
                         let message = error.to_string();
                         events.push(HarnessEvent::ToolCallFailed {
-                            name: tool_call.name().to_string(),
+                            event_id: EventId::new(),
+                            session_id: session_state.session_id().clone(),
+                            turn_id: turn_id.clone(),
+                            tool_name: tool_call.name().to_string(),
                             message: message.clone(),
                         });
                         ToolResult::json(json!({ "error": message }))

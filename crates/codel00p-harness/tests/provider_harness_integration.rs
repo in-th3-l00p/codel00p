@@ -166,6 +166,18 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                     "messages": [
                         {"role": "user", "content": "Read README."},
                         {
+                            "role": "assistant",
+                            "content": null,
+                            "tool_calls": [{
+                                "id": "call-readme",
+                                "type": "function",
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": "{\"path\":\"README.md\"}"
+                                }
+                            }]
+                        },
+                        {
                             "role": "tool",
                             "content": "{\"content\":\"Agent Harness\\n\",\"path\":\"README.md\"}",
                             "tool_call_id": "call-readme"

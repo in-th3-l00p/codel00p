@@ -35,3 +35,8 @@ It should not own:
 
 Those behaviors belong in the corresponding implementation crates. Protocol
 types are the stable exchange format between them.
+
+`codel00p-harness` now uses protocol contracts for session IDs, turn IDs,
+session messages, agent events, and model tool calls. This keeps the first
+runtime aligned with the exchange format that future CLI, memory, desktop, and
+cloud modules should consume.
