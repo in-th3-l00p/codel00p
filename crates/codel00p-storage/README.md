@@ -10,10 +10,13 @@ crate's small set of primitives:
 - `DocumentStore` for structured records by scope, collection, and id.
 - `AppendLogStore` for ordered session, memory, audit, and sync streams.
 
-The first backend is `InMemoryStorage`, used to lock down contracts and make
-domain crates testable without external services. SQLite, Redis, and cloud
-storage should implement the same traits as separate backend modules without
-changing service APIs.
+The first backends are:
+
+- `InMemoryStorage` for tests, harness development, and contract hardening.
+- `SqliteStorage` behind the `sqlite` feature for durable local project state.
+
+Redis and cloud storage should implement the same traits as separate backend
+modules without changing service APIs.
 
 The design goal is capability-based storage, not a SQL-shaped abstraction.
 Different backends can be excellent internally while codel00p services keep a

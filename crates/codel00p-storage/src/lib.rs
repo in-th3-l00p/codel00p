@@ -3,6 +3,11 @@ use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(feature = "sqlite")]
+mod sqlite;
+#[cfg(feature = "sqlite")]
+pub use sqlite::SqliteStorage;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct StorageScope {
     organization_id: Option<String>,

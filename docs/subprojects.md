@@ -195,7 +195,8 @@ Pitch:
 
 The first Rust implementation exists at
 [`crates/codel00p-storage`](../crates/codel00p-storage). It currently defines
-the storage traits and an in-memory backend used by `codel00p-session` tests.
+the storage traits, an in-memory backend used by `codel00p-session` tests, and
+a feature-gated SQLite backend for durable local project state.
 
 ## codel00p-research
 

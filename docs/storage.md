@@ -28,12 +28,13 @@ one stable model.
 
 ## Backend Strategy
 
-The current backend is `InMemoryStorage`. It exists for tests, harness
-development, and contract hardening.
+The current backends are:
+
+- `InMemoryStorage` for tests, harness development, and contract hardening.
+- `SqliteStorage` behind the `sqlite` feature for durable local project state.
 
 Planned backends:
 
-- SQLite for durable local project state.
 - Redis for fast shared state, leases, queues, and ephemeral coordination.
 - Cloud storage for organization-backed memory, audit, and team state.
 
