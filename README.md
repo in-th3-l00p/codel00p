@@ -58,6 +58,8 @@ asset is the project knowledge that codel00p captures and makes reusable.
 
 - [Project Description](docs/project.md)
 - [Subprojects](docs/subprojects.md)
+- [Repository Structure](docs/repository.md)
+- [Dependency Policy](docs/dependencies.md)
 - [Architecture](docs/architecture.md)
 - [Protocol](docs/protocol.md)
 - [Storage](docs/storage.md)

@@ -32,6 +32,9 @@ Good contributions are:
 Documentation should stay concise and technical. Prefer short files with clear
 boundaries over one large document.
 
+Read [Repository Structure](docs/repository.md) before adding a new crate, app,
+or shared package.
+
 ## Development
 
 Rust engine work lives under `core/`:
@@ -45,6 +48,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Application and TypeScript package work lives under `apps/` and `packages/`.
 Use the root package manager workspace for those projects.
+
+Run the complete repository check from the root before opening a pull request:
+
+```bash
+pnpm verify
+```
 
 ## Git history
 
