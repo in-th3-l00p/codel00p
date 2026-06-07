@@ -15,6 +15,7 @@
     "dev:desktop": "pnpm --filter @codel00p/desktop dev",
     "core:fmt": "cd core && cargo fmt --all -- --check",
     "core:test": "cd core && cargo test --workspace",
+    "core:test:cli": "cd core && cargo test -p codel00p-cli",
     "core:test:sqlite": "cd core && cargo test -p codel00p-storage --features sqlite",
     "core:test:memory:sqlite": "cd core && cargo test -p codel00p-memory --features sqlite",
     "core:coverage:storage": "cd core && cargo llvm-cov -p codel00p-storage --features sqlite --summary-only",

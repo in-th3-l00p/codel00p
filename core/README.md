@@ -11,6 +11,7 @@ interface:
   backend.
 - `codel00p-memory`: candidate lifecycle, review audit, and deterministic
   retrieval for durable project knowledge.
+- `codel00p-cli`: terminal review workflow for project memory.
 - `codel00p-providers`: inference provider profiles, policy, credentials, and
   transports.
 - `codel00p-session`: durable session metadata and replay APIs.
@@ -24,9 +25,12 @@ Run Rust checks from this directory:
 ```bash
 cargo fmt --all -- --check
 cargo test --workspace
+cargo test -p codel00p-cli
 cargo test -p codel00p-storage --features sqlite
+cargo test -p codel00p-memory --features sqlite
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy -p codel00p-storage --features sqlite --all-targets -- -D warnings
+cargo clippy -p codel00p-memory --features sqlite --all-targets -- -D warnings
 ```
 
 From the repository root, the same checks are available through:

@@ -72,6 +72,11 @@ Pitch:
 The CLI should ship before the desktop app because it is the fastest way to test
 the memory and harness loop in real developer workflows.
 
+The first Rust implementation exists at
+[`core/crates/codel00p-cli`](../core/crates/codel00p-cli). It currently provides
+SQLite-backed memory review commands for listing, showing, approving, rejecting,
+archiving, and auditing project memory records.
+
 ## codel00p-desktop
 
 The Electron control center.

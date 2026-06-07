@@ -130,6 +130,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "codel00p-cli"
+version = "0.1.0"
+dependencies = [
+ "codel00p-memory",
+ "codel00p-protocol",
+ "codel00p-storage",
+ "tempfile",
+]
+
+[[package]]
 name = "codel00p-harness"
 version = "0.1.0"
 dependencies = [
