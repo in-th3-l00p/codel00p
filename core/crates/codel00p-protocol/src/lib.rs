@@ -756,6 +756,14 @@ impl MemorySource {
             turn_id,
         }
     }
+
+    pub fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    pub fn turn_id(&self) -> &TurnId {
+        &self.turn_id
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

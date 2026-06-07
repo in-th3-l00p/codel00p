@@ -183,7 +183,10 @@ Status: started in `core/crates/codel00p-memory`. The first implementation
 supports candidate creation, explicit review transitions, audit logs, storage
 backing through `codel00p-storage`, and deterministic retrieval of approved
 memory. Retrieval now supports project-scoped filtering by memory kind, tag,
-and text, plus deterministic result limits for prompt-context assembly.
+and text, plus deterministic result limits for prompt-context assembly. The
+crate also includes an explicit extractor that turns `remember ...:` directives
+from summaries or human notes into candidate memory without requiring model
+extraction.
 
 Success criteria:
 
@@ -217,6 +220,23 @@ Success criteria:
 - retrieval is deterministic for fixed fixtures;
 - returned memory includes reason strings and source metadata;
 - users can inspect what was loaded.
+
+### Phase 4: Memory extraction
+
+Build extraction interfaces that propose reviewable candidates from completed
+turns, session summaries, tool outputs, imported documents, and human notes.
+
+Status: started. `ExplicitMemoryExtractor` supports deterministic extraction
+from explicit `remember ...:` directives, including optional kind and tags.
+Every extracted item remains a candidate until it passes the normal review
+lifecycle.
+
+Success criteria:
+
+- extraction can run without writing directly to approved memory;
+- extracted candidates include source session and turn metadata;
+- deterministic extractors are available for tests and human-authored notes;
+- model-assisted extractors can be added behind the same trait later.
 
 ### Phase 4: Candidate extraction interface
 

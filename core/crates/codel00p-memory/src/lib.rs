@@ -37,8 +37,34 @@ impl MemoryCandidateInput {
     }
 
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
-        self.tags.push(tag.into());
+        if let Some(tag) = non_empty_filter(tag.into()) {
+            self.tags.push(tag);
+        }
         self
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn project(&self) -> &ProjectRef {
+        &self.project
+    }
+
+    pub fn kind(&self) -> MemoryKind {
+        self.kind
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    pub fn source(&self) -> &MemorySource {
+        &self.source
+    }
+
+    pub fn tags(&self) -> &[String] {
+        &self.tags
     }
 
     fn validate(&self) -> Result<(), MemoryError> {
@@ -64,6 +90,95 @@ impl MemoryCandidateInput {
             entry = entry.with_tag(tag);
         }
         entry
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryExtractionInput {
+    project: ProjectRef,
+    source: MemorySource,
+    text: String,
+    tags: Vec<String>,
+}
+
+impl MemoryExtractionInput {
+    pub fn new(project: ProjectRef, source: MemorySource, text: impl Into<String>) -> Self {
+        Self {
+            project,
+            source,
+            text: text.into(),
+            tags: Vec::new(),
+        }
+    }
+
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        if let Some(tag) = non_empty_filter(tag.into()) {
+            self.tags.push(tag);
+        }
+        self
+    }
+
+    pub fn project(&self) -> &ProjectRef {
+        &self.project
+    }
+
+    pub fn source(&self) -> &MemorySource {
+        &self.source
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn tags(&self) -> &[String] {
+        &self.tags
+    }
+}
+
+pub trait MemoryCandidateExtractor {
+    fn extract(
+        &self,
+        input: MemoryExtractionInput,
+    ) -> Result<Vec<MemoryCandidateInput>, MemoryError>;
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ExplicitMemoryExtractor;
+
+impl MemoryCandidateExtractor for ExplicitMemoryExtractor {
+    fn extract(
+        &self,
+        input: MemoryExtractionInput,
+    ) -> Result<Vec<MemoryCandidateInput>, MemoryError> {
+        let mut candidates = Vec::new();
+        for line in input.text().lines() {
+            let Some((kind, directive_tags, content)) = parse_remember_directive(line) else {
+                continue;
+            };
+
+            let id = format!(
+                "memory-candidate-{}-{}-{}",
+                input.source().session_id().as_str(),
+                input.source().turn_id().as_str(),
+                candidates.len() + 1
+            );
+            let mut candidate = MemoryCandidateInput::new(
+                id,
+                input.project().clone(),
+                kind,
+                content,
+                input.source().clone(),
+            );
+            for tag in input.tags() {
+                candidate = candidate.with_tag(tag);
+            }
+            for tag in directive_tags {
+                candidate = candidate.with_tag(tag);
+            }
+            candidates.push(candidate);
+        }
+
+        Ok(candidates)
     }
 }
 
@@ -532,6 +647,62 @@ fn non_empty_filter(value: String) -> Option<String> {
         None
     } else {
         Some(trimmed.to_string())
+    }
+}
+
+fn parse_remember_directive(line: &str) -> Option<(MemoryKind, Vec<String>, String)> {
+    let line = line.trim();
+    let rest = line.strip_prefix("remember")?.trim_start();
+    let (header, content) = rest.split_once(':')?;
+    let content = non_empty_filter(content.to_string())?;
+    let header = header.trim();
+    let kind = parse_directive_kind(header)?;
+    let tags = parse_directive_tags(header);
+
+    Some((kind, tags, content))
+}
+
+fn parse_directive_kind(header: &str) -> Option<MemoryKind> {
+    if header.is_empty() {
+        return Some(MemoryKind::Decision);
+    }
+
+    let kind = header
+        .split_once('[')
+        .map(|(kind, _)| kind)
+        .unwrap_or(header)
+        .trim();
+
+    if kind.is_empty() {
+        Some(MemoryKind::Decision)
+    } else {
+        memory_kind_from_label(kind)
+    }
+}
+
+fn parse_directive_tags(header: &str) -> Vec<String> {
+    let Some((_, raw_tags)) = header.split_once('[') else {
+        return Vec::new();
+    };
+    let Some((raw_tags, _)) = raw_tags.split_once(']') else {
+        return Vec::new();
+    };
+
+    raw_tags
+        .split(',')
+        .filter_map(|tag| non_empty_filter(tag.to_string()))
+        .collect()
+}
+
+fn memory_kind_from_label(label: &str) -> Option<MemoryKind> {
+    match label.trim().to_ascii_lowercase().as_str() {
+        "architecture" => Some(MemoryKind::Architecture),
+        "convention" => Some(MemoryKind::Convention),
+        "workflow" => Some(MemoryKind::Workflow),
+        "decision" => Some(MemoryKind::Decision),
+        "deployment" => Some(MemoryKind::Deployment),
+        "troubleshooting" => Some(MemoryKind::Troubleshooting),
+        _ => None,
     }
 }
 
