@@ -7,6 +7,7 @@ use crate::{
     events::HarnessEvent,
     iteration_budget::IterationBudget,
     lifecycle::{LifecycleHook, TurnLifecycleContext},
+    memory::{ProjectMemoryProvider, ProjectMemoryRequest},
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
     session::{SessionId, SessionState, TurnId, UserMessage},
     tool_registry::ToolRegistry,
@@ -23,6 +24,7 @@ pub struct AgentHarness {
     tools: ToolRegistry,
     permission_policy: Arc<dyn PermissionPolicy>,
     lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
+    project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
     context_window: Option<ContextWindowState>,
     max_iterations: u32,
 }
@@ -85,6 +87,18 @@ impl AgentHarness {
                 );
             if let Some(context_window) = &self.context_window {
                 request = request.with_context_window(context_window.clone());
+            }
+            if let Some(project_memory_provider) = &self.project_memory_provider {
+                let project_memory = project_memory_provider
+                    .retrieve(ProjectMemoryRequest::new(
+                        session_state.session_id().clone(),
+                        turn_id.clone(),
+                        session_state.messages().len(),
+                    ))
+                    .await?;
+                if !project_memory.is_empty() {
+                    request = request.with_project_memory(project_memory);
+                }
             }
 
             let response = self.model_client.infer(request).await?;
@@ -394,6 +408,7 @@ pub struct AgentHarnessBuilder {
     tools: Option<ToolRegistry>,
     permission_policy: Option<Arc<dyn PermissionPolicy>>,
     lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
+    project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
     context_window: Option<ContextWindowState>,
     max_iterations: Option<u32>,
 }
@@ -438,6 +453,14 @@ impl AgentHarnessBuilder {
         self
     }
 
+    pub fn project_memory_provider<T>(mut self, project_memory_provider: T) -> Self
+    where
+        T: ProjectMemoryProvider + 'static,
+    {
+        self.project_memory_provider = Some(Arc::new(project_memory_provider));
+        self
+    }
+
     pub fn max_iterations(mut self, max_iterations: u32) -> Self {
         self.max_iterations = Some(max_iterations);
         self
@@ -458,6 +481,7 @@ impl AgentHarnessBuilder {
                 .permission_policy
                 .unwrap_or_else(|| Arc::new(AllowAllPermissionPolicy)),
             lifecycle_hooks: self.lifecycle_hooks,
+            project_memory_provider: self.project_memory_provider,
             context_window: self.context_window,
             max_iterations: self.max_iterations.unwrap_or(4),
         })

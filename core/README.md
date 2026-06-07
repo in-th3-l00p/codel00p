@@ -14,8 +14,8 @@ interface:
 - `codel00p-providers`: inference provider profiles, policy, credentials, and
   transports.
 - `codel00p-session`: durable session metadata and replay APIs.
-- `codel00p-harness`: agent runtime, tool loop, permissions, and lifecycle
-  hooks.
+- `codel00p-harness`: agent runtime, memory-aware inference context, tool loop,
+  permissions, and lifecycle hooks.
 
 ## Commands
 

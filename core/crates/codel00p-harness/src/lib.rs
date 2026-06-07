@@ -4,6 +4,7 @@ pub mod errors;
 pub mod events;
 pub mod iteration_budget;
 pub mod lifecycle;
+pub mod memory;
 pub mod permissions;
 pub mod provider_adapter;
 pub mod session;
@@ -19,6 +20,10 @@ pub use errors::HarnessError;
 pub use events::HarnessEvent;
 pub use iteration_budget::IterationBudget;
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
+pub use memory::{
+    MemoryRepositoryProjectMemoryProvider, ProjectMemoryContext, ProjectMemoryItem,
+    ProjectMemoryProvider, ProjectMemoryRequest,
+};
 pub use permissions::{
     AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope,
