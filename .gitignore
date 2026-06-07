@@ -1,2 +1,10 @@
 target/
-
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+.turbo/
+.env
+.env.*
+!.env.example

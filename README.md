@@ -85,6 +85,17 @@ cd core
 cargo test --workspace
 ```
 
+Application development uses the root pnpm workspace:
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm build
+pnpm dev:landing
+pnpm dev:cloud
+pnpm dev:desktop
+```
+
 ## Current implementation
 
 The first Rust modules have started:

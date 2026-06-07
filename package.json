@@ -1,0 +1,21 @@
+{
+  "name": "codel00p-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "dev:landing": "pnpm --filter @codel00p/landing dev",
+    "dev:cloud": "pnpm --filter @codel00p/cloud dev",
+    "dev:desktop": "pnpm --filter @codel00p/desktop dev",
+    "core:fmt": "cd core && cargo fmt --all -- --check",
+    "core:test": "cd core && cargo test --workspace",
+    "core:clippy": "cd core && cargo clippy --workspace --all-targets -- -D warnings"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest"
+  }
+}

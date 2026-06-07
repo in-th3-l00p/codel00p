@@ -1,0 +1,23 @@
+{
+  "name": "@codel00p/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codel00p/sdk": "workspace:*",
+    "@codel00p/ui": "workspace:*",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "latest",
+    "electron-vite": "latest",
+    "vite": "^7.0.0"
+  }
+}
