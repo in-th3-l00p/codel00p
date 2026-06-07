@@ -3,7 +3,9 @@ use codel00p_protocol::{
 };
 use codel00p_session::{
     InMemorySessionStore, SessionMetadata, SessionRecord, SessionStore, SessionStoreError,
+    StorageBackedSessionStore,
 };
+use codel00p_storage::{InMemoryStorage, StorageScope};
 
 #[test]
 fn appends_and_replays_session_records_in_order() {
@@ -89,4 +91,25 @@ fn persistence_events_are_emitted_for_appends() {
         appended.persistence_event(),
         SessionPersistenceEvent::RecordAppended { .. }
     ));
+}
+
+#[test]
+fn session_store_can_run_on_supplied_storage_backend_and_scope() {
+    let storage = InMemoryStorage::default();
+    let scope = StorageScope::project("org-1", "project-1");
+    let mut store = StorageBackedSessionStore::new(scope, storage);
+    let session_id = SessionId::from_static("session-storage-backed");
+
+    store
+        .create_session(SessionMetadata::new(session_id.clone(), "cli"))
+        .expect("create session");
+    store
+        .append_message(&session_id, SessionMessage::user("Use generic storage."))
+        .expect("append message");
+
+    let replayed = store.replay(&session_id).expect("replay");
+
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].session_id(), &session_id);
+    assert!(matches!(replayed[0].record(), SessionRecord::Message(_)));
 }

@@ -123,6 +123,57 @@ impl StorageDocument {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StorageValue {
+    scope: StorageScope,
+    key: String,
+    version: u64,
+    payload: Value,
+    metadata: BTreeMap<String, String>,
+}
+
+impl StorageValue {
+    pub fn new(scope: StorageScope, key: impl Into<String>, payload: Value) -> Self {
+        Self {
+            scope,
+            key: key.into(),
+            version: 0,
+            payload,
+            metadata: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn scope(&self) -> &StorageScope {
+        &self.scope
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    pub fn payload(&self) -> &Value {
+        &self.payload
+    }
+
+    pub fn metadata(&self) -> &BTreeMap<String, String> {
+        &self.metadata
+    }
+
+    fn with_version(mut self, version: u64) -> Self {
+        self.version = version;
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppendLogEntry {
     scope: StorageScope,
     stream: String,
@@ -187,6 +238,16 @@ pub trait DocumentStore {
     ) -> Result<Option<StorageDocument>, StorageError>;
 }
 
+pub trait KeyValueStore {
+    fn put_value(&mut self, value: StorageValue) -> Result<StorageValue, StorageError>;
+
+    fn get_value(
+        &self,
+        scope: &StorageScope,
+        key: &str,
+    ) -> Result<Option<StorageValue>, StorageError>;
+}
+
 pub trait AppendLogStore {
     fn append_log(
         &mut self,
@@ -204,8 +265,33 @@ pub trait AppendLogStore {
 
 #[derive(Default)]
 pub struct InMemoryStorage {
+    values: HashMap<ValueKey, StorageValue>,
     documents: HashMap<DocumentKey, StorageDocument>,
     logs: HashMap<LogKey, Vec<AppendLogEntry>>,
+}
+
+impl KeyValueStore for InMemoryStorage {
+    fn put_value(&mut self, value: StorageValue) -> Result<StorageValue, StorageError> {
+        let key = ValueKey::new(value.scope(), value.key());
+        let next_version = self
+            .values
+            .get(&key)
+            .map(|existing| existing.version() + 1)
+            .unwrap_or(1);
+        let stored = value.with_version(next_version);
+
+        self.values.insert(key, stored.clone());
+
+        Ok(stored)
+    }
+
+    fn get_value(
+        &self,
+        scope: &StorageScope,
+        key: &str,
+    ) -> Result<Option<StorageValue>, StorageError> {
+        Ok(self.values.get(&ValueKey::new(scope, key)).cloned())
+    }
 }
 
 impl DocumentStore for InMemoryStorage {
@@ -270,6 +356,21 @@ impl AppendLogStore for InMemoryStorage {
             .get(&LogKey::new(scope, stream))
             .cloned()
             .unwrap_or_default())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ValueKey {
+    scope: StorageScope,
+    key: String,
+}
+
+impl ValueKey {
+    fn new(scope: &StorageScope, key: &str) -> Self {
+        Self {
+            scope: scope.clone(),
+            key: key.to_string(),
+        }
     }
 }
 

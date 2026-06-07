@@ -1,7 +1,8 @@
 use serde_json::json;
 
 use codel00p_storage::{
-    AppendLogStore, DocumentStore, InMemoryStorage, StorageDocument, StorageScope,
+    AppendLogStore, DocumentStore, InMemoryStorage, KeyValueStore, StorageDocument, StorageScope,
+    StorageValue,
 };
 
 #[test]
@@ -82,4 +83,43 @@ fn append_log_entries_replay_in_sequence_order() {
     assert_eq!(replayed.len(), 2);
     assert_eq!(replayed[0].payload(), &json!({ "text": "first" }));
     assert_eq!(replayed[1].payload(), &json!({ "text": "second" }));
+}
+
+#[test]
+fn scoped_key_values_are_isolated() {
+    let mut storage = InMemoryStorage::default();
+    let first_scope = StorageScope::workspace("workspace-1");
+    let second_scope = StorageScope::workspace("workspace-2");
+
+    storage
+        .put_value(StorageValue::new(
+            first_scope.clone(),
+            "provider.selected",
+            json!("openai"),
+        ))
+        .expect("put first value");
+    storage
+        .put_value(StorageValue::new(
+            second_scope.clone(),
+            "provider.selected",
+            json!("anthropic"),
+        ))
+        .expect("put second value");
+
+    assert_eq!(
+        storage
+            .get_value(&first_scope, "provider.selected")
+            .expect("get first")
+            .expect("first value")
+            .payload(),
+        &json!("openai")
+    );
+    assert_eq!(
+        storage
+            .get_value(&second_scope, "provider.selected")
+            .expect("get second")
+            .expect("second value")
+            .payload(),
+        &json!("anthropic")
+    );
 }

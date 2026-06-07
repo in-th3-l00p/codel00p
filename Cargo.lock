@@ -160,7 +160,9 @@ name = "codel00p-session"
 version = "0.1.0"
 dependencies = [
  "codel00p-protocol",
+ "codel00p-storage",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
