@@ -1,8 +1,10 @@
 target/
+core/target/
 node_modules/
-.next/
-out/
-dist/
+apps/*/.next/
+apps/*/out/
+apps/*/dist/
+packages/*/dist/
 *.tsbuildinfo
 .turbo/
 .env

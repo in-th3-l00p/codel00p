@@ -11,13 +11,13 @@
   "dependencies": {
     "@codel00p/sdk": "workspace:*",
     "@codel00p/ui": "workspace:*",
-    "react": "latest",
-    "react-dom": "latest"
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
-    "electron": "latest",
-    "electron-vite": "latest",
-    "vite": "^7.0.0"
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "42.3.3",
+    "electron-vite": "5.0.0",
+    "vite": "7.3.5"
   }
 }
