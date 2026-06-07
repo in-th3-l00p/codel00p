@@ -241,3 +241,104 @@ fn retrieval_is_deterministic_by_memory_id() {
         ["mem-a", "mem-b", "mem-c"]
     );
 }
+
+#[test]
+fn retrieval_can_filter_by_memory_kind() {
+    let mut store = InMemoryMemoryStore::default();
+    for (id, kind, content) in [
+        (
+            "mem-architecture",
+            MemoryKind::Architecture,
+            "The harness owns tool execution.",
+        ),
+        (
+            "mem-workflow",
+            MemoryKind::Workflow,
+            "Run pnpm verify before pushing main.",
+        ),
+    ] {
+        store
+            .create_candidate(MemoryCandidateInput::new(
+                id,
+                project(),
+                kind,
+                content,
+                source(),
+            ))
+            .expect("create candidate");
+        store
+            .review(id, ReviewDecision::approve("alice"))
+            .expect("approve candidate");
+    }
+
+    let retrieved = store
+        .retrieve(MemoryQuery::new(project()).with_kind(MemoryKind::Workflow))
+        .expect("retrieve workflow memory");
+
+    assert_eq!(retrieved.len(), 1);
+    assert_eq!(retrieved[0].entry().id(), "mem-workflow");
+    assert_eq!(retrieved[0].reason(), "matched kind workflow");
+}
+
+#[test]
+fn retrieval_limit_caps_deterministic_results() {
+    let mut store = InMemoryMemoryStore::default();
+    for id in ["mem-c", "mem-a", "mem-b"] {
+        store
+            .create_candidate(MemoryCandidateInput::new(
+                id,
+                project(),
+                MemoryKind::Workflow,
+                format!("Verification workflow note {id}."),
+                source(),
+            ))
+            .expect("create candidate");
+        store
+            .review(id, ReviewDecision::approve("alice"))
+            .expect("approve candidate");
+    }
+
+    let retrieved = store
+        .retrieve(MemoryQuery::new(project()).with_limit(2))
+        .expect("retrieve capped memory");
+
+    assert_eq!(
+        retrieved
+            .iter()
+            .map(|memory| memory.entry().id())
+            .collect::<Vec<_>>(),
+        ["mem-a", "mem-b"]
+    );
+}
+
+#[test]
+fn retrieval_ignores_empty_optional_filters() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(
+                "mem-1",
+                project(),
+                MemoryKind::Architecture,
+                "The harness owns tool execution.",
+                source(),
+            )
+            .with_tag("harness"),
+        )
+        .expect("create candidate");
+    store
+        .review("mem-1", ReviewDecision::approve("alice"))
+        .expect("approve candidate");
+
+    let retrieved = store
+        .retrieve(
+            MemoryQuery::new(project())
+                .with_tag(" ")
+                .with_text(" ")
+                .with_limit(0),
+        )
+        .expect("retrieve memory");
+
+    assert_eq!(retrieved.len(), 1);
+    assert_eq!(retrieved[0].reason(), "matched approved project memory");
+}

@@ -212,26 +212,40 @@ impl MemoryAuditEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryQuery {
     project: ProjectRef,
+    kind: Option<MemoryKind>,
     tag: Option<String>,
     text: Option<String>,
+    limit: Option<usize>,
 }
 
 impl MemoryQuery {
     pub fn new(project: ProjectRef) -> Self {
         Self {
             project,
+            kind: None,
             tag: None,
             text: None,
+            limit: None,
         }
     }
 
+    pub fn with_kind(mut self, kind: MemoryKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
-        self.tag = Some(tag.into());
+        self.tag = non_empty_filter(tag.into());
         self
     }
 
     pub fn with_text(mut self, text: impl Into<String>) -> Self {
-        self.text = Some(text.into());
+        self.text = non_empty_filter(text.into());
+        self
+    }
+
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = if limit == 0 { None } else { Some(limit) };
         self
     }
 }
@@ -391,6 +405,13 @@ where
             }
 
             let mut reasons = Vec::new();
+            if let Some(kind) = query.kind {
+                if record.entry().kind() != kind {
+                    continue;
+                }
+                reasons.push(format!("kind {}", memory_kind_label(kind)));
+            }
+
             if let Some(tag) = &query.tag {
                 if !record
                     .entry()
@@ -423,6 +444,9 @@ where
         }
 
         retrieved.sort_by(|left, right| left.entry().id().cmp(right.entry().id()));
+        if let Some(limit) = query.limit {
+            retrieved.truncate(limit);
+        }
         Ok(retrieved)
     }
 }
@@ -500,6 +524,26 @@ fn set_status(entry: MemoryEntry, status: MemoryStatus) -> MemoryEntry {
 
 fn entry_content(entry: &MemoryEntry) -> &str {
     entry.content()
+}
+
+fn non_empty_filter(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn memory_kind_label(kind: MemoryKind) -> &'static str {
+    match kind {
+        MemoryKind::Architecture => "architecture",
+        MemoryKind::Convention => "convention",
+        MemoryKind::Workflow => "workflow",
+        MemoryKind::Decision => "decision",
+        MemoryKind::Deployment => "deployment",
+        MemoryKind::Troubleshooting => "troubleshooting",
+    }
 }
 
 fn memory_audit_stream(id: &str) -> String {

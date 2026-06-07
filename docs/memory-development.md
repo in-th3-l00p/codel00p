@@ -182,7 +182,8 @@ tests and JSON serialization.
 Status: started in `core/crates/codel00p-memory`. The first implementation
 supports candidate creation, explicit review transitions, audit logs, storage
 backing through `codel00p-storage`, and deterministic retrieval of approved
-memory.
+memory. Retrieval now supports project-scoped filtering by memory kind, tag,
+and text, plus deterministic result limits for prompt-context assembly.
 
 Success criteria:
 
