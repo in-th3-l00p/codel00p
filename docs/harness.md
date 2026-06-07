@@ -9,6 +9,9 @@ The first implementation now exists under
 deterministic read-only turns, fake model-client tests, workspace-safe tools,
 bounded tool-call loops, concurrency-safe tool batching, a provider adapter, and
 shared public contracts from `codel00p-protocol`.
+It also exposes permission policy and lifecycle hook surfaces so future memory,
+compaction, approvals, and remote-control modules do not have to fork the core
+turn loop.
 
 The first harness milestone should be intentionally small: read-only repository
 work, deterministic tests, and a clean public interface that future CLI,
@@ -129,6 +132,34 @@ larger security and determinism surface than file reading/searching.
 
 Read-only defaults are marked concurrency-safe. Custom tools must explicitly opt
 in by implementing `Tool::is_concurrency_safe`; the default is serial execution.
+Custom tools also expose a `PermissionScope`. Unknown/custom tools default to a
+write-like scope so policy must explicitly allow them before execution.
+
+## Runtime Control
+
+The harness has a control layer inspired by Hermes and Claude Code:
+
+- `PermissionPolicy` receives a typed `PermissionRequest` before each tool call.
+- denied tools are not executed; they become structured tool results with
+  `permission_denied`;
+- permission request/denial and tool progress events are emitted through the
+  shared protocol event stream;
+- `ContextWindowState` can be attached to inference requests so context engines,
+  UI, and provider routing see the same pressure information.
+
+## Lifecycle Hooks
+
+`LifecycleHook` is the memory/context extension point. Hooks currently run at:
+
+- turn start;
+- pre-inference;
+- post-tool;
+- pre-compact;
+- turn completion.
+
+Hook failures are non-fatal and become `LifecycleHookFailed` events. This keeps
+memory extraction, compaction bookkeeping, telemetry, and remote sidecars from
+crashing the agent loop when they fail.
 
 ## Event Stream
 
@@ -183,6 +214,8 @@ Required tests:
 - an unknown tool produces a controlled tool error;
 - concurrency-safe tools run in parallel batches;
 - unsafe tools split parallel batches;
+- permission denials produce structured tool results without executing tools;
+- lifecycle hook failures emit events and do not abort the turn;
 - iteration budget stops infinite tool-call loops;
 - events are emitted in deterministic order;
 - workspace paths cannot escape the workspace root;

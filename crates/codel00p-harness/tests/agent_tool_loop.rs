@@ -3,7 +3,7 @@ mod support;
 use std::{
     fs,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
@@ -12,8 +12,9 @@ use std::{
 use async_trait::async_trait;
 use codel00p_harness::{
     AgentHarness, ContextWindowState, HarnessError, HarnessEvent, HarnessInferenceResponse,
-    ModelToolCall, PermissionDecision, PermissionMode, PermissionPolicy, PermissionRequest,
-    SessionId, SessionMessage, Tool, ToolRegistry, ToolResult, UserMessage, Workspace,
+    LifecycleHook, ModelToolCall, PermissionDecision, PermissionMode, PermissionPolicy,
+    PermissionRequest, SessionId, SessionMessage, Tool, ToolRegistry, ToolResult,
+    TurnLifecycleContext, UserMessage, Workspace,
 };
 use serde_json::{Value, json};
 use support::ScriptedModelClient;
@@ -206,6 +207,44 @@ async fn context_window_state_is_sent_to_model_client() {
             .used_tokens(),
         64_000
     );
+}
+
+#[tokio::test]
+async fn lifecycle_hooks_run_in_order_and_fail_nonfatally() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github", "gpt-4o", "Done.",
+    )]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .lifecycle_hook(RecordingLifecycleHook {
+            calls: calls.clone(),
+            fail_on_pre_inference: true,
+        })
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-hooks"),
+            UserMessage::new("Run hooks."),
+        )
+        .await
+        .expect("run turn");
+
+    assert_eq!(
+        calls.lock().expect("calls").as_slice(),
+        &["turn_started", "pre_inference", "turn_completed"]
+    );
+    assert!(outcome.events.iter().any(|event| {
+        matches!(
+            event,
+            HarnessEvent::LifecycleHookFailed { hook, message, .. }
+                if hook == "pre_inference" && message.contains("pre inference failed")
+        )
+    }));
 }
 
 #[tokio::test]
@@ -480,5 +519,33 @@ impl PermissionPolicy for DenyToolPolicy {
             PermissionMode::Deny,
             format!("{} is blocked in this test", request.tool_name()),
         ))
+    }
+}
+
+struct RecordingLifecycleHook {
+    calls: Arc<Mutex<Vec<&'static str>>>,
+    fail_on_pre_inference: bool,
+}
+
+#[async_trait]
+impl LifecycleHook for RecordingLifecycleHook {
+    async fn on_turn_started(&self, _context: TurnLifecycleContext) -> Result<(), HarnessError> {
+        self.calls.lock().expect("calls").push("turn_started");
+        Ok(())
+    }
+
+    async fn on_pre_inference(&self, _context: TurnLifecycleContext) -> Result<(), HarnessError> {
+        self.calls.lock().expect("calls").push("pre_inference");
+        if self.fail_on_pre_inference {
+            return Err(HarnessError::Configuration {
+                message: "pre inference failed".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    async fn on_turn_completed(&self, _context: TurnLifecycleContext) -> Result<(), HarnessError> {
+        self.calls.lock().expect("calls").push("turn_completed");
+        Ok(())
     }
 }

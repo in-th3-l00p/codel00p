@@ -316,6 +316,13 @@ pub enum AgentEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
+    LifecycleHookFailed {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        hook: String,
+        message: String,
+    },
     TurnCompleted {
         event_id: EventId,
         session_id: SessionId,

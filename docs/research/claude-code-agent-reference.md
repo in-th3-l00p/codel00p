@@ -38,6 +38,10 @@ This is now part of `codel00p-harness`: default read-only tools opt in to
 concurrency-safe execution, custom tools are serial by default, and session
 messages preserve the model's original tool-call order.
 
+The harness also now has a typed permission policy surface. Permission requests
+are emitted before tool execution, denied tools are not executed, and denied
+results are recorded as structured tool output.
+
 ### Memory And Context Pressure
 
 The strongest product lesson is that memory cannot be a passive notes feature.
@@ -53,6 +57,10 @@ It needs active lifecycle management:
 For codel00p this belongs in a dedicated `codel00p-memory` crate with protocol
 contracts for memory entries, compaction events, and review status. The harness
 should expose hooks; it should not own memory storage.
+
+The harness now exposes lifecycle hooks for turn start, pre-inference,
+post-tool, pre-compact, and turn completion. These are the integration points
+for future memory extraction and context engines.
 
 ### Permissions And Policy
 
@@ -86,10 +94,11 @@ audit logs, and test assertions to use the same contract.
 ## Implementation Backlog
 
 1. Persist and replay `SessionState` with append-only turn records.
-2. Add context-pressure accounting and compact-warning protocol events.
-3. Design `codel00p-memory` extraction hooks and reviewed memory entries.
-4. Add permission-decision contracts before any mutating tool ships.
-5. Classify harness/tool/provider errors into stable protocol error kinds.
-6. Add progress events for long-running tools.
-7. Add cancellation tokens to inference and tool execution.
-8. Add MCP/LSP integration behind protocol-safe connector boundaries.
+2. Add a SQLite session-store backend with search and parent-session lineage.
+3. Add context-pressure accounting and compact-warning protocol events.
+4. Design `codel00p-memory` extraction hooks and reviewed memory entries.
+5. Add permission-decision contracts before any mutating tool ships.
+6. Classify harness/tool/provider errors into stable protocol error kinds.
+7. Add progress events for long-running tools.
+8. Add cancellation tokens to inference and tool execution.
+9. Add MCP/LSP integration behind protocol-safe connector boundaries.

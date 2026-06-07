@@ -50,6 +50,19 @@ Memory should move through a deliberate lifecycle:
 
 Review is required because unreviewed memory becomes noise quickly.
 
+The harness exposes lifecycle hooks for this flow:
+
+- `on_turn_started` can queue recall for the next turn;
+- `on_pre_inference` can inject reviewed context or update context pressure;
+- `on_post_tool` can observe evidence without blocking tool execution;
+- `on_pre_compact` can extract facts before older transcript segments are
+  summarized;
+- `on_turn_completed` can queue durable memory extraction at safe boundaries.
+
+Memory extraction should run only when token and tool-call thresholds justify
+it, prefer natural breaks after final assistant answers, and use restricted
+permissions when a background extractor writes memory candidates.
+
 ## Storage and sync
 
 The memory system should support both cloud and local storage. Cloud storage is

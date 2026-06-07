@@ -2,6 +2,7 @@ pub mod agent;
 pub mod context;
 pub mod errors;
 pub mod events;
+pub mod lifecycle;
 pub mod permissions;
 pub mod provider_adapter;
 pub mod session;
@@ -15,6 +16,7 @@ pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use errors::HarnessError;
 pub use events::HarnessEvent;
+pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use permissions::{
     AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope,

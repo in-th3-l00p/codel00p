@@ -5,6 +5,7 @@ use futures::future::join_all;
 use crate::{
     errors::HarnessError,
     events::HarnessEvent,
+    lifecycle::{LifecycleHook, TurnLifecycleContext},
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
     session::{SessionId, SessionState, TurnId, UserMessage},
     tool_registry::ToolRegistry,
@@ -20,6 +21,7 @@ pub struct AgentHarness {
     workspace: Workspace,
     tools: ToolRegistry,
     permission_policy: Arc<dyn PermissionPolicy>,
+    lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
     context_window: Option<ContextWindowState>,
     max_iterations: u32,
 }
@@ -48,10 +50,31 @@ impl AgentHarness {
             turn_id: turn_id.clone(),
             message_count: session_state.messages().len(),
         });
+        self.run_lifecycle_hook(
+            "turn_started",
+            TurnLifecycleContext::new(
+                session_state.session_id().clone(),
+                turn_id.clone(),
+                session_state.messages().len(),
+            ),
+            &mut events,
+        )
+        .await;
 
         let mut executed_tool_calls = Vec::new();
 
         for iteration in 1..=self.max_iterations {
+            self.run_lifecycle_hook(
+                "pre_inference",
+                TurnLifecycleContext::new(
+                    session_state.session_id().clone(),
+                    turn_id.clone(),
+                    session_state.messages().len(),
+                ),
+                &mut events,
+            )
+            .await;
+
             let mut request = HarnessInferenceRequest::new(session_state.clone())
                 .with_runtime_context(
                     self.workspace.root().display().to_string(),
@@ -82,6 +105,17 @@ impl AgentHarness {
                 if let Some(content) = &assistant_message {
                     session_state.push_assistant(content);
                 }
+
+                self.run_lifecycle_hook(
+                    "turn_completed",
+                    TurnLifecycleContext::new(
+                        session_state.session_id().clone(),
+                        turn_id.clone(),
+                        session_state.messages().len(),
+                    ),
+                    &mut events,
+                )
+                .await;
 
                 events.push(HarnessEvent::TurnCompleted {
                     event_id: EventId::new(),
@@ -278,6 +312,16 @@ impl AgentHarness {
                         tool_call.name(),
                         result.content().to_string(),
                     );
+                    self.run_post_tool_hook(
+                        TurnLifecycleContext::new(
+                            session_state.session_id().clone(),
+                            turn_id.clone(),
+                            session_state.messages().len(),
+                        ),
+                        tool_call.name(),
+                        &mut events,
+                    )
+                    .await;
                     executed_tool_calls.push(ExecutedToolCall {
                         id: tool_call.id().to_string(),
                         name: tool_call.name().to_string(),
@@ -293,6 +337,51 @@ impl AgentHarness {
             limit: self.max_iterations,
         })
     }
+
+    async fn run_lifecycle_hook(
+        &self,
+        hook_name: &str,
+        context: TurnLifecycleContext,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        for hook in &self.lifecycle_hooks {
+            let result = match hook_name {
+                "turn_started" => hook.on_turn_started(context.clone()).await,
+                "pre_inference" => hook.on_pre_inference(context.clone()).await,
+                "pre_compact" => hook.on_pre_compact(context.clone()).await,
+                "turn_completed" => hook.on_turn_completed(context.clone()).await,
+                _ => Ok(()),
+            };
+            if let Err(error) = result {
+                events.push(HarnessEvent::LifecycleHookFailed {
+                    event_id: EventId::new(),
+                    session_id: context.session_id().clone(),
+                    turn_id: context.turn_id().clone(),
+                    hook: hook_name.to_string(),
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
+
+    async fn run_post_tool_hook(
+        &self,
+        context: TurnLifecycleContext,
+        tool_name: &str,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        for hook in &self.lifecycle_hooks {
+            if let Err(error) = hook.on_post_tool(context.clone(), tool_name).await {
+                events.push(HarnessEvent::LifecycleHookFailed {
+                    event_id: EventId::new(),
+                    session_id: context.session_id().clone(),
+                    turn_id: context.turn_id().clone(),
+                    hook: "post_tool".to_string(),
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
 }
 
 #[derive(Default)]
@@ -301,6 +390,7 @@ pub struct AgentHarnessBuilder {
     workspace: Option<Workspace>,
     tools: Option<ToolRegistry>,
     permission_policy: Option<Arc<dyn PermissionPolicy>>,
+    lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
     context_window: Option<ContextWindowState>,
     max_iterations: Option<u32>,
 }
@@ -337,6 +427,14 @@ impl AgentHarnessBuilder {
         self
     }
 
+    pub fn lifecycle_hook<T>(mut self, lifecycle_hook: T) -> Self
+    where
+        T: LifecycleHook + 'static,
+    {
+        self.lifecycle_hooks.push(Arc::new(lifecycle_hook));
+        self
+    }
+
     pub fn max_iterations(mut self, max_iterations: u32) -> Self {
         self.max_iterations = Some(max_iterations);
         self
@@ -356,6 +454,7 @@ impl AgentHarnessBuilder {
             permission_policy: self
                 .permission_policy
                 .unwrap_or_else(|| Arc::new(AllowAllPermissionPolicy)),
+            lifecycle_hooks: self.lifecycle_hooks,
             context_window: self.context_window,
             max_iterations: self.max_iterations.unwrap_or(4),
         })
