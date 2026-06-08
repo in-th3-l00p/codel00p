@@ -2,6 +2,7 @@ use std::{env, process::ExitCode};
 
 mod agent;
 mod config;
+mod help;
 mod memory;
 mod providers;
 mod session;
@@ -22,6 +23,10 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Vec<String>) -> CliResult<String> {
+    if let Some(help) = help::help_for(&args) {
+        return Ok(help.to_string());
+    }
+
     let (config, rest) = parse_global_args(args)?;
     let Some((command, rest)) = rest.split_first() else {
         return Err("missing command".to_string());
