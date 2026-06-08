@@ -146,6 +146,13 @@ pub struct MemoryCandidateSinkOutcome {
 }
 
 impl MemoryCandidateSinkOutcome {
+    pub fn from_parts(created_ids: Vec<String>, duplicate_ids: Vec<String>) -> Self {
+        Self {
+            created_ids,
+            duplicate_ids,
+        }
+    }
+
     pub fn created_ids(&self) -> &[String] {
         &self.created_ids
     }
