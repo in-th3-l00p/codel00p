@@ -1,6 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use async_trait::async_trait;
-use codel00p_memory::{MemoryQuery, MemoryRepository};
-use codel00p_protocol::{MemoryKind, ProjectRef};
+use codel00p_memory::{
+    ExplicitMemoryExtractor, MemoryCandidateExtractor, MemoryCandidateInput, MemoryExtractionInput,
+    MemoryQuery, MemoryRepository,
+};
+use codel00p_protocol::{MemoryKind, MemorySource, ProjectRef};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -34,6 +39,183 @@ impl ProjectMemoryRequest {
 
     pub fn message_count(&self) -> usize {
         self.message_count
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TurnMemoryExtractionRequest {
+    session_id: SessionId,
+    turn_id: TurnId,
+    assistant_message: Option<String>,
+    message_count: usize,
+}
+
+impl TurnMemoryExtractionRequest {
+    pub fn new(
+        session_id: SessionId,
+        turn_id: TurnId,
+        assistant_message: Option<String>,
+        message_count: usize,
+    ) -> Self {
+        Self {
+            session_id,
+            turn_id,
+            assistant_message,
+            message_count,
+        }
+    }
+
+    pub fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    pub fn turn_id(&self) -> &TurnId {
+        &self.turn_id
+    }
+
+    pub fn assistant_message(&self) -> Option<&str> {
+        self.assistant_message.as_deref()
+    }
+
+    pub fn message_count(&self) -> usize {
+        self.message_count
+    }
+}
+
+#[async_trait]
+pub trait TurnMemoryExtractor: Send + Sync {
+    async fn extract(
+        &self,
+        request: TurnMemoryExtractionRequest,
+    ) -> Result<Vec<MemoryCandidateInput>, HarnessError>;
+}
+
+pub struct ExplicitTurnMemoryExtractor {
+    project: ProjectRef,
+    tags: Vec<String>,
+    extractor: ExplicitMemoryExtractor,
+}
+
+impl ExplicitTurnMemoryExtractor {
+    pub fn new(project: ProjectRef) -> Self {
+        Self {
+            project,
+            tags: Vec::new(),
+            extractor: ExplicitMemoryExtractor,
+        }
+    }
+
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        if let Some(tag) = non_empty_filter(tag.into()) {
+            self.tags.push(tag);
+        }
+        self
+    }
+}
+
+#[async_trait]
+impl TurnMemoryExtractor for ExplicitTurnMemoryExtractor {
+    async fn extract(
+        &self,
+        request: TurnMemoryExtractionRequest,
+    ) -> Result<Vec<MemoryCandidateInput>, HarnessError> {
+        let Some(assistant_message) = request.assistant_message() else {
+            return Ok(Vec::new());
+        };
+        let mut input = MemoryExtractionInput::new(
+            self.project.clone(),
+            MemorySource::turn(request.session_id().clone(), request.turn_id().clone()),
+            assistant_message,
+        );
+        for tag in &self.tags {
+            input = input.with_tag(tag);
+        }
+
+        self.extractor
+            .extract(input)
+            .map_err(|error| HarnessError::InferenceFailed {
+                message: format!("memory extraction failed: {error}"),
+            })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MemoryCandidateSinkOutcome {
+    created_ids: Vec<String>,
+    duplicate_ids: Vec<String>,
+}
+
+impl MemoryCandidateSinkOutcome {
+    pub fn created_ids(&self) -> &[String] {
+        &self.created_ids
+    }
+
+    pub fn duplicate_ids(&self) -> &[String] {
+        &self.duplicate_ids
+    }
+
+    pub fn total_seen(&self) -> usize {
+        self.created_ids.len() + self.duplicate_ids.len()
+    }
+}
+
+#[async_trait]
+pub trait MemoryCandidateSink: Send + Sync {
+    async fn persist(
+        &self,
+        candidates: Vec<MemoryCandidateInput>,
+    ) -> Result<MemoryCandidateSinkOutcome, HarnessError>;
+}
+
+pub struct MemoryRepositoryCandidateSink<R> {
+    repository: Arc<Mutex<R>>,
+}
+
+impl<R> MemoryRepositoryCandidateSink<R> {
+    pub fn new(repository: R) -> Self {
+        Self {
+            repository: Arc::new(Mutex::new(repository)),
+        }
+    }
+
+    pub fn new_shared(repository: Arc<Mutex<R>>) -> Self {
+        Self { repository }
+    }
+}
+
+#[async_trait]
+impl<R> MemoryCandidateSink for MemoryRepositoryCandidateSink<R>
+where
+    R: MemoryRepository + Send,
+{
+    async fn persist(
+        &self,
+        candidates: Vec<MemoryCandidateInput>,
+    ) -> Result<MemoryCandidateSinkOutcome, HarnessError> {
+        let mut repository = self
+            .repository
+            .lock()
+            .map_err(|_| HarnessError::Configuration {
+                message: "memory candidate repository lock was poisoned".to_string(),
+            })?;
+        let mut outcome = MemoryCandidateSinkOutcome::default();
+
+        for candidate in candidates {
+            let id = candidate.id().to_string();
+            match repository.create_candidate(candidate) {
+                Ok(_) => outcome.created_ids.push(id),
+                Err(codel00p_memory::MemoryError::MemoryAlreadyExists { .. }) => {
+                    outcome.duplicate_ids.push(id);
+                }
+                Err(error) => {
+                    return Err(HarnessError::InferenceFailed {
+                        message: format!("memory candidate persistence failed: {error}"),
+                    });
+                }
+            }
+        }
+
+        Ok(outcome)
     }
 }
 

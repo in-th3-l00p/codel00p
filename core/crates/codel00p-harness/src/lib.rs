@@ -21,8 +21,10 @@ pub use events::HarnessEvent;
 pub use iteration_budget::IterationBudget;
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use memory::{
-    MemoryRepositoryProjectMemoryProvider, ProjectMemoryContext, ProjectMemoryItem,
-    ProjectMemoryProvider, ProjectMemoryRequest,
+    ExplicitTurnMemoryExtractor, MemoryCandidateSink, MemoryCandidateSinkOutcome,
+    MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider, ProjectMemoryContext,
+    ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest, TurnMemoryExtractionRequest,
+    TurnMemoryExtractor,
 };
 pub use permissions::{
     AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,

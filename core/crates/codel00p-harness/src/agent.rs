@@ -7,7 +7,10 @@ use crate::{
     events::HarnessEvent,
     iteration_budget::IterationBudget,
     lifecycle::{LifecycleHook, TurnLifecycleContext},
-    memory::{ProjectMemoryProvider, ProjectMemoryRequest},
+    memory::{
+        MemoryCandidateSink, ProjectMemoryProvider, ProjectMemoryRequest,
+        TurnMemoryExtractionRequest, TurnMemoryExtractor,
+    },
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
     session::{SessionId, SessionState, TurnId, UserMessage},
     tool_registry::ToolRegistry,
@@ -25,6 +28,8 @@ pub struct AgentHarness {
     permission_policy: Arc<dyn PermissionPolicy>,
     lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
     project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
+    turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
+    memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     context_window: Option<ContextWindowState>,
     max_iterations: u32,
 }
@@ -122,6 +127,15 @@ impl AgentHarness {
                 if let Some(content) = &assistant_message {
                     session_state.push_assistant(content);
                 }
+
+                self.extract_memory_candidates(
+                    session_state.session_id().clone(),
+                    turn_id.clone(),
+                    assistant_message.clone(),
+                    session_state.messages().len(),
+                    &mut events,
+                )
+                .await;
 
                 self.run_lifecycle_hook(
                     "turn_completed",
@@ -399,6 +413,57 @@ impl AgentHarness {
             }
         }
     }
+
+    async fn extract_memory_candidates(
+        &self,
+        session_id: SessionId,
+        turn_id: TurnId,
+        assistant_message: Option<String>,
+        message_count: usize,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        let (Some(extractor), Some(sink)) =
+            (&self.turn_memory_extractor, &self.memory_candidate_sink)
+        else {
+            return;
+        };
+
+        let candidates = match extractor
+            .extract(TurnMemoryExtractionRequest::new(
+                session_id.clone(),
+                turn_id.clone(),
+                assistant_message,
+                message_count,
+            ))
+            .await
+        {
+            Ok(candidates) => candidates,
+            Err(error) => {
+                events.push(HarnessEvent::LifecycleHookFailed {
+                    event_id: EventId::new(),
+                    session_id,
+                    turn_id,
+                    hook: "memory_extraction".to_string(),
+                    message: error.to_string(),
+                });
+                return;
+            }
+        };
+
+        if candidates.is_empty() {
+            return;
+        }
+
+        if let Err(error) = sink.persist(candidates).await {
+            events.push(HarnessEvent::LifecycleHookFailed {
+                event_id: EventId::new(),
+                session_id,
+                turn_id,
+                hook: "memory_candidate_sink".to_string(),
+                message: error.to_string(),
+            });
+        }
+    }
 }
 
 #[derive(Default)]
@@ -409,6 +474,8 @@ pub struct AgentHarnessBuilder {
     permission_policy: Option<Arc<dyn PermissionPolicy>>,
     lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
     project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
+    turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
+    memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     context_window: Option<ContextWindowState>,
     max_iterations: Option<u32>,
 }
@@ -461,6 +528,22 @@ impl AgentHarnessBuilder {
         self
     }
 
+    pub fn turn_memory_extractor<T>(mut self, turn_memory_extractor: T) -> Self
+    where
+        T: TurnMemoryExtractor + 'static,
+    {
+        self.turn_memory_extractor = Some(Arc::new(turn_memory_extractor));
+        self
+    }
+
+    pub fn memory_candidate_sink<T>(mut self, memory_candidate_sink: T) -> Self
+    where
+        T: MemoryCandidateSink + 'static,
+    {
+        self.memory_candidate_sink = Some(Arc::new(memory_candidate_sink));
+        self
+    }
+
     pub fn max_iterations(mut self, max_iterations: u32) -> Self {
         self.max_iterations = Some(max_iterations);
         self
@@ -482,6 +565,8 @@ impl AgentHarnessBuilder {
                 .unwrap_or_else(|| Arc::new(AllowAllPermissionPolicy)),
             lifecycle_hooks: self.lifecycle_hooks,
             project_memory_provider: self.project_memory_provider,
+            turn_memory_extractor: self.turn_memory_extractor,
+            memory_candidate_sink: self.memory_candidate_sink,
             context_window: self.context_window,
             max_iterations: self.max_iterations.unwrap_or(4),
         })

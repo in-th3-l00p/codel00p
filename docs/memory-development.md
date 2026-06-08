@@ -229,7 +229,9 @@ turns, session summaries, tool outputs, imported documents, and human notes.
 Status: started. `ExplicitMemoryExtractor` supports deterministic extraction
 from explicit `remember ...:` directives, including optional kind and tags.
 Every extracted item remains a candidate until it passes the normal review
-lifecycle.
+lifecycle. `codel00p-harness` can now run an explicit turn extractor after a
+completed turn and persist candidates through a `MemoryCandidateSink`; failures
+are non-fatal and candidates are never approved automatically.
 
 Success criteria:
 

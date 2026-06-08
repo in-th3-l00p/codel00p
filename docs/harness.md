@@ -186,22 +186,31 @@ and replay should all consume the same protocol event shape.
 
 Do not implement memory inside the harness.
 
-The harness should expose hooks:
+The harness exposes explicit read and write memory boundaries:
 
 ```rust
 #[async_trait::async_trait]
-pub trait ContextProvider {
-    async fn build_context(&self, request: ContextRequest) -> Result<ContextBundle, HarnessError>;
+pub trait ProjectMemoryProvider {
+    async fn retrieve(&self, request: ProjectMemoryRequest) -> Result<ProjectMemoryContext, HarnessError>;
 }
 
 #[async_trait::async_trait]
-pub trait MemorySink {
-    async fn observe_turn(&self, outcome: &TurnOutcome) -> Result<(), HarnessError>;
+pub trait TurnMemoryExtractor {
+    async fn extract(&self, request: TurnMemoryExtractionRequest) -> Result<Vec<MemoryCandidateInput>, HarnessError>;
+}
+
+#[async_trait::async_trait]
+pub trait MemoryCandidateSink {
+    async fn persist(&self, candidates: Vec<MemoryCandidateInput>) -> Result<MemoryCandidateSinkOutcome, HarnessError>;
 }
 ```
 
-`codel00p-memory` can later provide implementations. Until then, the harness
-can use an empty context provider and no-op memory sink.
+`ProjectMemoryProvider` supplies approved memory before inference.
+`TurnMemoryExtractor` and `MemoryCandidateSink` are opt-in and run after a
+successful final assistant response. They create candidate memory only; the CLI,
+desktop app, or cloud review workflow must approve candidates before retrieval
+can use them. Extraction and sink failures are non-fatal and become
+`LifecycleHookFailed` events.
 
 ## Test Strategy
 
