@@ -5,6 +5,7 @@ use futures::future::join_all;
 use crate::{
     errors::HarnessError,
     events::HarnessEvent,
+    instructions::ProjectInstructionLoader,
     iteration_budget::IterationBudget,
     lifecycle::{LifecycleHook, TurnLifecycleContext},
     memory::{
@@ -100,6 +101,10 @@ impl AgentHarness {
                 );
             if let Some(context_window) = &self.context_window {
                 request = request.with_context_window(context_window.clone());
+            }
+            let project_instructions = ProjectInstructionLoader.load(&self.workspace)?;
+            if !project_instructions.is_empty() {
+                request = request.with_project_instructions(project_instructions);
             }
             if let Some(project_memory_provider) = &self.project_memory_provider {
                 let project_memory = project_memory_provider

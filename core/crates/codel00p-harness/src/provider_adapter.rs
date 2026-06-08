@@ -46,6 +46,10 @@ impl ProviderModelClient {
     ) -> InferenceRequest {
         let mut builder = InferenceRequest::builder(provider, model);
 
+        if let Some(project_instructions) = request.project_instructions() {
+            builder = builder.message(ChatMessage::system(project_instructions.as_prompt()));
+        }
+
         if let Some(project_memory) = request.project_memory()
             && let Some(prompt) = MemoryPromptAssembler.assemble(project_memory)
         {

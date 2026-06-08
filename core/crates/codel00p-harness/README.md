@@ -30,6 +30,18 @@ auditable.
 Read-only default tools opt in to concurrency-safe execution. Custom tools are
 serial unless they explicitly declare that a given input can run concurrently.
 
+## Project Instructions
+
+The harness loads root-level project instruction files before each model call.
+Precedence is deterministic:
+
+1. `CODEL00P.md`
+2. `AGENTS.md`
+3. `CLAUDE.md`
+
+The assembled instruction block is sent as the first system message. Approved
+project memory is sent after instructions and before session messages.
+
 ## Minimal Shape
 
 ```rust

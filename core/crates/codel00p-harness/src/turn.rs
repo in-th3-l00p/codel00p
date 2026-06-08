@@ -4,8 +4,8 @@ pub use codel00p_protocol::ToolCall as ModelToolCall;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    errors::HarnessError, events::HarnessEvent, memory::ProjectMemoryContext,
-    session::SessionState, tool_result::ToolResult,
+    errors::HarnessError, events::HarnessEvent, instructions::ProjectInstructions,
+    memory::ProjectMemoryContext, session::SessionState, tool_result::ToolResult,
 };
 
 #[async_trait]
@@ -22,6 +22,7 @@ pub struct HarnessInferenceRequest {
     workspace_root: Option<String>,
     tool_names: Vec<String>,
     context_window: Option<ContextWindowState>,
+    project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
 }
 
@@ -32,6 +33,7 @@ impl HarnessInferenceRequest {
             workspace_root: None,
             tool_names: Vec::new(),
             context_window: None,
+            project_instructions: None,
             project_memory: None,
         }
     }
@@ -48,6 +50,11 @@ impl HarnessInferenceRequest {
 
     pub fn with_context_window(mut self, context_window: ContextWindowState) -> Self {
         self.context_window = Some(context_window);
+        self
+    }
+
+    pub fn with_project_instructions(mut self, project_instructions: ProjectInstructions) -> Self {
+        self.project_instructions = Some(project_instructions);
         self
     }
 
@@ -70,6 +77,10 @@ impl HarnessInferenceRequest {
 
     pub fn context_window(&self) -> Option<&ContextWindowState> {
         self.context_window.as_ref()
+    }
+
+    pub fn project_instructions(&self) -> Option<&ProjectInstructions> {
+        self.project_instructions.as_ref()
     }
 
     pub fn project_memory(&self) -> Option<&ProjectMemoryContext> {

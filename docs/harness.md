@@ -159,6 +159,34 @@ The harness has a control layer inspired by Hermes and Claude Code:
 - `ContextWindowState` can be attached to inference requests so context engines,
   UI, and provider routing see the same pressure information.
 
+## Project Instructions
+
+The harness loads repository instruction files before each inference request.
+The first supported scope is the workspace root, with deterministic precedence:
+
+1. `CODEL00P.md`
+2. `AGENTS.md`
+3. `CLAUDE.md`
+
+`CODEL00P.md` is the native codel00p instruction file. `AGENTS.md` and
+`CLAUDE.md` are compatibility inputs so existing repositories can migrate
+without losing their agent rules.
+
+When present, instructions become the first provider system message:
+
+```text
+Project instructions:
+## CODEL00P.md
+Run pnpm verify before pushing main.
+
+## AGENTS.md
+Follow repository coding conventions.
+```
+
+Project memory is still injected after project instructions and before session
+messages. This ensures the model sees durable repository rules before retrieved
+facts and prior conversation.
+
 ## Lifecycle Hooks
 
 `LifecycleHook` is the memory/context extension point. Hooks currently run at:

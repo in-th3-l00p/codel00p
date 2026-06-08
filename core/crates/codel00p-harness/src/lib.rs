@@ -2,6 +2,7 @@ pub mod agent;
 pub mod context;
 pub mod errors;
 pub mod events;
+pub mod instructions;
 pub mod iteration_budget;
 pub mod lifecycle;
 pub mod memory;
@@ -18,6 +19,7 @@ pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use errors::HarnessError;
 pub use events::HarnessEvent;
+pub use instructions::{ProjectInstruction, ProjectInstructionLoader, ProjectInstructions};
 pub use iteration_budget::IterationBudget;
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use memory::{

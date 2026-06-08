@@ -1,6 +1,7 @@
 use codel00p_harness::{
-    HarnessInferenceRequest, MemoryPromptAssembler, ModelToolCall, ProjectMemoryContext,
-    ProjectMemoryItem, ProviderModelClient, SessionId, SessionState, UserMessage,
+    HarnessInferenceRequest, MemoryPromptAssembler, ModelToolCall, ProjectInstruction,
+    ProjectInstructions, ProjectMemoryContext, ProjectMemoryItem, ProviderModelClient, SessionId,
+    SessionState, UserMessage,
 };
 use codel00p_protocol::MemoryKind;
 use codel00p_providers::{InferenceResponse, MessageRole, ToolCall};
@@ -137,6 +138,48 @@ Project memory:
         )
     );
     assert_eq!(provider_request.messages[1].role, MessageRole::User);
+}
+
+#[test]
+fn provider_request_includes_project_instructions_before_memory_and_session_messages() {
+    let mut state = SessionState::new(SessionId::from_static("session-provider"));
+    state.push_user(UserMessage::new("Inspect the project."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_project_instructions(ProjectInstructions::new(vec![ProjectInstruction::new(
+            "CODEL00P.md",
+            "Always run pnpm verify.",
+        )]))
+        .with_project_memory(ProjectMemoryContext::new(vec![ProjectMemoryItem::new(
+            "mem-harness",
+            MemoryKind::Architecture,
+            "The harness owns tool execution.",
+            vec!["harness".to_string()],
+            "matched tag harness",
+        )]));
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    assert_eq!(provider_request.messages.len(), 3);
+    assert_eq!(provider_request.messages[0].role, MessageRole::System);
+    assert_eq!(
+        provider_request.messages[0].content.as_deref(),
+        Some(
+            "\
+Project instructions:
+## CODEL00P.md
+Always run pnpm verify."
+        )
+    );
+    assert_eq!(provider_request.messages[1].role, MessageRole::System);
+    assert!(
+        provider_request.messages[1]
+            .content
+            .as_deref()
+            .expect("memory prompt")
+            .starts_with("Project memory:")
+    );
+    assert_eq!(provider_request.messages[2].role, MessageRole::User);
 }
 
 #[test]
