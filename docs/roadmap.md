@@ -59,6 +59,26 @@ Remaining work:
 Success means early users can use codel00p from the terminal and grow reviewed
 project memory across repeated agent sessions.
 
+## Phase 3.5: Coding agent parity
+
+Goal: close the practical gap with mature coding agents while preserving
+codel00p's reviewed-memory advantage.
+
+Work:
+
+- resume and continue persisted sessions;
+- load project instructions from codel00p-native files and compatibility files;
+- add permissioned editing tools;
+- add permissioned shell execution;
+- add git inspection, diff review, commit, and PR preparation workflows;
+- add MCP client support for external team tools;
+- add context compaction and session summaries;
+- stream events for interactive clients.
+
+Success means a user can ask codel00p to implement a real repository change,
+watch the agent inspect, edit, test, and commit safely, and then review the
+project knowledge learned during the work.
+
 ## Phase 4: Providers and protocol
 
 Goal: stabilize contracts between modules.

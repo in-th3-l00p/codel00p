@@ -65,6 +65,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Storage](docs/storage.md)
 - [Inference Providers](docs/providers.md)
 - [Agent Harness](docs/harness.md)
+- [Agent Capability Parity](docs/agent-capability-parity.md)
 - [Project Memory](docs/memory.md)
 - [Memory Development Plan](docs/memory-development.md)
 - [Roadmap](docs/roadmap.md)
@@ -128,6 +129,7 @@ Chat-Completions-compatible providers, inspect a workspace with safe tools,
 persist session records, extract candidate memories, and reuse approved project
 memory in future runs.
 
-The next production work is hardening and packaging: clearer install paths,
-better provider documentation, session resume, real provider smoke tests, and
-then the desktop/cloud surfaces.
+The next production work is hardening the agent toward parity with serious code
+tools: session resume, project instructions, permissioned editing, shell
+execution, git workflows, MCP, streaming events, and then the desktop/cloud
+surfaces.
