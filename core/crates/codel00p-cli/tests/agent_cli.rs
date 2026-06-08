@@ -24,6 +24,24 @@ fn run_codel00p(db_path: &Path, args: &[&str]) -> Output {
         .expect("run codel00p")
 }
 
+fn run_codel00p_without_provider_env(db_path: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .arg("--memory-db")
+        .arg(db_path)
+        .arg("--organization-id")
+        .arg("org-1")
+        .arg("--project-id")
+        .arg("project-1")
+        .arg("--project-name")
+        .arg("codel00p")
+        .env_remove("CODEL00P_PROVIDER_CUSTOM_API_KEY")
+        .env_remove("CODEL00P_PROVIDER_OPENAI_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .args(args)
+        .output()
+        .expect("run codel00p")
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout utf8")
 }
@@ -252,4 +270,62 @@ fn agent_run_extracts_reviewed_memory_and_reuses_approved_memory() {
     );
     assert_eq!(stdout(&second_run), "Loaded reviewed project memory.\n");
     second.assert();
+}
+
+#[test]
+fn agent_run_missing_credential_lists_supported_environment_variables() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let output = run_codel00p_without_provider_env(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            "http://127.0.0.1:9",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let error = stderr(&output);
+    assert!(error.contains("missing credential for provider `custom`"));
+    assert!(error.contains("CODEL00P_PROVIDER_CUSTOM_API_KEY"));
+}
+
+#[test]
+fn agent_run_rejects_provider_modes_that_are_not_implemented_for_cli_agent() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let output = run_codel00p_without_provider_env(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "openai",
+            "--model",
+            "gpt-5",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let error = stderr(&output);
+    assert!(error.contains("provider `openai` uses responses"));
+    assert!(error.contains("agent run currently supports chat_completions providers"));
 }
