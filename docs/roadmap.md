@@ -39,16 +39,25 @@ Success means the harness can run useful work with memory-aware context.
 
 Goal: ship the first usable developer surface.
 
-Work:
+Implemented:
 
-- connect repositories;
-- start and resume sessions;
+- run one read-only agent turn through `codel00p agent run`;
+- call Chat-Completions-compatible providers with environment credentials;
 - inspect memory;
 - approve or reject memory candidates;
+- persist and inspect session records;
+- extract candidate memory from completed turns;
+- inject approved memory into later provider requests.
+
+Remaining work:
+
+- connect repositories;
+- resume sessions;
 - configure user or organization providers;
 - expose basic sync hooks for later phases.
 
-Success means early users can use codel00p from the terminal.
+Success means early users can use codel00p from the terminal and grow reviewed
+project memory across repeated agent sessions.
 
 ## Phase 4: Providers and protocol
 

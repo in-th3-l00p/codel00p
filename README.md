@@ -105,9 +105,9 @@ The first Rust modules have started:
 - [codel00p-memory](core/crates/codel00p-memory): candidate creation, review
   lifecycle, audit history, and deterministic retrieval for approved project
   knowledge.
-- [codel00p-cli](core/crates/codel00p-cli): terminal memory review commands for
-  listing, inspecting, approving, rejecting, archiving, and auditing memory
-  records.
+- [codel00p-cli](core/crates/codel00p-cli): terminal agent runs, durable session
+  inspection, and memory review commands for listing, inspecting, approving,
+  rejecting, archiving, and auditing memory records.
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   tool calls, route inspection, and provider policy enforcement.
@@ -123,6 +123,11 @@ The first Rust modules have started:
 
 ## Current status
 
-codel00p is in early implementation. The immediate goal is to connect provider
-inference, the read-only harness, project memory, and the CLI into a usable
-developer workflow.
+codel00p now has a working local CLI vertical slice: a read-only agent can call
+Chat-Completions-compatible providers, inspect a workspace with safe tools,
+persist session records, extract candidate memories, and reuse approved project
+memory in future runs.
+
+The next production work is hardening and packaging: clearer install paths,
+better provider documentation, session resume, real provider smoke tests, and
+then the desktop/cloud surfaces.
