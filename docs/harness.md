@@ -147,6 +147,28 @@ in by implementing `Tool::is_concurrency_safe`; the default is serial execution.
 Custom tools also expose a `PermissionScope`. Unknown/custom tools default to a
 write-like scope so policy must explicitly allow them before execution.
 
+## Editing Tools
+
+The harness now exposes an opt-in editing tool set through
+`ToolRegistry::editing_defaults()`. These tools are not included in
+`ToolRegistry::read_only_defaults()`, so the CLI remains read-only until it grows
+an explicit write mode.
+
+Editing tools:
+
+- `create_file`: create a new UTF-8 file under the workspace root;
+- `update_file`: replace an existing UTF-8 file under the workspace root;
+- `delete_file`: delete an existing file under the workspace root;
+- `apply_patch`: apply exact string replacements to existing files.
+
+All editing tools declare `PermissionScope::WorkspaceWrite`. The agent loop
+requests permission before execution and records denied writes as structured
+tool results without mutating the workspace.
+
+The first `apply_patch` implementation intentionally uses exact replacements
+instead of a full unified-diff parser. That keeps patch behavior deterministic
+and testable while leaving room for a richer patch format later.
+
 ## Runtime Control
 
 The harness has a control layer inspired by Hermes and Claude Code:

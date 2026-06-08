@@ -30,6 +30,16 @@ auditable.
 Read-only default tools opt in to concurrency-safe execution. Custom tools are
 serial unless they explicitly declare that a given input can run concurrently.
 
+Editing tools are available through `ToolRegistry::editing_defaults()`:
+
+- `create_file`;
+- `update_file`;
+- `delete_file`;
+- `apply_patch`.
+
+These tools all require `PermissionScope::WorkspaceWrite`. They are not part of
+`ToolRegistry::read_only_defaults()`.
+
 ## Project Instructions
 
 The harness loads root-level project instruction files before each model call.

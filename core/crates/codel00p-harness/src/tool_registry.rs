@@ -4,6 +4,7 @@ use codel00p_protocol::PermissionScope;
 use serde_json::Value;
 
 use crate::{
+    editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
     errors::HarnessError,
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool},
@@ -25,6 +26,14 @@ impl ToolRegistry {
             .with_tool(ListFilesTool)
             .with_tool(ReadFileTool)
             .with_tool(SearchTextTool)
+    }
+
+    pub fn editing_defaults() -> Self {
+        Self::new()
+            .with_tool(ApplyPatchTool)
+            .with_tool(CreateFileTool)
+            .with_tool(DeleteFileTool)
+            .with_tool(UpdateFileTool)
     }
 
     pub fn with_tool<T>(mut self, tool: T) -> Self

@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod context;
+pub mod editing;
 pub mod errors;
 pub mod events;
 pub mod instructions;

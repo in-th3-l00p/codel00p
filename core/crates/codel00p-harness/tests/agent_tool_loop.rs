@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use codel00p_harness::{
     AgentHarness, ContextWindowState, HarnessError, HarnessEvent, HarnessInferenceResponse,
     LifecycleHook, ModelToolCall, PermissionDecision, PermissionMode, PermissionPolicy,
-    PermissionRequest, SessionId, SessionMessage, Tool, ToolRegistry, ToolResult,
+    PermissionRequest, PermissionScope, SessionId, SessionMessage, Tool, ToolRegistry, ToolResult,
     TurnLifecycleContext, UserMessage, Workspace,
 };
 use serde_json::{Value, json};
@@ -166,6 +166,98 @@ async fn denied_tool_call_is_recorded_without_executing_tool() {
     );
     assert!(outcome.events.iter().any(|event| {
         matches!(event, HarnessEvent::PermissionDenied { tool_name, .. } if tool_name == "counting")
+    }));
+}
+
+#[tokio::test]
+async fn write_tool_calls_request_workspace_write_permission_and_mutate_when_allowed() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![ModelToolCall::new(
+                "call-create",
+                "create_file",
+                json!({ "path": "src/lib.rs", "content": "pub fn answer() -> u32 { 42 }\n" }),
+            )],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "Created the file."),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::editing_defaults())
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-write-tool"),
+            UserMessage::new("Create src/lib.rs."),
+        )
+        .await
+        .expect("run turn");
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).expect("read created file"),
+        "pub fn answer() -> u32 { 42 }\n"
+    );
+    assert!(outcome.events.iter().any(|event| {
+        matches!(
+            event,
+            HarnessEvent::PermissionRequested {
+                tool_name,
+                scope: PermissionScope::WorkspaceWrite,
+                ..
+            } if tool_name == "create_file"
+        )
+    }));
+    assert!(outcome.events.iter().any(|event| {
+        matches!(event, HarnessEvent::ToolCallCompleted { tool_name, .. } if tool_name == "create_file")
+    }));
+}
+
+#[tokio::test]
+async fn denied_write_tool_calls_do_not_mutate_workspace() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![ModelToolCall::new(
+                "call-create-denied",
+                "create_file",
+                json!({ "path": "src/lib.rs", "content": "pub fn answer() -> u32 { 42 }\n" }),
+            )],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "Write was denied."),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::editing_defaults())
+        .permission_policy(DenyToolPolicy)
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-write-denied"),
+            UserMessage::new("Create src/lib.rs."),
+        )
+        .await
+        .expect("run turn");
+
+    assert!(!dir.path().join("src/lib.rs").exists());
+    assert_eq!(
+        outcome.tool_calls[0].result.content()["error_kind"],
+        "permission_denied"
+    );
+    assert!(outcome.events.iter().any(|event| {
+        matches!(event, HarnessEvent::PermissionDenied { tool_name, .. } if tool_name == "create_file")
     }));
 }
 

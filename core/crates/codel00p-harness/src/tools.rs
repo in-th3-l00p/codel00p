@@ -229,7 +229,11 @@ fn normalize_path(path: &Path) -> String {
         .join("/")
 }
 
-fn required_string<'a>(tool: &str, input: &'a Value, key: &str) -> Result<&'a str, HarnessError> {
+pub(crate) fn required_string<'a>(
+    tool: &str,
+    input: &'a Value,
+    key: &str,
+) -> Result<&'a str, HarnessError> {
     optional_string(input, key).ok_or_else(|| HarnessError::InvalidToolInput {
         name: tool.to_string(),
         message: format!("missing string field `{key}`"),
