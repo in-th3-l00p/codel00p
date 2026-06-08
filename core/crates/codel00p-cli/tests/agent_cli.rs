@@ -140,3 +140,116 @@ fn agent_run_persists_session_messages_and_events() {
     assert!(session_output.contains("\tevent\tturn_completed\t\n"));
     provider.assert();
 }
+
+#[test]
+fn agent_run_extracts_reviewed_memory_and_reuses_approved_memory() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::write(workspace.join("README.md"), "# codel00p\n").expect("write readme");
+
+    let server = MockServer::start();
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Capture memory.");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "remember workflow[verify]: Run pnpm verify before pushing main."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let first_run = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Capture memory.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--session-id",
+            "session-memory",
+        ],
+    );
+    assert!(first_run.status.success(), "stderr: {}", stderr(&first_run));
+    first.assert();
+
+    let listed = run_codel00p(&db_path, &["memory", "list", "--status", "candidate"]);
+    assert!(listed.status.success(), "stderr: {}", stderr(&listed));
+    let listed_stdout = stdout(&listed);
+    assert!(
+        listed_stdout.contains("\tcandidate\tworkflow\tRun pnpm verify before pushing main.\n")
+    );
+    let memory_id = listed_stdout
+        .split('\t')
+        .next()
+        .expect("memory id")
+        .to_string();
+
+    let approve = run_codel00p(
+        &db_path,
+        &["memory", "approve", &memory_id, "--actor", "alice"],
+    );
+    assert!(approve.status.success(), "stderr: {}", stderr(&approve));
+
+    let second = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Use memory.")
+            .body_includes("Project memory:")
+            .body_includes("kind: workflow")
+            .body_includes("Run pnpm verify before pushing main.");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Loaded reviewed project memory."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let second_run = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Use memory.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--session-id",
+            "session-memory-2",
+        ],
+    );
+
+    assert!(
+        second_run.status.success(),
+        "stderr: {}",
+        stderr(&second_run)
+    );
+    assert_eq!(stdout(&second_run), "Loaded reviewed project memory.\n");
+    second.assert();
+}
