@@ -212,7 +212,7 @@ fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
 
         let mut output = String::new();
         if let Some(message) = &outcome.assistant_message {
-            output.push_str(&message);
+            output.push_str(message);
             output.push('\n');
         }
         if options.json_events {
