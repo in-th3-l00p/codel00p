@@ -50,6 +50,10 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr utf8")
 }
 
+fn occurrences(haystack: &str, needle: &str) -> usize {
+    haystack.match_indices(needle).count()
+}
+
 #[test]
 fn agent_run_calls_provider_with_read_only_tools_and_prints_final_text() {
     let dir = tempdir().expect("tempdir");
@@ -157,6 +161,118 @@ fn agent_run_persists_session_messages_and_events() {
     assert!(session_output.contains("\tevent\tturn_started\t\n"));
     assert!(session_output.contains("\tevent\tturn_completed\t\n"));
     provider.assert();
+}
+
+#[test]
+fn agent_resume_replays_prior_session_messages_and_appends_only_new_records() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::write(workspace.join("README.md"), "# codel00p\n").expect("write readme");
+
+    let first_server = MockServer::start();
+    let first = first_server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Initial request.");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Initial answer."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let first_run = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Initial request.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &first_server.base_url(),
+            "--session-id",
+            "session-resume",
+        ],
+    );
+    assert!(first_run.status.success(), "stderr: {}", stderr(&first_run));
+    first.assert();
+
+    let second_server = MockServer::start();
+    let second = second_server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Initial request.")
+            .body_includes("Initial answer.")
+            .body_includes("Continue with the next step.");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Resumed answer."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let resumed = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "resume",
+            "session-resume",
+            "Continue with the next step.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &second_server.base_url(),
+        ],
+    );
+    assert!(resumed.status.success(), "stderr: {}", stderr(&resumed));
+    assert_eq!(stdout(&resumed), "Resumed answer.\n");
+    second.assert();
+
+    let show = run_codel00p(&db_path, &["session", "show", "session-resume"]);
+    assert!(show.status.success(), "stderr: {}", stderr(&show));
+    let session_output = stdout(&show);
+    assert_eq!(
+        occurrences(&session_output, "\tmessage\tuser\tInitial request.\n"),
+        1
+    );
+    assert_eq!(
+        occurrences(&session_output, "\tmessage\tassistant\tInitial answer.\n"),
+        1
+    );
+    assert_eq!(
+        occurrences(
+            &session_output,
+            "\tmessage\tuser\tContinue with the next step.\n"
+        ),
+        1
+    );
+    assert_eq!(
+        occurrences(&session_output, "\tmessage\tassistant\tResumed answer.\n"),
+        1
+    );
 }
 
 #[test]

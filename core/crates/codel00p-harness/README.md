@@ -43,6 +43,22 @@ let outcome = AgentHarness::builder()
     .await?;
 ```
 
+Persisted sessions can be resumed by rebuilding `SessionState` from durable
+message records and using `run_turn_with_state`:
+
+```rust
+let outcome = AgentHarness::builder()
+    .model_client(model_client)
+    .workspace(workspace)
+    .tools(ToolRegistry::read_only_defaults())
+    .build()?
+    .run_turn_with_state(
+        restored_session_state,
+        UserMessage::new("Continue with the next step."),
+    )
+    .await?;
+```
+
 Project memory can be supplied through a repository-backed provider:
 
 ```rust

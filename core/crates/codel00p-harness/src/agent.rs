@@ -44,13 +44,21 @@ impl AgentHarness {
         session_id: SessionId,
         user_message: UserMessage,
     ) -> Result<TurnOutcome, HarnessError> {
+        self.run_turn_with_state(SessionState::new(session_id), user_message)
+            .await
+    }
+
+    pub async fn run_turn_with_state(
+        self,
+        mut session_state: SessionState,
+        user_message: UserMessage,
+    ) -> Result<TurnOutcome, HarnessError> {
         let turn_id = TurnId::new();
         let mut events = vec![HarnessEvent::TurnStarted {
             event_id: EventId::new(),
-            session_id: session_id.clone(),
+            session_id: session_state.session_id().clone(),
             turn_id: turn_id.clone(),
         }];
-        let mut session_state = SessionState::new(session_id);
         session_state.push_user(user_message);
         events.push(HarnessEvent::ContextBuilt {
             event_id: EventId::new(),

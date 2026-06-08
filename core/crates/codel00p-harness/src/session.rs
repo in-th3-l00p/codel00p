@@ -46,6 +46,10 @@ impl SessionState {
         self.messages.push(SessionMessage::user(message.content));
     }
 
+    pub fn push_message(&mut self, message: SessionMessage) {
+        self.messages.push(message);
+    }
+
     pub fn push_assistant(&mut self, content: impl Into<String>) {
         self.messages.push(SessionMessage::assistant(content));
     }

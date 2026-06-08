@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use codel00p_harness::{
     AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
     HarnessInferenceResponse, MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider,
-    SessionId, SessionMessage, ToolRegistry, TurnMemoryExtractionRequest, TurnMemoryExtractor,
-    UserMessage, Workspace,
+    SessionId, SessionMessage, SessionState, ToolRegistry, TurnMemoryExtractionRequest,
+    TurnMemoryExtractor, UserMessage, Workspace,
 };
 use codel00p_memory::{
     InMemoryMemoryStore, MemoryCandidateInput, MemoryListFilter, MemoryRepository, ReviewDecision,
@@ -91,6 +91,51 @@ async fn run_turn_returns_final_assistant_message_without_tools() {
         outcome.events.last(),
         Some(HarnessEvent::TurnCompleted { iterations: 1, .. })
     ));
+}
+
+#[tokio::test]
+async fn run_turn_with_state_preserves_prior_messages_before_new_user_message() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github",
+        "gpt-4o",
+        "Continue from the previous answer.",
+    )]);
+    let mut session_state = SessionState::new(SessionId::from_static("session-resume"));
+    session_state.push_user(UserMessage::new("Initial request."));
+    session_state.push_assistant("Initial answer.");
+
+    let outcome = AgentHarness::builder()
+        .model_client(model.clone())
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        .build()
+        .expect("build harness")
+        .run_turn_with_state(
+            session_state,
+            UserMessage::new("Continue with the next step."),
+        )
+        .await
+        .expect("run resumed turn");
+
+    assert_eq!(
+        model.requests()[0].session_state().messages(),
+        &[
+            SessionMessage::user("Initial request."),
+            SessionMessage::assistant("Initial answer."),
+            SessionMessage::user("Continue with the next step."),
+        ]
+    );
+    assert_eq!(
+        outcome.session_state.messages(),
+        &[
+            SessionMessage::user("Initial request."),
+            SessionMessage::assistant("Initial answer."),
+            SessionMessage::user("Continue with the next step."),
+            SessionMessage::assistant("Continue from the previous answer."),
+        ]
+    );
 }
 
 #[tokio::test]

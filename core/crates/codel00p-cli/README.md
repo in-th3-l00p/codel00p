@@ -54,6 +54,26 @@ Provider credentials are read from environment variables:
 the provider layer, but `agent run` currently rejects non-Chat-Completions modes
 until their transports are implemented.
 
+## Agent Resume
+
+`agent resume` continues a persisted session. The CLI replays prior session
+messages into the next model request and appends only the new turn's messages
+and events back to storage.
+
+```bash
+CODEL00P_PROVIDER_CUSTOM_API_KEY=local-dev-key \
+codel00p \
+  --memory-db .codel00p/memory.sqlite \
+  --organization-id org-1 \
+  --project-id project-1 \
+  --project-name codel00p \
+  agent resume session-architecture "Continue with the next implementation step." \
+  --workspace . \
+  --provider custom \
+  --model local-model \
+  --base-url http://127.0.0.1:11434/v1
+```
+
 ## Memory Review
 
 ```bash

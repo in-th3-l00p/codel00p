@@ -11,6 +11,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
         [command, subcommand, flag] if is_help(flag) => {
             match (command.as_str(), subcommand.as_str()) {
                 ("agent", "run") => Some(AGENT_RUN_HELP),
+                ("agent", "resume") => Some(AGENT_RESUME_HELP),
                 _ => None,
             }
         }
@@ -42,6 +43,7 @@ Usage: codel00p [global options] agent <command>
 
 Commands:
   run      Run one read-only agent turn
+  resume   Resume a persisted agent session
 ";
 
 const AGENT_RUN_HELP: &str = "\
@@ -53,6 +55,18 @@ Options:
   --model <id>                Provider model id
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
+  --max-iterations <n>        Maximum model/tool iterations
+  --json-events               Print serialized harness events after assistant text
+";
+
+const AGENT_RESUME_HELP: &str = "\
+Usage: codel00p [global options] agent resume <session-id> <prompt> [options]
+
+Options:
+  --workspace <path>          Workspace root, defaults to current directory
+  --provider <id>             Provider id or alias
+  --model <id>                Provider model id
+  --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
   --json-events               Print serialized harness events after assistant text
 ";

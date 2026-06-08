@@ -75,6 +75,18 @@ let outcome = harness
     .await?;
 ```
 
+Resumed sessions use the same runtime after the caller restores prior message
+records:
+
+```rust
+let outcome = harness
+    .run_turn_with_state(
+        restored_session_state,
+        UserMessage::new("Continue from the previous turn."),
+    )
+    .await?;
+```
+
 The outcome should be structured:
 
 ```rust

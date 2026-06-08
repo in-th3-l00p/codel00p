@@ -8,7 +8,7 @@ use codel00p_harness::{
 };
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
-use codel00p_session::{SessionMetadata, SessionStore, SessionStoreError};
+use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
 
 use crate::{
     config::{
@@ -36,12 +36,31 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
 
     match command.as_str() {
         "run" => agent_run(config, rest),
+        "resume" => agent_resume(config, rest),
         _ => Err(format!("unknown agent command: {command}")),
     }
 }
 
 fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
     let options = parse_agent_run_options(args)?;
+    run_agent_turn(config, options, AgentSessionMode::Fresh)
+}
+
+fn agent_resume(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let options = parse_agent_resume_options(args)?;
+    run_agent_turn(config, options, AgentSessionMode::Resume)
+}
+
+enum AgentSessionMode {
+    Fresh,
+    Resume,
+}
+
+fn run_agent_turn(
+    config: CliConfig,
+    options: AgentRunOptions,
+    session_mode: AgentSessionMode,
+) -> CliResult<String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -75,16 +94,13 @@ fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
             builder = builder.max_iterations(max_iterations);
         }
 
-        let session_id = options
-            .session_id
-            .as_deref()
-            .map(parse_session_id)
-            .transpose()?
-            .unwrap_or_default();
+        let (session_state, previous_message_count) =
+            prepare_session_state(&config, &options, session_mode)?;
+
         let outcome = builder
             .build()
             .map_err(|error| error.to_string())?
-            .run_turn(session_id, UserMessage::new(options.prompt))
+            .run_turn_with_state(session_state, UserMessage::new(options.prompt))
             .await
             .map_err(|error| error.to_string())?;
 
@@ -99,10 +115,43 @@ fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
                 output.push('\n');
             }
         }
-        persist_turn_outcome(&config, &outcome.session_state, &outcome.events)?;
+        persist_turn_outcome(
+            &config,
+            &outcome.session_state,
+            &outcome.events,
+            previous_message_count,
+        )?;
 
         Ok(output)
     })
+}
+
+fn prepare_session_state(
+    config: &CliConfig,
+    options: &AgentRunOptions,
+    session_mode: AgentSessionMode,
+) -> CliResult<(codel00p_harness::SessionState, usize)> {
+    match session_mode {
+        AgentSessionMode::Fresh => {
+            let session_id = options
+                .session_id
+                .as_deref()
+                .map(parse_session_id)
+                .transpose()?
+                .unwrap_or_default();
+            Ok((codel00p_harness::SessionState::new(session_id), 0))
+        }
+        AgentSessionMode::Resume => {
+            let session_id = options
+                .session_id
+                .as_deref()
+                .ok_or_else(|| "missing resume session id".to_string())
+                .and_then(parse_session_id)?;
+            let session_state = replay_session_messages(config, session_id)?;
+            let previous_message_count = session_state.messages().len();
+            Ok((session_state, previous_message_count))
+        }
+    }
 }
 
 fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
@@ -168,10 +217,41 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     })
 }
 
+fn parse_agent_resume_options(args: &[String]) -> CliResult<AgentRunOptions> {
+    if args.len() < 2 {
+        return Err("usage: agent resume <session-id> <prompt>".to_string());
+    }
+
+    let session_id = args[0].clone();
+    let mut options = parse_agent_run_options(&args[1..])?;
+    options.session_id = Some(session_id);
+    Ok(options)
+}
+
+fn replay_session_messages(
+    config: &CliConfig,
+    session_id: codel00p_harness::SessionId,
+) -> CliResult<codel00p_harness::SessionState> {
+    let store = open_session_store(config)?;
+    let records = store
+        .replay(&session_id)
+        .map_err(|error| error.to_string())?;
+    let mut session_state = codel00p_harness::SessionState::new(session_id);
+
+    for record in records {
+        if let SessionRecord::Message(message) = record.record() {
+            session_state.push_message(message.clone());
+        }
+    }
+
+    Ok(session_state)
+}
+
 fn persist_turn_outcome(
     config: &CliConfig,
     session_state: &codel00p_harness::SessionState,
     events: &[AgentEvent],
+    message_start_index: usize,
 ) -> CliResult<()> {
     let mut store = open_session_store(config)?;
     match store.create_session(SessionMetadata::new(
@@ -182,7 +262,7 @@ fn persist_turn_outcome(
         Err(error) => return Err(error.to_string()),
     }
 
-    for message in session_state.messages() {
+    for message in &session_state.messages()[message_start_index..] {
         store
             .append_message(session_state.session_id(), message.clone())
             .map_err(|error| error.to_string())?;
