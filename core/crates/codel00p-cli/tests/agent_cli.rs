@@ -85,3 +85,58 @@ fn agent_run_calls_provider_with_read_only_tools_and_prints_final_text() {
     assert_eq!(stdout(&output), "The project has a README.\n");
     provider.assert();
 }
+
+#[test]
+fn agent_run_persists_session_messages_and_events() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::write(workspace.join("README.md"), "# codel00p\n").expect("write readme");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Session persistence works."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let run = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Persist this turn.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--session-id",
+            "session-cli",
+        ],
+    );
+    let show = run_codel00p(&db_path, &["session", "show", "session-cli"]);
+
+    assert!(run.status.success(), "stderr: {}", stderr(&run));
+    assert!(show.status.success(), "stderr: {}", stderr(&show));
+    assert_eq!(stdout(&run), "Session persistence works.\n");
+    let session_output = stdout(&show);
+    assert!(session_output.contains("1\tmessage\tuser\tPersist this turn.\n"));
+    assert!(session_output.contains("2\tmessage\tassistant\tSession persistence works.\n"));
+    assert!(session_output.contains("\tevent\tturn_started\t\n"));
+    assert!(session_output.contains("\tevent\tturn_completed\t\n"));
+    provider.assert();
+}

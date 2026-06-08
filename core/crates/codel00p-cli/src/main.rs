@@ -10,8 +10,13 @@ use codel00p_memory::{
     MemoryCandidateInput, MemoryError, MemoryListFilter, MemoryQuery, MemoryRepository,
     ReviewDecision, StorageBackedMemoryStore,
 };
-use codel00p_protocol::{MemoryKind, MemoryStatus, ProjectRef};
+use codel00p_protocol::{
+    AgentEvent, MemoryKind, MemoryStatus, ProjectRef, SessionMessage, SessionRole,
+};
 use codel00p_providers::{Credential, InferenceClient, default_registry};
+use codel00p_session::{
+    SessionMetadata, SessionRecord, SessionStore, SessionStoreError, StorageBackedSessionStore,
+};
 use codel00p_storage::{SqliteStorage, StorageScope};
 
 type CliResult<T> = Result<T, String>;
@@ -45,6 +50,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
     match command.as_str() {
         "agent" => run_agent(config, rest),
         "memory" => run_memory(config, rest),
+        "session" => run_session(config, rest),
         _ => Err(format!("unknown command: {command}")),
     }
 }
@@ -124,6 +130,16 @@ fn open_store(
     ))
 }
 
+fn open_session_store(
+    config: &CliConfig,
+) -> CliResult<StorageBackedSessionStore<codel00p_storage::SqliteStorage>> {
+    let storage = SqliteStorage::open(&config.memory_db).map_err(|error| error.to_string())?;
+    Ok(StorageBackedSessionStore::new(
+        StorageScope::project(&config.organization_id, config.project.id()),
+        storage,
+    ))
+}
+
 struct AgentRunOptions {
     prompt: String,
     workspace: PathBuf,
@@ -195,19 +211,48 @@ fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
             .map_err(|error| error.to_string())?;
 
         let mut output = String::new();
-        if let Some(message) = outcome.assistant_message {
+        if let Some(message) = &outcome.assistant_message {
             output.push_str(&message);
             output.push('\n');
         }
         if options.json_events {
-            for event in outcome.events {
+            for event in &outcome.events {
                 output.push_str(&serde_json::to_string(&event).map_err(|error| error.to_string())?);
                 output.push('\n');
             }
         }
+        persist_turn_outcome(&config, &outcome.session_state, &outcome.events)?;
 
         Ok(output)
     })
+}
+
+fn persist_turn_outcome(
+    config: &CliConfig,
+    session_state: &codel00p_harness::SessionState,
+    events: &[AgentEvent],
+) -> CliResult<()> {
+    let mut store = open_session_store(config)?;
+    match store.create_session(SessionMetadata::new(
+        session_state.session_id().clone(),
+        "cli",
+    )) {
+        Ok(()) | Err(SessionStoreError::SessionAlreadyExists { .. }) => {}
+        Err(error) => return Err(error.to_string()),
+    }
+
+    for message in session_state.messages() {
+        store
+            .append_message(session_state.session_id(), message.clone())
+            .map_err(|error| error.to_string())?;
+    }
+    for event in events {
+        store
+            .append_event(session_state.session_id(), event.clone())
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
 }
 
 struct CliProjectMemoryProvider {
@@ -425,6 +470,82 @@ fn read_secret(key: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn run_session(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some((command, rest)) = args.split_first() else {
+        return Err("missing session command".to_string());
+    };
+
+    match command.as_str() {
+        "show" => session_show(config, rest),
+        _ => Err(format!("unknown session command: {command}")),
+    }
+}
+
+fn session_show(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let id = single_id(args, "session show")?;
+    let session_id = parse_session_id(id)?;
+    let store = open_session_store(&config)?;
+    let records = store
+        .replay(&session_id)
+        .map_err(|error| error.to_string())?;
+    let mut output = String::new();
+
+    for record in records {
+        match record.record() {
+            SessionRecord::Message(message) => output.push_str(&format!(
+                "{}\tmessage\t{}\t{}\n",
+                record.sequence(),
+                session_role_label(message.role()),
+                session_message_summary(message)
+            )),
+            SessionRecord::Event(event) => output.push_str(&format!(
+                "{}\tevent\t{}\t\n",
+                record.sequence(),
+                agent_event_label(event)
+            )),
+        }
+    }
+
+    Ok(output)
+}
+
+fn session_role_label(role: SessionRole) -> &'static str {
+    match role {
+        SessionRole::System => "system",
+        SessionRole::User => "user",
+        SessionRole::Assistant => "assistant",
+        SessionRole::Tool => "tool",
+    }
+}
+
+fn session_message_summary(message: &SessionMessage) -> String {
+    if !message.content().is_empty() {
+        return message.content().to_string();
+    }
+    if !message.tool_calls().is_empty() {
+        return format!("{} tool call(s)", message.tool_calls().len());
+    }
+    String::new()
+}
+
+fn agent_event_label(event: &AgentEvent) -> &'static str {
+    match event {
+        AgentEvent::SessionStarted { .. } => "session_started",
+        AgentEvent::TurnStarted { .. } => "turn_started",
+        AgentEvent::ContextBuilt { .. } => "context_built",
+        AgentEvent::InferenceRequested { .. } => "inference_requested",
+        AgentEvent::InferenceCompleted { .. } => "inference_completed",
+        AgentEvent::ToolCallRequested { .. } => "tool_call_requested",
+        AgentEvent::ToolCallCompleted { .. } => "tool_call_completed",
+        AgentEvent::ToolCallFailed { .. } => "tool_call_failed",
+        AgentEvent::PermissionRequested { .. } => "permission_requested",
+        AgentEvent::PermissionDenied { .. } => "permission_denied",
+        AgentEvent::ToolProgress { .. } => "tool_progress",
+        AgentEvent::LifecycleHookFailed { .. } => "lifecycle_hook_failed",
+        AgentEvent::TurnCompleted { .. } => "turn_completed",
+    }
 }
 
 fn memory_list(config: CliConfig, args: &[String]) -> CliResult<String> {

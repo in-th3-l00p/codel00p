@@ -138,6 +138,7 @@ dependencies = [
  "codel00p-memory",
  "codel00p-protocol",
  "codel00p-providers",
+ "codel00p-session",
  "codel00p-storage",
  "httpmock",
  "serde_json",
