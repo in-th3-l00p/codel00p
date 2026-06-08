@@ -1,7 +1,8 @@
 use codel00p_harness::{
-    HarnessInferenceRequest, ModelToolCall, ProviderModelClient, SessionId, SessionState,
-    UserMessage,
+    HarnessInferenceRequest, MemoryPromptAssembler, ModelToolCall, ProjectMemoryContext,
+    ProjectMemoryItem, ProviderModelClient, SessionId, SessionState, UserMessage,
 };
+use codel00p_protocol::MemoryKind;
 use codel00p_providers::{InferenceResponse, MessageRole, ToolCall};
 use serde_json::json;
 
@@ -33,6 +34,123 @@ fn maps_harness_session_messages_to_provider_request() {
             .collect::<Vec<_>>(),
         vec!["read_file", "search_text"]
     );
+}
+
+#[test]
+fn assembles_project_memory_into_stable_prompt_block() {
+    let memory = ProjectMemoryContext::new(vec![
+        ProjectMemoryItem::new(
+            "mem-b",
+            MemoryKind::Workflow,
+            "Run pnpm verify before pushing main.",
+            vec!["verify".to_string()],
+            "matched kind workflow",
+        ),
+        ProjectMemoryItem::new(
+            "mem-a",
+            MemoryKind::Architecture,
+            "The harness owns tool execution.",
+            vec!["harness".to_string(), "runtime".to_string()],
+            "matched tag harness",
+        ),
+    ]);
+
+    let prompt = MemoryPromptAssembler
+        .assemble(&memory)
+        .expect("memory prompt");
+
+    assert_eq!(
+        prompt,
+        "\
+Project memory:
+- id: mem-a
+  kind: architecture
+  tags: harness,runtime
+  reason: matched tag harness
+  content: The harness owns tool execution.
+- id: mem-b
+  kind: workflow
+  tags: verify
+  reason: matched kind workflow
+  content: Run pnpm verify before pushing main."
+    );
+}
+
+#[test]
+fn assembles_multiline_project_memory_without_breaking_prompt_fields() {
+    let memory = ProjectMemoryContext::new(vec![ProjectMemoryItem::new(
+        "mem-multi",
+        MemoryKind::Troubleshooting,
+        "First line\nSecond line",
+        vec!["debug".to_string()],
+        "matched content\nmatched tag debug",
+    )]);
+
+    let prompt = MemoryPromptAssembler
+        .assemble(&memory)
+        .expect("memory prompt");
+
+    assert_eq!(
+        prompt,
+        "\
+Project memory:
+- id: mem-multi
+  kind: troubleshooting
+  tags: debug
+  reason: matched content
+    matched tag debug
+  content: First line
+    Second line"
+    );
+}
+
+#[test]
+fn provider_request_includes_project_memory_before_session_messages() {
+    let mut state = SessionState::new(SessionId::from_static("session-provider"));
+    state.push_user(UserMessage::new("Inspect the project."));
+    let request =
+        HarnessInferenceRequest::new(state).with_project_memory(ProjectMemoryContext::new(vec![
+            ProjectMemoryItem::new(
+                "mem-harness",
+                MemoryKind::Architecture,
+                "The harness owns tool execution.",
+                vec!["harness".to_string()],
+                "matched tag harness",
+            ),
+        ]));
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    assert_eq!(provider_request.messages.len(), 2);
+    assert_eq!(provider_request.messages[0].role, MessageRole::System);
+    assert_eq!(
+        provider_request.messages[0].content.as_deref(),
+        Some(
+            "\
+Project memory:
+- id: mem-harness
+  kind: architecture
+  tags: harness
+  reason: matched tag harness
+  content: The harness owns tool execution."
+        )
+    );
+    assert_eq!(provider_request.messages[1].role, MessageRole::User);
+}
+
+#[test]
+fn empty_project_memory_adds_no_provider_message() {
+    let mut state = SessionState::new(SessionId::from_static("session-provider"));
+    state.push_user(UserMessage::new("Inspect the project."));
+    let request =
+        HarnessInferenceRequest::new(state).with_project_memory(ProjectMemoryContext::new(vec![]));
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    assert_eq!(provider_request.messages.len(), 1);
+    assert_eq!(provider_request.messages[0].role, MessageRole::User);
 }
 
 #[test]

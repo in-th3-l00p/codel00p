@@ -6,6 +6,7 @@ use serde_json::json;
 
 use crate::{
     errors::HarnessError,
+    memory::MemoryPromptAssembler,
     session::SessionMessage,
     turn::{HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall},
 };
@@ -44,6 +45,12 @@ impl ProviderModelClient {
         request: &HarnessInferenceRequest,
     ) -> InferenceRequest {
         let mut builder = InferenceRequest::builder(provider, model);
+
+        if let Some(project_memory) = request.project_memory()
+            && let Some(prompt) = MemoryPromptAssembler.assemble(project_memory)
+        {
+            builder = builder.message(ChatMessage::system(prompt));
+        }
 
         for message in request.session_state().messages() {
             builder = builder.message(map_session_message(message));

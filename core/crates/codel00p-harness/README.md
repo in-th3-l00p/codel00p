@@ -61,6 +61,18 @@ let outcome = AgentHarness::builder()
     .await?;
 ```
 
+Approved memory is assembled into a provider-neutral system message before
+session messages:
+
+```text
+Project memory:
+- id: mem-harness
+  kind: architecture
+  tags: harness,runtime
+  reason: matched tag harness
+  content: The harness owns tool execution.
+```
+
 Candidate memory can be extracted after completed turns:
 
 ```rust

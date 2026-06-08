@@ -238,6 +238,34 @@ impl ProjectMemoryContext {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct MemoryPromptAssembler;
+
+impl MemoryPromptAssembler {
+    pub fn assemble(&self, memory: &ProjectMemoryContext) -> Option<String> {
+        if memory.is_empty() {
+            return None;
+        }
+
+        let mut items = memory.items().to_vec();
+        items.sort_by(|left, right| left.id().cmp(right.id()));
+
+        let mut prompt = String::from("Project memory:");
+        for item in items {
+            prompt.push_str(&format!(
+                "\n- id: {}\n  kind: {}\n  tags: {}\n  reason: {}\n  content: {}",
+                item.id(),
+                memory_kind_label(item.kind()),
+                format_prompt_field(&item.tags().join(",")),
+                format_prompt_field(item.reason()),
+                format_prompt_field(item.content())
+            ));
+        }
+
+        Some(prompt)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectMemoryItem {
     id: String,
@@ -387,4 +415,19 @@ fn non_empty_filter(value: String) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn memory_kind_label(kind: MemoryKind) -> &'static str {
+    match kind {
+        MemoryKind::Architecture => "architecture",
+        MemoryKind::Convention => "convention",
+        MemoryKind::Workflow => "workflow",
+        MemoryKind::Decision => "decision",
+        MemoryKind::Deployment => "deployment",
+        MemoryKind::Troubleshooting => "troubleshooting",
+    }
+}
+
+fn format_prompt_field(value: &str) -> String {
+    value.lines().collect::<Vec<_>>().join("\n    ")
 }

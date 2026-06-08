@@ -212,6 +212,21 @@ desktop app, or cloud review workflow must approve candidates before retrieval
 can use them. Extraction and sink failures are non-fatal and become
 `LifecycleHookFailed` events.
 
+Approved project memory is assembled into a provider-neutral system message
+before session messages:
+
+```text
+Project memory:
+- id: mem-harness
+  kind: architecture
+  tags: harness,runtime
+  reason: matched tag harness
+  content: The harness owns tool execution.
+```
+
+The prompt block is sorted by memory id for deterministic provider requests and
+includes retrieval reasons so users can inspect why the memory was loaded.
+
 ## Test Strategy
 
 Use TDD from the first harness commit.

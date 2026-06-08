@@ -95,6 +95,24 @@ Memory retrieval should be:
 The user should be able to understand why memory was used and correct memory
 that is stale or wrong.
 
+## Prompt assembly
+
+Approved memory enters inference through a provider-neutral system message
+assembled by the harness:
+
+```text
+Project memory:
+- id: mem-harness
+  kind: architecture
+  tags: harness,runtime
+  reason: matched tag harness
+  content: The harness owns tool execution.
+```
+
+Only approved memory can reach this path. Candidates, rejected memory, and
+archived memory remain available for review/audit workflows but are excluded
+from inference retrieval.
+
 ## Development approach
 
 The first implementation should be `codel00p-memory`: a Rust memory engine with

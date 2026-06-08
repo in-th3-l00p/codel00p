@@ -22,9 +22,9 @@ pub use iteration_budget::IterationBudget;
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use memory::{
     ExplicitTurnMemoryExtractor, MemoryCandidateSink, MemoryCandidateSinkOutcome,
-    MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider, ProjectMemoryContext,
-    ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest, TurnMemoryExtractionRequest,
-    TurnMemoryExtractor,
+    MemoryPromptAssembler, MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider,
+    ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest,
+    TurnMemoryExtractionRequest, TurnMemoryExtractor,
 };
 pub use permissions::{
     AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,
