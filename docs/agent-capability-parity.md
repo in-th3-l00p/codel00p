@@ -134,8 +134,9 @@ Current implementation:
 - `agent mcp list` inspects configured tools without making a model call;
 - MCP permission requests and denials flow through the same JSON event stream
   and session audit log as native tools;
-- `codel00p mcp serve` exposes read-only memory/session tools to other MCP
-  clients over stdio;
+- `codel00p mcp serve` exposes memory search/list/show, reviewed memory
+  create/approve/reject/archive tools, and read-only session replay to other
+  MCP clients over stdio;
 - `--remember-permissions` persists ask-mode MCP connector allow/deny decisions
   per project, tool, and permission scope;
 - `codel00p mcp permissions list` and `forget` inspect and revoke remembered
@@ -143,7 +144,8 @@ Current implementation:
 
 Remaining work:
 
-- broader MCP server write tools once policy management is explicit.
+- resource subscriptions and progress notifications for long-running MCP
+  clients;
 
 ### 7. Context Management
 

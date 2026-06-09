@@ -126,8 +126,12 @@ Expose codel00p itself as a stdio MCP server for other agents/tools:
 codel00p ... mcp serve
 ```
 
-The server exposes read-only `memory_search`, `memory_list`, `memory_show`, and
-`session_show` tools backed by the same project-scoped memory/session database.
+The server exposes `memory_search`, `memory_list`, `memory_show`,
+`memory_create_candidate`, `memory_approve`, `memory_reject`,
+`memory_archive`, and read-only `session_show` tools backed by the same
+project-scoped memory/session database. Memory writes keep the review lifecycle:
+external clients create candidates first, then explicitly approve, reject, or
+archive them.
 
 Tool calls run with `--permission-mode allow` by default. Use
 `--permission-mode deny` to exercise a turn without mutating the workspace or

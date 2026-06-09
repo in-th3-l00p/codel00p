@@ -1,7 +1,11 @@
 use std::io::{self, BufRead, Write};
 
-use codel00p_memory::{MemoryListFilter, MemoryQuery, MemoryRepository};
-use codel00p_protocol::{MemoryKind, MemoryStatus, SessionMessage, SessionRole};
+use codel00p_memory::{
+    MemoryCandidateInput, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
+};
+use codel00p_protocol::{
+    MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
+};
 use codel00p_session::{SessionRecord, SessionStore};
 use serde_json::{Value, json};
 
@@ -180,6 +184,60 @@ fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_create_candidate",
+            "description": "Create candidate codel00p project memory for review.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "kind", "content", "session_id", "turn_id"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "content": { "type": "string" },
+                    "session_id": { "type": "string" },
+                    "turn_id": { "type": "string" },
+                    "tags": { "type": "array", "items": { "type": "string" } }
+                }
+            }
+        }),
+        json!({
+            "name": "memory_approve",
+            "description": "Approve one codel00p project memory candidate.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "actor"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "actor": { "type": "string" }
+                }
+            }
+        }),
+        json!({
+            "name": "memory_reject",
+            "description": "Reject one codel00p project memory candidate.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "actor", "reason"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "actor": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
+            "name": "memory_archive",
+            "description": "Archive one codel00p project memory record.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "actor", "reason"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "actor": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
             "name": "session_show",
             "description": "Replay one codel00p agent session by id.",
             "inputSchema": {
@@ -206,6 +264,10 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<Value, String> {
         "memory_search" => memory_search(config, &arguments)?,
         "memory_list" => memory_list(config, &arguments)?,
         "memory_show" => memory_show(config, &arguments)?,
+        "memory_create_candidate" => memory_create_candidate(config, &arguments)?,
+        "memory_approve" => memory_review(config, &arguments, MemoryReviewAction::Approve)?,
+        "memory_reject" => memory_review(config, &arguments, MemoryReviewAction::Reject)?,
+        "memory_archive" => memory_review(config, &arguments, MemoryReviewAction::Archive)?,
         "session_show" => session_show(config, &arguments)?,
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
@@ -285,14 +347,64 @@ fn memory_show(config: &CliConfig, arguments: &Value) -> Result<String, String> 
     let id = required_string(arguments, "id")?;
     let store = open_memory_store(config)?;
     let record = store.get(id).map_err(|error| error.to_string())?;
-    serde_json::to_string(&json!({
-        "id": record.entry().id(),
-        "status": status_label(record.entry().status()),
-        "kind": kind_label(record.entry().kind()),
-        "content": record.entry().content(),
-        "tags": record.entry().tags(),
-    }))
-    .map_err(|error| error.to_string())
+    serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
+}
+
+fn memory_create_candidate(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+    let source = MemorySource::turn(
+        parse_session_id(required_string(arguments, "session_id")?)?,
+        parse_turn_id(required_string(arguments, "turn_id")?)?,
+    );
+    let mut input = MemoryCandidateInput::new(
+        required_string(arguments, "id")?,
+        config.project.clone(),
+        parse_kind(required_string(arguments, "kind")?)?,
+        required_string(arguments, "content")?,
+        source,
+    );
+    for tag in optional_string_array(arguments, "tags")? {
+        input = input.with_tag(tag);
+    }
+
+    let mut store = open_memory_store(config)?;
+    let record = store
+        .create_candidate(input)
+        .map_err(|error| error.to_string())?;
+    serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MemoryReviewAction {
+    Approve,
+    Reject,
+    Archive,
+}
+
+fn memory_review(
+    config: &CliConfig,
+    arguments: &Value,
+    action: MemoryReviewAction,
+) -> Result<String, String> {
+    let id = required_string(arguments, "id")?;
+    let actor = required_string(arguments, "actor")?;
+    let decision = match action {
+        MemoryReviewAction::Approve => ReviewDecision::approve(actor),
+        MemoryReviewAction::Reject => ReviewDecision::reject(
+            actor,
+            required_string(arguments, "reason")
+                .map_err(|_| "memory_reject requires reason".to_string())?,
+        ),
+        MemoryReviewAction::Archive => ReviewDecision::archive(
+            actor,
+            required_string(arguments, "reason")
+                .map_err(|_| "memory_archive requires reason".to_string())?,
+        ),
+    };
+    let mut store = open_memory_store(config)?;
+    let record = store
+        .review(id, decision)
+        .map_err(|error| error.to_string())?;
+    serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
 }
 
 fn session_show(config: &CliConfig, arguments: &Value) -> Result<String, String> {
@@ -320,6 +432,16 @@ fn session_show(config: &CliConfig, arguments: &Value) -> Result<String, String>
     serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 
+fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
+    json!({
+        "id": record.entry().id(),
+        "status": status_label(record.entry().status()),
+        "kind": kind_label(record.entry().kind()),
+        "content": record.entry().content(),
+        "tags": record.entry().tags(),
+    })
+}
+
 fn required_string<'a>(arguments: &'a Value, key: &str) -> Result<&'a str, String> {
     arguments
         .get(key)
@@ -343,6 +465,29 @@ fn optional_usize(arguments: &Value, key: &str) -> Result<Option<usize>, String>
         .as_u64()
         .map(|value| Some(value as usize))
         .ok_or_else(|| format!("argument `{key}` must be a positive integer"))
+}
+
+fn optional_string_array<'a>(arguments: &'a Value, key: &str) -> Result<Vec<&'a str>, String> {
+    let Some(value) = arguments.get(key) else {
+        return Ok(Vec::new());
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| format!("argument `{key}` must be an array of strings"))?;
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| format!("argument `{key}` must be an array of strings"))
+        })
+        .collect()
+}
+
+fn parse_turn_id(value: &str) -> Result<TurnId, String> {
+    serde_json::from_value(Value::String(value.to_string()))
+        .map_err(|error| format!("invalid turn_id: {error}"))
 }
 
 fn parse_status(value: &str) -> Result<MemoryStatus, String> {

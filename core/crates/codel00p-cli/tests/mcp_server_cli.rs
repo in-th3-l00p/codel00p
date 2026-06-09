@@ -90,6 +90,10 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert!(tool_names.contains(&"memory_search"));
     assert!(tool_names.contains(&"memory_list"));
     assert!(tool_names.contains(&"memory_show"));
+    assert!(tool_names.contains(&"memory_create_candidate"));
+    assert!(tool_names.contains(&"memory_approve"));
+    assert!(tool_names.contains(&"memory_reject"));
+    assert!(tool_names.contains(&"memory_archive"));
     assert!(tool_names.contains(&"session_show"));
 
     send(
@@ -108,6 +112,174 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert_eq!(call["result"]["isError"], false);
     assert_eq!(call["result"]["content"][0]["type"], "text");
     assert_eq!(call["result"]["content"][0]["text"], "[]");
+
+    child.kill().expect("kill server");
+    let _ = child.wait();
+}
+
+#[test]
+fn mcp_serve_can_create_and_review_project_memory() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let mut child = spawn_codel00p_mcp_server(&db_path);
+    let stdout = child.stdout.take().expect("stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }),
+    );
+    let _ = read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }),
+    );
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-mcp-1",
+                    "kind": "decision",
+                    "content": "Use MCP write tools for reviewed project memory.",
+                    "session_id": "session-mcp",
+                    "turn_id": "turn-mcp",
+                    "tags": ["mcp", "memory"]
+                }
+            }
+        }),
+    );
+    let created = read_response(&mut stdout);
+    assert_eq!(created["result"]["isError"], false);
+    let created_text = created["result"]["content"][0]["text"]
+        .as_str()
+        .expect("created text");
+    assert!(created_text.contains(r#""id":"mem-mcp-1""#));
+    assert!(created_text.contains(r#""status":"candidate""#));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_approve",
+                "arguments": {
+                    "id": "mem-mcp-1",
+                    "actor": "mcp-client"
+                }
+            }
+        }),
+    );
+    let approved = read_response(&mut stdout);
+    assert_eq!(approved["result"]["isError"], false);
+    let approved_text = approved["result"]["content"][0]["text"]
+        .as_str()
+        .expect("approved text");
+    assert!(approved_text.contains(r#""status":"approved""#));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_search",
+                "arguments": { "text": "MCP write tools" }
+            }
+        }),
+    );
+    let searched = read_response(&mut stdout);
+    assert_eq!(searched["result"]["isError"], false);
+    let searched_text = searched["result"]["content"][0]["text"]
+        .as_str()
+        .expect("searched text");
+    assert!(searched_text.contains(r#""id":"mem-mcp-1""#));
+    assert!(searched_text.contains("reviewed project memory"));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-mcp-reject",
+                    "kind": "workflow",
+                    "content": "Reject vague MCP memory.",
+                    "session_id": "session-mcp",
+                    "turn_id": "turn-mcp",
+                    "tags": ["mcp"]
+                }
+            }
+        }),
+    );
+    let rejected_candidate = read_response(&mut stdout);
+    assert_eq!(rejected_candidate["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_reject",
+                "arguments": {
+                    "id": "mem-mcp-reject",
+                    "actor": "mcp-client",
+                    "reason": "too vague"
+                }
+            }
+        }),
+    );
+    let rejected = read_response(&mut stdout);
+    assert_eq!(rejected["result"]["isError"], false);
+    let rejected_text = rejected["result"]["content"][0]["text"]
+        .as_str()
+        .expect("rejected text");
+    assert!(rejected_text.contains(r#""status":"rejected""#));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_archive",
+                "arguments": {
+                    "id": "mem-mcp-1",
+                    "actor": "mcp-client",
+                    "reason": "superseded"
+                }
+            }
+        }),
+    );
+    let archived = read_response(&mut stdout);
+    assert_eq!(archived["result"]["isError"], false);
+    let archived_text = archived["result"]["content"][0]["text"]
+        .as_str()
+        .expect("archived text");
+    assert!(archived_text.contains(r#""status":"archived""#));
 
     child.kill().expect("kill server");
     let _ = child.wait();

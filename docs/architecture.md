@@ -51,8 +51,9 @@ audit behavior for external systems. The first runtime transports are stdio and
 HTTP: workspace `.codel00p/mcp.json` files and ad hoc CLI flags can launch local
 MCP server processes or connect to remote MCP endpoints, discover tools, assign
 permission scopes, and inspect tools without a model call.
-The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing read-only
-project memory and session replay tools to other agents.
+The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing project
+memory search/list/show, reviewed memory candidate creation and review tools,
+and read-only session replay to other agents.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
 not require repeated prompts. Operators can inspect and revoke those remembered
