@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use codel00p_harness::{Tool, ToolRegistry, Workspace};
 use codel00p_mcp::{
     McpClient, McpClientNotification, McpResourceDescriptor, McpTool, McpToolCall,
-    McpToolDescriptor, McpToolOutput, discover_tool_registry,
+    McpSubscriptionEvent, McpToolDescriptor, McpToolOutput, discover_tool_registry,
 };
-use codel00p_protocol::PermissionScope;
+use codel00p_protocol::{AgentEvent, PermissionScope, SessionId, TurnId};
 use serde_json::json;
 
 #[test]
@@ -40,6 +40,36 @@ fn resource_descriptor_carries_server_uri_and_mime_type() {
     assert_eq!(resource.uri(), "file:///workspace/README.md");
     assert_eq!(resource.name(), "README");
     assert_eq!(resource.mime_type(), Some("text/markdown"));
+}
+
+#[test]
+fn subscription_events_convert_to_harness_progress_events() {
+    let session_id = SessionId::from_static("session-mcp");
+    let turn_id = TurnId::from_static("turn-mcp");
+
+    let event = McpSubscriptionEvent::reconnecting(
+        "docs",
+        2,
+        "mcp stdio transport failed for docs: server closed stdout",
+    )
+    .to_harness_event(session_id.clone(), turn_id.clone(), "mcp.docs.__subscription");
+
+    assert!(matches!(
+        event,
+        AgentEvent::ToolProgress {
+            session_id: observed_session_id,
+            turn_id: observed_turn_id,
+            tool_name,
+            phase,
+            message,
+            ..
+        } if observed_session_id == session_id
+            && observed_turn_id == turn_id
+            && tool_name == "mcp.docs.__subscription"
+            && phase == "mcp_subscription_reconnecting"
+            && message.as_deref()
+                == Some("docs reconnect attempt 2: mcp stdio transport failed for docs: server closed stdout")
+    ));
 }
 
 #[tokio::test]

@@ -10,7 +10,7 @@ use std::{
 
 use async_trait::async_trait;
 use codel00p_harness::{HarnessError, Tool, ToolRegistry, ToolResult, Workspace};
-use codel00p_protocol::PermissionScope;
+use codel00p_protocol::{AgentEvent, EventId, PermissionScope, SessionId, TurnId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{
@@ -744,6 +744,44 @@ impl McpSubscriptionEvent {
             server_id: server_id.into(),
             attempt,
             error: error.into(),
+        }
+    }
+
+    pub fn to_harness_event(
+        &self,
+        session_id: SessionId,
+        turn_id: TurnId,
+        tool_name: impl Into<String>,
+    ) -> AgentEvent {
+        let (phase, message) = self.progress_parts();
+        AgentEvent::ToolProgress {
+            event_id: EventId::new(),
+            session_id,
+            turn_id,
+            tool_name: tool_name.into(),
+            phase,
+            message,
+        }
+    }
+
+    fn progress_parts(&self) -> (String, Option<String>) {
+        match self {
+            Self::Connected { server_id, attempt } => (
+                "mcp_subscription_connected".to_string(),
+                Some(format!("{server_id} connected on attempt {attempt}")),
+            ),
+            Self::Subscribed { uri } => {
+                ("mcp_subscription_subscribed".to_string(), Some(uri.clone()))
+            }
+            Self::Notification { notification } => mcp_notification_progress_parts(notification),
+            Self::Reconnecting {
+                server_id,
+                attempt,
+                error,
+            } => (
+                "mcp_subscription_reconnecting".to_string(),
+                Some(format!("{server_id} reconnect attempt {attempt}: {error}")),
+            ),
         }
     }
 }
@@ -2274,6 +2312,28 @@ where
     Ok(registry)
 }
 
+fn mcp_notification_progress_parts(notification: &McpClientNotification) -> (String, Option<String>) {
+    match notification {
+        McpClientNotification::Progress { message, .. } => {
+            ("mcp_progress".to_string(), message.clone())
+        }
+        McpClientNotification::ResourceUpdated { uri } => {
+            ("mcp_resource_updated".to_string(), Some(uri.clone()))
+        }
+        McpClientNotification::ToolsListChanged => ("mcp_tools_list_changed".to_string(), None),
+        McpClientNotification::ResourcesListChanged => {
+            ("mcp_resources_list_changed".to_string(), None)
+        }
+        McpClientNotification::PromptsListChanged => ("mcp_prompts_list_changed".to_string(), None),
+        McpClientNotification::LogMessage { level, .. } => {
+            ("mcp_log_message".to_string(), Some(level.clone()))
+        }
+        McpClientNotification::Other { method, .. } => {
+            ("mcp_notification".to_string(), Some(method.clone()))
+        }
+    }
+}
+
 #[async_trait]
 impl Tool for McpTool {
     fn name(&self) -> &str {
@@ -2312,29 +2372,8 @@ impl Tool for McpTool {
 
         let mut result = ToolResult::json(output.content().clone());
         for notification in output.notifications() {
-            match notification {
-                McpClientNotification::Progress { message, .. } => {
-                    result = result.with_progress("mcp_progress", message.as_deref());
-                }
-                McpClientNotification::ResourceUpdated { uri } => {
-                    result = result.with_progress("mcp_resource_updated", Some(uri.as_str()));
-                }
-                McpClientNotification::ToolsListChanged => {
-                    result = result.with_progress("mcp_tools_list_changed", None::<&str>);
-                }
-                McpClientNotification::ResourcesListChanged => {
-                    result = result.with_progress("mcp_resources_list_changed", None::<&str>);
-                }
-                McpClientNotification::PromptsListChanged => {
-                    result = result.with_progress("mcp_prompts_list_changed", None::<&str>);
-                }
-                McpClientNotification::LogMessage { level, .. } => {
-                    result = result.with_progress("mcp_log_message", Some(level.as_str()));
-                }
-                McpClientNotification::Other { method, .. } => {
-                    result = result.with_progress("mcp_notification", Some(method.as_str()));
-                }
-            }
+            let (phase, message) = mcp_notification_progress_parts(notification);
+            result = result.with_progress(phase, message);
         }
         Ok(result)
     }
