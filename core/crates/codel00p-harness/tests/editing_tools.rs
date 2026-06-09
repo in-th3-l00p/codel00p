@@ -14,7 +14,7 @@ async fn editing_defaults_expose_write_scoped_mutation_tools() {
     );
     for tool_name in registry.names() {
         assert_eq!(
-            registry.permission_scope(tool_name, &json!({})),
+            registry.permission_scope(&tool_name, &json!({})),
             PermissionScope::WorkspaceWrite
         );
     }

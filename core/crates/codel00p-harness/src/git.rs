@@ -20,7 +20,7 @@ pub struct GitStatusTool;
 
 #[async_trait]
 impl Tool for GitStatusTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "git_status"
     }
 
@@ -61,7 +61,7 @@ pub struct GitDiffTool;
 
 #[async_trait]
 impl Tool for GitDiffTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "git_diff"
     }
 
@@ -103,7 +103,7 @@ pub struct GitLogTool;
 
 #[async_trait]
 impl Tool for GitLogTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "git_log"
     }
 
@@ -146,7 +146,7 @@ pub struct GitCommitTool;
 
 #[async_trait]
 impl Tool for GitCommitTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "git_commit"
     }
 

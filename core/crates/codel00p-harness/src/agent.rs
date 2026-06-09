@@ -112,7 +112,7 @@ impl AgentHarness {
             let mut request = HarnessInferenceRequest::new(session_state.clone())
                 .with_runtime_context(
                     self.workspace.root().display().to_string(),
-                    self.tools.names().into_iter().map(str::to_string).collect(),
+                    self.tools.names(),
                 );
             if let Some(context_window) = &self.context_window {
                 request = request.with_context_window(context_window.clone());

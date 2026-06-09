@@ -25,7 +25,7 @@ pub struct RunCommandTool;
 
 #[async_trait]
 impl Tool for RunCommandTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "run_command"
     }
 

@@ -15,7 +15,7 @@ pub struct CreateFileTool;
 
 #[async_trait]
 impl Tool for CreateFileTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "create_file"
     }
 
@@ -68,7 +68,7 @@ pub struct UpdateFileTool;
 
 #[async_trait]
 impl Tool for UpdateFileTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "update_file"
     }
 
@@ -113,7 +113,7 @@ pub struct DeleteFileTool;
 
 #[async_trait]
 impl Tool for DeleteFileTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "delete_file"
     }
 
@@ -155,7 +155,7 @@ pub struct ApplyPatchTool;
 
 #[async_trait]
 impl Tool for ApplyPatchTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "apply_patch"
     }
 

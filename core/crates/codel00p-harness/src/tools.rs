@@ -11,7 +11,7 @@ const MAX_SEARCH_MATCHES: usize = 200;
 
 #[async_trait]
 pub trait Tool: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
     fn description(&self) -> &'static str;
 
@@ -36,7 +36,7 @@ pub struct ListFilesTool;
 
 #[async_trait]
 impl Tool for ListFilesTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "list_files"
     }
 
@@ -82,7 +82,7 @@ pub struct ReadFileTool;
 
 #[async_trait]
 impl Tool for ReadFileTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "read_file"
     }
 
@@ -127,7 +127,7 @@ pub struct SearchTextTool;
 
 #[async_trait]
 impl Tool for SearchTextTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "search_text"
     }
 

@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Clone, Default)]
 pub struct ToolRegistry {
-    tools: BTreeMap<&'static str, Arc<dyn Tool>>,
+    tools: BTreeMap<String, Arc<dyn Tool>>,
 }
 
 impl ToolRegistry {
@@ -54,7 +54,7 @@ impl ToolRegistry {
     where
         T: Tool + 'static,
     {
-        self.tools.insert(tool.name(), Arc::new(tool));
+        self.tools.insert(tool.name().to_string(), Arc::new(tool));
         self
     }
 
@@ -63,8 +63,8 @@ impl ToolRegistry {
         self
     }
 
-    pub fn names(&self) -> Vec<&'static str> {
-        self.tools.keys().copied().collect()
+    pub fn names(&self) -> Vec<String> {
+        self.tools.keys().cloned().collect()
     }
 
     pub fn is_concurrency_safe(&self, name: &str, input: &Value) -> bool {

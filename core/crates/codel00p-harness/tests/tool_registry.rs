@@ -5,9 +5,13 @@ use tempfile::tempdir;
 
 struct EchoTool;
 
+struct DynamicTool {
+    name: String,
+}
+
 #[async_trait]
 impl Tool for EchoTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "echo"
     }
 
@@ -35,6 +39,29 @@ impl Tool for EchoTool {
     }
 }
 
+#[async_trait]
+impl Tool for DynamicTool {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &'static str {
+        "Dynamic test tool."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({ "type": "object" })
+    }
+
+    async fn execute(
+        &self,
+        _workspace: &Workspace,
+        _input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        Ok(ToolResult::json(json!({ "tool": self.name })))
+    }
+}
+
 #[tokio::test]
 async fn registers_and_dispatches_tools_by_name() {
     let dir = tempdir().expect("tempdir");
@@ -53,7 +80,30 @@ async fn registers_and_dispatches_tools_by_name() {
 fn lists_tool_names_in_stable_order() {
     let registry = ToolRegistry::new().with_tool(EchoTool);
 
-    assert_eq!(registry.names(), vec!["echo"]);
+    assert_eq!(registry.names(), vec!["echo".to_string()]);
+}
+
+#[tokio::test]
+async fn registers_dynamic_tool_names() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::new().with_tool(DynamicTool {
+        name: "mcp.linear.create_issue".to_string(),
+    });
+
+    assert_eq!(
+        registry.names(),
+        vec!["mcp.linear.create_issue".to_string()]
+    );
+    let result = registry
+        .execute("mcp.linear.create_issue", &workspace, json!({}))
+        .await
+        .expect("execute dynamic tool");
+
+    assert_eq!(
+        result.content(),
+        &json!({ "tool": "mcp.linear.create_issue" })
+    );
 }
 
 #[tokio::test]

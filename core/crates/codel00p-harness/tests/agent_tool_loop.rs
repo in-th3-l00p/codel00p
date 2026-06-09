@@ -746,7 +746,7 @@ struct SlowReadOnlyTool(&'static str);
 
 #[async_trait]
 impl Tool for SlowReadOnlyTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         self.0
     }
 
@@ -797,7 +797,7 @@ impl TrackingTool {
 
 #[async_trait]
 impl Tool for TrackingTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         self.name
     }
 
@@ -833,7 +833,7 @@ struct CountingTool {
 
 #[async_trait]
 impl Tool for CountingTool {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "counting"
     }
 
