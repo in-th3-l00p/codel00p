@@ -347,6 +347,109 @@ printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text
 }
 
 #[test]
+fn agent_run_mcp_server_specs_support_args_and_env_assignments() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    let mcp_server = dir.path().join("fake-mcp-with-args.sh");
+    fs::write(
+        &mcp_server,
+        r#"#!/bin/sh
+TOOL_NAME="$1"
+read init
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1.0.0"}}}'
+read initialized
+read list
+printf '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"%s","description":"Echo text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}}}}]}}\n' "$TOOL_NAME"
+read call
+printf '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"%s"}],"isError":false}}\n' "$CODEL00P_FAKE_ECHO"
+"#,
+    )
+    .expect("write fake mcp server");
+    let chmod = Command::new("chmod")
+        .arg("+x")
+        .arg(&mcp_server)
+        .output()
+        .expect("chmod fake server");
+    assert!(chmod.status.success(), "stderr: {}", stderr(&chmod));
+
+    let server = MockServer::start();
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""name":"mcp.fake.echo_arg""#)
+            .body_excludes(r#""role":"tool""#);
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": null,
+                        "tool_calls": [
+                            {
+                                "id": "call-echo",
+                                "type": "function",
+                                "function": {
+                                    "name": "mcp.fake.echo_arg",
+                                    "arguments": "{\"text\":\"hello\"}"
+                                }
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls"
+                }
+            ]
+        }));
+    });
+    let second = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""role":"tool""#)
+            .body_includes("env echo")
+            .body_excludes("permission_denied");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "MCP args and env worked."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Use the MCP echo tool.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--mcp-server",
+            &format!(
+                "fake=CODEL00P_FAKE_ECHO='env echo' {} echo_arg",
+                mcp_server.display()
+            ),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "MCP args and env worked.\n");
+    first.assert();
+    second.assert();
+}
+
+#[test]
 fn agent_run_rejects_unknown_tool_sets() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

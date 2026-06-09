@@ -28,3 +28,5 @@ responses from stdout. It supports the MCP lifecycle handshake by sending
 `initialize`, recording the negotiated server metadata, and then sending
 `notifications/initialized` before normal operation. It maps `tools/list`,
 `resources/list`, and `tools/call` into codel00p descriptors and outputs.
+Requests have a configurable timeout, and shutdown closes server stdin, waits
+for process exit, then kills the server if it does not stop in time.

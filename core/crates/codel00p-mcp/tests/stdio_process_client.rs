@@ -1,3 +1,8 @@
+use std::{
+    fs,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 use codel00p_mcp::{McpStdioClient, McpToolCall, StdioServerCommand};
 use serde_json::json;
 
@@ -95,6 +100,59 @@ async fn stdio_client_reports_json_rpc_error_responses() {
 
     assert!(error.to_string().contains("json-rpc error response"));
     assert!(error.to_string().contains("missing method"));
+}
+
+#[tokio::test]
+async fn stdio_client_times_out_when_server_does_not_respond() {
+    let command = StdioServerCommand::new(
+        "slow",
+        "/bin/sh",
+        [
+            "-c",
+            "read line; sleep 2; printf '%s\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'",
+        ],
+    )
+    .with_request_timeout(Duration::from_millis(50));
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let error = client
+        .request("tools/list", json!({}))
+        .await
+        .expect_err("hung server should time out");
+
+    assert!(error.to_string().contains("timed out"));
+    assert!(error.to_string().contains("slow"));
+}
+
+#[tokio::test]
+async fn stdio_client_shutdown_closes_stdin_and_waits_for_server_exit() {
+    let marker = std::env::temp_dir().join(format!(
+        "codel00p-mcp-shutdown-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos()
+    ));
+    let command = StdioServerCommand::new(
+        "shutdown",
+        "/bin/sh",
+        [
+            "-c",
+            "while read line; do :; done; printf done > \"$MARKER\"",
+        ],
+    )
+    .with_env("MARKER", marker.as_os_str())
+    .with_request_timeout(Duration::from_millis(100));
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    client.shutdown().await.expect("shutdown client");
+
+    assert_eq!(fs::read_to_string(&marker).expect("marker"), "done");
+    let _ = fs::remove_file(marker);
 }
 
 #[tokio::test]

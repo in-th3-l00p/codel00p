@@ -63,15 +63,16 @@ Supported tool-set names:
 - `all`: enable edit, command, and git tool sets.
 
 Attach external MCP stdio tools with `--mcp-server <id=command>`. The command
-is currently an executable path; wrap complex startup commands in a script. The
-CLI starts the server, performs the MCP initialization handshake, discovers
-`tools/list`, and exposes tools as `mcp.<id>.<tool>`.
+is parsed into an executable, argv, and optional leading environment
+assignments; it is spawned directly, not through a shell. The CLI starts the
+server, performs the MCP initialization handshake, discovers `tools/list`, and
+exposes tools as `mcp.<id>.<tool>`.
 
 ```bash
 codel00p ... agent run "Search project docs." \
   --provider custom \
   --model local-model \
-  --mcp-server docs=./tools/docs-mcp-server
+  --mcp-server "docs=DOCS_ROOT=. ./tools/docs-mcp-server --watch=false"
 ```
 
 Tool calls run with `--permission-mode allow` by default. Use

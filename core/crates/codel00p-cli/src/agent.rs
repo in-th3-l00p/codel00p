@@ -61,6 +61,8 @@ enum CliPermissionMode {
 struct McpServerSpec {
     server_id: String,
     command: PathBuf,
+    args: Vec<String>,
+    env: Vec<(String, String)>,
 }
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -314,21 +316,82 @@ fn parse_permission_mode(value: &str) -> CliResult<CliPermissionMode> {
 }
 
 fn parse_mcp_server(value: &str) -> CliResult<McpServerSpec> {
-    let (server_id, command) = value
+    let (server_id, command_spec) = value
         .split_once('=')
         .ok_or_else(|| "invalid --mcp-server, expected <id>=<command>".to_string())?;
     let server_id = server_id.trim();
-    let command = command.trim();
+    let command_spec = command_spec.trim();
     if server_id.is_empty() {
         return Err("invalid --mcp-server, server id is empty".to_string());
     }
-    if command.is_empty() {
+    if command_spec.is_empty() {
         return Err("invalid --mcp-server, command is empty".to_string());
     }
+    let mut tokens = split_command_spec(command_spec)?;
+    let mut env = Vec::new();
+    while let Some((key, value)) = tokens
+        .first()
+        .and_then(|token| parse_env_assignment_token(token))
+    {
+        env.push((key, value));
+        tokens.remove(0);
+    }
+    let Some(command) = tokens.first() else {
+        return Err("invalid --mcp-server, command is empty".to_string());
+    };
     Ok(McpServerSpec {
         server_id: server_id.to_string(),
         command: PathBuf::from(command),
+        args: tokens[1..].to_vec(),
+        env,
     })
+}
+
+fn parse_env_assignment_token(token: &str) -> Option<(String, String)> {
+    let (key, value) = token.split_once('=')?;
+    if key.is_empty()
+        || key
+            .chars()
+            .any(|ch| !(ch == '_' || ch.is_ascii_alphanumeric()))
+        || key.chars().next().is_some_and(|ch| ch.is_ascii_digit())
+    {
+        return None;
+    }
+    Some((key.to_string(), value.to_string()))
+}
+
+fn split_command_spec(value: &str) -> CliResult<Vec<String>> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut chars = value.chars().peekable();
+    let mut quote = None;
+    while let Some(ch) = chars.next() {
+        match (quote, ch) {
+            (None, '\'') => quote = Some('\''),
+            (None, '"') => quote = Some('"'),
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (None, ch) if ch.is_whitespace() => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            (_, '\\') => {
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                } else {
+                    current.push('\\');
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+    if let Some(quote) = quote {
+        return Err(format!("invalid --mcp-server, unterminated {quote} quote"));
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    Ok(tokens)
 }
 
 async fn build_tool_registry(
@@ -349,13 +412,20 @@ async fn build_tool_registry(
         };
     }
     for server in mcp_servers {
-        let mut client = McpStdioClient::spawn(StdioServerCommand::new(
+        let command = StdioServerCommand::new(
             server.server_id.clone(),
             server.command.clone(),
-            std::iter::empty::<&str>(),
-        ))
-        .await
-        .map_err(|error| error.to_string())?;
+            &server.args,
+        )
+        .with_envs(
+            server
+                .env
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str())),
+        );
+        let mut client = McpStdioClient::spawn(command)
+            .await
+            .map_err(|error| error.to_string())?;
         client
             .initialize()
             .await

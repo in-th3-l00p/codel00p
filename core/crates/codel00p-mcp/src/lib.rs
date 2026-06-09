@@ -3,6 +3,7 @@ use std::{
     path::PathBuf,
     process::Stdio,
     sync::Arc,
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -14,6 +15,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
     process::{Child, ChildStdin, ChildStdout, Command},
     sync::Mutex,
+    time::timeout,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -173,6 +175,8 @@ pub struct StdioServerCommand {
     program: PathBuf,
     args: Vec<OsString>,
     env: Vec<(OsString, OsString)>,
+    request_timeout: Duration,
+    shutdown_timeout: Duration,
 }
 
 impl StdioServerCommand {
@@ -189,6 +193,8 @@ impl StdioServerCommand {
                 .map(|arg| arg.as_ref().to_os_string())
                 .collect(),
             env: Vec::new(),
+            request_timeout: Duration::from_secs(30),
+            shutdown_timeout: Duration::from_secs(5),
         }
     }
 
@@ -201,15 +207,40 @@ impl StdioServerCommand {
             .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
         self
     }
+
+    pub fn with_envs<I, K, V>(mut self, env: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.env.extend(
+            env.into_iter()
+                .map(|(key, value)| (key.as_ref().to_os_string(), value.as_ref().to_os_string())),
+        );
+        self
+    }
+
+    pub fn with_request_timeout(mut self, request_timeout: Duration) -> Self {
+        self.request_timeout = request_timeout;
+        self
+    }
+
+    pub fn with_shutdown_timeout(mut self, shutdown_timeout: Duration) -> Self {
+        self.shutdown_timeout = shutdown_timeout;
+        self
+    }
 }
 
 pub struct McpStdioClient {
     server_id: String,
     child: Child,
-    stdin: BufWriter<ChildStdin>,
+    stdin: Option<BufWriter<ChildStdin>>,
     stdout: BufReader<ChildStdout>,
     next_request_id: u64,
     initialized: Option<McpInitialization>,
+    request_timeout: Duration,
+    shutdown_timeout: Duration,
 }
 
 impl McpStdioClient {
@@ -240,10 +271,12 @@ impl McpStdioClient {
         Ok(Self {
             server_id: command.server_id,
             child,
-            stdin: BufWriter::new(stdin),
+            stdin: Some(BufWriter::new(stdin)),
             stdout: BufReader::new(stdout),
             next_request_id: 1,
             initialized: None,
+            request_timeout: command.request_timeout,
+            shutdown_timeout: command.shutdown_timeout,
         })
     }
 
@@ -300,20 +333,40 @@ impl McpStdioClient {
         self.next_request_id += 1;
         let request = JsonRpcMessage::request(JsonRpcRequest::new(request_id, method, params));
         let encoded = encode_stdio_message(&request)?;
-        self.stdin
+        let server_id = self.server_id.clone();
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id,
+                message: "server stdin is closed".to_string(),
+            })?;
+        stdin
             .write_all(encoded.as_bytes())
             .await
             .map_err(|error| self.stdio_error(format!("failed to write request: {error}")))?;
-        self.stdin
+        let server_id = self.server_id.clone();
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id,
+                message: "server stdin is closed".to_string(),
+            })?;
+        stdin
             .flush()
             .await
             .map_err(|error| self.stdio_error(format!("failed to flush request: {error}")))?;
 
         let mut line = String::new();
-        let bytes = self
-            .stdout
-            .read_line(&mut line)
+        let bytes = timeout(self.request_timeout, self.stdout.read_line(&mut line))
             .await
+            .map_err(|_| {
+                self.stdio_error(format!(
+                    "request timed out after {} ms",
+                    self.request_timeout.as_millis()
+                ))
+            })?
             .map_err(|error| self.stdio_error(format!("failed to read response: {error}")))?;
         if bytes == 0 {
             return Err(self.stdio_error("server closed stdout before responding"));
@@ -346,15 +399,51 @@ impl McpStdioClient {
     ) -> Result<(), McpError> {
         let notification = JsonRpcMessage::Notification(JsonRpcNotification::new(method, params));
         let encoded = encode_stdio_message(&notification)?;
-        self.stdin
+        let server_id = self.server_id.clone();
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id,
+                message: "server stdin is closed".to_string(),
+            })?;
+        stdin
             .write_all(encoded.as_bytes())
             .await
             .map_err(|error| self.stdio_error(format!("failed to write notification: {error}")))?;
-        self.stdin
+        let server_id = self.server_id.clone();
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id,
+                message: "server stdin is closed".to_string(),
+            })?;
+        stdin
             .flush()
             .await
             .map_err(|error| self.stdio_error(format!("failed to flush notification: {error}")))?;
         Ok(())
+    }
+
+    pub async fn shutdown(&mut self) -> Result<(), McpError> {
+        self.stdin.take();
+        match timeout(self.shutdown_timeout, self.child.wait()).await {
+            Ok(Ok(_status)) => Ok(()),
+            Ok(Err(error)) => {
+                Err(self.stdio_error(format!("failed to wait for shutdown: {error}")))
+            }
+            Err(_) => {
+                self.child
+                    .start_kill()
+                    .map_err(|error| self.stdio_error(format!("failed to kill server: {error}")))?;
+                let _ = self.child.wait().await;
+                Err(self.stdio_error(format!(
+                    "server did not exit within {} ms",
+                    self.shutdown_timeout.as_millis()
+                )))
+            }
+        }
     }
 
     fn stdio_error(&self, message: impl Into<String>) -> McpError {
