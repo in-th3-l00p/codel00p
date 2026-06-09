@@ -109,6 +109,41 @@ async fn stdio_client_collects_notifications_before_tool_response() {
 }
 
 #[tokio::test]
+async fn stdio_client_reads_notifications_after_resource_subscription() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read subscribe; case "$subscribe" in *'"method":"resources/subscribe"'*) ;; *) exit 11;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"codel00p://memory/mem-1"}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}'; read unsubscribe; case "$unsubscribe" in *'"method":"resources/unsubscribe"'*) ;; *) exit 12;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{}}'"#,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    client
+        .subscribe_resource("codel00p://memory/mem-1")
+        .await
+        .expect("subscribe resource");
+    assert_eq!(
+        client.read_notification().await.expect("resource update"),
+        McpClientNotification::resource_updated("codel00p://memory/mem-1")
+    );
+    assert_eq!(
+        client
+            .read_notification()
+            .await
+            .expect("tools list changed"),
+        McpClientNotification::tools_list_changed()
+    );
+    client
+        .unsubscribe_resource("codel00p://memory/mem-1")
+        .await
+        .expect("unsubscribe resource");
+}
+
+#[tokio::test]
 async fn stdio_client_reports_json_rpc_error_responses() {
     let command = StdioServerCommand::new(
         "fake",

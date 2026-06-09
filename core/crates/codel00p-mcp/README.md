@@ -16,8 +16,9 @@ This crate owns the contract between MCP servers and the agent harness:
   notifications.
 - `McpServerHandler` and `serve_stdio_server`: typed server dispatch and
   newline-delimited stdio serving for codel00p MCP servers.
-- `McpClientNotification`: progress/resource notification metadata collected
-  by MCP clients and emitted through harness `ToolProgress` events.
+- `McpClientNotification`: progress, resource-update, and list-changed
+  notification metadata collected by MCP clients and emitted through harness
+  `ToolProgress` events.
 
 Harness tool names are prefixed as:
 
@@ -36,16 +37,18 @@ The stdio transport launches a configured server process, writes newline
 delimited JSON-RPC messages to stdin, and reads newline delimited JSON-RPC
 responses from stdout. Requests have a configurable timeout, and shutdown closes
 server stdin, waits for process exit, then kills the server if it does not stop
-in time.
+in time. It can subscribe/unsubscribe resource URIs and poll subsequent
+server-sent notifications from the same long-lived process.
 
 The HTTP transport sends each JSON-RPC client message as a POST to the MCP
 endpoint, accepts JSON or `text/event-stream` responses, stores
 `Mcp-Session-Id` returned by `initialize`, and sends that session header on
 later requests. It supports bearer tokens and static headers for enterprise
 connector gateways. Stdio and HTTP tool calls preserve
-`notifications/progress` and `notifications/resources/updated` messages that
-arrive before the final response; the harness adapter maps them into
-`mcp_progress` and `mcp_resource_updated` tool progress phases.
+`notifications/progress`, `notifications/resources/updated`, and list-changed
+messages that arrive before the final response; the harness adapter maps them
+into `mcp_progress`, `mcp_resource_updated`, `mcp_tools_list_changed`, and
+`mcp_resources_list_changed` tool progress phases.
 
 Both transports support the MCP lifecycle handshake by sending `initialize`,
 recording the negotiated server metadata, and then sending

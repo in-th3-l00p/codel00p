@@ -92,6 +92,8 @@ async fn mcp_tool_maps_client_notifications_to_tool_progress() {
         McpToolOutput::json(json!({ "matches": ["memory.md"] })).with_notifications(vec![
             McpClientNotification::progress(json!("p1"), 1.0, Some(2.0), Some("Searching")),
             McpClientNotification::resource_updated("codel00p://memory/mem-1"),
+            McpClientNotification::tools_list_changed(),
+            McpClientNotification::resources_list_changed(),
         ]),
     );
     let tool = McpTool::new(
@@ -112,6 +114,10 @@ async fn mcp_tool_maps_client_notifications_to_tool_progress() {
         result.progress()[1].message(),
         Some("codel00p://memory/mem-1")
     );
+    assert_eq!(result.progress()[2].phase(), "mcp_tools_list_changed");
+    assert_eq!(result.progress()[2].message(), None);
+    assert_eq!(result.progress()[3].phase(), "mcp_resources_list_changed");
+    assert_eq!(result.progress()[3].message(), None);
 }
 
 #[tokio::test]

@@ -536,6 +536,8 @@ pub enum McpClientNotification {
     ResourceUpdated {
         uri: String,
     },
+    ToolsListChanged,
+    ResourcesListChanged,
     Other {
         method: String,
         params: Value,
@@ -559,6 +561,14 @@ impl McpClientNotification {
 
     pub fn resource_updated(uri: impl Into<String>) -> Self {
         Self::ResourceUpdated { uri: uri.into() }
+    }
+
+    pub fn tools_list_changed() -> Self {
+        Self::ToolsListChanged
+    }
+
+    pub fn resources_list_changed() -> Self {
+        Self::ResourcesListChanged
     }
 }
 
@@ -1023,6 +1033,8 @@ fn client_notification_from_json_rpc(notification: JsonRpcNotification) -> McpCl
                 }
             }
         }
+        "notifications/tools/list_changed" => McpClientNotification::tools_list_changed(),
+        "notifications/resources/list_changed" => McpClientNotification::resources_list_changed(),
         method => McpClientNotification::Other {
             method: method.to_string(),
             params: notification.params().clone(),
@@ -1200,6 +1212,61 @@ impl McpStdioClient {
                     return Err(self.stdio_error("server returned a non-response message"));
                 }
             }
+        }
+    }
+
+    pub async fn subscribe_resource(&mut self, uri: impl Into<String>) -> Result<(), McpError> {
+        self.request(
+            "resources/subscribe",
+            serde_json::json!({
+                "uri": uri.into()
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn unsubscribe_resource(&mut self, uri: impl Into<String>) -> Result<(), McpError> {
+        self.request(
+            "resources/unsubscribe",
+            serde_json::json!({
+                "uri": uri.into()
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn read_notification(&mut self) -> Result<McpClientNotification, McpError> {
+        loop {
+            let mut line = String::new();
+            let bytes = timeout(self.request_timeout, self.stdout.read_line(&mut line))
+                .await
+                .map_err(|_| {
+                    self.stdio_error(format!(
+                        "notification read timed out after {} ms",
+                        self.request_timeout.as_millis()
+                    ))
+                })?
+                .map_err(|error| {
+                    self.stdio_error(format!("failed to read notification: {error}"))
+                })?;
+            if bytes == 0 {
+                return Err(self.stdio_error("server closed stdout before notification"));
+            }
+            if line.trim().is_empty() {
+                continue;
+            }
+            return match decode_stdio_message(&line)? {
+                JsonRpcMessage::Notification(notification) => {
+                    Ok(client_notification_from_json_rpc(notification))
+                }
+                JsonRpcMessage::Response(_)
+                | JsonRpcMessage::Raw(_)
+                | JsonRpcMessage::Request(_) => {
+                    Err(self.stdio_error("server returned a non-notification message"))
+                }
+            };
         }
     }
 
@@ -1651,6 +1718,12 @@ impl Tool for McpTool {
                 }
                 McpClientNotification::ResourceUpdated { uri } => {
                     result = result.with_progress("mcp_resource_updated", Some(uri.as_str()));
+                }
+                McpClientNotification::ToolsListChanged => {
+                    result = result.with_progress("mcp_tools_list_changed", None::<&str>);
+                }
+                McpClientNotification::ResourcesListChanged => {
+                    result = result.with_progress("mcp_resources_list_changed", None::<&str>);
                 }
                 McpClientNotification::Other { method, .. } => {
                     result = result.with_progress("mcp_notification", Some(method.as_str()));
