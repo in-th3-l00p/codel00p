@@ -84,11 +84,20 @@ Workspace MCP servers can also be declared in `.codel00p/mcp.json`:
       "command": "./tools/docs-mcp-server",
       "args": ["--watch=false"],
       "env": { "DOCS_ROOT": "." },
-      "timeoutMs": 30000
+      "timeoutMs": 30000,
+      "permissionScope": "external_connector",
+      "toolScopes": {
+        "search": "read_only"
+      }
     }
   }
 }
 ```
+
+`permissionScope` applies to every tool from a server. `toolScopes` overrides a
+single discovered tool. Supported scopes are `read_only`, `workspace_write`,
+`shell`, and `external_connector`. MCP tools default to `external_connector`
+when no scope is configured.
 
 Validate configured MCP tools without a model call:
 

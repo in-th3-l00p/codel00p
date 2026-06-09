@@ -21,6 +21,9 @@ mcp.<server_id>.<tool_name>
 This keeps external tools visibly separate from native workspace, shell, and git
 tools. MCP tools default to `PermissionScope::ExternalConnector`; descriptors
 can opt into stricter or weaker scopes when the server/tool semantics are known.
+The CLI uses this to let workspace config mark trusted MCP tools as
+`read_only`, `workspace_write`, or `shell` when the default external connector
+classification is too broad.
 
 The stdio transport launches a configured server process, writes newline
 delimited JSON-RPC messages to stdin, and reads newline delimited JSON-RPC

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env, fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -10,11 +11,11 @@ use async_trait::async_trait;
 use codel00p_harness::{
     AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
     MemoryCandidateSink, MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode,
-    PermissionPolicy, PermissionRequest, ProjectMemoryContext, ProjectMemoryItem,
+    PermissionPolicy, PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
     ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage,
     Workspace,
 };
-use codel00p_mcp::{McpStdioClient, StdioServerCommand, discover_tool_registry};
+use codel00p_mcp::{McpClient, McpStdioClient, McpTool, StdioServerCommand};
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
@@ -65,6 +66,8 @@ struct McpServerSpec {
     args: Vec<String>,
     env: Vec<(String, String)>,
     timeout_ms: Option<u64>,
+    permission_scope: Option<PermissionScope>,
+    tool_scopes: HashMap<String, PermissionScope>,
 }
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -431,6 +434,8 @@ fn parse_mcp_server(value: &str) -> CliResult<McpServerSpec> {
         args: tokens[1..].to_vec(),
         env,
         timeout_ms: None,
+        permission_scope: None,
+        tool_scopes: HashMap::new(),
     })
 }
 
@@ -489,6 +494,30 @@ fn load_mcp_servers_from_workspace(workspace: &Path) -> CliResult<Vec<McpServerS
             .transpose()?
             .unwrap_or_default();
         let timeout_ms = server.get("timeoutMs").and_then(serde_json::Value::as_u64);
+        let permission_scope = server
+            .get("permissionScope")
+            .and_then(serde_json::Value::as_str)
+            .map(parse_permission_scope)
+            .transpose()
+            .map_err(|error| format!("mcp server `{server_id}` {error}"))?;
+        let tool_scopes = server
+            .get("toolScopes")
+            .and_then(serde_json::Value::as_object)
+            .map(|tool_scopes| {
+                tool_scopes
+                    .iter()
+                    .map(|(tool_name, value)| {
+                        let scope = value.as_str().ok_or_else(|| {
+                            format!(
+                                "mcp server `{server_id}` tool scope `{tool_name}` must be a string"
+                            )
+                        })?;
+                        Ok((tool_name.clone(), parse_permission_scope(scope)?))
+                    })
+                    .collect::<CliResult<HashMap<_, _>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
 
         specs.push(McpServerSpec {
             server_id: server_id.clone(),
@@ -496,9 +525,23 @@ fn load_mcp_servers_from_workspace(workspace: &Path) -> CliResult<Vec<McpServerS
             args,
             env,
             timeout_ms,
+            permission_scope,
+            tool_scopes,
         });
     }
     Ok(specs)
+}
+
+fn parse_permission_scope(value: &str) -> CliResult<PermissionScope> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "read_only" | "readonly" | "read-only" => Ok(PermissionScope::ReadOnly),
+        "workspace_write" | "workspace-write" | "write" => Ok(PermissionScope::WorkspaceWrite),
+        "shell" | "command" => Ok(PermissionScope::Shell),
+        "external_connector" | "external-connector" | "external" => {
+            Ok(PermissionScope::ExternalConnector)
+        }
+        _ => Err(format!("has unknown permission scope: {value}")),
+    }
 }
 
 fn parse_env_assignment_token(token: &str) -> Option<(String, String)> {
@@ -575,12 +618,32 @@ async fn build_tool_registry(
             .await
             .map_err(|error| error.to_string())?;
         let client = Arc::new(tokio::sync::Mutex::new(client));
-        let mcp_registry = discover_tool_registry(client)
+        let descriptors = client
+            .list_tools()
             .await
             .map_err(|error| error.to_string())?;
+        let mut mcp_registry = ToolRegistry::new();
+        for descriptor in descriptors {
+            let descriptor = match mcp_permission_scope_for_tool(server, descriptor.tool_name()) {
+                Some(scope) => descriptor.with_permission_scope(scope),
+                None => descriptor,
+            };
+            mcp_registry = mcp_registry.with_tool(McpTool::new(descriptor, client.clone()));
+        }
         registry = registry.with_registry(mcp_registry);
     }
     Ok(registry)
+}
+
+fn mcp_permission_scope_for_tool(
+    server: &McpServerSpec,
+    tool_name: &str,
+) -> Option<PermissionScope> {
+    server
+        .tool_scopes
+        .get(tool_name)
+        .copied()
+        .or(server.permission_scope)
 }
 
 fn stdio_command_from_spec(server: &McpServerSpec) -> StdioServerCommand {
