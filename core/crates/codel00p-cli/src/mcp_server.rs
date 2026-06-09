@@ -155,6 +155,7 @@ fn handle_json_rpc(config: &CliConfig, state: &mut McpServerState, request: Valu
         _ => Err(format!("unsupported method: {method}")),
     };
 
+    let progress_token = progress_token_for_method(method, &params);
     match result {
         Ok(result) => {
             let updated_resource_uris = result
@@ -172,7 +173,8 @@ fn handle_json_rpc(config: &CliConfig, state: &mut McpServerState, request: Valu
             if let Some(object) = result.as_object_mut() {
                 object.remove("_codel00p_updated_resource_uris");
             }
-            let mut messages = vec![json!({ "jsonrpc": "2.0", "id": id, "result": result })];
+            let mut messages = progress_notifications(progress_token.as_ref());
+            messages.push(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
             for uri in updated_resource_uris {
                 if state.resource_subscriptions.contains(&uri) {
                     messages.push(resource_updated_notification(&uri));
@@ -180,15 +182,54 @@ fn handle_json_rpc(config: &CliConfig, state: &mut McpServerState, request: Valu
             }
             messages
         }
-        Err(message) => vec![json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {
-                "code": -32000,
-                "message": message
-            }
-        })],
+        Err(message) => {
+            let mut messages = progress_notifications(progress_token.as_ref());
+            messages.push(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32000,
+                    "message": message
+                }
+            }));
+            messages
+        }
     }
+}
+
+fn progress_token_for_method(method: &str, params: &Value) -> Option<Value> {
+    if !matches!(method, "tools/call" | "resources/read") {
+        return None;
+    }
+    let token = params.get("_meta")?.get("progressToken")?;
+    if token.is_string() || token.is_number() {
+        Some(token.clone())
+    } else {
+        None
+    }
+}
+
+fn progress_notifications(progress_token: Option<&Value>) -> Vec<Value> {
+    let Some(progress_token) = progress_token else {
+        return Vec::new();
+    };
+    vec![
+        progress_notification(progress_token, 1, "Processing request"),
+        progress_notification(progress_token, 2, "Completing request"),
+    ]
+}
+
+fn progress_notification(progress_token: &Value, progress: u64, message: &str) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/progress",
+        "params": {
+            "progressToken": progress_token,
+            "progress": progress,
+            "total": 2,
+            "message": message
+        }
+    })
 }
 
 fn mcp_tools() -> Vec<Value> {

@@ -142,6 +142,8 @@ Current implementation:
   context browsing;
 - resource clients can subscribe to memory URIs and receive
   `notifications/resources/updated` after memory create/review mutations;
+- `tools/call` and `resources/read` requests with `_meta.progressToken`
+  receive `notifications/progress` before the final response;
 - `--remember-permissions` persists ask-mode MCP connector allow/deny decisions
   per project, tool, and permission scope;
 - `codel00p mcp permissions list` and `forget` inspect and revoke remembered
@@ -149,7 +151,7 @@ Current implementation:
 
 Remaining work:
 
-- progress notifications for long-running MCP clients;
+- move reusable MCP server protocol helpers out of the CLI into a crate layer;
 
 ### 7. Context Management
 

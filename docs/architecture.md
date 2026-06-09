@@ -57,7 +57,8 @@ and read-only session replay to other agents. The same server exposes JSON
 resource templates at `codel00p://memory/{id}` and
 `codel00p://sessions/{session_id}` for clients that browse context directly.
 Subscribed memory resources receive `notifications/resources/updated` after
-reviewed memory mutations.
+reviewed memory mutations, and tokenized tool/resource requests emit MCP
+`notifications/progress` before their final responses.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
 not require repeated prompts. Operators can inspect and revoke those remembered

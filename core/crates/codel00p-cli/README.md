@@ -142,6 +142,10 @@ Clients can subscribe to memory resource URIs with `resources/subscribe`.
 Successful memory create, approve, reject, and archive tool calls emit
 `notifications/resources/updated` for matching subscriptions.
 
+Requests to `tools/call` and `resources/read` that include
+`_meta.progressToken` receive `notifications/progress` before the final
+JSON-RPC response.
+
 Tool calls run with `--permission-mode allow` by default. Use
 `--permission-mode deny` to exercise a turn without mutating the workspace or
 running commands; denied calls are returned to the model as structured tool
