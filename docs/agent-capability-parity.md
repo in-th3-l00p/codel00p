@@ -137,6 +137,9 @@ Current implementation:
 - `codel00p mcp serve` exposes memory search/list/show, reviewed memory
   create/approve/reject/archive tools, and read-only session replay to other
   MCP clients over stdio;
+- the stdio MCP server exposes `codel00p://memory/{id}` and
+  `codel00p://sessions/{session_id}` JSON resource templates for direct
+  context browsing;
 - `--remember-permissions` persists ask-mode MCP connector allow/deny decisions
   per project, tool, and permission scope;
 - `codel00p mcp permissions list` and `forget` inspect and revoke remembered

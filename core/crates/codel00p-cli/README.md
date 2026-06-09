@@ -133,6 +133,11 @@ project-scoped memory/session database. Memory writes keep the review lifecycle:
 external clients create candidates first, then explicitly approve, reject, or
 archive them.
 
+It also exposes JSON resources for clients that browse context directly:
+
+- `codel00p://memory/{id}` reads one project memory record.
+- `codel00p://sessions/{session_id}` reads one session replay.
+
 Tool calls run with `--permission-mode allow` by default. Use
 `--permission-mode deny` to exercise a turn without mutating the workspace or
 running commands; denied calls are returned to the model as structured tool

@@ -53,7 +53,9 @@ MCP server processes or connect to remote MCP endpoints, discover tools, assign
 permission scopes, and inspect tools without a model call.
 The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing project
 memory search/list/show, reviewed memory candidate creation and review tools,
-and read-only session replay to other agents.
+and read-only session replay to other agents. The same server exposes JSON
+resource templates at `codel00p://memory/{id}` and
+`codel00p://sessions/{session_id}` for clients that browse context directly.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
 not require repeated prompts. Operators can inspect and revoke those remembered

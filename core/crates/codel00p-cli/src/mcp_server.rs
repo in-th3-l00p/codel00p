@@ -6,7 +6,7 @@ use codel00p_memory::{
 use codel00p_protocol::{
     MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
 };
-use codel00p_session::{SessionRecord, SessionStore};
+use codel00p_session::{SessionRecord, SessionStore, SessionStoreError};
 use serde_json::{Value, json};
 
 use crate::config::{
@@ -120,7 +120,10 @@ fn handle_json_rpc(config: &CliConfig, request: Value) -> Option<Value> {
     let result = match method {
         "initialize" => Ok(json!({
             "protocolVersion": "2025-06-18",
-            "capabilities": { "tools": {} },
+            "capabilities": {
+                "tools": {},
+                "resources": {}
+            },
             "serverInfo": {
                 "name": "codel00p",
                 "version": env!("CARGO_PKG_VERSION")
@@ -128,6 +131,11 @@ fn handle_json_rpc(config: &CliConfig, request: Value) -> Option<Value> {
         })),
         "tools/list" => Ok(json!({ "tools": mcp_tools() })),
         "tools/call" => call_tool(config, &params),
+        "resources/list" => Ok(json!({
+            "resources": [],
+            "resourceTemplates": mcp_resource_templates()
+        })),
+        "resources/read" => read_resource(config, &params),
         _ => Err(format!("unsupported method: {method}")),
     };
 
@@ -251,6 +259,23 @@ fn mcp_tools() -> Vec<Value> {
     ]
 }
 
+fn mcp_resource_templates() -> Vec<Value> {
+    vec![
+        json!({
+            "uriTemplate": "codel00p://memory/{id}",
+            "name": "codel00p memory record",
+            "description": "Read one codel00p project memory record as JSON.",
+            "mimeType": "application/json"
+        }),
+        json!({
+            "uriTemplate": "codel00p://sessions/{session_id}",
+            "name": "codel00p session replay",
+            "description": "Read one codel00p agent session replay as JSON.",
+            "mimeType": "application/json"
+        }),
+    ]
+}
+
 fn call_tool(config: &CliConfig, params: &Value) -> Result<Value, String> {
     let name = params
         .get("name")
@@ -276,6 +301,28 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<Value, String> {
             { "type": "text", "text": text }
         ],
         "isError": false
+    }))
+}
+
+fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {
+    let uri = required_string(params, "uri")?;
+    let text = if let Some(memory_id) = uri.strip_prefix("codel00p://memory/") {
+        let store = open_memory_store(config)?;
+        let record = store.get(memory_id).map_err(|error| error.to_string())?;
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?
+    } else if let Some(session_id) = uri.strip_prefix("codel00p://sessions/") {
+        session_resource(config, session_id)?
+    } else {
+        return Err(format!("unsupported codel00p resource uri: {uri}"));
+    };
+    Ok(json!({
+        "contents": [
+            {
+                "uri": uri,
+                "mimeType": "application/json",
+                "text": text
+            }
+        ]
     }))
 }
 
@@ -413,7 +460,23 @@ fn session_show(config: &CliConfig, arguments: &Value) -> Result<String, String>
     let records = store
         .replay(&session_id)
         .map_err(|error| error.to_string())?;
-    let items = records
+    let items = session_records_json(&records);
+    serde_json::to_string(&items).map_err(|error| error.to_string())
+}
+
+fn session_resource(config: &CliConfig, session_id: &str) -> Result<String, String> {
+    let session_id = parse_session_id(session_id)?;
+    let store = open_session_store(config)?;
+    let records = match store.replay(&session_id) {
+        Ok(records) => records,
+        Err(SessionStoreError::SessionNotFound { .. }) => Vec::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    serde_json::to_string(&session_records_json(&records)).map_err(|error| error.to_string())
+}
+
+fn session_records_json(records: &[codel00p_session::PersistedSessionRecord]) -> Vec<Value> {
+    records
         .iter()
         .map(|record| match record.record() {
             SessionRecord::Message(message) => json!({
@@ -428,8 +491,7 @@ fn session_show(config: &CliConfig, arguments: &Value) -> Result<String, String>
                 "event": format!("{event:?}"),
             }),
         })
-        .collect::<Vec<_>>();
-    serde_json::to_string(&items).map_err(|error| error.to_string())
+        .collect()
 }
 
 fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
