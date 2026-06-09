@@ -140,6 +140,8 @@ Current implementation:
 - the stdio MCP server exposes `codel00p://memory/{id}` and
   `codel00p://sessions/{session_id}` JSON resource templates for direct
   context browsing;
+- resource clients can subscribe to memory URIs and receive
+  `notifications/resources/updated` after memory create/review mutations;
 - `--remember-permissions` persists ask-mode MCP connector allow/deny decisions
   per project, tool, and permission scope;
 - `codel00p mcp permissions list` and `forget` inspect and revoke remembered
@@ -147,8 +149,7 @@ Current implementation:
 
 Remaining work:
 
-- resource subscriptions and progress notifications for long-running MCP
-  clients;
+- progress notifications for long-running MCP clients;
 
 ### 7. Context Management
 

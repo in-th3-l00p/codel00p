@@ -1,4 +1,7 @@
-use std::io::{self, BufRead, Write};
+use std::{
+    collections::HashSet,
+    io::{self, BufRead, Write},
+};
 
 use codel00p_memory::{
     MemoryCandidateInput, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
@@ -90,6 +93,7 @@ fn permissions_forget(config: &CliConfig, args: &[String]) -> CliResult<String> 
 fn serve_stdio(config: CliConfig) -> CliResult<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
+    let mut state = McpServerState::default();
     for line in stdin.lock().lines() {
         let line = line.map_err(|error| error.to_string())?;
         if line.trim().is_empty() {
@@ -97,7 +101,7 @@ fn serve_stdio(config: CliConfig) -> CliResult<()> {
         }
         let request: Value = serde_json::from_str(&line)
             .map_err(|error| format!("invalid json-rpc request: {error}"))?;
-        if let Some(response) = handle_json_rpc(&config, request) {
+        for response in handle_json_rpc(&config, &mut state, request) {
             writeln!(
                 stdout,
                 "{}",
@@ -110,11 +114,19 @@ fn serve_stdio(config: CliConfig) -> CliResult<()> {
     Ok(())
 }
 
-fn handle_json_rpc(config: &CliConfig, request: Value) -> Option<Value> {
-    let method = request.get("method").and_then(Value::as_str)?;
+#[derive(Default)]
+struct McpServerState {
+    resource_subscriptions: HashSet<String>,
+}
+
+fn handle_json_rpc(config: &CliConfig, state: &mut McpServerState, request: Value) -> Vec<Value> {
+    let Some(method) = request.get("method").and_then(Value::as_str) else {
+        return Vec::new();
+    };
     let id = request.get("id").cloned();
-    id.as_ref()?;
-    let id = id.expect("checked id");
+    let Some(id) = id else {
+        return Vec::new();
+    };
     let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
 
     let result = match method {
@@ -122,7 +134,9 @@ fn handle_json_rpc(config: &CliConfig, request: Value) -> Option<Value> {
             "protocolVersion": "2025-06-18",
             "capabilities": {
                 "tools": {},
-                "resources": {}
+                "resources": {
+                    "subscribe": true
+                }
             },
             "serverInfo": {
                 "name": "codel00p",
@@ -136,20 +150,45 @@ fn handle_json_rpc(config: &CliConfig, request: Value) -> Option<Value> {
             "resourceTemplates": mcp_resource_templates()
         })),
         "resources/read" => read_resource(config, &params),
+        "resources/subscribe" => subscribe_resource(state, &params),
+        "resources/unsubscribe" => unsubscribe_resource(state, &params),
         _ => Err(format!("unsupported method: {method}")),
     };
 
-    Some(match result {
-        Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-        Err(message) => json!({
+    match result {
+        Ok(result) => {
+            let updated_resource_uris = result
+                .get("_codel00p_updated_resource_uris")
+                .and_then(Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let mut result = result;
+            if let Some(object) = result.as_object_mut() {
+                object.remove("_codel00p_updated_resource_uris");
+            }
+            let mut messages = vec![json!({ "jsonrpc": "2.0", "id": id, "result": result })];
+            for uri in updated_resource_uris {
+                if state.resource_subscriptions.contains(&uri) {
+                    messages.push(resource_updated_notification(&uri));
+                }
+            }
+            messages
+        }
+        Err(message) => vec![json!({
             "jsonrpc": "2.0",
             "id": id,
             "error": {
                 "code": -32000,
                 "message": message
             }
-        }),
-    })
+        })],
+    }
 }
 
 fn mcp_tools() -> Vec<Value> {
@@ -285,23 +324,56 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<Value, String> {
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let text = match name {
-        "memory_search" => memory_search(config, &arguments)?,
-        "memory_list" => memory_list(config, &arguments)?,
-        "memory_show" => memory_show(config, &arguments)?,
+    let (text, updated_resource_uris) = match name {
+        "memory_search" => (memory_search(config, &arguments)?, Vec::new()),
+        "memory_list" => (memory_list(config, &arguments)?, Vec::new()),
+        "memory_show" => (memory_show(config, &arguments)?, Vec::new()),
         "memory_create_candidate" => memory_create_candidate(config, &arguments)?,
         "memory_approve" => memory_review(config, &arguments, MemoryReviewAction::Approve)?,
         "memory_reject" => memory_review(config, &arguments, MemoryReviewAction::Reject)?,
         "memory_archive" => memory_review(config, &arguments, MemoryReviewAction::Archive)?,
-        "session_show" => session_show(config, &arguments)?,
+        "session_show" => (session_show(config, &arguments)?, Vec::new()),
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
     Ok(json!({
         "content": [
             { "type": "text", "text": text }
         ],
-        "isError": false
+        "isError": false,
+        "_codel00p_updated_resource_uris": updated_resource_uris
     }))
+}
+
+fn subscribe_resource(state: &mut McpServerState, params: &Value) -> Result<Value, String> {
+    let uri = required_string(params, "uri")?;
+    validate_resource_uri(uri)?;
+    state.resource_subscriptions.insert(uri.to_string());
+    Ok(json!({}))
+}
+
+fn unsubscribe_resource(state: &mut McpServerState, params: &Value) -> Result<Value, String> {
+    let uri = required_string(params, "uri")?;
+    validate_resource_uri(uri)?;
+    state.resource_subscriptions.remove(uri);
+    Ok(json!({}))
+}
+
+fn validate_resource_uri(uri: &str) -> Result<(), String> {
+    if uri.starts_with("codel00p://memory/") || uri.starts_with("codel00p://sessions/") {
+        Ok(())
+    } else {
+        Err(format!("unsupported codel00p resource uri: {uri}"))
+    }
+}
+
+fn resource_updated_notification(uri: &str) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/resources/updated",
+        "params": {
+            "uri": uri
+        }
+    })
 }
 
 fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {
@@ -397,13 +469,17 @@ fn memory_show(config: &CliConfig, arguments: &Value) -> Result<String, String> 
     serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
 }
 
-fn memory_create_candidate(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+fn memory_create_candidate(
+    config: &CliConfig,
+    arguments: &Value,
+) -> Result<(String, Vec<String>), String> {
+    let id = required_string(arguments, "id")?;
     let source = MemorySource::turn(
         parse_session_id(required_string(arguments, "session_id")?)?,
         parse_turn_id(required_string(arguments, "turn_id")?)?,
     );
     let mut input = MemoryCandidateInput::new(
-        required_string(arguments, "id")?,
+        id,
         config.project.clone(),
         parse_kind(required_string(arguments, "kind")?)?,
         required_string(arguments, "content")?,
@@ -417,7 +493,9 @@ fn memory_create_candidate(config: &CliConfig, arguments: &Value) -> Result<Stri
     let record = store
         .create_candidate(input)
         .map_err(|error| error.to_string())?;
-    serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((text, vec![memory_resource_uri(id)]))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -431,7 +509,7 @@ fn memory_review(
     config: &CliConfig,
     arguments: &Value,
     action: MemoryReviewAction,
-) -> Result<String, String> {
+) -> Result<(String, Vec<String>), String> {
     let id = required_string(arguments, "id")?;
     let actor = required_string(arguments, "actor")?;
     let decision = match action {
@@ -451,7 +529,13 @@ fn memory_review(
     let record = store
         .review(id, decision)
         .map_err(|error| error.to_string())?;
-    serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((text, vec![memory_resource_uri(id)]))
+}
+
+fn memory_resource_uri(id: &str) -> String {
+    format!("codel00p://memory/{id}")
 }
 
 fn session_show(config: &CliConfig, arguments: &Value) -> Result<String, String> {
