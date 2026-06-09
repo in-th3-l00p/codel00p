@@ -62,6 +62,12 @@ Supported tool-set names:
 - `git`: guarded status, diff, log, and commit tools.
 - `all`: enable edit, command, and git tool sets.
 
+Tool calls run with `--permission-mode allow` by default. Use
+`--permission-mode deny` to exercise a turn without mutating the workspace or
+running commands; denied calls are returned to the model as structured tool
+results. `--permission-mode ask` currently fails closed in the non-interactive
+CLI until interactive approval prompts are implemented.
+
 Use `--stream-events` when a caller wants one JSON event per line as the turn is
 running. Use `--json-events` when a caller wants the final assistant text first
 and the complete event list after the turn completes.

@@ -2,9 +2,11 @@ use std::{env, path::PathBuf};
 
 use async_trait::async_trait;
 use codel00p_harness::{
-    AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessEvent, MemoryCandidateSink,
-    MemoryCandidateSinkOutcome, ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider,
-    ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage, Workspace,
+    AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
+    MemoryCandidateSink, MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode,
+    PermissionPolicy, PermissionRequest, ProjectMemoryContext, ProjectMemoryItem,
+    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage,
+    Workspace,
 };
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
@@ -29,6 +31,7 @@ struct AgentRunOptions {
     json_events: bool,
     stream_events: bool,
     tool_sets: Vec<AgentToolSet>,
+    permission_mode: CliPermissionMode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +41,13 @@ enum AgentToolSet {
     Command,
     Git,
     All,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CliPermissionMode {
+    Allow,
+    Ask,
+    Deny,
 }
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -98,6 +108,7 @@ fn run_agent_turn(
             .model_client(model_client)
             .workspace(workspace)
             .tools(build_tool_registry(&options.tool_sets))
+            .permission_policy(CliPermissionPolicy::new(options.permission_mode))
             .project_memory_provider(memory_provider)
             .turn_memory_extractor(memory_extractor)
             .memory_candidate_sink(memory_sink);
@@ -182,6 +193,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut json_events = false;
     let mut stream_events = false;
     let mut tool_sets = Vec::new();
+    let mut permission_mode = CliPermissionMode::Allow;
     let mut index = 1;
 
     while index < args.len() {
@@ -226,6 +238,11 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
                 tool_sets.push(parse_agent_tool_set(&value)?);
                 index += 2;
             }
+            "--permission-mode" => {
+                let value = required_value(args, index, "--permission-mode")?;
+                permission_mode = parse_permission_mode(&value)?;
+                index += 2;
+            }
             flag => return Err(format!("unknown agent run option: {flag}")),
         }
     }
@@ -241,6 +258,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         json_events,
         stream_events,
         tool_sets,
+        permission_mode,
     })
 }
 
@@ -266,6 +284,15 @@ fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
     }
 }
 
+fn parse_permission_mode(value: &str) -> CliResult<CliPermissionMode> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "allow" | "allowed" => Ok(CliPermissionMode::Allow),
+        "ask" | "prompt" | "interactive" => Ok(CliPermissionMode::Ask),
+        "deny" | "denied" => Ok(CliPermissionMode::Deny),
+        _ => Err(format!("unknown permission mode: {value}")),
+    }
+}
+
 fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
     let mut registry = ToolRegistry::read_only_defaults();
     for tool_set in tool_sets {
@@ -281,6 +308,41 @@ fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
         };
     }
     registry
+}
+
+struct CliPermissionPolicy {
+    mode: CliPermissionMode,
+}
+
+impl CliPermissionPolicy {
+    fn new(mode: CliPermissionMode) -> Self {
+        Self { mode }
+    }
+}
+
+#[async_trait]
+impl PermissionPolicy for CliPermissionPolicy {
+    async fn decide(&self, request: PermissionRequest) -> Result<PermissionDecision, HarnessError> {
+        match self.mode {
+            CliPermissionMode::Allow => Ok(PermissionDecision::allow(
+                request.id(),
+                PermissionMode::Allow,
+            )),
+            CliPermissionMode::Ask => Ok(PermissionDecision::deny(
+                request.id(),
+                PermissionMode::Ask,
+                format!(
+                    "{} requires approval, but interactive permission prompts are not implemented",
+                    request.tool_name()
+                ),
+            )),
+            CliPermissionMode::Deny => Ok(PermissionDecision::deny(
+                request.id(),
+                PermissionMode::Deny,
+                format!("{} denied by CLI permission mode", request.tool_name()),
+            )),
+        }
+    }
 }
 
 struct StdoutJsonEventSink;
