@@ -47,10 +47,10 @@ External tool integration starts in `codel00p-mcp`, a transport-neutral Rust
 crate that adapts MCP server tools into harness tools named
 `mcp.<server>.<tool>`. Keeping MCP behind the same harness tool registry means
 CLI, desktop, and cloud runtimes can share permission checks, event streams, and
-audit behavior for external systems. The first runtime transport is stdio:
-workspace `.codel00p/mcp.json` files and ad hoc CLI flags can launch MCP server
-processes, discover tools, assign permission scopes, and inspect tools without a
-model call.
+audit behavior for external systems. The first runtime transports are stdio and
+HTTP: workspace `.codel00p/mcp.json` files and ad hoc CLI flags can launch local
+MCP server processes or connect to remote MCP endpoints, discover tools, assign
+permission scopes, and inspect tools without a model call.
 
 Durable persistence is split into two layers. `codel00p-storage` owns the
 backend-neutral storage primitives: scoped key-value state, structured

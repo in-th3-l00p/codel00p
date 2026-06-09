@@ -15,7 +15,10 @@ use codel00p_harness::{
     ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage,
     Workspace,
 };
-use codel00p_mcp::{McpClient, McpStdioClient, McpTool, StdioServerCommand};
+use codel00p_mcp::{
+    HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
+    StdioServerCommand,
+};
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
@@ -62,9 +65,12 @@ enum CliPermissionMode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct McpServerSpec {
     server_id: String,
-    command: PathBuf,
+    command: Option<PathBuf>,
     args: Vec<String>,
     env: Vec<(String, String)>,
+    url: Option<String>,
+    headers: Vec<(String, String)>,
+    bearer_token_env: Option<String>,
     timeout_ms: Option<u64>,
     permission_scope: Option<PermissionScope>,
     tool_scopes: HashMap<String, PermissionScope>,
@@ -120,16 +126,7 @@ fn agent_mcp_list(args: &[String]) -> CliResult<String> {
         servers.extend(options.mcp_servers);
         let mut lines = Vec::new();
         for server in servers {
-            let command = stdio_command_from_spec(&server);
-            let mut client = McpStdioClient::spawn(command)
-                .await
-                .map_err(|error| error.to_string())?;
-            client
-                .initialize()
-                .await
-                .map_err(|error| error.to_string())?;
-            for tool in client
-                .list_tools()
+            for tool in list_mcp_tools_for_server(&server)
                 .await
                 .map_err(|error| error.to_string())?
             {
@@ -139,7 +136,6 @@ fn agent_mcp_list(args: &[String]) -> CliResult<String> {
                     tool.description()
                 ));
             }
-            let _ = client.shutdown().await;
         }
         lines.sort();
         Ok(if lines.is_empty() {
@@ -430,9 +426,12 @@ fn parse_mcp_server(value: &str) -> CliResult<McpServerSpec> {
     };
     Ok(McpServerSpec {
         server_id: server_id.to_string(),
-        command: PathBuf::from(command),
+        command: Some(PathBuf::from(command)),
         args: tokens[1..].to_vec(),
         env,
+        url: None,
+        headers: Vec::new(),
+        bearer_token_env: None,
         timeout_ms: None,
         permission_scope: None,
         tool_scopes: HashMap::new(),
@@ -457,10 +456,29 @@ fn load_mcp_servers_from_workspace(workspace: &Path) -> CliResult<Vec<McpServerS
         let command = server
             .get("command")
             .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| format!("mcp server `{server_id}` is missing command"))?;
-        let mut command = PathBuf::from(command);
-        if command.is_relative() {
-            command = workspace.join(command);
+            .map(|command| {
+                let mut command = PathBuf::from(command);
+                if command.is_relative() {
+                    command = workspace.join(command);
+                }
+                command
+            });
+        let url = server
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .map(ToString::to_string);
+        match (&command, &url) {
+            (Some(_), Some(_)) => {
+                return Err(format!(
+                    "mcp server `{server_id}` must not define both command and url"
+                ));
+            }
+            (None, None) => {
+                return Err(format!(
+                    "mcp server `{server_id}` is missing command or url"
+                ));
+            }
+            _ => {}
         }
         let args = server
             .get("args")
@@ -493,6 +511,28 @@ fn load_mcp_servers_from_workspace(workspace: &Path) -> CliResult<Vec<McpServerS
             })
             .transpose()?
             .unwrap_or_default();
+        let headers = server
+            .get("headers")
+            .and_then(serde_json::Value::as_object)
+            .map(|headers| {
+                headers
+                    .iter()
+                    .map(|(key, value)| {
+                        value
+                            .as_str()
+                            .map(|value| (key.clone(), value.to_string()))
+                            .ok_or_else(|| {
+                                format!("mcp server `{server_id}` header `{key}` must be a string")
+                            })
+                    })
+                    .collect::<CliResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let bearer_token_env = server
+            .get("bearerTokenEnv")
+            .and_then(serde_json::Value::as_str)
+            .map(ToString::to_string);
         let timeout_ms = server.get("timeoutMs").and_then(serde_json::Value::as_u64);
         let permission_scope = server
             .get("permissionScope")
@@ -524,6 +564,9 @@ fn load_mcp_servers_from_workspace(workspace: &Path) -> CliResult<Vec<McpServerS
             command,
             args,
             env,
+            url,
+            headers,
+            bearer_token_env,
             timeout_ms,
             permission_scope,
             tool_scopes,
@@ -609,10 +652,40 @@ async fn build_tool_registry(
         };
     }
     for server in mcp_servers {
-        let command = stdio_command_from_spec(server);
-        let mut client = McpStdioClient::spawn(command)
+        registry = registry.with_registry(build_mcp_registry_for_server(server).await?);
+    }
+    Ok(registry)
+}
+
+async fn list_mcp_tools_for_server(server: &McpServerSpec) -> CliResult<Vec<McpToolDescriptor>> {
+    if server.url.is_some() {
+        let mut client = http_client_from_spec(server)?;
+        client
+            .initialize()
             .await
             .map_err(|error| error.to_string())?;
+        return client.list_tools().await.map_err(|error| error.to_string());
+    }
+
+    let command = stdio_command_from_spec(server)?;
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .initialize()
+        .await
+        .map_err(|error| error.to_string())?;
+    let tools = client
+        .list_tools()
+        .await
+        .map_err(|error| error.to_string())?;
+    let _ = client.shutdown().await;
+    Ok(tools)
+}
+
+async fn build_mcp_registry_for_server(server: &McpServerSpec) -> CliResult<ToolRegistry> {
+    if server.url.is_some() {
+        let mut client = http_client_from_spec(server)?;
         client
             .initialize()
             .await
@@ -622,17 +695,42 @@ async fn build_tool_registry(
             .list_tools()
             .await
             .map_err(|error| error.to_string())?;
-        let mut mcp_registry = ToolRegistry::new();
-        for descriptor in descriptors {
-            let descriptor = match mcp_permission_scope_for_tool(server, descriptor.tool_name()) {
-                Some(scope) => descriptor.with_permission_scope(scope),
-                None => descriptor,
-            };
-            mcp_registry = mcp_registry.with_tool(McpTool::new(descriptor, client.clone()));
-        }
-        registry = registry.with_registry(mcp_registry);
+        return Ok(register_mcp_descriptors(server, client, descriptors));
     }
-    Ok(registry)
+
+    let command = stdio_command_from_spec(server)?;
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .initialize()
+        .await
+        .map_err(|error| error.to_string())?;
+    let client = Arc::new(tokio::sync::Mutex::new(client));
+    let descriptors = client
+        .list_tools()
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(register_mcp_descriptors(server, client, descriptors))
+}
+
+fn register_mcp_descriptors<T>(
+    server: &McpServerSpec,
+    client: T,
+    descriptors: Vec<McpToolDescriptor>,
+) -> ToolRegistry
+where
+    T: McpClient + Clone + 'static,
+{
+    let mut mcp_registry = ToolRegistry::new();
+    for descriptor in descriptors {
+        let descriptor = match mcp_permission_scope_for_tool(server, descriptor.tool_name()) {
+            Some(scope) => descriptor.with_permission_scope(scope),
+            None => descriptor,
+        };
+        mcp_registry = mcp_registry.with_tool(McpTool::new(descriptor, client.clone()));
+    }
+    mcp_registry
 }
 
 fn mcp_permission_scope_for_tool(
@@ -646,23 +744,47 @@ fn mcp_permission_scope_for_tool(
         .or(server.permission_scope)
 }
 
-fn stdio_command_from_spec(server: &McpServerSpec) -> StdioServerCommand {
-    let command = StdioServerCommand::new(
-        server.server_id.clone(),
-        server.command.clone(),
-        &server.args,
-    )
-    .with_envs(
-        server
-            .env
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())),
-    );
-    if let Some(timeout_ms) = server.timeout_ms {
+fn stdio_command_from_spec(server: &McpServerSpec) -> CliResult<StdioServerCommand> {
+    let command_path = server
+        .command
+        .clone()
+        .ok_or_else(|| format!("mcp server `{}` is missing command", server.server_id))?;
+    let command = StdioServerCommand::new(server.server_id.clone(), command_path, &server.args)
+        .with_envs(
+            server
+                .env
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str())),
+        );
+    Ok(if let Some(timeout_ms) = server.timeout_ms {
         command.with_request_timeout(Duration::from_millis(timeout_ms))
     } else {
         command
+    })
+}
+
+fn http_client_from_spec(server: &McpServerSpec) -> CliResult<McpHttpClient> {
+    let url = server
+        .url
+        .clone()
+        .ok_or_else(|| format!("mcp server `{}` is missing url", server.server_id))?;
+    let mut endpoint = HttpServerEndpoint::new(server.server_id.clone(), url);
+    for (key, value) in &server.headers {
+        endpoint = endpoint.with_header(key, value);
     }
+    if let Some(env_var) = &server.bearer_token_env {
+        let token = env::var(env_var).map_err(|_| {
+            format!(
+                "mcp server `{}` missing bearer token env `{env_var}`",
+                server.server_id
+            )
+        })?;
+        endpoint = endpoint.with_bearer_token(token);
+    }
+    if let Some(timeout_ms) = server.timeout_ms {
+        endpoint = endpoint.with_request_timeout(Duration::from_millis(timeout_ms));
+    }
+    McpHttpClient::connect(endpoint).map_err(|error| error.to_string())
 }
 
 struct CliPermissionPolicy {

@@ -35,6 +35,9 @@ pub enum McpError {
 
     #[error("mcp stdio transport failed for {server_id}: {message}")]
     StdioTransport { server_id: String, message: String },
+
+    #[error("mcp http transport failed for {server_id}: {message}")]
+    HttpTransport { server_id: String, message: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -241,6 +244,410 @@ pub struct McpStdioClient {
     initialized: Option<McpInitialization>,
     request_timeout: Duration,
     shutdown_timeout: Duration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HttpServerEndpoint {
+    server_id: String,
+    url: String,
+    bearer_token: Option<String>,
+    headers: Vec<(String, String)>,
+    request_timeout: Duration,
+}
+
+impl HttpServerEndpoint {
+    pub fn new(server_id: impl Into<String>, url: impl Into<String>) -> Self {
+        Self {
+            server_id: server_id.into(),
+            url: url.into(),
+            bearer_token: None,
+            headers: Vec::new(),
+            request_timeout: Duration::from_secs(30),
+        }
+    }
+
+    pub fn server_id(&self) -> &str {
+        &self.server_id
+    }
+
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    pub fn with_bearer_token(mut self, bearer_token: impl Into<String>) -> Self {
+        self.bearer_token = Some(bearer_token.into());
+        self
+    }
+
+    pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn with_request_timeout(mut self, request_timeout: Duration) -> Self {
+        self.request_timeout = request_timeout;
+        self
+    }
+}
+
+pub struct McpHttpClient {
+    server_id: String,
+    url: String,
+    client: reqwest::Client,
+    bearer_token: Option<String>,
+    headers: Vec<(String, String)>,
+    session_id: Option<String>,
+    next_request_id: u64,
+    initialized: Option<McpInitialization>,
+}
+
+impl McpHttpClient {
+    pub fn connect(endpoint: HttpServerEndpoint) -> Result<Self, McpError> {
+        let client = reqwest::Client::builder()
+            .timeout(endpoint.request_timeout)
+            .build()
+            .map_err(|error| McpError::HttpTransport {
+                server_id: endpoint.server_id.clone(),
+                message: format!("failed to build http client: {error}"),
+            })?;
+        Ok(Self {
+            server_id: endpoint.server_id,
+            url: endpoint.url,
+            client,
+            bearer_token: endpoint.bearer_token,
+            headers: endpoint.headers,
+            session_id: None,
+            next_request_id: 1,
+            initialized: None,
+        })
+    }
+
+    pub async fn initialize(&mut self) -> Result<McpInitialization, McpError> {
+        let response = self
+            .request(
+                "initialize",
+                serde_json::json!({
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "codel00p",
+                        "title": "codel00p",
+                        "version": env!("CARGO_PKG_VERSION"),
+                    }
+                }),
+            )
+            .await?;
+        let initialization = parse_initialization_response(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })?;
+        self.notify(
+            "notifications/initialized",
+            Value::Object(Default::default()),
+        )
+        .await?;
+        self.initialized = Some(initialization.clone());
+        Ok(initialization)
+    }
+
+    pub async fn request(
+        &mut self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<Value, McpError> {
+        let request_id = self.next_request_id;
+        self.next_request_id += 1;
+        let request = JsonRpcMessage::request(JsonRpcRequest::new(request_id, method, params));
+        let response = self.post_json_rpc(&request).await?;
+        json_rpc_result_from_response(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })
+    }
+
+    pub async fn notify(
+        &mut self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<(), McpError> {
+        let notification = JsonRpcMessage::Notification(JsonRpcNotification::new(method, params));
+        let response = self.post_json_rpc(&notification).await?;
+        if response.is_null() {
+            return Ok(());
+        }
+        json_rpc_result_from_response(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })?;
+        Ok(())
+    }
+
+    async fn post_json_rpc(&mut self, message: &JsonRpcMessage) -> Result<Value, McpError> {
+        let mut request = self
+            .client
+            .post(&self.url)
+            .header("accept", "application/json, text/event-stream")
+            .header("content-type", "application/json")
+            .json(message);
+        if let Some(token) = &self.bearer_token {
+            request = request.bearer_auth(token);
+        }
+        if let Some(session_id) = &self.session_id {
+            request = request.header("Mcp-Session-Id", session_id);
+        }
+        for (key, value) in &self.headers {
+            request = request.header(key, value);
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|error| self.http_error(format!("request failed: {error}")))?;
+        if let Some(session_id) = response
+            .headers()
+            .get("Mcp-Session-Id")
+            .and_then(|value| value.to_str().ok())
+        {
+            self.session_id = Some(session_id.to_string());
+        }
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| self.http_error(format!("failed to read response body: {error}")))?;
+        if !status.is_success() {
+            return Err(self.http_error(format!("server returned HTTP {status}: {}", body.trim())));
+        }
+        if status == reqwest::StatusCode::ACCEPTED || body.trim().is_empty() {
+            return Ok(Value::Null);
+        }
+        if content_type
+            .to_ascii_lowercase()
+            .starts_with("text/event-stream")
+        {
+            return decode_sse_json_rpc_message(&body).map_err(|message| self.http_error(message));
+        }
+        serde_json::from_str(&body)
+            .map_err(|error| self.http_error(format!("invalid json response: {error}")))
+    }
+
+    fn http_error(&self, message: impl Into<String>) -> McpError {
+        McpError::HttpTransport {
+            server_id: self.server_id.clone(),
+            message: message.into(),
+        }
+    }
+
+    pub async fn list_tools(&mut self) -> Result<Vec<McpToolDescriptor>, McpError> {
+        let response = self
+            .request("tools/list", Value::Object(Default::default()))
+            .await?;
+        parse_tool_descriptors(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })
+    }
+
+    pub async fn list_resources(&mut self) -> Result<Vec<McpResourceDescriptor>, McpError> {
+        let response = self
+            .request("resources/list", Value::Object(Default::default()))
+            .await?;
+        parse_resource_descriptors(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })
+    }
+
+    pub async fn call_tool(&mut self, call: McpToolCall) -> Result<McpToolOutput, McpError> {
+        if call.server_id() != self.server_id {
+            return Err(McpError::Tool {
+                server_id: call.server_id().to_string(),
+                tool_name: call.tool_name().to_string(),
+                message: format!("http client is connected to `{}`", self.server_id),
+            });
+        }
+
+        let response = self
+            .request(
+                "tools/call",
+                serde_json::json!({
+                    "name": call.tool_name(),
+                    "arguments": call.input(),
+                }),
+            )
+            .await?;
+
+        Ok(McpToolOutput::json(response))
+    }
+}
+
+fn json_rpc_result_from_response<F>(
+    server_id: &str,
+    response: Value,
+    error: F,
+) -> Result<Value, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    match serde_json::from_value::<JsonRpcMessage>(response.clone()) {
+        Ok(JsonRpcMessage::Response(response)) => {
+            if let Some(error_value) = response.error() {
+                return Err(error(format!("json-rpc error response: {error_value}")));
+            }
+            response
+                .result()
+                .cloned()
+                .ok_or_else(|| error("json-rpc response omitted result".to_string()))
+        }
+        Ok(JsonRpcMessage::Raw(value)) => value
+            .get("result")
+            .cloned()
+            .ok_or_else(|| error("json-rpc response omitted result".to_string())),
+        Ok(JsonRpcMessage::Request(_) | JsonRpcMessage::Notification(_)) => {
+            Err(error("server returned a non-response message".to_string()))
+        }
+        Err(_) => response
+            .get("result")
+            .cloned()
+            .ok_or_else(|| error(format!("{server_id} response omitted result"))),
+    }
+}
+
+fn parse_initialization_response<F>(
+    server_id: &str,
+    response: Value,
+    error: F,
+) -> Result<McpInitialization, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let protocol_version = response
+        .get("protocolVersion")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            error(format!(
+                "{server_id} initialize response omitted protocolVersion"
+            ))
+        })?
+        .to_string();
+    Ok(McpInitialization {
+        protocol_version,
+        capabilities: response
+            .get("capabilities")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+        server_info: response
+            .get("serverInfo")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+        instructions: response
+            .get("instructions")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+    })
+}
+
+fn parse_tool_descriptors<F>(
+    server_id: &str,
+    response: Value,
+    error: F,
+) -> Result<Vec<McpToolDescriptor>, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let tools = response
+        .get("tools")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("tools/list response omitted tools array".to_string()))?;
+
+    tools
+        .iter()
+        .map(|tool| {
+            let name = tool
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("tool descriptor omitted name".to_string()))?;
+            let description = tool
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or("MCP tool.");
+            let input_schema = tool
+                .get("inputSchema")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({ "type": "object" }));
+            Ok(McpToolDescriptor::new(
+                server_id.to_string(),
+                name,
+                description,
+                input_schema,
+            ))
+        })
+        .collect()
+}
+
+fn parse_resource_descriptors<F>(
+    server_id: &str,
+    response: Value,
+    error: F,
+) -> Result<Vec<McpResourceDescriptor>, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let resources = response
+        .get("resources")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("resources/list response omitted resources array".to_string()))?;
+
+    resources
+        .iter()
+        .map(|resource| {
+            let uri = resource
+                .get("uri")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("resource descriptor omitted uri".to_string()))?;
+            let name = resource.get("name").and_then(Value::as_str).unwrap_or(uri);
+            let mime_type = resource.get("mimeType").and_then(Value::as_str);
+            Ok(McpResourceDescriptor::new(
+                server_id.to_string(),
+                uri,
+                name,
+                mime_type,
+            ))
+        })
+        .collect()
+}
+
+fn decode_sse_json_rpc_message(body: &str) -> Result<Value, String> {
+    let mut data = String::new();
+    for line in body.lines() {
+        let Some(rest) = line.strip_prefix("data:") else {
+            continue;
+        };
+        if !data.is_empty() {
+            data.push('\n');
+        }
+        data.push_str(rest.trim_start());
+    }
+    if data.trim().is_empty() {
+        return Err("sse response omitted data event".to_string());
+    }
+    serde_json::from_str(&data).map_err(|error| format!("invalid sse json response: {error}"))
 }
 
 impl McpStdioClient {
@@ -546,6 +953,21 @@ impl Drop for McpStdioClient {
 
 #[async_trait]
 impl McpClient for Arc<Mutex<McpStdioClient>> {
+    async fn list_tools(&self) -> Result<Vec<McpToolDescriptor>, McpError> {
+        self.lock().await.list_tools().await
+    }
+
+    async fn list_resources(&self) -> Result<Vec<McpResourceDescriptor>, McpError> {
+        self.lock().await.list_resources().await
+    }
+
+    async fn call_tool(&self, call: McpToolCall) -> Result<McpToolOutput, McpError> {
+        self.lock().await.call_tool(call).await
+    }
+}
+
+#[async_trait]
+impl McpClient for Arc<Mutex<McpHttpClient>> {
     async fn list_tools(&self) -> Result<Vec<McpToolDescriptor>, McpError> {
         self.lock().await.list_tools().await
     }

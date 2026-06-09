@@ -126,6 +126,8 @@ Current implementation:
   be registered into a `ToolRegistry`;
 - stdio MCP servers can be launched, initialized, listed, called, timed out,
   and shut down by the runtime;
+- HTTP MCP endpoints can be called with JSON or SSE responses, optional bearer
+  tokens, static headers, and `Mcp-Session-Id` reuse;
 - `agent run --mcp-server` can attach ad hoc stdio servers with argv/env;
 - `.codel00p/mcp.json` can define workspace MCP servers, request timeouts, and
   server/tool permission scopes;
@@ -135,7 +137,6 @@ Current implementation:
 
 Remaining work:
 
-- HTTP MCP transport;
 - persistent permission policy for external calls;
 - MCP server mode exposing codel00p memory/session APIs.
 

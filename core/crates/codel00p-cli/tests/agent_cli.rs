@@ -622,6 +622,236 @@ printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search","desc
 }
 
 #[test]
+fn agent_mcp_list_prints_configured_http_tools() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::create_dir(workspace.join(".codel00p")).expect("create config dir");
+
+    let mcp = MockServer::start();
+    let initialize = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"initialize""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": { "tools": {} },
+                "serverInfo": { "name": "docs", "version": "1.0.0" }
+            }
+        }));
+    });
+    let initialized = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"notifications/initialized""#);
+        then.status(202);
+    });
+    let list = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .header("authorization", "Bearer test-token")
+            .body_includes(r#""method":"tools/list""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "tools": [
+                    {
+                        "name": "lookup",
+                        "description": "Lookup remote docs.",
+                        "inputSchema": { "type": "object" }
+                    }
+                ]
+            }
+        }));
+    });
+    fs::write(
+        workspace.join(".codel00p/mcp.json"),
+        json!({
+            "servers": {
+                "docs": {
+                    "url": format!("{}/mcp", mcp.base_url()),
+                    "bearerTokenEnv": "CODEL00P_PROVIDER_CUSTOM_API_KEY"
+                }
+            }
+        })
+        .to_string(),
+    )
+    .expect("write mcp config");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "mcp",
+            "list",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "mcp.docs.lookup\tLookup remote docs.\n");
+    initialize.assert();
+    initialized.assert();
+    list.assert();
+}
+
+#[test]
+fn agent_run_calls_configured_http_mcp_tools() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::create_dir(workspace.join(".codel00p")).expect("create config dir");
+
+    let mcp = MockServer::start();
+    let initialize = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"initialize""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": { "tools": {} },
+                "serverInfo": { "name": "docs", "version": "1.0.0" }
+            }
+        }));
+    });
+    let initialized = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"notifications/initialized""#);
+        then.status(202);
+    });
+    let list = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"tools/list""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "tools": [
+                    {
+                        "name": "lookup",
+                        "description": "Lookup remote docs.",
+                        "inputSchema": { "type": "object" }
+                    }
+                ]
+            }
+        }));
+    });
+    let call = mcp.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"tools/call""#)
+            .body_includes(r#""name":"lookup""#)
+            .body_includes(r#""query":"memory""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+                "content": [
+                    { "type": "text", "text": "remote memory docs" }
+                ],
+                "isError": false
+            }
+        }));
+    });
+    fs::write(
+        workspace.join(".codel00p/mcp.json"),
+        json!({
+            "servers": {
+                "docs": {
+                    "url": format!("{}/mcp", mcp.base_url())
+                }
+            }
+        })
+        .to_string(),
+    )
+    .expect("write mcp config");
+
+    let provider = MockServer::start();
+    let first = provider.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""name":"mcp.docs.lookup""#)
+            .body_excludes(r#""role":"tool""#);
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": null,
+                        "tool_calls": [
+                            {
+                                "id": "call-lookup",
+                                "type": "function",
+                                "function": {
+                                    "name": "mcp.docs.lookup",
+                                    "arguments": "{\"query\":\"memory\"}"
+                                }
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls"
+                }
+            ]
+        }));
+    });
+    let second = provider.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""role":"tool""#)
+            .body_includes("remote memory docs");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "HTTP MCP worked."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Search remote docs.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &provider.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "HTTP MCP worked.\n");
+    initialize.assert();
+    initialized.assert();
+    list.assert();
+    call.assert();
+    first.assert();
+    second.assert();
+}
+
+#[test]
 fn agent_run_denies_mcp_tools_as_external_connectors_in_json_events() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

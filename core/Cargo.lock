@@ -171,6 +171,8 @@ dependencies = [
  "async-trait",
  "codel00p-harness",
  "codel00p-protocol",
+ "httpmock",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",

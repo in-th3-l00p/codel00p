@@ -94,6 +94,21 @@ Workspace MCP servers can also be declared in `.codel00p/mcp.json`:
 }
 ```
 
+HTTP MCP endpoints use `url` instead of `command`:
+
+```json
+{
+  "servers": {
+    "remote-docs": {
+      "url": "https://mcp.example.com/mcp",
+      "bearerTokenEnv": "REMOTE_DOCS_MCP_TOKEN",
+      "headers": { "X-Workspace": "docs" },
+      "timeoutMs": 30000
+    }
+  }
+}
+```
+
 `permissionScope` applies to every tool from a server. `toolScopes` overrides a
 single discovered tool. Supported scopes are `read_only`, `workspace_write`,
 `shell`, and `external_connector`. MCP tools default to `external_connector`

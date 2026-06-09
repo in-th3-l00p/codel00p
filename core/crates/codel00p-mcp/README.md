@@ -27,9 +27,17 @@ classification is too broad.
 
 The stdio transport launches a configured server process, writes newline
 delimited JSON-RPC messages to stdin, and reads newline delimited JSON-RPC
-responses from stdout. It supports the MCP lifecycle handshake by sending
-`initialize`, recording the negotiated server metadata, and then sending
-`notifications/initialized` before normal operation. It maps `tools/list`,
+responses from stdout. Requests have a configurable timeout, and shutdown closes
+server stdin, waits for process exit, then kills the server if it does not stop
+in time.
+
+The HTTP transport sends each JSON-RPC client message as a POST to the MCP
+endpoint, accepts JSON or `text/event-stream` responses, stores
+`Mcp-Session-Id` returned by `initialize`, and sends that session header on
+later requests. It supports bearer tokens and static headers for enterprise
+connector gateways.
+
+Both transports support the MCP lifecycle handshake by sending `initialize`,
+recording the negotiated server metadata, and then sending
+`notifications/initialized` before normal operation. Both map `tools/list`,
 `resources/list`, and `tools/call` into codel00p descriptors and outputs.
-Requests have a configurable timeout, and shutdown closes server stdin, waits
-for process exit, then kills the server if it does not stop in time.
