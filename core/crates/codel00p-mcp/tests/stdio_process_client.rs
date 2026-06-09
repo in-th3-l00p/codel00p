@@ -96,3 +96,27 @@ async fn stdio_client_reports_json_rpc_error_responses() {
     assert!(error.to_string().contains("json-rpc error response"));
     assert!(error.to_string().contains("missing method"));
 }
+
+#[tokio::test]
+async fn stdio_client_initializes_before_normal_operations() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read init; case "$init" in *'"method":"initialize"'*) ;; *) exit 11;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"fake-server","version":"1.2.3"},"instructions":"Use fake tools."}}'; read initialized; case "$initialized" in *'"method":"notifications/initialized"'*) ;; *) exit 12;; esac; read list; case "$list" in *'"method":"tools/list"'*) ;; *) exit 13;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}'"#,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let initialized = client.initialize().await.expect("initialize");
+    let tools = client.list_tools().await.expect("list tools");
+
+    assert_eq!(initialized.protocol_version(), "2025-06-18");
+    assert_eq!(initialized.server_name(), Some("fake-server"));
+    assert_eq!(initialized.server_version(), Some("1.2.3"));
+    assert_eq!(initialized.instructions(), Some("Use fake tools."));
+    assert!(tools.is_empty());
+}

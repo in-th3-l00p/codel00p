@@ -1,4 +1,6 @@
-use codel00p_mcp::{JsonRpcMessage, JsonRpcRequest, decode_stdio_message, encode_stdio_message};
+use codel00p_mcp::{
+    JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, decode_stdio_message, encode_stdio_message,
+};
 use serde_json::json;
 
 #[test]
@@ -29,6 +31,22 @@ fn decodes_single_line_json_rpc_messages() {
     assert_eq!(
         decoded,
         JsonRpcMessage::request(JsonRpcRequest::new(3, "tools/list", json!({})))
+    );
+}
+
+#[test]
+fn decodes_json_rpc_notifications_without_ids() {
+    let decoded = decode_stdio_message(
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}"#,
+    )
+    .expect("decode notification");
+
+    assert_eq!(
+        decoded,
+        JsonRpcMessage::Notification(JsonRpcNotification::new(
+            "notifications/initialized",
+            json!({})
+        ))
     );
 }
 

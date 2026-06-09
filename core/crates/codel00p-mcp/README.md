@@ -23,7 +23,8 @@ tools. MCP tools default to `PermissionScope::ExternalConnector`; descriptors
 can opt into stricter or weaker scopes when the server/tool semantics are known.
 
 The stdio transport launches a configured server process, writes newline
-delimited JSON-RPC requests to stdin, reads newline delimited JSON-RPC responses
-from stdout, and maps `tools/list`, `resources/list`, and `tools/call` into
-codel00p descriptors and outputs. Full MCP initialization and capability
-negotiation are the next layer above the raw process transport.
+delimited JSON-RPC messages to stdin, and reads newline delimited JSON-RPC
+responses from stdout. It supports the MCP lifecycle handshake by sending
+`initialize`, recording the negotiated server metadata, and then sending
+`notifications/initialized` before normal operation. It maps `tools/list`,
+`resources/list`, and `tools/call` into codel00p descriptors and outputs.

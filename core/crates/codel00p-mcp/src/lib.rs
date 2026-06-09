@@ -104,6 +104,7 @@ impl JsonRpcResponse {
 #[serde(untagged)]
 pub enum JsonRpcMessage {
     Request(JsonRpcRequest),
+    Notification(JsonRpcNotification),
     Response(JsonRpcResponse),
     Raw(Value),
 }
@@ -111,6 +112,57 @@ pub enum JsonRpcMessage {
 impl JsonRpcMessage {
     pub fn request(request: JsonRpcRequest) -> Self {
         Self::Request(request)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct JsonRpcNotification {
+    jsonrpc: String,
+    method: String,
+    params: Value,
+}
+
+impl JsonRpcNotification {
+    pub fn new(method: impl Into<String>, params: Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: method.into(),
+            params,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct McpInitialization {
+    protocol_version: String,
+    capabilities: Value,
+    server_info: Value,
+    instructions: Option<String>,
+}
+
+impl McpInitialization {
+    pub fn protocol_version(&self) -> &str {
+        &self.protocol_version
+    }
+
+    pub fn capabilities(&self) -> &Value {
+        &self.capabilities
+    }
+
+    pub fn server_info(&self) -> &Value {
+        &self.server_info
+    }
+
+    pub fn server_name(&self) -> Option<&str> {
+        self.server_info.get("name").and_then(Value::as_str)
+    }
+
+    pub fn server_version(&self) -> Option<&str> {
+        self.server_info.get("version").and_then(Value::as_str)
+    }
+
+    pub fn instructions(&self) -> Option<&str> {
+        self.instructions.as_deref()
     }
 }
 
@@ -156,6 +208,7 @@ pub struct McpStdioClient {
     stdin: BufWriter<ChildStdin>,
     stdout: BufReader<ChildStdout>,
     next_request_id: u64,
+    initialized: Option<McpInitialization>,
 }
 
 impl McpStdioClient {
@@ -189,7 +242,52 @@ impl McpStdioClient {
             stdin: BufWriter::new(stdin),
             stdout: BufReader::new(stdout),
             next_request_id: 1,
+            initialized: None,
         })
+    }
+
+    pub async fn initialize(&mut self) -> Result<McpInitialization, McpError> {
+        let response = self
+            .request(
+                "initialize",
+                serde_json::json!({
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "codel00p",
+                        "title": "codel00p",
+                        "version": env!("CARGO_PKG_VERSION"),
+                    }
+                }),
+            )
+            .await?;
+        let protocol_version = response
+            .get("protocolVersion")
+            .and_then(Value::as_str)
+            .ok_or_else(|| self.stdio_error("initialize response omitted protocolVersion"))?
+            .to_string();
+        let initialization = McpInitialization {
+            protocol_version,
+            capabilities: response
+                .get("capabilities")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({})),
+            server_info: response
+                .get("serverInfo")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({})),
+            instructions: response
+                .get("instructions")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+        };
+        self.notify(
+            "notifications/initialized",
+            Value::Object(Default::default()),
+        )
+        .await?;
+        self.initialized = Some(initialization.clone());
+        Ok(initialization)
     }
 
     pub async fn request(
@@ -234,8 +332,28 @@ impl McpStdioClient {
                 .get("result")
                 .cloned()
                 .ok_or_else(|| self.stdio_error("json-rpc response omitted result")),
-            JsonRpcMessage::Request(_) => Err(self.stdio_error("server returned a request")),
+            JsonRpcMessage::Request(_) | JsonRpcMessage::Notification(_) => {
+                Err(self.stdio_error("server returned a non-response message"))
+            }
         }
+    }
+
+    pub async fn notify(
+        &mut self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<(), McpError> {
+        let notification = JsonRpcMessage::Notification(JsonRpcNotification::new(method, params));
+        let encoded = encode_stdio_message(&notification)?;
+        self.stdin
+            .write_all(encoded.as_bytes())
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to write notification: {error}")))?;
+        self.stdin
+            .flush()
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to flush notification: {error}")))?;
+        Ok(())
     }
 
     fn stdio_error(&self, message: impl Into<String>) -> McpError {
