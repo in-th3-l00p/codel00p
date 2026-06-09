@@ -136,6 +136,11 @@ results. Use `--permission-mode ask` to approve or reject each requested tool
 call from stdin; prompts are printed on stderr so stdout remains scriptable.
 When no approval input is available, `ask` denies the call.
 
+Use `--remember-permissions` with `--permission-mode ask` to persist MCP
+connector allow/deny decisions in the project-scoped local store. Later runs
+with the same flag reuse remembered decisions for the same MCP tool and
+permission scope without prompting again.
+
 Use `--stream-events` when a caller wants one JSON event per line as the turn is
 running. Use `--json-events` when a caller wants the final assistant text first
 and the complete event list after the turn completes.

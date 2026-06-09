@@ -135,12 +135,14 @@ Current implementation:
 - MCP permission requests and denials flow through the same JSON event stream
   and session audit log as native tools;
 - `codel00p mcp serve` exposes read-only memory/session tools to other MCP
-  clients over stdio.
+  clients over stdio;
+- `--remember-permissions` persists ask-mode MCP connector allow/deny decisions
+  per project, tool, and permission scope.
 
 Remaining work:
 
-- persistent permission policy for external calls;
-- broader MCP server write tools after connector policy is durable.
+- policy inspection/revocation commands for remembered connector decisions;
+- broader MCP server write tools once policy management is explicit.
 
 ### 7. Context Management
 

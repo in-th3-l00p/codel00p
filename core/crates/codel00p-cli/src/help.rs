@@ -70,6 +70,7 @@ Options:
   --tool-set <name>           Enable a tool set: read, edit, command, git, all
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
   --json-events               Print serialized harness events after assistant text
 ";
@@ -86,6 +87,7 @@ Options:
   --tool-set <name>           Enable a tool set: read, edit, command, git, all
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
   --json-events               Print serialized harness events after assistant text
 ";

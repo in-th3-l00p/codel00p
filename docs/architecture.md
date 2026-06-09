@@ -53,6 +53,9 @@ MCP server processes or connect to remote MCP endpoints, discover tools, assign
 permission scopes, and inspect tools without a model call.
 The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing read-only
 project memory and session replay tools to other agents.
+Ask-mode MCP connector decisions can be remembered in the same project-scoped
+local store, keyed by tool name and permission scope, so trusted connectors do
+not require repeated prompts.
 
 Durable persistence is split into two layers. `codel00p-storage` owns the
 backend-neutral storage primitives: scoped key-value state, structured

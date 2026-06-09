@@ -22,6 +22,8 @@ use codel00p_mcp::{
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
+use codel00p_storage::{KeyValueStore, SqliteStorage, StorageScope, StorageValue};
+use serde_json::{Value, json};
 
 use crate::{
     config::{
@@ -43,6 +45,7 @@ struct AgentRunOptions {
     stream_events: bool,
     tool_sets: Vec<AgentToolSet>,
     permission_mode: CliPermissionMode,
+    remember_permissions: bool,
     mcp_servers: Vec<McpServerSpec>,
 }
 
@@ -184,7 +187,11 @@ fn run_agent_turn(
             .model_client(model_client)
             .workspace(workspace)
             .tools(build_tool_registry(&options.tool_sets, &mcp_servers).await?)
-            .permission_policy(CliPermissionPolicy::new(options.permission_mode))
+            .permission_policy(CliPermissionPolicy::new(
+                config.clone(),
+                options.permission_mode,
+                options.remember_permissions,
+            ))
             .project_memory_provider(memory_provider)
             .turn_memory_extractor(memory_extractor)
             .memory_candidate_sink(memory_sink);
@@ -270,6 +277,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut stream_events = false;
     let mut tool_sets = Vec::new();
     let mut permission_mode = CliPermissionMode::Allow;
+    let mut remember_permissions = false;
     let mut mcp_servers = Vec::new();
     let mut index = 1;
 
@@ -320,6 +328,10 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
                 permission_mode = parse_permission_mode(&value)?;
                 index += 2;
             }
+            "--remember-permissions" => {
+                remember_permissions = true;
+                index += 1;
+            }
             "--mcp-server" => {
                 let value = required_value(args, index, "--mcp-server")?;
                 mcp_servers.push(parse_mcp_server(&value)?);
@@ -341,6 +353,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         stream_events,
         tool_sets,
         permission_mode,
+        remember_permissions,
         mcp_servers,
     })
 }
@@ -788,14 +801,18 @@ fn http_client_from_spec(server: &McpServerSpec) -> CliResult<McpHttpClient> {
 }
 
 struct CliPermissionPolicy {
+    config: CliConfig,
     mode: CliPermissionMode,
+    remember_permissions: bool,
     prompt_lock: Arc<Mutex<()>>,
 }
 
 impl CliPermissionPolicy {
-    fn new(mode: CliPermissionMode) -> Self {
+    fn new(config: CliConfig, mode: CliPermissionMode, remember_permissions: bool) -> Self {
         Self {
+            config,
             mode,
+            remember_permissions,
             prompt_lock: Arc::new(Mutex::new(())),
         }
     }
@@ -809,7 +826,14 @@ impl PermissionPolicy for CliPermissionPolicy {
                 request.id(),
                 PermissionMode::Allow,
             )),
-            CliPermissionMode::Ask => self.decide_with_prompt(request),
+            CliPermissionMode::Ask => {
+                if let Some(decision) = self.remembered_decision(&request)? {
+                    return Ok(decision);
+                }
+                let decision = self.decide_with_prompt(&request)?;
+                self.persist_decision_if_needed(&request, &decision)?;
+                Ok(decision)
+            }
             CliPermissionMode::Deny => Ok(PermissionDecision::deny(
                 request.id(),
                 PermissionMode::Deny,
@@ -820,9 +844,92 @@ impl PermissionPolicy for CliPermissionPolicy {
 }
 
 impl CliPermissionPolicy {
+    fn remembered_decision(
+        &self,
+        request: &PermissionRequest,
+    ) -> Result<Option<PermissionDecision>, HarnessError> {
+        if !self.should_remember(request) {
+            return Ok(None);
+        }
+        let storage = self.open_storage()?;
+        let Some(value) = storage
+            .get_value(&self.storage_scope(), &permission_key(request))
+            .map_err(|error| HarnessError::ToolFailed {
+                name: request.tool_name().to_string(),
+                message: format!("failed to read remembered permission: {error}"),
+            })?
+        else {
+            return Ok(None);
+        };
+        let status = value
+            .payload()
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        Ok(match status {
+            "allow" => Some(PermissionDecision::allow(request.id(), PermissionMode::Ask)),
+            "deny" => Some(PermissionDecision::deny(
+                request.id(),
+                PermissionMode::Ask,
+                format!(
+                    "{} denied by remembered connector policy",
+                    request.tool_name()
+                ),
+            )),
+            _ => None,
+        })
+    }
+
+    fn persist_decision_if_needed(
+        &self,
+        request: &PermissionRequest,
+        decision: &PermissionDecision,
+    ) -> Result<(), HarnessError> {
+        if !self.should_remember(request) {
+            return Ok(());
+        }
+        let status = if decision.allows_execution() {
+            "allow"
+        } else {
+            "deny"
+        };
+        let mut storage = self.open_storage()?;
+        storage
+            .put_value(StorageValue::new(
+                self.storage_scope(),
+                permission_key(request),
+                json!({
+                    "tool_name": request.tool_name(),
+                    "scope": scope_label(request.scope()),
+                    "status": status,
+                }),
+            ))
+            .map_err(|error| HarnessError::ToolFailed {
+                name: request.tool_name().to_string(),
+                message: format!("failed to remember permission: {error}"),
+            })?;
+        Ok(())
+    }
+
+    fn should_remember(&self, request: &PermissionRequest) -> bool {
+        self.remember_permissions
+            && is_rememberable_permission(request.tool_name(), request.scope())
+    }
+
+    fn open_storage(&self) -> Result<SqliteStorage, HarnessError> {
+        SqliteStorage::open(&self.config.memory_db).map_err(|error| HarnessError::ToolFailed {
+            name: "permission_policy".to_string(),
+            message: format!("failed to open permission store: {error}"),
+        })
+    }
+
+    fn storage_scope(&self) -> StorageScope {
+        StorageScope::project(&self.config.organization_id, self.config.project.id())
+    }
+
     fn decide_with_prompt(
         &self,
-        request: PermissionRequest,
+        request: &PermissionRequest,
     ) -> Result<PermissionDecision, HarnessError> {
         let _prompt = self
             .prompt_lock
@@ -833,7 +940,7 @@ impl CliPermissionPolicy {
             })?;
 
         let approved =
-            prompt_for_permission(&request).map_err(|error| HarnessError::ToolFailed {
+            prompt_for_permission(request).map_err(|error| HarnessError::ToolFailed {
                 name: request.tool_name().to_string(),
                 message: format!("failed to read permission approval: {error}"),
             })?;
@@ -847,6 +954,29 @@ impl CliPermissionPolicy {
                 format!("{} rejected by CLI approval prompt", request.tool_name()),
             ))
         }
+    }
+}
+
+fn is_rememberable_permission(tool_name: &str, scope: PermissionScope) -> bool {
+    tool_name.starts_with("mcp.") || scope == PermissionScope::ExternalConnector
+}
+
+fn permission_key(request: &PermissionRequest) -> String {
+    permission_key_parts(request.tool_name(), request.scope())
+}
+
+fn permission_key_parts(tool_name: &str, scope: PermissionScope) -> String {
+    format!("connector_permission:{}:{tool_name}", scope_label(scope))
+}
+
+fn scope_label(scope: PermissionScope) -> &'static str {
+    match scope {
+        PermissionScope::ReadOnly => "read_only",
+        PermissionScope::WorkspaceWrite => "workspace_write",
+        PermissionScope::Shell => "shell",
+        PermissionScope::Network => "network",
+        PermissionScope::ExternalConnector => "external_connector",
+        PermissionScope::MemoryWrite => "memory_write",
     }
 }
 
