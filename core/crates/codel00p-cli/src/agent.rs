@@ -1,8 +1,9 @@
 use std::{
-    env,
+    env, fs,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -63,6 +64,7 @@ struct McpServerSpec {
     command: PathBuf,
     args: Vec<String>,
     env: Vec<(String, String)>,
+    timeout_ms: Option<u64>,
 }
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -73,6 +75,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     match command.as_str() {
         "run" => agent_run(config, rest),
         "resume" => agent_resume(config, rest),
+        "mcp" => agent_mcp(config, rest),
         _ => Err(format!("unknown agent command: {command}")),
     }
 }
@@ -87,9 +90,66 @@ fn agent_resume(config: CliConfig, args: &[String]) -> CliResult<String> {
     run_agent_turn(config, options, AgentSessionMode::Resume)
 }
 
+fn agent_mcp(_config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some((command, rest)) = args.split_first() else {
+        return Err("missing agent mcp command".to_string());
+    };
+    match command.as_str() {
+        "list" => agent_mcp_list(rest),
+        _ => Err(format!("unknown agent mcp command: {command}")),
+    }
+}
+
 enum AgentSessionMode {
     Fresh,
     Resume,
+}
+
+fn agent_mcp_list(args: &[String]) -> CliResult<String> {
+    let options = parse_agent_mcp_list_options(args)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| format!("failed to start async runtime: {error}"))?;
+
+    runtime.block_on(async move {
+        let mut servers = load_mcp_servers_from_workspace(&options.workspace)?;
+        servers.extend(options.mcp_servers);
+        let mut lines = Vec::new();
+        for server in servers {
+            let command = stdio_command_from_spec(&server);
+            let mut client = McpStdioClient::spawn(command)
+                .await
+                .map_err(|error| error.to_string())?;
+            client
+                .initialize()
+                .await
+                .map_err(|error| error.to_string())?;
+            for tool in client
+                .list_tools()
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                lines.push(format!(
+                    "{}\t{}",
+                    tool.harness_tool_name(),
+                    tool.description()
+                ));
+            }
+            let _ = client.shutdown().await;
+        }
+        lines.sort();
+        Ok(if lines.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", lines.join("\n"))
+        })
+    })
+}
+
+struct AgentMcpListOptions {
+    workspace: PathBuf,
+    mcp_servers: Vec<McpServerSpec>,
 }
 
 fn run_agent_turn(
@@ -118,11 +178,13 @@ fn run_agent_turn(
         let memory_extractor = ExplicitTurnMemoryExtractor::new(config.project.clone())
             .with_tag("agent")
             .with_tag("cli");
+        let mut mcp_servers = load_mcp_servers_from_workspace(&options.workspace)?;
+        mcp_servers.extend(options.mcp_servers.clone());
 
         let mut builder = AgentHarness::builder()
             .model_client(model_client)
             .workspace(workspace)
-            .tools(build_tool_registry(&options.tool_sets, &options.mcp_servers).await?)
+            .tools(build_tool_registry(&options.tool_sets, &mcp_servers).await?)
             .permission_policy(CliPermissionPolicy::new(options.permission_mode))
             .project_memory_provider(memory_provider)
             .turn_memory_extractor(memory_extractor)
@@ -295,6 +357,30 @@ fn parse_agent_resume_options(args: &[String]) -> CliResult<AgentRunOptions> {
     Ok(options)
 }
 
+fn parse_agent_mcp_list_options(args: &[String]) -> CliResult<AgentMcpListOptions> {
+    let mut workspace = env::current_dir().map_err(|error| error.to_string())?;
+    let mut mcp_servers = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--workspace" => {
+                workspace = PathBuf::from(required_value(args, index, "--workspace")?);
+                index += 2;
+            }
+            "--mcp-server" => {
+                let value = required_value(args, index, "--mcp-server")?;
+                mcp_servers.push(parse_mcp_server(&value)?);
+                index += 2;
+            }
+            flag => return Err(format!("unknown agent mcp list option: {flag}")),
+        }
+    }
+    Ok(AgentMcpListOptions {
+        workspace,
+        mcp_servers,
+    })
+}
+
 fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
     match value.trim().to_ascii_lowercase().as_str() {
         "read" | "read-only" | "readonly" => Ok(AgentToolSet::Read),
@@ -344,7 +430,75 @@ fn parse_mcp_server(value: &str) -> CliResult<McpServerSpec> {
         command: PathBuf::from(command),
         args: tokens[1..].to_vec(),
         env,
+        timeout_ms: None,
     })
+}
+
+fn load_mcp_servers_from_workspace(workspace: &Path) -> CliResult<Vec<McpServerSpec>> {
+    let config_path = workspace.join(".codel00p/mcp.json");
+    if !config_path.exists() {
+        return Ok(Vec::new());
+    }
+    let config = fs::read_to_string(&config_path)
+        .map_err(|error| format!("failed to read {}: {error}", config_path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&config)
+        .map_err(|error| format!("failed to parse {}: {error}", config_path.display()))?;
+    let Some(servers) = value.get("servers").and_then(serde_json::Value::as_object) else {
+        return Ok(Vec::new());
+    };
+
+    let mut specs = Vec::new();
+    for (server_id, server) in servers {
+        let command = server
+            .get("command")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("mcp server `{server_id}` is missing command"))?;
+        let mut command = PathBuf::from(command);
+        if command.is_relative() {
+            command = workspace.join(command);
+        }
+        let args = server
+            .get("args")
+            .and_then(serde_json::Value::as_array)
+            .map(|args| {
+                args.iter()
+                    .map(|arg| {
+                        arg.as_str()
+                            .map(ToString::to_string)
+                            .ok_or_else(|| format!("mcp server `{server_id}` has a non-string arg"))
+                    })
+                    .collect::<CliResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let env = server
+            .get("env")
+            .and_then(serde_json::Value::as_object)
+            .map(|env| {
+                env.iter()
+                    .map(|(key, value)| {
+                        value
+                            .as_str()
+                            .map(|value| (key.clone(), value.to_string()))
+                            .ok_or_else(|| {
+                                format!("mcp server `{server_id}` env `{key}` must be a string")
+                            })
+                    })
+                    .collect::<CliResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let timeout_ms = server.get("timeoutMs").and_then(serde_json::Value::as_u64);
+
+        specs.push(McpServerSpec {
+            server_id: server_id.clone(),
+            command,
+            args,
+            env,
+            timeout_ms,
+        });
+    }
+    Ok(specs)
 }
 
 fn parse_env_assignment_token(token: &str) -> Option<(String, String)> {
@@ -412,17 +566,7 @@ async fn build_tool_registry(
         };
     }
     for server in mcp_servers {
-        let command = StdioServerCommand::new(
-            server.server_id.clone(),
-            server.command.clone(),
-            &server.args,
-        )
-        .with_envs(
-            server
-                .env
-                .iter()
-                .map(|(key, value)| (key.as_str(), value.as_str())),
-        );
+        let command = stdio_command_from_spec(server);
         let mut client = McpStdioClient::spawn(command)
             .await
             .map_err(|error| error.to_string())?;
@@ -437,6 +581,25 @@ async fn build_tool_registry(
         registry = registry.with_registry(mcp_registry);
     }
     Ok(registry)
+}
+
+fn stdio_command_from_spec(server: &McpServerSpec) -> StdioServerCommand {
+    let command = StdioServerCommand::new(
+        server.server_id.clone(),
+        server.command.clone(),
+        &server.args,
+    )
+    .with_envs(
+        server
+            .env
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str())),
+    );
+    if let Some(timeout_ms) = server.timeout_ms {
+        command.with_request_timeout(Duration::from_millis(timeout_ms))
+    } else {
+        command
+    }
 }
 
 struct CliPermissionPolicy {

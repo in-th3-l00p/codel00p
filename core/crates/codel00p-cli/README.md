@@ -75,6 +75,27 @@ codel00p ... agent run "Search project docs." \
   --mcp-server "docs=DOCS_ROOT=. ./tools/docs-mcp-server --watch=false"
 ```
 
+Workspace MCP servers can also be declared in `.codel00p/mcp.json`:
+
+```json
+{
+  "servers": {
+    "docs": {
+      "command": "./tools/docs-mcp-server",
+      "args": ["--watch=false"],
+      "env": { "DOCS_ROOT": "." },
+      "timeoutMs": 30000
+    }
+  }
+}
+```
+
+Validate configured MCP tools without a model call:
+
+```bash
+codel00p ... agent mcp list --workspace .
+```
+
 Tool calls run with `--permission-mode allow` by default. Use
 `--permission-mode deny` to exercise a turn without mutating the workspace or
 running commands; denied calls are returned to the model as structured tool

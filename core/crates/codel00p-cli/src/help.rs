@@ -12,6 +12,13 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             match (command.as_str(), subcommand.as_str()) {
                 ("agent", "run") => Some(AGENT_RUN_HELP),
                 ("agent", "resume") => Some(AGENT_RESUME_HELP),
+                ("agent", "mcp") => Some(AGENT_MCP_HELP),
+                _ => None,
+            }
+        }
+        [command, subcommand, nested, flag] if is_help(flag) => {
+            match (command.as_str(), subcommand.as_str(), nested.as_str()) {
+                ("agent", "mcp", "list") => Some(AGENT_MCP_LIST_HELP),
                 _ => None,
             }
         }
@@ -44,6 +51,7 @@ Usage: codel00p [global options] agent <command>
 Commands:
   run      Run one agent turn
   resume   Resume a persisted agent session
+  mcp      Inspect MCP server tools
 ";
 
 const AGENT_RUN_HELP: &str = "\
@@ -77,6 +85,21 @@ Options:
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --stream-events             Stream serialized harness events during the turn
   --json-events               Print serialized harness events after assistant text
+";
+
+const AGENT_MCP_HELP: &str = "\
+Usage: codel00p [global options] agent mcp <command>
+
+Commands:
+  list     List configured MCP stdio tools
+";
+
+const AGENT_MCP_LIST_HELP: &str = "\
+Usage: codel00p [global options] agent mcp list [options]
+
+Options:
+  --workspace <path>          Workspace root, defaults to current directory
+  --mcp-server <id=command>   Attach an MCP stdio server executable
 ";
 
 const MEMORY_HELP: &str = "\

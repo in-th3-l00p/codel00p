@@ -43,6 +43,14 @@ fn command_help_prints_without_project_flags() {
             "Usage: codel00p [global options] agent resume <session-id> <prompt>",
         ),
         (
+            &["agent", "mcp", "--help"][..],
+            "Usage: codel00p [global options] agent mcp <command>",
+        ),
+        (
+            &["agent", "mcp", "list", "--help"][..],
+            "Usage: codel00p [global options] agent mcp list",
+        ),
+        (
             &["memory", "--help"][..],
             "Usage: codel00p [global options] memory <command>",
         ),
