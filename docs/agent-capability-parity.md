@@ -123,12 +123,19 @@ Current implementation:
 - MCP tools can be adapted into `codel00p-harness` tools with stable
   `mcp.<server>.<tool>` names;
 - discovered MCP tools default to `PermissionScope::ExternalConnector` and can
-  be registered into a `ToolRegistry`.
+  be registered into a `ToolRegistry`;
+- stdio MCP servers can be launched, initialized, listed, called, timed out,
+  and shut down by the runtime;
+- `agent run --mcp-server` can attach ad hoc stdio servers with argv/env;
+- `.codel00p/mcp.json` can define workspace MCP servers, request timeouts, and
+  server/tool permission scopes;
+- `agent mcp list` inspects configured tools without making a model call;
+- MCP permission requests and denials flow through the same JSON event stream
+  and session audit log as native tools.
 
 Remaining work:
 
-- stdio and HTTP MCP transports;
-- CLI configuration for MCP servers;
+- HTTP MCP transport;
 - persistent permission policy for external calls;
 - MCP server mode exposing codel00p memory/session APIs.
 
