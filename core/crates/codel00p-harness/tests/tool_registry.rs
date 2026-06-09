@@ -15,7 +15,7 @@ impl Tool for EchoTool {
         "echo"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Echoes the input payload."
     }
 
@@ -45,7 +45,7 @@ impl Tool for DynamicTool {
         &self.name
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Dynamic test tool."
     }
 

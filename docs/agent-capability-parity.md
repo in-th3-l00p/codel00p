@@ -117,6 +117,21 @@ codel00p should be both an MCP client and, later, an MCP server:
   tools;
 - permission prompts for external tool calls.
 
+Current implementation:
+
+- `codel00p-mcp` defines transport-neutral MCP tool/resource descriptors;
+- MCP tools can be adapted into `codel00p-harness` tools with stable
+  `mcp.<server>.<tool>` names;
+- discovered MCP tools default to `PermissionScope::ExternalConnector` and can
+  be registered into a `ToolRegistry`.
+
+Remaining work:
+
+- stdio and HTTP MCP transports;
+- CLI configuration for MCP servers;
+- persistent permission policy for external calls;
+- MCP server mode exposing codel00p memory/session APIs.
+
 ### 7. Context Management
 
 Long-running work needs context pressure handling:

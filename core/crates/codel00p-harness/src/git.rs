@@ -24,7 +24,7 @@ impl Tool for GitStatusTool {
         "git_status"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Show stable porcelain git status for the workspace."
     }
 
@@ -65,7 +65,7 @@ impl Tool for GitDiffTool {
         "git_diff"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Show git diff output for tracked workspace changes."
     }
 
@@ -107,7 +107,7 @@ impl Tool for GitLogTool {
         "git_log"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Show recent git commits."
     }
 
@@ -150,7 +150,7 @@ impl Tool for GitCommitTool {
         "git_commit"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Create a guarded git commit for tracked workspace changes."
     }
 

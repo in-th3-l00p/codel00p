@@ -43,6 +43,12 @@ The first runtime implementation is `codel00p-harness`, a Rust crate that runs
 deterministic read-only agent turns and adapts them to `codel00p-providers`.
 See [Agent Harness](harness.md) for the current harness design.
 
+External tool integration starts in `codel00p-mcp`, a transport-neutral Rust
+crate that adapts MCP server tools into harness tools named
+`mcp.<server>.<tool>`. Keeping MCP behind the same harness tool registry means
+CLI, desktop, and cloud runtimes can share permission checks, event streams, and
+audit behavior for external systems.
+
 Durable persistence is split into two layers. `codel00p-storage` owns the
 backend-neutral storage primitives: scoped key-value state, structured
 documents, and ordered append logs. `codel00p-session` owns session-specific

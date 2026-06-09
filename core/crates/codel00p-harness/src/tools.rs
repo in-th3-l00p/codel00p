@@ -13,7 +13,7 @@ const MAX_SEARCH_MATCHES: usize = 200;
 pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
 
-    fn description(&self) -> &'static str;
+    fn description(&self) -> &str;
 
     fn input_schema(&self) -> Value;
 
@@ -40,7 +40,7 @@ impl Tool for ListFilesTool {
         "list_files"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "List files inside the workspace root."
     }
 
@@ -86,7 +86,7 @@ impl Tool for ReadFileTool {
         "read_file"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Read a UTF-8 file inside the workspace root."
     }
 
@@ -131,7 +131,7 @@ impl Tool for SearchTextTool {
         "search_text"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Search UTF-8 files inside the workspace root."
     }
 

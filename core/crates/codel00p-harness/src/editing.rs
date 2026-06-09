@@ -19,7 +19,7 @@ impl Tool for CreateFileTool {
         "create_file"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Create a UTF-8 file inside the workspace root."
     }
 
@@ -72,7 +72,7 @@ impl Tool for UpdateFileTool {
         "update_file"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Replace a UTF-8 file inside the workspace root."
     }
 
@@ -117,7 +117,7 @@ impl Tool for DeleteFileTool {
         "delete_file"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Delete a file inside the workspace root."
     }
 
@@ -159,7 +159,7 @@ impl Tool for ApplyPatchTool {
         "apply_patch"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Apply exact string replacements to workspace files."
     }
 

@@ -750,7 +750,7 @@ impl Tool for SlowReadOnlyTool {
         self.0
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Slow read-only test tool."
     }
 
@@ -801,7 +801,7 @@ impl Tool for TrackingTool {
         self.name
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Tracking test tool."
     }
 
@@ -837,7 +837,7 @@ impl Tool for CountingTool {
         "counting"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Counts executions."
     }
 

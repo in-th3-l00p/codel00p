@@ -6,6 +6,7 @@ members = [
     "crates/codel00p-session",
     "crates/codel00p-storage",
     "crates/codel00p-memory",
+    "crates/codel00p-mcp",
     "crates/codel00p-cli",
 ]
 resolver = "3"

@@ -29,7 +29,7 @@ impl Tool for RunCommandTool {
         "run_command"
     }
 
-    fn description(&self) -> &'static str {
+    fn description(&self) -> &str {
         "Run a command inside the workspace with timeout and output limits."
     }
 

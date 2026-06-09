@@ -71,7 +71,8 @@ Work:
 - add permissioned editing tools;
 - add permissioned shell execution;
 - add git inspection, diff review, commit, and PR preparation workflows;
-- add MCP client support for external team tools;
+- add MCP client support for external team tools: transport-neutral contract is
+  in place; stdio/HTTP transports and CLI server config are next;
 - add context compaction and session summaries;
 - stream events for interactive clients.
 
