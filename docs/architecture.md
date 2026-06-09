@@ -55,7 +55,10 @@ The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing read-only
 project memory and session replay tools to other agents.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
-not require repeated prompts.
+not require repeated prompts. Operators can inspect and revoke those remembered
+decisions with `codel00p mcp permissions list` and `codel00p mcp permissions
+forget`, which keeps connector policy reviewable without reaching into the
+storage backend.
 
 Durable persistence is split into two layers. `codel00p-storage` owns the
 backend-neutral storage primitives: scoped key-value state, structured

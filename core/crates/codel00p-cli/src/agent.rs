@@ -22,13 +22,15 @@ use codel00p_mcp::{
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
-use codel00p_storage::{KeyValueStore, SqliteStorage, StorageScope, StorageValue};
-use serde_json::{Value, json};
 
 use crate::{
     config::{
         CliConfig, CliResult, open_memory_store, open_session_store, parse_session_id,
         required_value,
+    },
+    connector_permissions::{
+        ConnectorPermissionDecision, ConnectorPermissionStatus, is_rememberable_permission,
+        load_decision, remember_decision,
     },
     providers::build_provider_client,
 };
@@ -851,24 +853,18 @@ impl CliPermissionPolicy {
         if !self.should_remember(request) {
             return Ok(None);
         }
-        let storage = self.open_storage()?;
-        let Some(value) = storage
-            .get_value(&self.storage_scope(), &permission_key(request))
-            .map_err(|error| HarnessError::ToolFailed {
-                name: request.tool_name().to_string(),
-                message: format!("failed to read remembered permission: {error}"),
-            })?
-        else {
-            return Ok(None);
-        };
-        let status = value
-            .payload()
-            .get("status")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        Ok(match status {
-            "allow" => Some(PermissionDecision::allow(request.id(), PermissionMode::Ask)),
-            "deny" => Some(PermissionDecision::deny(
+        let decision =
+            load_decision(&self.config, request.tool_name(), request.scope()).map_err(|error| {
+                HarnessError::ToolFailed {
+                    name: request.tool_name().to_string(),
+                    message: format!("failed to read remembered permission: {error}"),
+                }
+            })?;
+        Ok(match decision.map(|decision| decision.status) {
+            Some(ConnectorPermissionStatus::Allow) => {
+                Some(PermissionDecision::allow(request.id(), PermissionMode::Ask))
+            }
+            Some(ConnectorPermissionStatus::Deny) => Some(PermissionDecision::deny(
                 request.id(),
                 PermissionMode::Ask,
                 format!(
@@ -876,7 +872,7 @@ impl CliPermissionPolicy {
                     request.tool_name()
                 ),
             )),
-            _ => None,
+            None => None,
         })
     }
 
@@ -889,42 +885,28 @@ impl CliPermissionPolicy {
             return Ok(());
         }
         let status = if decision.allows_execution() {
-            "allow"
+            ConnectorPermissionStatus::Allow
         } else {
-            "deny"
+            ConnectorPermissionStatus::Deny
         };
-        let mut storage = self.open_storage()?;
-        storage
-            .put_value(StorageValue::new(
-                self.storage_scope(),
-                permission_key(request),
-                json!({
-                    "tool_name": request.tool_name(),
-                    "scope": scope_label(request.scope()),
-                    "status": status,
-                }),
-            ))
-            .map_err(|error| HarnessError::ToolFailed {
-                name: request.tool_name().to_string(),
-                message: format!("failed to remember permission: {error}"),
-            })?;
+        remember_decision(
+            &self.config,
+            ConnectorPermissionDecision {
+                tool_name: request.tool_name().to_string(),
+                scope: request.scope(),
+                status,
+            },
+        )
+        .map_err(|error| HarnessError::ToolFailed {
+            name: request.tool_name().to_string(),
+            message: format!("failed to remember permission: {error}"),
+        })?;
         Ok(())
     }
 
     fn should_remember(&self, request: &PermissionRequest) -> bool {
         self.remember_permissions
             && is_rememberable_permission(request.tool_name(), request.scope())
-    }
-
-    fn open_storage(&self) -> Result<SqliteStorage, HarnessError> {
-        SqliteStorage::open(&self.config.memory_db).map_err(|error| HarnessError::ToolFailed {
-            name: "permission_policy".to_string(),
-            message: format!("failed to open permission store: {error}"),
-        })
-    }
-
-    fn storage_scope(&self) -> StorageScope {
-        StorageScope::project(&self.config.organization_id, self.config.project.id())
     }
 
     fn decide_with_prompt(
@@ -954,29 +936,6 @@ impl CliPermissionPolicy {
                 format!("{} rejected by CLI approval prompt", request.tool_name()),
             ))
         }
-    }
-}
-
-fn is_rememberable_permission(tool_name: &str, scope: PermissionScope) -> bool {
-    tool_name.starts_with("mcp.") || scope == PermissionScope::ExternalConnector
-}
-
-fn permission_key(request: &PermissionRequest) -> String {
-    permission_key_parts(request.tool_name(), request.scope())
-}
-
-fn permission_key_parts(tool_name: &str, scope: PermissionScope) -> String {
-    format!("connector_permission:{}:{tool_name}", scope_label(scope))
-}
-
-fn scope_label(scope: PermissionScope) -> &'static str {
-    match scope {
-        PermissionScope::ReadOnly => "read_only",
-        PermissionScope::WorkspaceWrite => "workspace_write",
-        PermissionScope::Shell => "shell",
-        PermissionScope::Network => "network",
-        PermissionScope::ExternalConnector => "external_connector",
-        PermissionScope::MemoryWrite => "memory_write",
     }
 }
 

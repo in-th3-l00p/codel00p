@@ -14,6 +14,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
                 ("agent", "run") => Some(AGENT_RUN_HELP),
                 ("agent", "resume") => Some(AGENT_RESUME_HELP),
                 ("agent", "mcp") => Some(AGENT_MCP_HELP),
+                ("mcp", "permissions") => Some(MCP_PERMISSIONS_HELP),
                 ("mcp", "serve") => Some(MCP_SERVE_HELP),
                 _ => None,
             }
@@ -21,6 +22,8 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
         [command, subcommand, nested, flag] if is_help(flag) => {
             match (command.as_str(), subcommand.as_str(), nested.as_str()) {
                 ("agent", "mcp", "list") => Some(AGENT_MCP_LIST_HELP),
+                ("mcp", "permissions", "list") => Some(MCP_PERMISSIONS_LIST_HELP),
+                ("mcp", "permissions", "forget") => Some(MCP_PERMISSIONS_FORGET_HELP),
                 _ => None,
             }
         }
@@ -111,11 +114,31 @@ const MCP_HELP: &str = "\
 Usage: codel00p [global options] mcp <command>
 
 Commands:
-  serve    Run a stdio MCP server for codel00p memory and sessions
+  serve        Run a stdio MCP server for codel00p memory and sessions
+  permissions  Inspect remembered MCP connector permission decisions
 ";
 
 const MCP_SERVE_HELP: &str = "\
 Usage: codel00p [global options] mcp serve
+";
+
+const MCP_PERMISSIONS_HELP: &str = "\
+Usage: codel00p [global options] mcp permissions <command>
+
+Commands:
+  list     List remembered MCP connector permission decisions
+  forget   Forget one remembered MCP connector permission decision
+";
+
+const MCP_PERMISSIONS_LIST_HELP: &str = "\
+Usage: codel00p [global options] mcp permissions list
+";
+
+const MCP_PERMISSIONS_FORGET_HELP: &str = "\
+Usage: codel00p [global options] mcp permissions forget <tool-name> [options]
+
+Options:
+  --scope <scope>             Permission scope, defaults to external_connector
 ";
 
 const MEMORY_HELP: &str = "\

@@ -137,11 +137,12 @@ Current implementation:
 - `codel00p mcp serve` exposes read-only memory/session tools to other MCP
   clients over stdio;
 - `--remember-permissions` persists ask-mode MCP connector allow/deny decisions
-  per project, tool, and permission scope.
+  per project, tool, and permission scope;
+- `codel00p mcp permissions list` and `forget` inspect and revoke remembered
+  connector decisions with scriptable TSV output.
 
 Remaining work:
 
-- policy inspection/revocation commands for remembered connector decisions;
 - broader MCP server write tools once policy management is explicit.
 
 ### 7. Context Management

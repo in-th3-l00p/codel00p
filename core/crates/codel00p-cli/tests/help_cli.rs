@@ -60,6 +60,18 @@ fn command_help_prints_without_project_flags() {
             "Usage: codel00p [global options] mcp serve",
         ),
         (
+            &["mcp", "permissions", "--help"][..],
+            "Usage: codel00p [global options] mcp permissions <command>",
+        ),
+        (
+            &["mcp", "permissions", "list", "--help"][..],
+            "Usage: codel00p [global options] mcp permissions list",
+        ),
+        (
+            &["mcp", "permissions", "forget", "--help"][..],
+            "Usage: codel00p [global options] mcp permissions forget <tool-name>",
+        ),
+        (
             &["memory", "--help"][..],
             "Usage: codel00p [global options] memory <command>",
         ),

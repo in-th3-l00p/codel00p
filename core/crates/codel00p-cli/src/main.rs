@@ -2,6 +2,7 @@ use std::{env, process::ExitCode};
 
 mod agent;
 mod config;
+mod connector_permissions;
 mod help;
 mod mcp_server;
 mod memory;

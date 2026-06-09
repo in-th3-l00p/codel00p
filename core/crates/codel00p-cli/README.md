@@ -141,6 +141,16 @@ connector allow/deny decisions in the project-scoped local store. Later runs
 with the same flag reuse remembered decisions for the same MCP tool and
 permission scope without prompting again.
 
+Inspect and revoke remembered connector decisions:
+
+```bash
+codel00p ... mcp permissions list
+codel00p ... mcp permissions forget mcp.docs.search --scope external_connector
+```
+
+`mcp permissions list` prints tab-separated `tool`, `scope`, and `status`
+columns so shell scripts can audit project connector policy directly.
+
 Use `--stream-events` when a caller wants one JSON event per line as the turn is
 running. Use `--json-events` when a caller wants the final assistant text first
 and the complete event list after the turn completes.
