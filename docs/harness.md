@@ -169,6 +169,48 @@ The first `apply_patch` implementation intentionally uses exact replacements
 instead of a full unified-diff parser. That keeps patch behavior deterministic
 and testable while leaving room for a richer patch format later.
 
+## Command Execution
+
+The harness exposes shell execution through `ToolRegistry::command_defaults()`.
+The first command tool is:
+
+- `run_command`: run a program inside the workspace with timeout and output
+  limits.
+
+`run_command` accepts a structured argument vector instead of a free-form shell
+string:
+
+```json
+{
+  "program": "cargo",
+  "args": ["test", "--workspace"],
+  "cwd": ".",
+  "timeout_ms": 30000,
+  "max_output_bytes": 16384
+}
+```
+
+The tool declares `PermissionScope::Shell`. The agent loop requests permission
+before execution. Denied shell commands are returned to the model as structured
+permission-denied tool results without executing the process.
+
+Command results are structured:
+
+```json
+{
+  "exit_code": 0,
+  "success": true,
+  "timed_out": false,
+  "stdout": "...",
+  "stderr": "...",
+  "stdout_truncated": false,
+  "stderr_truncated": false
+}
+```
+
+The working directory is constrained to the workspace root. Timeouts and output
+caps are bounded even when the model requests larger values.
+
 ## Runtime Control
 
 The harness has a control layer inspired by Hermes and Claude Code:

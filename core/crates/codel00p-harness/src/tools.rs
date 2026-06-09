@@ -240,6 +240,6 @@ pub(crate) fn required_string<'a>(
     })
 }
 
-fn optional_string<'a>(input: &'a Value, key: &str) -> Option<&'a str> {
+pub(crate) fn optional_string<'a>(input: &'a Value, key: &str) -> Option<&'a str> {
     input.get(key).and_then(Value::as_str)
 }

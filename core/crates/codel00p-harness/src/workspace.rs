@@ -91,6 +91,17 @@ impl Workspace {
         Ok(resolved)
     }
 
+    pub fn resolve_directory(&self, path: impl AsRef<Path>) -> Result<PathBuf, HarnessError> {
+        let path = path.as_ref();
+        let resolved = self.resolve(path)?;
+        if !resolved.is_dir() {
+            return Err(HarnessError::InvalidWorkspacePath {
+                path: path.display().to_string(),
+            });
+        }
+        Ok(resolved)
+    }
+
     pub fn read_utf8(&self, path: impl AsRef<Path>) -> Result<String, HarnessError> {
         let resolved = self.resolve(path)?;
         Ok(fs::read_to_string(resolved)?)

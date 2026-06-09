@@ -4,6 +4,7 @@ use codel00p_protocol::PermissionScope;
 use serde_json::Value;
 
 use crate::{
+    commands::RunCommandTool,
     editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
     errors::HarnessError,
     tool_result::ToolResult,
@@ -34,6 +35,10 @@ impl ToolRegistry {
             .with_tool(CreateFileTool)
             .with_tool(DeleteFileTool)
             .with_tool(UpdateFileTool)
+    }
+
+    pub fn command_defaults() -> Self {
+        Self::new().with_tool(RunCommandTool)
     }
 
     pub fn with_tool<T>(mut self, tool: T) -> Self

@@ -40,6 +40,14 @@ Editing tools are available through `ToolRegistry::editing_defaults()`:
 These tools all require `PermissionScope::WorkspaceWrite`. They are not part of
 `ToolRegistry::read_only_defaults()`.
 
+Command execution is available through `ToolRegistry::command_defaults()`:
+
+- `run_command`.
+
+`run_command` requires `PermissionScope::Shell`, runs inside the workspace,
+accepts `program` plus `args` instead of a free-form shell string, and returns
+structured exit status, timeout, stdout, stderr, and truncation fields.
+
 ## Project Instructions
 
 The harness loads root-level project instruction files before each model call.
