@@ -52,6 +52,10 @@ fn command_help_prints_without_project_flags() {
             "Usage: codel00p [global options] agent mcp list",
         ),
         (
+            &["agent", "mcp", "doctor", "--help"][..],
+            "Usage: codel00p [global options] agent mcp doctor",
+        ),
+        (
             &["mcp", "--help"][..],
             "Usage: codel00p [global options] mcp <command>",
         ),

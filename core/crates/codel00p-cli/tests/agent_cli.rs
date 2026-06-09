@@ -702,6 +702,73 @@ fn agent_mcp_list_prints_configured_http_tools() {
 }
 
 #[test]
+fn agent_mcp_doctor_reports_capabilities_without_leaking_env_values() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::create_dir(workspace.join(".codel00p")).expect("create config dir");
+    let mcp_server = workspace.join("fake-doctor-mcp.sh");
+    fs::write(
+        &mcp_server,
+        r#"#!/bin/sh
+case "$SECRET_TOKEN" in super-secret) ;; *) exit 31;; esac
+read init
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{},"resources":{},"prompts":{}},"serverInfo":{"name":"fake","version":"1.0.0"}}}'
+read initialized
+read tools
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search","description":"Search docs.","inputSchema":{"type":"object"}}]}}'
+read resources
+printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"resources":[{"uri":"codel00p://docs/one","name":"One","mimeType":"text/plain"}]}}'
+read prompts
+printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{"prompts":[{"name":"review","description":"Review docs."}]}}'
+"#,
+    )
+    .expect("write fake mcp server");
+    fs::write(
+        workspace.join(".codel00p/mcp.json"),
+        json!({
+            "servers": {
+                "docs": {
+                    "command": "/bin/sh",
+                    "args": [mcp_server.to_str().expect("mcp server path")],
+                    "env": {
+                        "SECRET_TOKEN": "super-secret"
+                    },
+                    "timeoutMs": 500
+                }
+            }
+        })
+        .to_string(),
+    )
+    .expect("write mcp config");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "mcp",
+            "doctor",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(
+        stdout.contains("docs\tok\tstdio\ttools=1\tresources=1\tprompts=1"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("env=SECRET_TOKEN:<redacted>"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("timeout_ms=500"), "stdout: {stdout}");
+    assert!(!stdout.contains("super-secret"), "stdout: {stdout}");
+}
+
+#[test]
 fn agent_run_calls_configured_http_mcp_tools() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

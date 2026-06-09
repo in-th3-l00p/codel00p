@@ -22,6 +22,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
         [command, subcommand, nested, flag] if is_help(flag) => {
             match (command.as_str(), subcommand.as_str(), nested.as_str()) {
                 ("agent", "mcp", "list") => Some(AGENT_MCP_LIST_HELP),
+                ("agent", "mcp", "doctor") => Some(AGENT_MCP_DOCTOR_HELP),
                 ("mcp", "permissions", "list") => Some(MCP_PERMISSIONS_LIST_HELP),
                 ("mcp", "permissions", "forget") => Some(MCP_PERMISSIONS_FORGET_HELP),
                 _ => None,
@@ -99,11 +100,20 @@ const AGENT_MCP_HELP: &str = "\
 Usage: codel00p [global options] agent mcp <command>
 
 Commands:
-  list     List configured MCP stdio tools
+  list     List configured MCP server tools
+  doctor   Validate configured MCP servers and print redacted diagnostics
 ";
 
 const AGENT_MCP_LIST_HELP: &str = "\
 Usage: codel00p [global options] agent mcp list [options]
+
+Options:
+  --workspace <path>          Workspace root, defaults to current directory
+  --mcp-server <id=command>   Attach an MCP stdio server executable
+";
+
+const AGENT_MCP_DOCTOR_HELP: &str = "\
+Usage: codel00p [global options] agent mcp doctor [options]
 
 Options:
   --workspace <path>          Workspace root, defaults to current directory
