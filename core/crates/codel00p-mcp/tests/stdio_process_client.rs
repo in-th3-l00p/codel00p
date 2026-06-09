@@ -1,10 +1,14 @@
 use std::{
     fs,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use codel00p_mcp::{McpClientNotification, McpStdioClient, McpToolCall, StdioServerCommand};
+use codel00p_mcp::{
+    McpClientNotification, McpNotificationWorker, McpStdioClient, McpToolCall, StdioServerCommand,
+};
 use serde_json::json;
+use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn stdio_client_sends_json_rpc_requests_to_process_and_reads_responses() {
@@ -141,6 +145,62 @@ async fn stdio_client_reads_notifications_after_resource_subscription() {
         .unsubscribe_resource("codel00p://memory/mem-1")
         .await
         .expect("unsubscribe resource");
+}
+
+#[tokio::test]
+async fn notification_worker_subscribes_and_streams_stdio_notifications() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read subscribe; case "$subscribe" in *'"method":"resources/subscribe"'*) ;; *) exit 11;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"codel00p://memory/mem-2"}}'; sleep 1"#,
+        ],
+    )
+    .with_request_timeout(Duration::from_millis(500));
+    let client = Arc::new(Mutex::new(
+        McpStdioClient::spawn(command)
+            .await
+            .expect("spawn stdio client"),
+    ));
+    let mut worker =
+        McpNotificationWorker::spawn_stdio(client, ["codel00p://memory/mem-2".to_string()]);
+
+    assert_eq!(
+        worker
+            .recv()
+            .await
+            .expect("worker should emit")
+            .expect("notification should succeed"),
+        McpClientNotification::resource_updated("codel00p://memory/mem-2")
+    );
+}
+
+#[tokio::test]
+async fn notification_worker_reports_subscription_failures() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read subscribe; printf '%s\n' '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"subscription denied"}}'"#,
+        ],
+    );
+    let client = Arc::new(Mutex::new(
+        McpStdioClient::spawn(command)
+            .await
+            .expect("spawn stdio client"),
+    ));
+    let mut worker =
+        McpNotificationWorker::spawn_stdio(client, ["codel00p://memory/mem-3".to_string()]);
+
+    let error = worker
+        .recv()
+        .await
+        .expect("worker should emit")
+        .expect_err("subscription should fail");
+
+    assert!(error.to_string().contains("subscription denied"));
 }
 
 #[tokio::test]

@@ -147,6 +147,8 @@ Current implementation:
 - stdio MCP clients can subscribe/unsubscribe resource URIs and poll later
   resource-updated, tools-list-changed, and resources-list-changed
   notifications from the long-lived server process;
+- `McpNotificationWorker` can run the stdio subscription read loop in the
+  background and stream notifications or subscription errors over a channel;
 - the stdio MCP server exposes `codel00p://memory/{id}` and
   `codel00p://sessions/{session_id}` JSON resource templates for direct
   context browsing;
@@ -161,8 +163,7 @@ Current implementation:
 
 Remaining work:
 
-- add automatic background notification tasks, reconnect behavior, and
-  UI/session routing for subscribed MCP servers;
+- add reconnect behavior and UI/session routing for subscribed MCP servers;
 
 ### 7. Context Management
 

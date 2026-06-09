@@ -67,8 +67,10 @@ stdio and HTTP transports collect MCP progress/resource notifications before
 the final tool response and the MCP harness adapter emits them as structured
 `ToolProgress` events for CLI, desktop, cloud, and session replay consumers.
 Long-lived stdio clients can also subscribe to resource URIs and poll later
-resource/list-change notifications from the same server process; higher-level
-background tasks and reconnect policy still belong above the transport layer.
+resource/list-change notifications from the same server process. The reusable
+`McpNotificationWorker` owns that read loop for stdio transports and forwards
+notifications over a channel; reconnect policy and product-specific UI/session
+routing still belong above the transport layer.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
 not require repeated prompts. Operators can inspect and revoke those remembered

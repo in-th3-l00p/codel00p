@@ -16,7 +16,8 @@ use serde_json::Value;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::Mutex,
+    sync::{Mutex, mpsc},
+    task::JoinHandle,
     time::timeout,
 };
 
@@ -576,6 +577,49 @@ impl McpClientNotification {
 struct McpClientExchange {
     response: Value,
     notifications: Vec<McpClientNotification>,
+}
+
+pub struct McpNotificationWorker {
+    receiver: mpsc::Receiver<Result<McpClientNotification, McpError>>,
+    task: JoinHandle<()>,
+}
+
+impl McpNotificationWorker {
+    pub fn spawn_stdio<I>(client: Arc<Mutex<McpStdioClient>>, subscriptions: I) -> Self
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let subscriptions = subscriptions.into_iter().collect::<Vec<_>>();
+        let (sender, receiver) = mpsc::channel(32);
+        let task = tokio::spawn(async move {
+            for uri in subscriptions {
+                let result = client.lock().await.subscribe_resource(uri).await;
+                if let Err(error) = result {
+                    let _ = sender.send(Err(error)).await;
+                    return;
+                }
+            }
+
+            loop {
+                let result = client.lock().await.read_notification().await;
+                let should_continue = result.is_ok();
+                if sender.send(result).await.is_err() || !should_continue {
+                    return;
+                }
+            }
+        });
+        Self { receiver, task }
+    }
+
+    pub async fn recv(&mut self) -> Option<Result<McpClientNotification, McpError>> {
+        self.receiver.recv().await
+    }
+}
+
+impl Drop for McpNotificationWorker {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
 }
 
 impl McpHttpClient {

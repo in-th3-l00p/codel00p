@@ -19,6 +19,8 @@ This crate owns the contract between MCP servers and the agent harness:
 - `McpClientNotification`: progress, resource-update, and list-changed
   notification metadata collected by MCP clients and emitted through harness
   `ToolProgress` events.
+- `McpNotificationWorker`: background stdio subscription reader that subscribes
+  resource URIs and streams later server notifications over a channel.
 
 Harness tool names are prefixed as:
 
@@ -38,7 +40,9 @@ delimited JSON-RPC messages to stdin, and reads newline delimited JSON-RPC
 responses from stdout. Requests have a configurable timeout, and shutdown closes
 server stdin, waits for process exit, then kills the server if it does not stop
 in time. It can subscribe/unsubscribe resource URIs and poll subsequent
-server-sent notifications from the same long-lived process.
+server-sent notifications from the same long-lived process. For callers that
+need a background loop, `McpNotificationWorker::spawn_stdio` subscribes the
+requested resources and forwards later notifications or subscription errors.
 
 The HTTP transport sends each JSON-RPC client message as a POST to the MCP
 endpoint, accepts JSON or `text/event-stream` responses, stores
