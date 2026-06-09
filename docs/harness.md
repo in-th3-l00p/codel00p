@@ -98,6 +98,23 @@ pub struct TurnOutcome {
 }
 ```
 
+## Event Streaming
+
+The harness records typed `HarnessEvent` values for turn boundaries, context
+construction, inference calls, tool progress, permission checks, lifecycle
+failures, and completion.
+
+Callers that need live progress can attach an `AgentEventSink` through
+`AgentHarness::builder().event_sink(...)`. The sink receives the same event
+values, in the same order, that are returned in `TurnOutcome.events`. Early
+events are emitted even if a later inference or tool step fails, which lets CLI,
+desktop, and cloud surfaces show useful progress instead of waiting for the
+entire turn to finish.
+
+The CLI exposes this with `--stream-events`, which writes one serialized event
+per line while the turn runs. `--json-events` remains a post-run dump appended
+after the final assistant message.
+
 ## Crate Layout
 
 ```text
@@ -108,6 +125,7 @@ core/crates/codel00p-harness/
     approvals.rs
     context.rs
     errors.rs
+    event_sink.rs
     events.rs
     session.rs
     tool_registry.rs

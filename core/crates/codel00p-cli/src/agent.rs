@@ -2,9 +2,9 @@ use std::{env, path::PathBuf};
 
 use async_trait::async_trait;
 use codel00p_harness::{
-    AgentHarness, ExplicitTurnMemoryExtractor, MemoryCandidateSink, MemoryCandidateSinkOutcome,
-    ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest,
-    ProviderModelClient, ToolRegistry, UserMessage, Workspace,
+    AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessEvent, MemoryCandidateSink,
+    MemoryCandidateSinkOutcome, ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider,
+    ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage, Workspace,
 };
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
@@ -27,6 +27,7 @@ struct AgentRunOptions {
     session_id: Option<String>,
     max_iterations: Option<u32>,
     json_events: bool,
+    stream_events: bool,
     tool_sets: Vec<AgentToolSet>,
 }
 
@@ -100,6 +101,9 @@ fn run_agent_turn(
             .project_memory_provider(memory_provider)
             .turn_memory_extractor(memory_extractor)
             .memory_candidate_sink(memory_sink);
+        if options.stream_events {
+            builder = builder.event_sink(StdoutJsonEventSink);
+        }
         if let Some(max_iterations) = options.max_iterations {
             builder = builder.max_iterations(max_iterations);
         }
@@ -176,6 +180,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut session_id = None;
     let mut max_iterations = None;
     let mut json_events = false;
+    let mut stream_events = false;
     let mut tool_sets = Vec::new();
     let mut index = 1;
 
@@ -212,6 +217,10 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
                 json_events = true;
                 index += 1;
             }
+            "--stream-events" => {
+                stream_events = true;
+                index += 1;
+            }
             "--tool-set" => {
                 let value = required_value(args, index, "--tool-set")?;
                 tool_sets.push(parse_agent_tool_set(&value)?);
@@ -230,6 +239,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         session_id,
         max_iterations,
         json_events,
+        stream_events,
         tool_sets,
     })
 }
@@ -271,6 +281,17 @@ fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
         };
     }
     registry
+}
+
+struct StdoutJsonEventSink;
+
+#[async_trait]
+impl AgentEventSink for StdoutJsonEventSink {
+    async fn emit(&self, event: &HarnessEvent) {
+        if let Ok(encoded) = serde_json::to_string(event) {
+            println!("{encoded}");
+        }
+    }
 }
 
 fn replay_session_messages(

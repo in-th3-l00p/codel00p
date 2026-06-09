@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use codel00p_harness::{
-    AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
+    AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
     HarnessInferenceResponse, MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider,
     SessionId, SessionMessage, SessionState, ToolRegistry, TurnMemoryExtractionRequest,
     TurnMemoryExtractor, UserMessage, Workspace,
@@ -91,6 +91,68 @@ async fn run_turn_returns_final_assistant_message_without_tools() {
         outcome.events.last(),
         Some(HarnessEvent::TurnCompleted { iterations: 1, .. })
     ));
+}
+
+#[tokio::test]
+async fn event_sink_receives_events_in_outcome_order() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github", "gpt-4o", "Done.",
+    )]);
+    let sink = RecordingEventSink::default();
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .event_sink(sink.clone())
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-event-sink"),
+            UserMessage::new("Run."),
+        )
+        .await
+        .expect("run turn");
+
+    assert_eq!(sink.events(), outcome.events);
+}
+
+#[tokio::test]
+async fn event_sink_receives_early_events_before_turn_error() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(Vec::new());
+    let sink = RecordingEventSink::default();
+
+    let error = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .event_sink(sink.clone())
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-event-sink-error"),
+            UserMessage::new("Run."),
+        )
+        .await
+        .expect_err("scripted model should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("scripted model client has no response")
+    );
+    let events = sink.events();
+    assert!(matches!(
+        events.first(),
+        Some(HarnessEvent::TurnStarted { .. })
+    ));
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, HarnessEvent::ContextBuilt { .. }))
+    );
 }
 
 #[tokio::test]
@@ -438,5 +500,23 @@ impl TurnMemoryExtractor for FixedCandidateExtractor {
         _request: TurnMemoryExtractionRequest,
     ) -> Result<Vec<MemoryCandidateInput>, HarnessError> {
         Ok(vec![self.candidate.clone()])
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingEventSink {
+    events: Arc<Mutex<Vec<HarnessEvent>>>,
+}
+
+impl RecordingEventSink {
+    fn events(&self) -> Vec<HarnessEvent> {
+        self.events.lock().expect("events").clone()
+    }
+}
+
+#[async_trait]
+impl AgentEventSink for RecordingEventSink {
+    async fn emit(&self, event: &HarnessEvent) {
+        self.events.lock().expect("events").push(event.clone());
     }
 }

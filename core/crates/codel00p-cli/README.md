@@ -62,6 +62,10 @@ Supported tool-set names:
 - `git`: guarded status, diff, log, and commit tools.
 - `all`: enable edit, command, and git tool sets.
 
+Use `--stream-events` when a caller wants one JSON event per line as the turn is
+running. Use `--json-events` when a caller wants the final assistant text first
+and the complete event list after the turn completes.
+
 Provider credentials are read from environment variables:
 
 - GitHub/Copilot: `CODEL00P_PROVIDER_GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`,

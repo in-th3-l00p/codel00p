@@ -57,6 +57,7 @@ Options:
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
   --tool-set <name>           Enable a tool set: read, edit, command, git, all
+  --stream-events             Stream serialized harness events during the turn
   --json-events               Print serialized harness events after assistant text
 ";
 
@@ -70,6 +71,7 @@ Options:
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
   --tool-set <name>           Enable a tool set: read, edit, command, git, all
+  --stream-events             Stream serialized harness events during the turn
   --json-events               Print serialized harness events after assistant text
 ";
 

@@ -249,6 +249,61 @@ fn agent_run_rejects_unknown_tool_sets() {
 }
 
 #[test]
+fn agent_run_can_stream_json_events_before_final_text() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Streaming complete."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Stream events.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--stream-events",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    let lines = stdout.lines().collect::<Vec<_>>();
+    assert!(lines.len() >= 2, "stdout: {stdout}");
+    assert!(lines[0].contains(r#""kind":"turn_started""#));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains(r#""kind":"turn_completed""#))
+    );
+    assert_eq!(lines.last(), Some(&"Streaming complete."));
+    provider.assert();
+}
+
+#[test]
 fn agent_run_persists_session_messages_and_events() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
