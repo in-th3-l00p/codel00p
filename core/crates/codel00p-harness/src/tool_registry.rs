@@ -7,6 +7,7 @@ use crate::{
     commands::RunCommandTool,
     editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
     errors::HarnessError,
+    git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool},
     workspace::Workspace,
@@ -39,6 +40,14 @@ impl ToolRegistry {
 
     pub fn command_defaults() -> Self {
         Self::new().with_tool(RunCommandTool)
+    }
+
+    pub fn git_defaults() -> Self {
+        Self::new()
+            .with_tool(GitCommitTool)
+            .with_tool(GitDiffTool)
+            .with_tool(GitLogTool)
+            .with_tool(GitStatusTool)
     }
 
     pub fn with_tool<T>(mut self, tool: T) -> Self

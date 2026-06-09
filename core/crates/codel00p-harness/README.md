@@ -48,6 +48,18 @@ Command execution is available through `ToolRegistry::command_defaults()`:
 accepts `program` plus `args` instead of a free-form shell string, and returns
 structured exit status, timeout, stdout, stderr, and truncation fields.
 
+Git workflow tools are available through `ToolRegistry::git_defaults()`:
+
+- `git_status`;
+- `git_diff`;
+- `git_log`;
+- `git_commit`.
+
+Read-only git tools require `PermissionScope::ReadOnly`. `git_commit` requires
+`PermissionScope::WorkspaceWrite`, rejects `Co-authored-by:` trailers, refuses
+to commit while untracked files are present, and stages tracked changes with
+`git add -u`.
+
 ## Project Instructions
 
 The harness loads root-level project instruction files before each model call.

@@ -4,6 +4,7 @@ pub mod context;
 pub mod editing;
 pub mod errors;
 pub mod events;
+pub mod git;
 pub mod instructions;
 pub mod iteration_budget;
 pub mod lifecycle;

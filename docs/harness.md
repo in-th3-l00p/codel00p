@@ -211,6 +211,29 @@ Command results are structured:
 The working directory is constrained to the workspace root. Timeouts and output
 caps are bounded even when the model requests larger values.
 
+## Git Workflow Tools
+
+The harness exposes guarded git tools through `ToolRegistry::git_defaults()`:
+
+- `git_status`: stable porcelain status, read-only;
+- `git_diff`: tracked-file diff with output caps, read-only;
+- `git_log`: recent commit metadata, read-only;
+- `git_commit`: guarded commit creation for tracked changes.
+
+`git_status`, `git_diff`, and `git_log` declare `PermissionScope::ReadOnly`.
+`git_commit` declares `PermissionScope::WorkspaceWrite`.
+
+The first commit implementation is intentionally strict:
+
+- commit messages must not contain `Co-authored-by:` trailers;
+- untracked files cause the commit to fail;
+- only tracked changes are staged with `git add -u`;
+- the result reports the new commit SHA, subject, changed-file count, and git
+  output.
+
+This gives the agent a safe base for clean commits without taking ownership of
+untracked user work.
+
 ## Runtime Control
 
 The harness has a control layer inspired by Hermes and Claude Code:
