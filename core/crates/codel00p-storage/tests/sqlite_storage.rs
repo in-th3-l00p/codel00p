@@ -265,6 +265,74 @@ fn sqlite_isolates_scope_collection_id_and_streams() {
 }
 
 #[test]
+fn sqlite_key_values_can_be_listed_and_deleted_by_scope() {
+    let mut storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let first_scope = StorageScope::project("org-1", "project-1");
+    let second_scope = StorageScope::project("org-1", "project-2");
+
+    storage
+        .put_value(StorageValue::new(
+            first_scope.clone(),
+            "connector_permission:external_connector:mcp.memory.list",
+            json!({ "status": "allow" }),
+        ))
+        .expect("put first value");
+    storage
+        .put_value(StorageValue::new(
+            first_scope.clone(),
+            "connector_permission:external_connector:mcp.memory.show",
+            json!({ "status": "deny" }),
+        ))
+        .expect("put second value");
+    storage
+        .put_value(StorageValue::new(
+            second_scope.clone(),
+            "connector_permission:external_connector:mcp.memory.list",
+            json!({ "status": "allow" }),
+        ))
+        .expect("put other scope value");
+
+    let values = storage
+        .list_values(&first_scope, Some("connector_permission:"))
+        .expect("list values");
+    let keys = values.iter().map(|value| value.key()).collect::<Vec<_>>();
+
+    assert_eq!(
+        keys,
+        vec![
+            "connector_permission:external_connector:mcp.memory.list",
+            "connector_permission:external_connector:mcp.memory.show"
+        ]
+    );
+    assert!(
+        storage
+            .delete_value(&first_scope, keys[0])
+            .expect("delete value")
+    );
+    assert!(
+        !storage
+            .delete_value(&first_scope, keys[0])
+            .expect("delete missing")
+    );
+    assert_eq!(
+        storage
+            .list_values(&first_scope, Some("connector_permission:"))
+            .expect("list after delete")
+            .len(),
+        1
+    );
+    assert!(
+        storage
+            .get_value(
+                &second_scope,
+                "connector_permission:external_connector:mcp.memory.list"
+            )
+            .expect("get other scope")
+            .is_some()
+    );
+}
+
+#[test]
 fn sqlite_persists_across_reopened_file_connections() {
     let path = temp_sqlite_path("reopen");
     let scope = StorageScope::workspace("workspace-1");

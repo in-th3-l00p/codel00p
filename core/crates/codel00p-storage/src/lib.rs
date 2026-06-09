@@ -251,6 +251,14 @@ pub trait KeyValueStore {
         scope: &StorageScope,
         key: &str,
     ) -> Result<Option<StorageValue>, StorageError>;
+
+    fn list_values(
+        &self,
+        scope: &StorageScope,
+        key_prefix: Option<&str>,
+    ) -> Result<Vec<StorageValue>, StorageError>;
+
+    fn delete_value(&mut self, scope: &StorageScope, key: &str) -> Result<bool, StorageError>;
 }
 
 pub trait AppendLogStore {
@@ -296,6 +304,32 @@ impl KeyValueStore for InMemoryStorage {
         key: &str,
     ) -> Result<Option<StorageValue>, StorageError> {
         Ok(self.values.get(&ValueKey::new(scope, key)).cloned())
+    }
+
+    fn list_values(
+        &self,
+        scope: &StorageScope,
+        key_prefix: Option<&str>,
+    ) -> Result<Vec<StorageValue>, StorageError> {
+        let mut values = self
+            .values
+            .iter()
+            .filter(|(key, _)| &key.scope == scope)
+            .filter(|(key, _)| {
+                key_prefix
+                    .map(|prefix| key.key.starts_with(prefix))
+                    .unwrap_or(true)
+            })
+            .map(|(_, value)| value.clone())
+            .collect::<Vec<_>>();
+
+        values.sort_by(|left, right| left.key().cmp(right.key()));
+
+        Ok(values)
+    }
+
+    fn delete_value(&mut self, scope: &StorageScope, key: &str) -> Result<bool, StorageError> {
+        Ok(self.values.remove(&ValueKey::new(scope, key)).is_some())
     }
 }
 

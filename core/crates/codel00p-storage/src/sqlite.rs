@@ -139,6 +139,102 @@ impl KeyValueStore for SqliteStorage {
         })
         .transpose()
     }
+
+    fn list_values(
+        &self,
+        scope: &StorageScope,
+        key_prefix: Option<&str>,
+    ) -> Result<Vec<StorageValue>, StorageError> {
+        let scope_key = scope_key(scope)?;
+        let mut values = Vec::new();
+
+        match key_prefix {
+            Some(prefix) => {
+                let mut statement = self
+                    .connection
+                    .prepare(
+                        "
+                        SELECT key, version, payload, metadata
+                        FROM storage_values
+                        WHERE scope = ?1 AND key LIKE ?2
+                        ORDER BY key ASC
+                        ",
+                    )
+                    .map_err(sqlite_error)?;
+                let rows = statement
+                    .query_map(params![scope_key, format!("{prefix}%")], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, u64>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ))
+                    })
+                    .map_err(sqlite_error)?;
+                for row in rows {
+                    let (key, version, payload, metadata) = row.map_err(sqlite_error)?;
+                    values.push(StorageValue {
+                        scope: scope.clone(),
+                        key,
+                        version,
+                        payload: serde_json::from_str(&payload)?,
+                        metadata: serde_json::from_str(&metadata)?,
+                    });
+                }
+            }
+            None => {
+                let mut statement = self
+                    .connection
+                    .prepare(
+                        "
+                        SELECT key, version, payload, metadata
+                        FROM storage_values
+                        WHERE scope = ?1
+                        ORDER BY key ASC
+                        ",
+                    )
+                    .map_err(sqlite_error)?;
+                let rows = statement
+                    .query_map(params![scope_key], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, u64>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ))
+                    })
+                    .map_err(sqlite_error)?;
+                for row in rows {
+                    let (key, version, payload, metadata) = row.map_err(sqlite_error)?;
+                    values.push(StorageValue {
+                        scope: scope.clone(),
+                        key,
+                        version,
+                        payload: serde_json::from_str(&payload)?,
+                        metadata: serde_json::from_str(&metadata)?,
+                    });
+                }
+            }
+        }
+
+        Ok(values)
+    }
+
+    fn delete_value(&mut self, scope: &StorageScope, key: &str) -> Result<bool, StorageError> {
+        let scope_key = scope_key(scope)?;
+        let deleted = self
+            .connection
+            .execute(
+                "
+                DELETE FROM storage_values
+                WHERE scope = ?1 AND key = ?2
+                ",
+                params![scope_key, key],
+            )
+            .map_err(sqlite_error)?;
+
+        Ok(deleted > 0)
+    }
 }
 
 impl DocumentStore for SqliteStorage {

@@ -341,6 +341,74 @@ fn key_value_versions_and_metadata_round_trip() {
 }
 
 #[test]
+fn key_values_can_be_listed_and_deleted_by_scope() {
+    let mut storage = InMemoryStorage::default();
+    let first_scope = StorageScope::project("org-1", "project-1");
+    let second_scope = StorageScope::project("org-1", "project-2");
+
+    storage
+        .put_value(StorageValue::new(
+            first_scope.clone(),
+            "connector_permission:external_connector:mcp.memory.list",
+            json!({ "status": "allow" }),
+        ))
+        .expect("put first value");
+    storage
+        .put_value(StorageValue::new(
+            first_scope.clone(),
+            "connector_permission:external_connector:mcp.memory.show",
+            json!({ "status": "deny" }),
+        ))
+        .expect("put second value");
+    storage
+        .put_value(StorageValue::new(
+            second_scope.clone(),
+            "connector_permission:external_connector:mcp.memory.list",
+            json!({ "status": "allow" }),
+        ))
+        .expect("put other scope value");
+
+    let values = storage
+        .list_values(&first_scope, Some("connector_permission:"))
+        .expect("list values");
+    let keys = values.iter().map(|value| value.key()).collect::<Vec<_>>();
+
+    assert_eq!(
+        keys,
+        vec![
+            "connector_permission:external_connector:mcp.memory.list",
+            "connector_permission:external_connector:mcp.memory.show"
+        ]
+    );
+    assert!(
+        storage
+            .delete_value(&first_scope, keys[0])
+            .expect("delete value")
+    );
+    assert!(
+        !storage
+            .delete_value(&first_scope, keys[0])
+            .expect("delete missing")
+    );
+    assert_eq!(
+        storage
+            .list_values(&first_scope, Some("connector_permission:"))
+            .expect("list after delete")
+            .len(),
+        1
+    );
+    assert!(
+        storage
+            .get_value(
+                &second_scope,
+                "connector_permission:external_connector:mcp.memory.list"
+            )
+            .expect("get other scope")
+            .is_some()
+    );
+}
+
+#[test]
 fn crate_identity_is_exposed() {
     assert_eq!(codel00p_storage::crate_name(), "codel00p-storage");
 }
