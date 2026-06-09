@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     ffi::{OsStr, OsString},
+    io::{BufRead, Write},
     path::PathBuf,
     process::Stdio,
     sync::Arc,
@@ -167,12 +168,25 @@ impl McpServerResponse {
     }
 }
 
+pub trait McpServerHandler {
+    fn handle_method(&mut self, method: &str, params: &Value) -> Result<McpServerResponse, String>;
+}
+
 #[derive(Default)]
 pub struct McpServerRuntime {
     resource_subscriptions: HashSet<String>,
 }
 
 impl McpServerRuntime {
+    pub fn handle_request_with_handler<H>(&mut self, request: Value, handler: &mut H) -> Vec<Value>
+    where
+        H: McpServerHandler,
+    {
+        self.handle_request(request, |method, params| {
+            handler.handle_method(method, params)
+        })
+    }
+
     pub fn handle_request<F>(&mut self, request: Value, dispatch: F) -> Vec<Value>
     where
         F: FnOnce(&str, &Value) -> Result<McpServerResponse, String>,
@@ -224,6 +238,48 @@ impl McpServerRuntime {
         self.resource_subscriptions.remove(uri);
         Ok(McpServerResponse::new(serde_json::json!({})))
     }
+}
+
+pub fn serve_stdio_server<R, W, H>(
+    reader: R,
+    mut writer: W,
+    handler: &mut H,
+) -> Result<(), McpError>
+where
+    R: BufRead,
+    W: Write,
+    H: McpServerHandler,
+{
+    let mut runtime = McpServerRuntime::default();
+    for line in reader.lines() {
+        let line = line.map_err(|error| McpError::StdioTransport {
+            server_id: "server".to_string(),
+            message: error.to_string(),
+        })?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let request: Value =
+            serde_json::from_str(&line).map_err(|error| McpError::InvalidStdioMessage {
+                message: format!("invalid json-rpc request: {error}"),
+            })?;
+        for response in runtime.handle_request_with_handler(request, handler) {
+            serde_json::to_writer(&mut writer, &response).map_err(|error| {
+                McpError::StdioTransport {
+                    server_id: "server".to_string(),
+                    message: error.to_string(),
+                }
+            })?;
+            writer
+                .write_all(b"\n")
+                .and_then(|_| writer.flush())
+                .map_err(|error| McpError::StdioTransport {
+                    server_id: "server".to_string(),
+                    message: error.to_string(),
+                })?;
+        }
+    }
+    Ok(())
 }
 
 fn required_param_string<'a>(params: &'a Value, key: &str) -> Result<&'a str, String> {

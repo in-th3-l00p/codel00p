@@ -1,6 +1,6 @@
-use std::io::{self, BufRead, Write};
+use std::io;
 
-use codel00p_mcp::{McpServerResponse, McpServerRuntime};
+use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
     MemoryCandidateInput, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
 };
@@ -90,28 +90,19 @@ fn permissions_forget(config: &CliConfig, args: &[String]) -> CliResult<String> 
 
 fn serve_stdio(config: CliConfig) -> CliResult<()> {
     let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    let mut runtime = McpServerRuntime::default();
-    for line in stdin.lock().lines() {
-        let line = line.map_err(|error| error.to_string())?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let request: Value = serde_json::from_str(&line)
-            .map_err(|error| format!("invalid json-rpc request: {error}"))?;
-        for response in runtime.handle_request(request, |method, params| {
-            dispatch_json_rpc(&config, method, params)
-        }) {
-            writeln!(
-                stdout,
-                "{}",
-                serde_json::to_string(&response).map_err(|error| error.to_string())?
-            )
-            .map_err(|error| error.to_string())?;
-            stdout.flush().map_err(|error| error.to_string())?;
-        }
+    let stdout = io::stdout();
+    let mut handler = Codel00pMcpServer { config };
+    serve_stdio_server(stdin.lock(), stdout, &mut handler).map_err(|error| error.to_string())
+}
+
+struct Codel00pMcpServer {
+    config: CliConfig,
+}
+
+impl McpServerHandler for Codel00pMcpServer {
+    fn handle_method(&mut self, method: &str, params: &Value) -> Result<McpServerResponse, String> {
+        dispatch_json_rpc(&self.config, method, params)
     }
-    Ok(())
 }
 
 fn dispatch_json_rpc(

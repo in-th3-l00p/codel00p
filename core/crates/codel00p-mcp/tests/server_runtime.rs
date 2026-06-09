@@ -1,4 +1,6 @@
-use codel00p_mcp::{McpServerResponse, McpServerRuntime};
+use std::io::Cursor;
+
+use codel00p_mcp::{McpServerHandler, McpServerResponse, McpServerRuntime, serve_stdio_server};
 use serde_json::json;
 
 #[test]
@@ -157,4 +159,76 @@ fn server_runtime_formats_dispatch_errors_and_ignores_notifications() {
     assert_eq!(errored[2]["id"], "request-1");
     assert_eq!(errored[2]["error"]["code"], -32000);
     assert_eq!(errored[2]["error"]["message"], "missing tool");
+}
+
+#[test]
+fn server_runtime_can_dispatch_through_a_typed_handler() {
+    let mut runtime = McpServerRuntime::default();
+    let mut handler = RecordingHandler::default();
+
+    let messages = runtime.handle_request_with_handler(
+        json!({
+            "jsonrpc": "2.0",
+            "id": "typed-1",
+            "method": "tools/list",
+            "params": {}
+        }),
+        &mut handler,
+    );
+
+    assert_eq!(handler.calls, vec!["tools/list"]);
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["id"], "typed-1");
+    assert_eq!(messages[0]["result"]["handled"], "tools/list");
+}
+
+#[test]
+fn stdio_server_runs_a_handler_until_eof_and_writes_newline_delimited_messages() {
+    let input = Cursor::new(
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"progressToken":"p1"},"name":"memory_list"}}
+"#,
+    );
+    let mut output = Vec::new();
+    let mut handler = RecordingHandler::default();
+
+    serve_stdio_server(input, &mut output, &mut handler).expect("stdio server should run");
+
+    let output = String::from_utf8(output).expect("stdio output should be utf-8");
+    let lines = output.lines().collect::<Vec<_>>();
+    assert_eq!(handler.calls, vec!["tools/list", "tools/call"]);
+    assert_eq!(lines.len(), 4);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines[0]).expect("json")["result"]["handled"],
+        "tools/list"
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines[1]).expect("json")["method"],
+        "notifications/progress"
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines[2]).expect("json")["method"],
+        "notifications/progress"
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines[3]).expect("json")["result"]["handled"],
+        "tools/call"
+    );
+}
+
+#[derive(Default)]
+struct RecordingHandler {
+    calls: Vec<String>,
+}
+
+impl McpServerHandler for RecordingHandler {
+    fn handle_method(
+        &mut self,
+        method: &str,
+        _params: &serde_json::Value,
+    ) -> Result<McpServerResponse, String> {
+        self.calls.push(method.to_string());
+        Ok(McpServerResponse::new(json!({ "handled": method })))
+    }
 }

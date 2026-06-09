@@ -14,6 +14,8 @@ This crate owns the contract between MCP servers and the agent harness:
 - `McpServerRuntime`: reusable server-side JSON-RPC response/error framing,
   progress notifications, resource subscriptions, and resource update
   notifications.
+- `McpServerHandler` and `serve_stdio_server`: typed server dispatch and
+  newline-delimited stdio serving for codel00p MCP servers.
 
 Harness tool names are prefixed as:
 
@@ -45,10 +47,12 @@ recording the negotiated server metadata, and then sending
 `notifications/initialized` before normal operation. Both map `tools/list`,
 `resources/list`, and `tools/call` into codel00p descriptors and outputs.
 
-The server runtime is deliberately transport-neutral. Callers provide the
-method dispatcher and the runtime handles protocol mechanics around the final
+The server runtime is deliberately transport-neutral. Callers provide a typed
+`McpServerHandler`, and the runtime handles protocol mechanics around the final
 result: ignored client notifications, JSON-RPC errors, optional progress
 notifications from `_meta.progressToken`, subscription bookkeeping for
 `resources/subscribe` and `resources/unsubscribe`, and
 `notifications/resources/updated` for subscribed resources changed by a
-successful operation.
+successful operation. `serve_stdio_server` wraps that runtime in a reusable
+newline-delimited stdio loop so product-specific servers only implement method
+dispatch.

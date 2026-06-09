@@ -140,6 +140,8 @@ Current implementation:
 - `codel00p-mcp` provides reusable server runtime helpers for JSON-RPC
   response/error framing, MCP progress notifications, resource subscriptions,
   and resource update notifications;
+- reusable typed MCP server handler traits and stdio server runner wiring let
+  future codel00p MCP servers be assembled without CLI-specific protocol loops;
 - the stdio MCP server exposes `codel00p://memory/{id}` and
   `codel00p://sessions/{session_id}` JSON resource templates for direct
   context browsing;
@@ -154,8 +156,8 @@ Current implementation:
 
 Remaining work:
 
-- add reusable typed server handler traits and stdio server runner wiring so
-  future codel00p MCP servers can be assembled without CLI-specific dispatch;
+- consume MCP progress and resource update notifications on the client side and
+  surface them as structured harness events;
 
 ### 7. Context Management
 
