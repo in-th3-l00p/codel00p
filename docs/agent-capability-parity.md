@@ -148,7 +148,8 @@ Current implementation:
 - stdio and HTTP MCP clients collect server progress/resource notifications
   and surface them as structured harness `ToolProgress` events;
 - stdio and HTTP MCP clients support resource templates, resource reads,
-  prompt discovery/materialization, and `logging/setLevel`;
+  prompt discovery/materialization, cursor pagination for list endpoints, and
+  `logging/setLevel`;
 - stdio clients answer server-originated `roots/list` requests with configured
   client roots;
 - stdio MCP clients can subscribe/unsubscribe resource URIs and poll later
@@ -176,7 +177,8 @@ Current implementation:
 Remaining hardening:
 
 - maintain a compatibility matrix against popular third-party MCP servers and
-  add regression fixtures for edge cases found there;
+  add regression fixtures for edge cases found there. The baseline matrix lives
+  in [MCP Compatibility](mcp-compatibility.md);
 
 ### 7. Context Management
 

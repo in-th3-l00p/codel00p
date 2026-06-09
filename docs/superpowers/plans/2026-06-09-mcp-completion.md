@@ -72,3 +72,25 @@
 - [x] Narrow remaining work to real-world compatibility matrix maintenance.
 - [x] Run full repository verification.
 - [x] Push completed commits to `main`.
+
+### Task 6: Cursor Pagination and Compatibility Matrix
+
+**Files:**
+- Modified: `core/crates/codel00p-mcp/src/lib.rs`
+- Modified: `core/crates/codel00p-mcp/tests/stdio_process_client.rs`
+- Modified: `core/crates/codel00p-mcp/tests/http_client.rs`
+- Created: `docs/mcp-compatibility.md`
+- Modified: `README.md`
+- Modified: `core/crates/codel00p-mcp/README.md`
+- Modified: `docs/agent-capability-parity.md`
+- Modified: `docs/architecture.md`
+- Modified: `docs/roadmap.md`
+
+- [x] Follow `nextCursor` pagination for stdio and HTTP `tools/list`.
+- [x] Follow `nextCursor` pagination for stdio and HTTP `resources/list`.
+- [x] Follow `nextCursor` pagination for stdio and HTTP `resources/templates/list`.
+- [x] Follow `nextCursor` pagination for stdio and HTTP `prompts/list`.
+- [x] Add regression coverage for paginated stdio list methods.
+- [x] Add regression coverage for paginated HTTP tool discovery.
+- [x] Document the supported MCP compatibility surface and fixture coverage.
+- [x] Document third-party certification targets and operational rules.

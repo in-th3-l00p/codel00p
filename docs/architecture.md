@@ -68,8 +68,9 @@ stdio and HTTP transports collect MCP progress/resource notifications before
 the final tool response and the MCP harness adapter emits them as structured
 `ToolProgress` events for CLI, desktop, cloud, and session replay consumers.
 Both client transports support tools, resources, resource templates, resource
-reads, prompt discovery, prompt materialization, logging-level control, and
-pre-response server notifications. Stdio clients can also answer
+reads, prompt discovery, prompt materialization, cursor pagination for
+list-style endpoints, logging-level control, and pre-response server
+notifications. Stdio clients can also answer
 server-originated `roots/list` requests for configured client roots. Long-lived
 stdio clients can subscribe to resource URIs and poll later resource/list-change
 notifications from the same server process. The reusable `McpNotificationWorker`

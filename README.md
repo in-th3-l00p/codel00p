@@ -66,6 +66,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Inference Providers](docs/providers.md)
 - [Agent Harness](docs/harness.md)
 - [Agent Capability Parity](docs/agent-capability-parity.md)
+- [MCP Compatibility](docs/mcp-compatibility.md)
 - [Project Memory](docs/memory.md)
 - [Memory Development Plan](docs/memory-development.md)
 - [Roadmap](docs/roadmap.md)
@@ -121,6 +122,9 @@ The first Rust modules have started:
   primitives for scoped key-value state, documents, and append logs.
 - [codel00p-session](core/crates/codel00p-session): durable session metadata and
   replay built on top of `codel00p-storage`.
+- [codel00p-mcp](core/crates/codel00p-mcp): MCP client/server runtime,
+  stdio/HTTP transports, tools, resources, prompts, subscriptions, diagnostics,
+  and harness event routing for external team tools.
 
 ## Current status
 
@@ -131,5 +135,5 @@ memory in future runs.
 
 The next production work is hardening the agent toward parity with serious code
 tools: session resume, project instructions, permissioned editing, shell
-execution, git workflows, MCP, streaming events, and then the desktop/cloud
-surfaces.
+execution, git workflows, streaming events, third-party MCP certification, and
+then the desktop/cloud surfaces.

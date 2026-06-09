@@ -70,7 +70,8 @@ recording the negotiated server metadata, and then sending
 `notifications/initialized` before normal operation. Both map `tools/list`,
 `resources/list`, `resources/templates/list`, `resources/read`, `prompts/list`,
 `prompts/get`, `logging/setLevel`, and `tools/call` into codel00p descriptors
-and outputs. Stdio clients can also answer server-originated `roots/list`
+and outputs. List-style methods follow `nextCursor` pagination until the server
+omits the cursor. Stdio clients can also answer server-originated `roots/list`
 requests with configured client roots.
 
 The server runtime is deliberately transport-neutral. Callers provide a typed
@@ -82,3 +83,6 @@ notifications from `_meta.progressToken`, subscription bookkeeping for
 successful operation. `serve_stdio_server` wraps that runtime in a reusable
 newline-delimited stdio loop so product-specific servers only implement method
 dispatch.
+
+See [MCP Compatibility](../../../docs/mcp-compatibility.md) for the supported
+surface, fixture coverage, and live third-party certification targets.

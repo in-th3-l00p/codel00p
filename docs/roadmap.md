@@ -73,10 +73,10 @@ Work:
 - add git inspection, diff review, commit, and PR preparation workflows;
 - add MCP support for external team tools: stdio/HTTP client transports, tools,
   resources, resource templates, prompts, logging controls, roots handling,
-  reconnecting subscriptions, CLI workspace config, redacted diagnostics,
-  remembered connector decisions, and codel00p MCP server mode are in place;
-  the next hardening pass is a compatibility matrix against common third-party
-  MCP servers;
+  cursor pagination, reconnecting subscriptions, CLI workspace config,
+  redacted diagnostics, remembered connector decisions, and codel00p MCP server
+  mode are in place; ongoing hardening is live certification against common
+  third-party MCP servers;
 - add context compaction and session summaries;
 - stream events for interactive clients.
 
