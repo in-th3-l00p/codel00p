@@ -5,7 +5,8 @@ use std::{
 };
 
 use codel00p_mcp::{
-    McpClientNotification, McpNotificationWorker, McpStdioClient, McpToolCall, StdioServerCommand,
+    McpClientNotification, McpNotificationWorker, McpPromptMessage, McpStdioClient, McpToolCall,
+    StdioServerCommand,
 };
 use serde_json::json;
 use tokio::sync::Mutex;
@@ -84,6 +85,39 @@ async fn stdio_client_lists_and_calls_mcp_tools() {
 }
 
 #[tokio::test]
+async fn stdio_client_lists_and_gets_mcp_prompts() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read list; case "$list" in *'"method":"prompts/list"'*) ;; *) exit 11;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"prompts":[{"name":"review_pr","description":"Review a pull request.","arguments":[{"name":"diff","description":"Unified diff","required":true}]}]}}'; read get; case "$get" in *'"method":"prompts/get"'*) ;; *) exit 12;; esac; case "$get" in *'"name":"review_pr"'*) ;; *) exit 13;; esac; case "$get" in *'"diff":"patch"'*) ;; *) exit 14;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"description":"Review a pull request.","messages":[{"role":"user","content":{"type":"text","text":"Review this patch."}}]}}'"#,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let prompts = client.list_prompts().await.expect("list prompts");
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(prompts[0].server_id(), "fake");
+    assert_eq!(prompts[0].name(), "review_pr");
+    assert_eq!(prompts[0].description(), Some("Review a pull request."));
+    assert_eq!(prompts[0].arguments()[0].name(), "diff");
+    assert!(prompts[0].arguments()[0].required());
+
+    let prompt = client
+        .get_prompt("review_pr", json!({ "diff": "patch" }))
+        .await
+        .expect("get prompt");
+    assert_eq!(prompt.description(), Some("Review a pull request."));
+    assert_eq!(
+        prompt.messages(),
+        &[McpPromptMessage::text("user", "Review this patch.")]
+    );
+}
+
+#[tokio::test]
 async fn stdio_client_collects_notifications_before_tool_response() {
     let command = StdioServerCommand::new(
         "fake",
@@ -110,6 +144,58 @@ async fn stdio_client_collects_notifications_before_tool_response() {
             McpClientNotification::resource_updated("codel00p://memory/mem-1")
         ]
     );
+}
+
+#[tokio::test]
+async fn stdio_client_maps_logging_and_prompt_change_notifications() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read line; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"warning","logger":"fake","data":{"message":"check auth"}}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/prompts/list_changed","params":{}}'; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}],"isError":false}}'"#,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let output = client
+        .call_tool(McpToolCall::new("fake", "echo", json!({})))
+        .await
+        .expect("call tool");
+
+    assert_eq!(
+        output.notifications(),
+        &[
+            McpClientNotification::log_message(
+                "warning",
+                Some("fake"),
+                json!({ "message": "check auth" })
+            ),
+            McpClientNotification::prompts_list_changed(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn stdio_client_answers_roots_list_requests_during_tool_discovery() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read list; printf '%s\n' '{"jsonrpc":"2.0","id":"roots-1","method":"roots/list","params":{}}'; read roots; case "$roots" in *'"id":"roots-1"'*) ;; *) exit 21;; esac; case "$roots" in *'"roots"'*) ;; *) exit 22;; esac; case "$roots" in *'"file:///workspace"'*) ;; *) exit 23;; esac; case "$roots" in *'"workspace"'*) ;; *) exit 24;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}'"#,
+        ],
+    )
+    .with_root("file:///workspace", Some("workspace"));
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let tools = client.list_tools().await.expect("list tools");
+
+    assert!(tools.is_empty());
 }
 
 #[tokio::test]

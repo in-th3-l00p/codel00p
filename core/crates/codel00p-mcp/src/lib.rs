@@ -394,12 +394,37 @@ impl McpInitialization {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpClientRoot {
+    uri: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+}
+
+impl McpClientRoot {
+    pub fn new(uri: impl Into<String>, name: Option<impl Into<String>>) -> Self {
+        Self {
+            uri: uri.into(),
+            name: name.map(Into::into),
+        }
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StdioServerCommand {
     server_id: String,
     program: PathBuf,
     args: Vec<OsString>,
     env: Vec<(OsString, OsString)>,
+    roots: Vec<McpClientRoot>,
     request_timeout: Duration,
     shutdown_timeout: Duration,
 }
@@ -418,6 +443,7 @@ impl StdioServerCommand {
                 .map(|arg| arg.as_ref().to_os_string())
                 .collect(),
             env: Vec::new(),
+            roots: Vec::new(),
             request_timeout: Duration::from_secs(30),
             shutdown_timeout: Duration::from_secs(5),
         }
@@ -430,6 +456,11 @@ impl StdioServerCommand {
     pub fn with_env(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
         self.env
             .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
+        self
+    }
+
+    pub fn with_root(mut self, uri: impl Into<String>, name: Option<impl Into<String>>) -> Self {
+        self.roots.push(McpClientRoot::new(uri, name));
         self
     }
 
@@ -464,6 +495,7 @@ pub struct McpStdioClient {
     stdout: BufReader<ChildStdout>,
     next_request_id: u64,
     initialized: Option<McpInitialization>,
+    roots: Vec<McpClientRoot>,
     request_timeout: Duration,
     shutdown_timeout: Duration,
 }
@@ -539,6 +571,13 @@ pub enum McpClientNotification {
     },
     ToolsListChanged,
     ResourcesListChanged,
+    PromptsListChanged,
+    LogMessage {
+        level: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        logger: Option<String>,
+        data: Value,
+    },
     Other {
         method: String,
         params: Value,
@@ -570,6 +609,22 @@ impl McpClientNotification {
 
     pub fn resources_list_changed() -> Self {
         Self::ResourcesListChanged
+    }
+
+    pub fn prompts_list_changed() -> Self {
+        Self::PromptsListChanged
+    }
+
+    pub fn log_message(
+        level: impl Into<String>,
+        logger: Option<impl Into<String>>,
+        data: Value,
+    ) -> Self {
+        Self::LogMessage {
+            level: level.into(),
+            logger: logger.map(Into::into),
+            data,
+        }
     }
 }
 
@@ -622,6 +677,19 @@ impl Drop for McpNotificationWorker {
     }
 }
 
+fn client_capabilities(roots: &[McpClientRoot]) -> Value {
+    let mut capabilities = serde_json::Map::new();
+    if !roots.is_empty() {
+        capabilities.insert(
+            "roots".to_string(),
+            serde_json::json!({
+                "listChanged": false
+            }),
+        );
+    }
+    Value::Object(capabilities)
+}
+
 impl McpHttpClient {
     pub fn connect(endpoint: HttpServerEndpoint) -> Result<Self, McpError> {
         let client = reqwest::Client::builder()
@@ -649,7 +717,7 @@ impl McpHttpClient {
                 "initialize",
                 serde_json::json!({
                     "protocolVersion": "2025-06-18",
-                    "capabilities": {},
+                    "capabilities": client_capabilities(&[]),
                     "clientInfo": {
                         "name": "codel00p",
                         "title": "codel00p",
@@ -820,6 +888,38 @@ impl McpHttpClient {
         })
     }
 
+    pub async fn list_prompts(&mut self) -> Result<Vec<McpPromptDescriptor>, McpError> {
+        let response = self
+            .request("prompts/list", Value::Object(Default::default()))
+            .await?;
+        parse_prompt_descriptors(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })
+    }
+
+    pub async fn get_prompt(
+        &mut self,
+        name: impl Into<String>,
+        arguments: Value,
+    ) -> Result<McpPromptOutput, McpError> {
+        let response = self
+            .request(
+                "prompts/get",
+                serde_json::json!({
+                    "name": name.into(),
+                    "arguments": arguments
+                }),
+            )
+            .await?;
+        parse_prompt_output(response, |message| McpError::HttpTransport {
+            server_id: self.server_id.clone(),
+            message,
+        })
+    }
+
     pub async fn call_tool(&mut self, call: McpToolCall) -> Result<McpToolOutput, McpError> {
         if call.server_id() != self.server_id {
             return Err(McpError::Tool {
@@ -979,6 +1079,85 @@ where
         .collect()
 }
 
+fn parse_prompt_descriptors<F>(
+    server_id: &str,
+    response: Value,
+    error: F,
+) -> Result<Vec<McpPromptDescriptor>, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let prompts = response
+        .get("prompts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("prompts/list response omitted prompts array".to_string()))?;
+
+    prompts
+        .iter()
+        .map(|prompt| {
+            let name = prompt
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("prompt descriptor omitted name".to_string()))?;
+            let description = prompt.get("description").and_then(Value::as_str);
+            let arguments = prompt
+                .get("arguments")
+                .and_then(Value::as_array)
+                .map(|arguments| {
+                    arguments
+                        .iter()
+                        .map(|argument| {
+                            let name =
+                                argument.get("name").and_then(Value::as_str).ok_or_else(|| {
+                                    error("prompt argument omitted name".to_string())
+                                })?;
+                            let description = argument.get("description").and_then(Value::as_str);
+                            let required = argument
+                                .get("required")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false);
+                            Ok(McpPromptArgument::new(name, description, required))
+                        })
+                        .collect::<Result<Vec<_>, McpError>>()
+                })
+                .transpose()?
+                .unwrap_or_default();
+            Ok(McpPromptDescriptor::new(
+                server_id.to_string(),
+                name,
+                description,
+                arguments,
+            ))
+        })
+        .collect()
+}
+
+fn parse_prompt_output<F>(response: Value, error: F) -> Result<McpPromptOutput, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let description = response.get("description").and_then(Value::as_str);
+    let messages = response
+        .get("messages")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("prompts/get response omitted messages array".to_string()))?;
+    let messages = messages
+        .iter()
+        .map(|message| {
+            let role = message
+                .get("role")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("prompt message omitted role".to_string()))?;
+            let content = message
+                .get("content")
+                .cloned()
+                .ok_or_else(|| error("prompt message omitted content".to_string()))?;
+            Ok(McpPromptMessage::new(role, content))
+        })
+        .collect::<Result<Vec<_>, McpError>>()?;
+    Ok(McpPromptOutput::new(description, messages))
+}
+
 fn decode_sse_json_rpc_messages(body: &str) -> Result<Vec<Value>, String> {
     let mut messages = Vec::new();
     let mut data = String::new();
@@ -1079,6 +1258,22 @@ fn client_notification_from_json_rpc(notification: JsonRpcNotification) -> McpCl
         }
         "notifications/tools/list_changed" => McpClientNotification::tools_list_changed(),
         "notifications/resources/list_changed" => McpClientNotification::resources_list_changed(),
+        "notifications/prompts/list_changed" => McpClientNotification::prompts_list_changed(),
+        "notifications/message" => {
+            let params = notification.params();
+            if let Some(level) = params.get("level").and_then(Value::as_str) {
+                McpClientNotification::log_message(
+                    level,
+                    params.get("logger").and_then(Value::as_str),
+                    params.get("data").cloned().unwrap_or(Value::Null),
+                )
+            } else {
+                McpClientNotification::Other {
+                    method: notification.method().to_string(),
+                    params: notification.params().clone(),
+                }
+            }
+        }
         method => McpClientNotification::Other {
             method: method.to_string(),
             params: notification.params().clone(),
@@ -1118,6 +1313,7 @@ impl McpStdioClient {
             stdout: BufReader::new(stdout),
             next_request_id: 1,
             initialized: None,
+            roots: command.roots,
             request_timeout: command.request_timeout,
             shutdown_timeout: command.shutdown_timeout,
         })
@@ -1129,7 +1325,7 @@ impl McpStdioClient {
                 "initialize",
                 serde_json::json!({
                     "protocolVersion": "2025-06-18",
-                    "capabilities": {},
+                    "capabilities": client_capabilities(&self.roots),
                     "clientInfo": {
                         "name": "codel00p",
                         "title": "codel00p",
@@ -1183,31 +1379,7 @@ impl McpStdioClient {
         let request_id = self.next_request_id;
         self.next_request_id += 1;
         let request = JsonRpcMessage::request(JsonRpcRequest::new(request_id, method, params));
-        let encoded = encode_stdio_message(&request)?;
-        let server_id = self.server_id.clone();
-        let stdin = self
-            .stdin
-            .as_mut()
-            .ok_or_else(|| McpError::StdioTransport {
-                server_id,
-                message: "server stdin is closed".to_string(),
-            })?;
-        stdin
-            .write_all(encoded.as_bytes())
-            .await
-            .map_err(|error| self.stdio_error(format!("failed to write request: {error}")))?;
-        let server_id = self.server_id.clone();
-        let stdin = self
-            .stdin
-            .as_mut()
-            .ok_or_else(|| McpError::StdioTransport {
-                server_id,
-                message: "server stdin is closed".to_string(),
-            })?;
-        stdin
-            .flush()
-            .await
-            .map_err(|error| self.stdio_error(format!("failed to flush request: {error}")))?;
+        self.write_message(&request).await?;
 
         let mut notifications = Vec::new();
         loop {
@@ -1252,8 +1424,8 @@ impl McpStdioClient {
                 JsonRpcMessage::Notification(notification) => {
                     notifications.push(client_notification_from_json_rpc(notification));
                 }
-                JsonRpcMessage::Request(_) => {
-                    return Err(self.stdio_error("server returned a non-response message"));
+                JsonRpcMessage::Request(request) => {
+                    self.respond_to_server_request(request).await?;
                 }
             }
         }
@@ -1305,9 +1477,11 @@ impl McpStdioClient {
                 JsonRpcMessage::Notification(notification) => {
                     Ok(client_notification_from_json_rpc(notification))
                 }
-                JsonRpcMessage::Response(_)
-                | JsonRpcMessage::Raw(_)
-                | JsonRpcMessage::Request(_) => {
+                JsonRpcMessage::Request(request) => {
+                    self.respond_to_server_request(request).await?;
+                    continue;
+                }
+                JsonRpcMessage::Response(_) | JsonRpcMessage::Raw(_) => {
                     Err(self.stdio_error("server returned a non-notification message"))
                 }
             };
@@ -1345,6 +1519,61 @@ impl McpStdioClient {
             .flush()
             .await
             .map_err(|error| self.stdio_error(format!("failed to flush notification: {error}")))?;
+        Ok(())
+    }
+
+    async fn respond_to_server_request(
+        &mut self,
+        request: JsonRpcRequest,
+    ) -> Result<(), McpError> {
+        let response = match request.method() {
+            "roots/list" => JsonRpcMessage::Response(JsonRpcResponse {
+                jsonrpc: "2.0".to_string(),
+                id: request.id.clone(),
+                result: Some(serde_json::json!({
+                    "roots": self.roots.clone()
+                })),
+                error: None,
+            }),
+            method => JsonRpcMessage::Response(JsonRpcResponse {
+                jsonrpc: "2.0".to_string(),
+                id: request.id.clone(),
+                result: None,
+                error: Some(serde_json::json!({
+                    "code": -32601,
+                    "message": format!("client request method is not supported: {method}")
+                })),
+            }),
+        };
+        self.write_message(&response).await
+    }
+
+    async fn write_message(&mut self, message: &JsonRpcMessage) -> Result<(), McpError> {
+        let encoded = encode_stdio_message(message)?;
+        let server_id = self.server_id.clone();
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id,
+                message: "server stdin is closed".to_string(),
+            })?;
+        stdin
+            .write_all(encoded.as_bytes())
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to write message: {error}")))?;
+        let server_id = self.server_id.clone();
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id,
+                message: "server stdin is closed".to_string(),
+            })?;
+        stdin
+            .flush()
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to flush message: {error}")))?;
         Ok(())
     }
 
@@ -1435,6 +1664,30 @@ impl McpStdioClient {
                 ))
             })
             .collect()
+    }
+
+    pub async fn list_prompts(&mut self) -> Result<Vec<McpPromptDescriptor>, McpError> {
+        let response = self
+            .request("prompts/list", Value::Object(Default::default()))
+            .await?;
+        parse_prompt_descriptors(&self.server_id, response, |message| self.stdio_error(message))
+    }
+
+    pub async fn get_prompt(
+        &mut self,
+        name: impl Into<String>,
+        arguments: Value,
+    ) -> Result<McpPromptOutput, McpError> {
+        let response = self
+            .request(
+                "prompts/get",
+                serde_json::json!({
+                    "name": name.into(),
+                    "arguments": arguments
+                }),
+            )
+            .await?;
+        parse_prompt_output(response, |message| self.stdio_error(message))
     }
 
     pub async fn call_tool(&mut self, call: McpToolCall) -> Result<McpToolOutput, McpError> {
@@ -1569,6 +1822,138 @@ impl McpResourceDescriptor {
 
     pub fn mime_type(&self) -> Option<&str> {
         self.mime_type.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpPromptArgument {
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    required: bool,
+}
+
+impl McpPromptArgument {
+    pub fn new(
+        name: impl Into<String>,
+        description: Option<impl Into<String>>,
+        required: bool,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.map(Into::into),
+            required,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    pub fn required(&self) -> bool {
+        self.required
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpPromptDescriptor {
+    server_id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    arguments: Vec<McpPromptArgument>,
+}
+
+impl McpPromptDescriptor {
+    pub fn new(
+        server_id: impl Into<String>,
+        name: impl Into<String>,
+        description: Option<impl Into<String>>,
+        arguments: Vec<McpPromptArgument>,
+    ) -> Self {
+        Self {
+            server_id: server_id.into(),
+            name: name.into(),
+            description: description.map(Into::into),
+            arguments,
+        }
+    }
+
+    pub fn server_id(&self) -> &str {
+        &self.server_id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    pub fn arguments(&self) -> &[McpPromptArgument] {
+        &self.arguments
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct McpPromptMessage {
+    role: String,
+    content: Value,
+}
+
+impl McpPromptMessage {
+    pub fn new(role: impl Into<String>, content: Value) -> Self {
+        Self {
+            role: role.into(),
+            content,
+        }
+    }
+
+    pub fn text(role: impl Into<String>, text: impl Into<String>) -> Self {
+        Self::new(
+            role,
+            serde_json::json!({
+                "type": "text",
+                "text": text.into()
+            }),
+        )
+    }
+
+    pub fn role(&self) -> &str {
+        &self.role
+    }
+
+    pub fn content(&self) -> &Value {
+        &self.content
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct McpPromptOutput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    messages: Vec<McpPromptMessage>,
+}
+
+impl McpPromptOutput {
+    pub fn new(description: Option<impl Into<String>>, messages: Vec<McpPromptMessage>) -> Self {
+        Self {
+            description: description.map(Into::into),
+            messages,
+        }
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    pub fn messages(&self) -> &[McpPromptMessage] {
+        &self.messages
     }
 }
 
@@ -1768,6 +2153,12 @@ impl Tool for McpTool {
                 }
                 McpClientNotification::ResourcesListChanged => {
                     result = result.with_progress("mcp_resources_list_changed", None::<&str>);
+                }
+                McpClientNotification::PromptsListChanged => {
+                    result = result.with_progress("mcp_prompts_list_changed", None::<&str>);
+                }
+                McpClientNotification::LogMessage { level, .. } => {
+                    result = result.with_progress("mcp_log_message", Some(level.as_str()));
                 }
                 McpClientNotification::Other { method, .. } => {
                     result = result.with_progress("mcp_notification", Some(method.as_str()));
