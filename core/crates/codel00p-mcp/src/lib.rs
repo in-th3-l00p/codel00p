@@ -1,10 +1,19 @@
-use std::sync::Arc;
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+    process::Stdio,
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use codel00p_harness::{HarnessError, Tool, ToolRegistry, ToolResult, Workspace};
 use codel00p_protocol::PermissionScope;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
+    process::{Child, ChildStdin, ChildStdout, Command},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum McpError {
@@ -20,6 +29,9 @@ pub enum McpError {
 
     #[error("invalid stdio transport message: {message}")]
     InvalidStdioMessage { message: String },
+
+    #[error("mcp stdio transport failed for {server_id}: {message}")]
+    StdioTransport { server_id: String, message: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -69,15 +81,258 @@ impl JsonRpcRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct JsonRpcResponse {
+    jsonrpc: String,
+    id: JsonRpcId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<Value>,
+}
+
+impl JsonRpcResponse {
+    pub fn result(&self) -> Option<&Value> {
+        self.result.as_ref()
+    }
+
+    pub fn error(&self) -> Option<&Value> {
+        self.error.as_ref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JsonRpcMessage {
     Request(JsonRpcRequest),
+    Response(JsonRpcResponse),
     Raw(Value),
 }
 
 impl JsonRpcMessage {
     pub fn request(request: JsonRpcRequest) -> Self {
         Self::Request(request)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StdioServerCommand {
+    server_id: String,
+    program: PathBuf,
+    args: Vec<OsString>,
+    env: Vec<(OsString, OsString)>,
+}
+
+impl StdioServerCommand {
+    pub fn new<I, S>(server_id: impl Into<String>, program: impl Into<PathBuf>, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        Self {
+            server_id: server_id.into(),
+            program: program.into(),
+            args: args
+                .into_iter()
+                .map(|arg| arg.as_ref().to_os_string())
+                .collect(),
+            env: Vec::new(),
+        }
+    }
+
+    pub fn server_id(&self) -> &str {
+        &self.server_id
+    }
+
+    pub fn with_env(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
+        self.env
+            .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
+        self
+    }
+}
+
+pub struct McpStdioClient {
+    server_id: String,
+    child: Child,
+    stdin: BufWriter<ChildStdin>,
+    stdout: BufReader<ChildStdout>,
+    next_request_id: u64,
+}
+
+impl McpStdioClient {
+    pub async fn spawn(command: StdioServerCommand) -> Result<Self, McpError> {
+        let mut child = Command::new(&command.program)
+            .args(&command.args)
+            .envs(command.env)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| McpError::StdioTransport {
+                server_id: command.server_id.clone(),
+                message: format!("failed to spawn server: {error}"),
+            })?;
+        let stdin = child.stdin.take().ok_or_else(|| McpError::StdioTransport {
+            server_id: command.server_id.clone(),
+            message: "server stdin was not available".to_string(),
+        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| McpError::StdioTransport {
+                server_id: command.server_id.clone(),
+                message: "server stdout was not available".to_string(),
+            })?;
+
+        Ok(Self {
+            server_id: command.server_id,
+            child,
+            stdin: BufWriter::new(stdin),
+            stdout: BufReader::new(stdout),
+            next_request_id: 1,
+        })
+    }
+
+    pub async fn request(
+        &mut self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<Value, McpError> {
+        let request_id = self.next_request_id;
+        self.next_request_id += 1;
+        let request = JsonRpcMessage::request(JsonRpcRequest::new(request_id, method, params));
+        let encoded = encode_stdio_message(&request)?;
+        self.stdin
+            .write_all(encoded.as_bytes())
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to write request: {error}")))?;
+        self.stdin
+            .flush()
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to flush request: {error}")))?;
+
+        let mut line = String::new();
+        let bytes = self
+            .stdout
+            .read_line(&mut line)
+            .await
+            .map_err(|error| self.stdio_error(format!("failed to read response: {error}")))?;
+        if bytes == 0 {
+            return Err(self.stdio_error("server closed stdout before responding"));
+        }
+
+        match decode_stdio_message(&line)? {
+            JsonRpcMessage::Response(response) => {
+                if let Some(error) = response.error() {
+                    return Err(self.stdio_error(format!("json-rpc error response: {error}")));
+                }
+                response
+                    .result()
+                    .cloned()
+                    .ok_or_else(|| self.stdio_error("json-rpc response omitted result"))
+            }
+            JsonRpcMessage::Raw(value) => value
+                .get("result")
+                .cloned()
+                .ok_or_else(|| self.stdio_error("json-rpc response omitted result")),
+            JsonRpcMessage::Request(_) => Err(self.stdio_error("server returned a request")),
+        }
+    }
+
+    fn stdio_error(&self, message: impl Into<String>) -> McpError {
+        McpError::StdioTransport {
+            server_id: self.server_id.clone(),
+            message: message.into(),
+        }
+    }
+
+    pub async fn list_tools(&mut self) -> Result<Vec<McpToolDescriptor>, McpError> {
+        let response = self
+            .request("tools/list", Value::Object(Default::default()))
+            .await?;
+        let tools = response
+            .get("tools")
+            .and_then(Value::as_array)
+            .ok_or_else(|| self.stdio_error("tools/list response omitted tools array"))?;
+
+        tools
+            .iter()
+            .map(|tool| {
+                let name = tool
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| self.stdio_error("tool descriptor omitted name"))?;
+                let description = tool
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or("MCP tool.");
+                let input_schema = tool
+                    .get("inputSchema")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({ "type": "object" }));
+                Ok(McpToolDescriptor::new(
+                    self.server_id.clone(),
+                    name,
+                    description,
+                    input_schema,
+                ))
+            })
+            .collect()
+    }
+
+    pub async fn list_resources(&mut self) -> Result<Vec<McpResourceDescriptor>, McpError> {
+        let response = self
+            .request("resources/list", Value::Object(Default::default()))
+            .await?;
+        let resources = response
+            .get("resources")
+            .and_then(Value::as_array)
+            .ok_or_else(|| self.stdio_error("resources/list response omitted resources array"))?;
+
+        resources
+            .iter()
+            .map(|resource| {
+                let uri = resource
+                    .get("uri")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| self.stdio_error("resource descriptor omitted uri"))?;
+                let name = resource.get("name").and_then(Value::as_str).unwrap_or(uri);
+                let mime_type = resource.get("mimeType").and_then(Value::as_str);
+                Ok(McpResourceDescriptor::new(
+                    self.server_id.clone(),
+                    uri,
+                    name,
+                    mime_type,
+                ))
+            })
+            .collect()
+    }
+
+    pub async fn call_tool(&mut self, call: McpToolCall) -> Result<McpToolOutput, McpError> {
+        if call.server_id() != self.server_id {
+            return Err(McpError::Tool {
+                server_id: call.server_id().to_string(),
+                tool_name: call.tool_name().to_string(),
+                message: format!("stdio client is connected to `{}`", self.server_id),
+            });
+        }
+
+        let response = self
+            .request(
+                "tools/call",
+                serde_json::json!({
+                    "name": call.tool_name(),
+                    "arguments": call.input(),
+                }),
+            )
+            .await?;
+
+        Ok(McpToolOutput::json(response))
+    }
+}
+
+impl Drop for McpStdioClient {
+    fn drop(&mut self) {
+        let _ = self.child.start_kill();
     }
 }
 
