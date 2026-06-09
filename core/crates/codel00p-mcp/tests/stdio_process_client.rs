@@ -5,7 +5,8 @@ use std::{
 };
 
 use codel00p_mcp::{
-    McpClientNotification, McpNotificationWorker, McpPromptMessage, McpStdioClient, McpToolCall,
+    McpClientNotification, McpNotificationWorker, McpPromptMessage, McpReconnectPolicy,
+    McpStdioClient, McpStdioNotificationSupervisor, McpSubscriptionEvent, McpToolCall,
     StdioServerCommand,
 };
 use serde_json::json;
@@ -287,6 +288,120 @@ async fn notification_worker_reports_subscription_failures() {
         .expect_err("subscription should fail");
 
     assert!(error.to_string().contains("subscription denied"));
+}
+
+#[tokio::test]
+async fn notification_supervisor_reconnects_stdio_servers_and_resubscribes() {
+    let dir = std::env::temp_dir().join(format!(
+        "codel00p-mcp-reconnect-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&dir).expect("create temp dir");
+    let attempt_path = dir.join("attempt");
+    let script = dir.join("server.sh");
+    fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+attempt_file={}
+attempt=0
+if [ -f "$attempt_file" ]; then
+  attempt=$(cat "$attempt_file")
+fi
+attempt=$((attempt + 1))
+printf '%s' "$attempt" > "$attempt_file"
+read init
+printf '%s\n' '{{"jsonrpc":"2.0","id":1,"result":{{"protocolVersion":"2025-06-18","capabilities":{{"resources":{{"subscribe":true}}}},"serverInfo":{{"name":"fake","version":"1"}}}}}}'
+read initialized
+read subscribe
+printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{}}}}'
+if [ "$attempt" = "1" ]; then
+  printf '%s\n' '{{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{{"uri":"codel00p://memory/first"}}}}'
+  exit 0
+fi
+printf '%s\n' '{{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{{"uri":"codel00p://memory/second"}}}}'
+sleep 1
+"#,
+            attempt_path.display()
+        ),
+    )
+    .expect("write fake server");
+    let command = StdioServerCommand::new("fake", "/bin/sh", [script.to_string_lossy().as_ref()])
+        .with_request_timeout(Duration::from_millis(500));
+    let policy = McpReconnectPolicy::new(2, Duration::from_millis(0));
+    let mut supervisor = McpStdioNotificationSupervisor::spawn(
+        command,
+        ["codel00p://memory/shared".to_string()],
+        policy,
+    );
+
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("connected")
+            .expect("connected event"),
+        McpSubscriptionEvent::connected("fake", 1)
+    );
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("subscribed")
+            .expect("subscribed event"),
+        McpSubscriptionEvent::subscribed("codel00p://memory/shared")
+    );
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("first notification")
+            .expect("first notification event"),
+        McpSubscriptionEvent::notification(McpClientNotification::resource_updated(
+            "codel00p://memory/first"
+        ))
+    );
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("reconnecting")
+            .expect("reconnecting event"),
+        McpSubscriptionEvent::reconnecting(
+            "fake",
+            2,
+            "mcp stdio transport failed for fake: server closed stdout before notification"
+        )
+    );
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("connected again")
+            .expect("connected again event"),
+        McpSubscriptionEvent::connected("fake", 2)
+    );
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("resubscribed")
+            .expect("resubscribed event"),
+        McpSubscriptionEvent::subscribed("codel00p://memory/shared")
+    );
+    assert_eq!(
+        supervisor
+            .recv()
+            .await
+            .expect("second notification")
+            .expect("second notification event"),
+        McpSubscriptionEvent::notification(McpClientNotification::resource_updated(
+            "codel00p://memory/second"
+        ))
+    );
 }
 
 #[tokio::test]
