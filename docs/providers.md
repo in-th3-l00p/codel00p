@@ -292,13 +292,16 @@ Implemented:
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - Anthropic Messages transport with mocked HTTP tests, including native system
   prompts, tool schemas, `tool_use` responses, tool-result replay, stop
-  reasons, and cache usage metadata.
+  reasons, and cache usage metadata;
+- OpenAI Responses transport with mocked HTTP tests, including stateless
+  requests, system/developer/user messages, function tools, function-call
+  replay, text/tool-call normalization, provider replay data, and usage
+  metadata.
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
 Next transports:
 
-- OpenAI Responses;
 - AWS Bedrock Converse;
 - Gemini native.
 

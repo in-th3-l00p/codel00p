@@ -13,6 +13,8 @@ fn with_env_lock(test: impl FnOnce()) {
         "GH_TOKEN",
         "GITHUB_TOKEN",
         "CODEL00P_PROVIDER_OPENROUTER_API_KEY",
+        "CODEL00P_PROVIDER_OPENAI_API_KEY",
+        "OPENAI_API_KEY",
         "CODEL00P_PROVIDER_ANTHROPIC_API_KEY",
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_TOKEN",
@@ -102,6 +104,24 @@ fn anthropic_credential_prefers_codel00p_specific_variable() {
 
         assert_eq!(
             config.credential("anthropic"),
+            Some(Credential::api_key("preferred"))
+        );
+    });
+}
+
+#[test]
+fn openai_credential_prefers_codel00p_specific_variable() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_OPENAI_API_KEY", "preferred");
+            std::env::set_var("OPENAI_API_KEY", "fallback");
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(
+            config.credential("openai"),
             Some(Credential::api_key("preferred"))
         );
     });

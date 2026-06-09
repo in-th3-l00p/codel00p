@@ -42,20 +42,20 @@ Implemented:
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport;
 - Anthropic Messages transport;
+- OpenAI Responses transport;
 - normalized responses, usage, and tool calls;
 - mocked integration tests for request payloads and response parsing.
 
 Not yet implemented:
 
-- OpenAI Responses transport;
 - AWS Bedrock Converse transport;
 - Gemini-native transport;
 - environment/cloud credential resolvers;
 - streaming.
 
-The current working transports are enough to use Anthropic directly, custom
-OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints when a base URL
-is supplied, and other compatible gateways.
+The current working transports are enough to use OpenAI Responses, Anthropic
+directly, custom OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints
+when a base URL is supplied, and other compatible gateways.
 
 ## Design rules
 
@@ -88,6 +88,11 @@ CODEL00P_INTEGRATION_TESTS=1 \
 CODEL00P_PROVIDER_ANTHROPIC_API_KEY=... \
 CODEL00P_PROVIDER_ANTHROPIC_MODEL=claude-3-5-haiku-20241022 \
 cargo test -p codel00p-providers --test live_anthropic -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_OPENAI_API_KEY=... \
+CODEL00P_PROVIDER_OPENAI_MODEL=gpt-5-mini \
+cargo test -p codel00p-providers --test live_openai -- --ignored --nocapture
 ```
 
 Credential environment variables:
