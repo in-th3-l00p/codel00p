@@ -160,3 +160,128 @@ async fn http_client_accepts_sse_json_rpc_responses() {
     assert!(tools.is_empty());
     list.assert();
 }
+
+#[tokio::test]
+async fn http_client_supports_prompts_resources_and_logging() {
+    let server = MockServer::start();
+    let prompts = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"prompts/list""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "prompts": [
+                    {
+                        "name": "review",
+                        "description": "Review code.",
+                        "arguments": [
+                            { "name": "diff", "required": true }
+                        ]
+                    }
+                ]
+            }
+        }));
+    });
+    let get_prompt = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"prompts/get""#)
+            .body_includes(r#""name":"review""#)
+            .body_includes(r#""diff":"patch""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": { "type": "text", "text": "Review patch." }
+                    }
+                ]
+            }
+        }));
+    });
+    let templates = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"resources/templates/list""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+                "resourceTemplates": [
+                    {
+                        "uriTemplate": "file:///{path}",
+                        "name": "workspace file",
+                        "mimeType": "text/plain"
+                    }
+                ]
+            }
+        }));
+    });
+    let read = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"resources/read""#)
+            .body_includes(r#""uri":"file:///README.md""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "result": {
+                "contents": [
+                    {
+                        "uri": "file:///README.md",
+                        "mimeType": "text/markdown",
+                        "text": "# codel00p"
+                    }
+                ]
+            }
+        }));
+    });
+    let logging = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"logging/setLevel""#)
+            .body_includes(r#""level":"warning""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "result": {}
+        }));
+    });
+
+    let endpoint = HttpServerEndpoint::new("remote", format!("{}/mcp", server.base_url()));
+    let mut client = McpHttpClient::connect(endpoint).expect("connect http client");
+
+    let prompt_descriptors = client.list_prompts().await.expect("list prompts");
+    assert_eq!(prompt_descriptors[0].name(), "review");
+    assert!(prompt_descriptors[0].arguments()[0].required());
+    let prompt = client
+        .get_prompt("review", json!({ "diff": "patch" }))
+        .await
+        .expect("get prompt");
+    assert_eq!(prompt.messages()[0].role(), "user");
+    assert_eq!(prompt.messages()[0].content()["text"], "Review patch.");
+    let resource_templates = client
+        .list_resource_templates()
+        .await
+        .expect("list resource templates");
+    assert_eq!(resource_templates[0].uri_template(), "file:///{path}");
+    let resource = client
+        .read_resource("file:///README.md")
+        .await
+        .expect("read resource");
+    assert_eq!(resource.contents()[0].text(), Some("# codel00p"));
+    client
+        .set_logging_level("warning")
+        .await
+        .expect("set logging level");
+
+    prompts.assert();
+    get_prompt.assert();
+    templates.assert();
+    read.assert();
+    logging.assert();
+}

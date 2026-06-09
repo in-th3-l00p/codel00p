@@ -1097,6 +1097,49 @@ impl McpHttpClient {
         })
     }
 
+    pub async fn list_resource_templates(
+        &mut self,
+    ) -> Result<Vec<McpResourceTemplateDescriptor>, McpError> {
+        let response = self
+            .request("resources/templates/list", Value::Object(Default::default()))
+            .await?;
+        parse_resource_template_descriptors(&self.server_id, response, |message| {
+            McpError::HttpTransport {
+                server_id: self.server_id.clone(),
+                message,
+            }
+        })
+    }
+
+    pub async fn read_resource(
+        &mut self,
+        uri: impl Into<String>,
+    ) -> Result<McpResourceOutput, McpError> {
+        let response = self
+            .request(
+                "resources/read",
+                serde_json::json!({
+                    "uri": uri.into()
+                }),
+            )
+            .await?;
+        parse_resource_output(response, |message| McpError::HttpTransport {
+            server_id: self.server_id.clone(),
+            message,
+        })
+    }
+
+    pub async fn set_logging_level(&mut self, level: impl Into<String>) -> Result<(), McpError> {
+        self.request(
+            "logging/setLevel",
+            serde_json::json!({
+                "level": level.into()
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn list_prompts(&mut self) -> Result<Vec<McpPromptDescriptor>, McpError> {
         let response = self
             .request("prompts/list", Value::Object(Default::default()))
@@ -1286,6 +1329,71 @@ where
             ))
         })
         .collect()
+}
+
+fn parse_resource_template_descriptors<F>(
+    server_id: &str,
+    response: Value,
+    error: F,
+) -> Result<Vec<McpResourceTemplateDescriptor>, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let templates = response
+        .get("resourceTemplates")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            error("resources/templates/list response omitted resourceTemplates array".to_string())
+        })?;
+
+    templates
+        .iter()
+        .map(|template| {
+            let uri_template = template
+                .get("uriTemplate")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("resource template omitted uriTemplate".to_string()))?;
+            let name = template
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or(uri_template);
+            let description = template.get("description").and_then(Value::as_str);
+            let mime_type = template.get("mimeType").and_then(Value::as_str);
+            Ok(McpResourceTemplateDescriptor::new(
+                server_id.to_string(),
+                uri_template,
+                name,
+                description,
+                mime_type,
+            ))
+        })
+        .collect()
+}
+
+fn parse_resource_output<F>(response: Value, error: F) -> Result<McpResourceOutput, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let contents = response
+        .get("contents")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("resources/read response omitted contents array".to_string()))?;
+    let contents = contents
+        .iter()
+        .map(|content| {
+            let uri = content
+                .get("uri")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("resource content omitted uri".to_string()))?;
+            Ok(McpResourceContent::new(
+                uri,
+                content.get("mimeType").and_then(Value::as_str),
+                content.get("text").and_then(Value::as_str),
+                content.get("blob").and_then(Value::as_str),
+            ))
+        })
+        .collect::<Result<Vec<_>, McpError>>()?;
+    Ok(McpResourceOutput::new(contents))
 }
 
 fn parse_prompt_descriptors<F>(
@@ -1875,6 +1983,43 @@ impl McpStdioClient {
             .collect()
     }
 
+    pub async fn list_resource_templates(
+        &mut self,
+    ) -> Result<Vec<McpResourceTemplateDescriptor>, McpError> {
+        let response = self
+            .request("resources/templates/list", Value::Object(Default::default()))
+            .await?;
+        parse_resource_template_descriptors(&self.server_id, response, |message| {
+            self.stdio_error(message)
+        })
+    }
+
+    pub async fn read_resource(
+        &mut self,
+        uri: impl Into<String>,
+    ) -> Result<McpResourceOutput, McpError> {
+        let response = self
+            .request(
+                "resources/read",
+                serde_json::json!({
+                    "uri": uri.into()
+                }),
+            )
+            .await?;
+        parse_resource_output(response, |message| self.stdio_error(message))
+    }
+
+    pub async fn set_logging_level(&mut self, level: impl Into<String>) -> Result<(), McpError> {
+        self.request(
+            "logging/setLevel",
+            serde_json::json!({
+                "level": level.into()
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn list_prompts(&mut self) -> Result<Vec<McpPromptDescriptor>, McpError> {
         let response = self
             .request("prompts/list", Value::Object(Default::default()))
@@ -2031,6 +2176,113 @@ impl McpResourceDescriptor {
 
     pub fn mime_type(&self) -> Option<&str> {
         self.mime_type.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpResourceTemplateDescriptor {
+    server_id: String,
+    uri_template: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime_type: Option<String>,
+}
+
+impl McpResourceTemplateDescriptor {
+    pub fn new(
+        server_id: impl Into<String>,
+        uri_template: impl Into<String>,
+        name: impl Into<String>,
+        description: Option<impl Into<String>>,
+        mime_type: Option<impl Into<String>>,
+    ) -> Self {
+        Self {
+            server_id: server_id.into(),
+            uri_template: uri_template.into(),
+            name: name.into(),
+            description: description.map(Into::into),
+            mime_type: mime_type.map(Into::into),
+        }
+    }
+
+    pub fn server_id(&self) -> &str {
+        &self.server_id
+    }
+
+    pub fn uri_template(&self) -> &str {
+        &self.uri_template
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    pub fn mime_type(&self) -> Option<&str> {
+        self.mime_type.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpResourceContent {
+    uri: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blob: Option<String>,
+}
+
+impl McpResourceContent {
+    pub fn new(
+        uri: impl Into<String>,
+        mime_type: Option<impl Into<String>>,
+        text: Option<impl Into<String>>,
+        blob: Option<impl Into<String>>,
+    ) -> Self {
+        Self {
+            uri: uri.into(),
+            mime_type: mime_type.map(Into::into),
+            text: text.map(Into::into),
+            blob: blob.map(Into::into),
+        }
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub fn mime_type(&self) -> Option<&str> {
+        self.mime_type.as_deref()
+    }
+
+    pub fn text(&self) -> Option<&str> {
+        self.text.as_deref()
+    }
+
+    pub fn blob(&self) -> Option<&str> {
+        self.blob.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpResourceOutput {
+    contents: Vec<McpResourceContent>,
+}
+
+impl McpResourceOutput {
+    pub fn new(contents: Vec<McpResourceContent>) -> Self {
+        Self { contents }
+    }
+
+    pub fn contents(&self) -> &[McpResourceContent] {
+        &self.contents
     }
 }
 

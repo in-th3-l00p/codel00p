@@ -119,6 +119,46 @@ async fn stdio_client_lists_and_gets_mcp_prompts() {
 }
 
 #[tokio::test]
+async fn stdio_client_reads_resources_templates_and_sets_logging_level() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r##"read templates; case "$templates" in *'"method":"resources/templates/list"'*) ;; *) exit 11;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"resourceTemplates":[{"uriTemplate":"file:///{path}","name":"workspace file","description":"Read a workspace file.","mimeType":"text/plain"}]}}'; read resource; case "$resource" in *'"method":"resources/read"'*'"uri":"file:///README.md"'*) ;; *) exit 12;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"contents":[{"uri":"file:///README.md","mimeType":"text/markdown","text":"# codel00p"}]}}'; read logging; case "$logging" in *'"method":"logging/setLevel"'*'"level":"warning"'*) ;; *) exit 13;; esac; printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{}}'"##,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let templates = client
+        .list_resource_templates()
+        .await
+        .expect("list resource templates");
+    assert_eq!(templates.len(), 1);
+    assert_eq!(templates[0].server_id(), "fake");
+    assert_eq!(templates[0].uri_template(), "file:///{path}");
+    assert_eq!(templates[0].name(), "workspace file");
+    assert_eq!(templates[0].description(), Some("Read a workspace file."));
+    assert_eq!(templates[0].mime_type(), Some("text/plain"));
+
+    let resource = client
+        .read_resource("file:///README.md")
+        .await
+        .expect("read resource");
+    assert_eq!(resource.contents().len(), 1);
+    assert_eq!(resource.contents()[0].uri(), "file:///README.md");
+    assert_eq!(resource.contents()[0].mime_type(), Some("text/markdown"));
+    assert_eq!(resource.contents()[0].text(), Some("# codel00p"));
+
+    client
+        .set_logging_level("warning")
+        .await
+        .expect("set logging level");
+}
+
+#[tokio::test]
 async fn stdio_client_collects_notifications_before_tool_response() {
     let command = StdioServerCommand::new(
         "fake",
