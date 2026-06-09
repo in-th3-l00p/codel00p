@@ -13,6 +13,7 @@ use serde_json::Value;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
     process::{Child, ChildStdin, ChildStdout, Command},
+    sync::Mutex,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -451,6 +452,21 @@ impl McpStdioClient {
 impl Drop for McpStdioClient {
     fn drop(&mut self) {
         let _ = self.child.start_kill();
+    }
+}
+
+#[async_trait]
+impl McpClient for Arc<Mutex<McpStdioClient>> {
+    async fn list_tools(&self) -> Result<Vec<McpToolDescriptor>, McpError> {
+        self.lock().await.list_tools().await
+    }
+
+    async fn list_resources(&self) -> Result<Vec<McpResourceDescriptor>, McpError> {
+        self.lock().await.list_resources().await
+    }
+
+    async fn call_tool(&self, call: McpToolCall) -> Result<McpToolOutput, McpError> {
+        self.lock().await.call_tool(call).await
     }
 }
 

@@ -13,6 +13,7 @@ use codel00p_harness::{
     ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage,
     Workspace,
 };
+use codel00p_mcp::{McpStdioClient, StdioServerCommand, discover_tool_registry};
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_protocol::AgentEvent;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
@@ -37,6 +38,7 @@ struct AgentRunOptions {
     stream_events: bool,
     tool_sets: Vec<AgentToolSet>,
     permission_mode: CliPermissionMode,
+    mcp_servers: Vec<McpServerSpec>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,6 +55,12 @@ enum CliPermissionMode {
     Allow,
     Ask,
     Deny,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct McpServerSpec {
+    server_id: String,
+    command: PathBuf,
 }
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -112,7 +120,7 @@ fn run_agent_turn(
         let mut builder = AgentHarness::builder()
             .model_client(model_client)
             .workspace(workspace)
-            .tools(build_tool_registry(&options.tool_sets))
+            .tools(build_tool_registry(&options.tool_sets, &options.mcp_servers).await?)
             .permission_policy(CliPermissionPolicy::new(options.permission_mode))
             .project_memory_provider(memory_provider)
             .turn_memory_extractor(memory_extractor)
@@ -199,6 +207,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut stream_events = false;
     let mut tool_sets = Vec::new();
     let mut permission_mode = CliPermissionMode::Allow;
+    let mut mcp_servers = Vec::new();
     let mut index = 1;
 
     while index < args.len() {
@@ -248,6 +257,11 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
                 permission_mode = parse_permission_mode(&value)?;
                 index += 2;
             }
+            "--mcp-server" => {
+                let value = required_value(args, index, "--mcp-server")?;
+                mcp_servers.push(parse_mcp_server(&value)?);
+                index += 2;
+            }
             flag => return Err(format!("unknown agent run option: {flag}")),
         }
     }
@@ -264,6 +278,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         stream_events,
         tool_sets,
         permission_mode,
+        mcp_servers,
     })
 }
 
@@ -298,7 +313,28 @@ fn parse_permission_mode(value: &str) -> CliResult<CliPermissionMode> {
     }
 }
 
-fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
+fn parse_mcp_server(value: &str) -> CliResult<McpServerSpec> {
+    let (server_id, command) = value
+        .split_once('=')
+        .ok_or_else(|| "invalid --mcp-server, expected <id>=<command>".to_string())?;
+    let server_id = server_id.trim();
+    let command = command.trim();
+    if server_id.is_empty() {
+        return Err("invalid --mcp-server, server id is empty".to_string());
+    }
+    if command.is_empty() {
+        return Err("invalid --mcp-server, command is empty".to_string());
+    }
+    Ok(McpServerSpec {
+        server_id: server_id.to_string(),
+        command: PathBuf::from(command),
+    })
+}
+
+async fn build_tool_registry(
+    tool_sets: &[AgentToolSet],
+    mcp_servers: &[McpServerSpec],
+) -> CliResult<ToolRegistry> {
     let mut registry = ToolRegistry::read_only_defaults();
     for tool_set in tool_sets {
         registry = match tool_set {
@@ -312,7 +348,25 @@ fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
                 .with_registry(ToolRegistry::git_defaults()),
         };
     }
-    registry
+    for server in mcp_servers {
+        let mut client = McpStdioClient::spawn(StdioServerCommand::new(
+            server.server_id.clone(),
+            server.command.clone(),
+            std::iter::empty::<&str>(),
+        ))
+        .await
+        .map_err(|error| error.to_string())?;
+        client
+            .initialize()
+            .await
+            .map_err(|error| error.to_string())?;
+        let client = Arc::new(tokio::sync::Mutex::new(client));
+        let mcp_registry = discover_tool_registry(client)
+            .await
+            .map_err(|error| error.to_string())?;
+        registry = registry.with_registry(mcp_registry);
+    }
+    Ok(registry)
 }
 
 struct CliPermissionPolicy {

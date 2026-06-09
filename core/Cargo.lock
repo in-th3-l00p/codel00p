@@ -135,6 +135,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "codel00p-harness",
+ "codel00p-mcp",
  "codel00p-memory",
  "codel00p-protocol",
  "codel00p-providers",

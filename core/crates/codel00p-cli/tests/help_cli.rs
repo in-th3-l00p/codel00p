@@ -94,5 +94,10 @@ fn agent_help_documents_tool_set_opt_in() {
             "args: {args:?}, stdout: {}",
             stdout(&output)
         );
+        assert!(
+            stdout(&output).contains("--mcp-server <id=command>"),
+            "args: {args:?}, stdout: {}",
+            stdout(&output)
+        );
     }
 }
