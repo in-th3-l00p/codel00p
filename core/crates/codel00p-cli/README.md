@@ -2,8 +2,9 @@
 
 Terminal interface for codel00p.
 
-The current CLI is the first usable codel00p product slice: a read-only coding
-agent with durable sessions and reviewed project memory.
+The current CLI is the first usable codel00p product slice: a coding agent with
+durable sessions, reviewed project memory, and explicit tool-set opt-ins. It is
+read-only by default.
 
 Commands open one SQLite-backed store scoped by organization and project. That
 store currently holds memory records and session replay records.
@@ -21,7 +22,7 @@ codel00p \
 
 ## Agent Run
 
-`agent run` executes one read-only harness turn against a workspace. It supports
+`agent run` executes one harness turn against a workspace. It supports
 OpenAI-compatible Chat Completions providers first: GitHub Copilot/GitHub
 Models, OpenRouter, Azure AI Foundry compatible endpoints, and custom/local
 OpenAI-compatible endpoints.
@@ -41,6 +42,26 @@ codel00p \
   --session-id session-architecture
 ```
 
+The default tool registry exposes only read-only workspace tools. Add
+`--tool-set` to opt into stronger capabilities for the current run:
+
+```bash
+codel00p ... agent run "Implement the next tested slice." \
+  --provider custom \
+  --model local-model \
+  --tool-set edit \
+  --tool-set command \
+  --tool-set git
+```
+
+Supported tool-set names:
+
+- `read`, `read-only`, `readonly`: keep the default read-only tools.
+- `edit`, `editing`, `write`: file creation, update, deletion, and patching.
+- `command`, `commands`, `shell`: structured command execution.
+- `git`: guarded status, diff, log, and commit tools.
+- `all`: enable edit, command, and git tool sets.
+
 Provider credentials are read from environment variables:
 
 - GitHub/Copilot: `CODEL00P_PROVIDER_GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`,
@@ -58,7 +79,8 @@ until their transports are implemented.
 
 `agent resume` continues a persisted session. The CLI replays prior session
 messages into the next model request and appends only the new turn's messages
-and events back to storage.
+and events back to storage. Resumed runs use the same default read-only tool
+registry unless `--tool-set` is passed again.
 
 ```bash
 CODEL00P_PROVIDER_CUSTOM_API_KEY=local-dev-key \

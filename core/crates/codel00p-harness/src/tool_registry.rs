@@ -58,6 +58,11 @@ impl ToolRegistry {
         self
     }
 
+    pub fn with_registry(mut self, registry: Self) -> Self {
+        self.tools.extend(registry.tools);
+        self
+    }
+
     pub fn names(&self) -> Vec<&'static str> {
         self.tools.keys().copied().collect()
     }

@@ -109,6 +109,146 @@ fn agent_run_calls_provider_with_read_only_tools_and_prints_final_text() {
 }
 
 #[test]
+fn agent_run_defaults_to_read_only_tools() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""name":"read_file""#)
+            .body_includes(r#""name":"search_text""#)
+            .body_includes(r#""name":"list_files""#)
+            .body_excludes(r#""name":"create_file""#)
+            .body_excludes(r#""name":"run_command""#)
+            .body_excludes(r#""name":"git_status""#);
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Read-only tools only."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect tools.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Read-only tools only.\n");
+    provider.assert();
+}
+
+#[test]
+fn agent_run_can_opt_into_edit_command_and_git_tool_sets() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""name":"read_file""#)
+            .body_includes(r#""name":"create_file""#)
+            .body_includes(r#""name":"apply_patch""#)
+            .body_includes(r#""name":"run_command""#)
+            .body_includes(r#""name":"git_status""#)
+            .body_includes(r#""name":"git_commit""#);
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Loaded expanded tools."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect tools.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--tool-set",
+            "edit",
+            "--tool-set",
+            "command",
+            "--tool-set",
+            "git",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Loaded expanded tools.\n");
+    provider.assert();
+}
+
+#[test]
+fn agent_run_rejects_unknown_tool_sets() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect tools.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            "http://127.0.0.1:9",
+            "--tool-set",
+            "danger",
+        ],
+    );
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("unknown tool set: danger"));
+}
+
+#[test]
 fn agent_run_persists_session_messages_and_events() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

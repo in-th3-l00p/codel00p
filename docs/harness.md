@@ -151,8 +151,8 @@ write-like scope so policy must explicitly allow them before execution.
 
 The harness now exposes an opt-in editing tool set through
 `ToolRegistry::editing_defaults()`. These tools are not included in
-`ToolRegistry::read_only_defaults()`, so the CLI remains read-only until it grows
-an explicit write mode.
+`ToolRegistry::read_only_defaults()`, so CLI runs stay read-only unless the user
+passes `--tool-set edit` or `--tool-set all`.
 
 Editing tools:
 
@@ -194,6 +194,8 @@ The tool declares `PermissionScope::Shell`. The agent loop requests permission
 before execution. Denied shell commands are returned to the model as structured
 permission-denied tool results without executing the process.
 
+CLI runs opt into this tool set with `--tool-set command` or `--tool-set all`.
+
 Command results are structured:
 
 ```json
@@ -233,6 +235,8 @@ The first commit implementation is intentionally strict:
 
 This gives the agent a safe base for clean commits without taking ownership of
 untracked user work.
+
+CLI runs opt into git tools with `--tool-set git` or `--tool-set all`.
 
 ## Runtime Control
 

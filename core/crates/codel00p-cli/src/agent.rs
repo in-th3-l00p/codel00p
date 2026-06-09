@@ -27,6 +27,16 @@ struct AgentRunOptions {
     session_id: Option<String>,
     max_iterations: Option<u32>,
     json_events: bool,
+    tool_sets: Vec<AgentToolSet>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AgentToolSet {
+    Read,
+    Edit,
+    Command,
+    Git,
+    All,
 }
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -86,7 +96,7 @@ fn run_agent_turn(
         let mut builder = AgentHarness::builder()
             .model_client(model_client)
             .workspace(workspace)
-            .tools(ToolRegistry::read_only_defaults())
+            .tools(build_tool_registry(&options.tool_sets))
             .project_memory_provider(memory_provider)
             .turn_memory_extractor(memory_extractor)
             .memory_candidate_sink(memory_sink);
@@ -166,6 +176,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut session_id = None;
     let mut max_iterations = None;
     let mut json_events = false;
+    let mut tool_sets = Vec::new();
     let mut index = 1;
 
     while index < args.len() {
@@ -201,6 +212,11 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
                 json_events = true;
                 index += 1;
             }
+            "--tool-set" => {
+                let value = required_value(args, index, "--tool-set")?;
+                tool_sets.push(parse_agent_tool_set(&value)?);
+                index += 2;
+            }
             flag => return Err(format!("unknown agent run option: {flag}")),
         }
     }
@@ -214,6 +230,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         session_id,
         max_iterations,
         json_events,
+        tool_sets,
     })
 }
 
@@ -226,6 +243,34 @@ fn parse_agent_resume_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut options = parse_agent_run_options(&args[1..])?;
     options.session_id = Some(session_id);
     Ok(options)
+}
+
+fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "read" | "read-only" | "readonly" => Ok(AgentToolSet::Read),
+        "edit" | "editing" | "write" => Ok(AgentToolSet::Edit),
+        "command" | "commands" | "shell" => Ok(AgentToolSet::Command),
+        "git" => Ok(AgentToolSet::Git),
+        "all" => Ok(AgentToolSet::All),
+        _ => Err(format!("unknown tool set: {value}")),
+    }
+}
+
+fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
+    let mut registry = ToolRegistry::read_only_defaults();
+    for tool_set in tool_sets {
+        registry = match tool_set {
+            AgentToolSet::Read => registry,
+            AgentToolSet::Edit => registry.with_registry(ToolRegistry::editing_defaults()),
+            AgentToolSet::Command => registry.with_registry(ToolRegistry::command_defaults()),
+            AgentToolSet::Git => registry.with_registry(ToolRegistry::git_defaults()),
+            AgentToolSet::All => registry
+                .with_registry(ToolRegistry::editing_defaults())
+                .with_registry(ToolRegistry::command_defaults())
+                .with_registry(ToolRegistry::git_defaults()),
+        };
+    }
+    registry
 }
 
 fn replay_session_messages(

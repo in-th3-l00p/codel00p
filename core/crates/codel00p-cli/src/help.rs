@@ -33,7 +33,7 @@ Global options:
   --project-name <name>       Project display name
 
 Commands:
-  agent    Run the read-only coding agent
+  agent    Run the coding agent
   memory   Review project memory
   session  Inspect persisted sessions
 ";
@@ -42,7 +42,7 @@ const AGENT_HELP: &str = "\
 Usage: codel00p [global options] agent <command>
 
 Commands:
-  run      Run one read-only agent turn
+  run      Run one agent turn
   resume   Resume a persisted agent session
 ";
 
@@ -56,6 +56,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
+  --tool-set <name>           Enable a tool set: read, edit, command, git, all
   --json-events               Print serialized harness events after assistant text
 ";
 
@@ -68,6 +69,7 @@ Options:
   --model <id>                Provider model id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
+  --tool-set <name>           Enable a tool set: read, edit, command, git, all
   --json-events               Print serialized harness events after assistant text
 ";
 
