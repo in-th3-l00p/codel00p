@@ -4,6 +4,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
         [flag] if is_help(flag) => Some(TOP_LEVEL_HELP),
         [command, flag] if is_help(flag) => match command.as_str() {
             "agent" => Some(AGENT_HELP),
+            "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
             _ => None,
@@ -13,6 +14,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
                 ("agent", "run") => Some(AGENT_RUN_HELP),
                 ("agent", "resume") => Some(AGENT_RESUME_HELP),
                 ("agent", "mcp") => Some(AGENT_MCP_HELP),
+                ("mcp", "serve") => Some(MCP_SERVE_HELP),
                 _ => None,
             }
         }
@@ -41,6 +43,7 @@ Global options:
 
 Commands:
   agent    Run the coding agent
+  mcp      Expose codel00p as an MCP server
   memory   Review project memory
   session  Inspect persisted sessions
 ";
@@ -100,6 +103,17 @@ Usage: codel00p [global options] agent mcp list [options]
 Options:
   --workspace <path>          Workspace root, defaults to current directory
   --mcp-server <id=command>   Attach an MCP stdio server executable
+";
+
+const MCP_HELP: &str = "\
+Usage: codel00p [global options] mcp <command>
+
+Commands:
+  serve    Run a stdio MCP server for codel00p memory and sessions
+";
+
+const MCP_SERVE_HELP: &str = "\
+Usage: codel00p [global options] mcp serve
 ";
 
 const MEMORY_HELP: &str = "\

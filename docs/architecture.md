@@ -51,6 +51,8 @@ audit behavior for external systems. The first runtime transports are stdio and
 HTTP: workspace `.codel00p/mcp.json` files and ad hoc CLI flags can launch local
 MCP server processes or connect to remote MCP endpoints, discover tools, assign
 permission scopes, and inspect tools without a model call.
+The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing read-only
+project memory and session replay tools to other agents.
 
 Durable persistence is split into two layers. `codel00p-storage` owns the
 backend-neutral storage primitives: scoped key-value state, structured

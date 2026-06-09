@@ -3,6 +3,7 @@ use std::{env, process::ExitCode};
 mod agent;
 mod config;
 mod help;
+mod mcp_server;
 mod memory;
 mod providers;
 mod session;
@@ -34,6 +35,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
 
     match command.as_str() {
         "agent" => agent::run(config, rest),
+        "mcp" => mcp_server::run(config, rest),
         "memory" => memory::run(config, rest),
         "session" => session::run(config, rest),
         _ => Err(format!("unknown command: {command}")),

@@ -133,12 +133,14 @@ Current implementation:
   server/tool permission scopes;
 - `agent mcp list` inspects configured tools without making a model call;
 - MCP permission requests and denials flow through the same JSON event stream
-  and session audit log as native tools.
+  and session audit log as native tools;
+- `codel00p mcp serve` exposes read-only memory/session tools to other MCP
+  clients over stdio.
 
 Remaining work:
 
 - persistent permission policy for external calls;
-- MCP server mode exposing codel00p memory/session APIs.
+- broader MCP server write tools after connector policy is durable.
 
 ### 7. Context Management
 

@@ -23,6 +23,7 @@ fn top_level_help_prints_without_project_flags() {
     let help = stdout(&output);
     assert!(help.contains("Usage: codel00p [global options] <command>"));
     assert!(help.contains("agent    Run the coding agent"));
+    assert!(help.contains("mcp      Expose codel00p as an MCP server"));
     assert!(help.contains("memory   Review project memory"));
     assert!(help.contains("session  Inspect persisted sessions"));
 }
@@ -49,6 +50,14 @@ fn command_help_prints_without_project_flags() {
         (
             &["agent", "mcp", "list", "--help"][..],
             "Usage: codel00p [global options] agent mcp list",
+        ),
+        (
+            &["mcp", "--help"][..],
+            "Usage: codel00p [global options] mcp <command>",
+        ),
+        (
+            &["mcp", "serve", "--help"][..],
+            "Usage: codel00p [global options] mcp serve",
         ),
         (
             &["memory", "--help"][..],

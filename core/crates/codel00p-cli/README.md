@@ -120,6 +120,15 @@ Validate configured MCP tools without a model call:
 codel00p ... agent mcp list --workspace .
 ```
 
+Expose codel00p itself as a stdio MCP server for other agents/tools:
+
+```bash
+codel00p ... mcp serve
+```
+
+The server exposes read-only `memory_search`, `memory_list`, `memory_show`, and
+`session_show` tools backed by the same project-scoped memory/session database.
+
 Tool calls run with `--permission-mode allow` by default. Use
 `--permission-mode deny` to exercise a turn without mutating the workspace or
 running commands; denied calls are returned to the model as structured tool
