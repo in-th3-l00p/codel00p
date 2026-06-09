@@ -132,6 +132,9 @@ Current implementation:
 - `.codel00p/mcp.json` can define workspace MCP servers, request timeouts, and
   server/tool permission scopes;
 - `agent mcp list` inspects configured tools without making a model call;
+- `agent mcp doctor` validates configured stdio/HTTP servers, counts advertised
+  tools/resources/prompts, and prints redacted diagnostics without leaking env
+  values or bearer tokens;
 - MCP permission requests and denials flow through the same JSON event stream
   and session audit log as native tools;
 - `codel00p mcp serve` exposes memory search/list/show, reviewed memory
@@ -144,11 +147,20 @@ Current implementation:
   future codel00p MCP servers be assembled without CLI-specific protocol loops;
 - stdio and HTTP MCP clients collect server progress/resource notifications
   and surface them as structured harness `ToolProgress` events;
+- stdio and HTTP MCP clients support resource templates, resource reads,
+  prompt discovery/materialization, and `logging/setLevel`;
+- stdio clients answer server-originated `roots/list` requests with configured
+  client roots;
 - stdio MCP clients can subscribe/unsubscribe resource URIs and poll later
-  resource-updated, tools-list-changed, and resources-list-changed
+  resource-updated, tools-list-changed, resources-list-changed,
+  prompts-list-changed, and logging-message
   notifications from the long-lived server process;
 - `McpNotificationWorker` can run the stdio subscription read loop in the
   background and stream notifications or subscription errors over a channel;
+- `McpStdioNotificationSupervisor` initializes stdio MCP subscriptions,
+  reconnects crashed servers with bounded backoff, resubscribes resources, and
+  converts subscription events into stable harness `ToolProgress` events for
+  UI and session replay consumers;
 - the stdio MCP server exposes `codel00p://memory/{id}` and
   `codel00p://sessions/{session_id}` JSON resource templates for direct
   context browsing;
@@ -161,9 +173,10 @@ Current implementation:
 - `codel00p mcp permissions list` and `forget` inspect and revoke remembered
   connector decisions with scriptable TSV output.
 
-Remaining work:
+Remaining hardening:
 
-- add reconnect behavior and UI/session routing for subscribed MCP servers;
+- maintain a compatibility matrix against popular third-party MCP servers and
+  add regression fixtures for edge cases found there;
 
 ### 7. Context Management
 

@@ -709,9 +709,16 @@ impl Default for McpReconnectPolicy {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum McpSubscriptionEvent {
-    Connected { server_id: String, attempt: u32 },
-    Subscribed { uri: String },
-    Notification { notification: McpClientNotification },
+    Connected {
+        server_id: String,
+        attempt: u32,
+    },
+    Subscribed {
+        uri: String,
+    },
+    Notification {
+        notification: McpClientNotification,
+    },
     Reconnecting {
         server_id: String,
         attempt: u32,
@@ -1101,7 +1108,10 @@ impl McpHttpClient {
         &mut self,
     ) -> Result<Vec<McpResourceTemplateDescriptor>, McpError> {
         let response = self
-            .request("resources/templates/list", Value::Object(Default::default()))
+            .request(
+                "resources/templates/list",
+                Value::Object(Default::default()),
+            )
             .await?;
         parse_resource_template_descriptors(&self.server_id, response, |message| {
             McpError::HttpTransport {
@@ -1424,10 +1434,10 @@ where
                     arguments
                         .iter()
                         .map(|argument| {
-                            let name =
-                                argument.get("name").and_then(Value::as_str).ok_or_else(|| {
-                                    error("prompt argument omitted name".to_string())
-                                })?;
+                            let name = argument
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .ok_or_else(|| error("prompt argument omitted name".to_string()))?;
                             let description = argument.get("description").and_then(Value::as_str);
                             let required = argument
                                 .get("required")
@@ -1839,10 +1849,7 @@ impl McpStdioClient {
         Ok(())
     }
 
-    async fn respond_to_server_request(
-        &mut self,
-        request: JsonRpcRequest,
-    ) -> Result<(), McpError> {
+    async fn respond_to_server_request(&mut self, request: JsonRpcRequest) -> Result<(), McpError> {
         let response = match request.method() {
             "roots/list" => JsonRpcMessage::Response(JsonRpcResponse {
                 jsonrpc: "2.0".to_string(),
@@ -1987,7 +1994,10 @@ impl McpStdioClient {
         &mut self,
     ) -> Result<Vec<McpResourceTemplateDescriptor>, McpError> {
         let response = self
-            .request("resources/templates/list", Value::Object(Default::default()))
+            .request(
+                "resources/templates/list",
+                Value::Object(Default::default()),
+            )
             .await?;
         parse_resource_template_descriptors(&self.server_id, response, |message| {
             self.stdio_error(message)
@@ -2024,7 +2034,9 @@ impl McpStdioClient {
         let response = self
             .request("prompts/list", Value::Object(Default::default()))
             .await?;
-        parse_prompt_descriptors(&self.server_id, response, |message| self.stdio_error(message))
+        parse_prompt_descriptors(&self.server_id, response, |message| {
+            self.stdio_error(message)
+        })
     }
 
     pub async fn get_prompt(
@@ -2564,7 +2576,9 @@ where
     Ok(registry)
 }
 
-fn mcp_notification_progress_parts(notification: &McpClientNotification) -> (String, Option<String>) {
+fn mcp_notification_progress_parts(
+    notification: &McpClientNotification,
+) -> (String, Option<String>) {
     match notification {
         McpClientNotification::Progress { message, .. } => {
             ("mcp_progress".to_string(), message.clone())

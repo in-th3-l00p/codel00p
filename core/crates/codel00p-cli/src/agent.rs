@@ -821,13 +821,20 @@ fn mcp_capability_advertised(capabilities: &serde_json::Value, name: &str) -> bo
 }
 
 fn mcp_server_transport(server: &McpServerSpec) -> &'static str {
-    if server.url.is_some() { "http" } else { "stdio" }
+    if server.url.is_some() {
+        "http"
+    } else {
+        "stdio"
+    }
 }
 
 fn redacted_mcp_server_details(server: &McpServerSpec) -> String {
     let mut parts = Vec::new();
     if let Some(command) = &server.command {
-        parts.push(format!("command={}", sanitize_diagnostic_field(&command.display().to_string())));
+        parts.push(format!(
+            "command={}",
+            sanitize_diagnostic_field(&command.display().to_string())
+        ));
     }
     if let Some(url) = &server.url {
         parts.push(format!("url={}", sanitize_diagnostic_field(url)));
@@ -871,7 +878,13 @@ fn redacted_mcp_server_details(server: &McpServerSpec) -> String {
 fn sanitize_diagnostic_field(value: &str) -> String {
     value
         .chars()
-        .map(|ch| if ch == '\t' || ch == '\n' || ch == '\r' { ' ' } else { ch })
+        .map(|ch| {
+            if ch == '\t' || ch == '\n' || ch == '\r' {
+                ' '
+            } else {
+                ch
+            }
+        })
         .collect()
 }
 

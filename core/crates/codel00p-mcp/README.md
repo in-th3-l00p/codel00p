@@ -7,6 +7,10 @@ This crate owns the contract between MCP servers and the agent harness:
 - `McpClient`: async client trait for listing tools/resources and calling tools;
 - `McpToolDescriptor`: server-provided tool metadata;
 - `McpResourceDescriptor`: server-provided resource metadata;
+- `McpResourceTemplateDescriptor` and `McpResourceOutput`: resource template
+  and resource-read contracts for direct context browsing.
+- `McpPromptDescriptor` and `McpPromptOutput`: prompt template discovery and
+  prompt materialization contracts.
 - `McpTool`: adapter that exposes an MCP tool as a `codel00p-harness` tool;
 - `discover_tool_registry`: builds a harness `ToolRegistry` from `list_tools`.
 - stdio JSON-RPC line encoding/decoding helpers.
@@ -21,6 +25,9 @@ This crate owns the contract between MCP servers and the agent harness:
   `ToolProgress` events.
 - `McpNotificationWorker`: background stdio subscription reader that subscribes
   resource URIs and streams later server notifications over a channel.
+- `McpStdioNotificationSupervisor`: reconnecting stdio subscription supervisor
+  that initializes, subscribes, resubscribes after process loss, and emits
+  routable subscription events.
 
 Harness tool names are prefixed as:
 
@@ -43,6 +50,9 @@ in time. It can subscribe/unsubscribe resource URIs and poll subsequent
 server-sent notifications from the same long-lived process. For callers that
 need a background loop, `McpNotificationWorker::spawn_stdio` subscribes the
 requested resources and forwards later notifications or subscription errors.
+For production subscriptions, `McpStdioNotificationSupervisor` owns process
+restart, bounded backoff, resource resubscription, and conversion into stable
+`ToolProgress` events for session replay and UI surfaces.
 
 The HTTP transport sends each JSON-RPC client message as a POST to the MCP
 endpoint, accepts JSON or `text/event-stream` responses, stores
@@ -52,12 +62,16 @@ connector gateways. Stdio and HTTP tool calls preserve
 `notifications/progress`, `notifications/resources/updated`, and list-changed
 messages that arrive before the final response; the harness adapter maps them
 into `mcp_progress`, `mcp_resource_updated`, `mcp_tools_list_changed`, and
-`mcp_resources_list_changed` tool progress phases.
+`mcp_resources_list_changed` tool progress phases. Logging notifications and
+prompt-list changes map to `mcp_log_message` and `mcp_prompts_list_changed`.
 
 Both transports support the MCP lifecycle handshake by sending `initialize`,
 recording the negotiated server metadata, and then sending
 `notifications/initialized` before normal operation. Both map `tools/list`,
-`resources/list`, and `tools/call` into codel00p descriptors and outputs.
+`resources/list`, `resources/templates/list`, `resources/read`, `prompts/list`,
+`prompts/get`, `logging/setLevel`, and `tools/call` into codel00p descriptors
+and outputs. Stdio clients can also answer server-originated `roots/list`
+requests with configured client roots.
 
 The server runtime is deliberately transport-neutral. Callers provide a typed
 `McpServerHandler`, and the runtime handles protocol mechanics around the final

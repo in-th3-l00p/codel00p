@@ -50,7 +50,8 @@ CLI, desktop, and cloud runtimes can share permission checks, event streams, and
 audit behavior for external systems. The first runtime transports are stdio and
 HTTP: workspace `.codel00p/mcp.json` files and ad hoc CLI flags can launch local
 MCP server processes or connect to remote MCP endpoints, discover tools, assign
-permission scopes, and inspect tools without a model call.
+permission scopes, inspect tools without a model call, and run redacted
+diagnostics with `agent mcp doctor`.
 The CLI can also run `codel00p mcp serve`, a stdio MCP server exposing project
 memory search/list/show, reviewed memory candidate creation and review tools,
 and read-only session replay to other agents. The same server exposes JSON
@@ -66,11 +67,16 @@ supplies codel00p-specific memory and session behavior. On the client side,
 stdio and HTTP transports collect MCP progress/resource notifications before
 the final tool response and the MCP harness adapter emits them as structured
 `ToolProgress` events for CLI, desktop, cloud, and session replay consumers.
-Long-lived stdio clients can also subscribe to resource URIs and poll later
-resource/list-change notifications from the same server process. The reusable
-`McpNotificationWorker` owns that read loop for stdio transports and forwards
-notifications over a channel; reconnect policy and product-specific UI/session
-routing still belong above the transport layer.
+Both client transports support tools, resources, resource templates, resource
+reads, prompt discovery, prompt materialization, logging-level control, and
+pre-response server notifications. Stdio clients can also answer
+server-originated `roots/list` requests for configured client roots. Long-lived
+stdio clients can subscribe to resource URIs and poll later resource/list-change
+notifications from the same server process. The reusable `McpNotificationWorker`
+owns the simple read loop, while `McpStdioNotificationSupervisor` owns the
+production loop: initialize, subscribe, reconnect with bounded backoff,
+resubscribe, and convert subscription state into stable `ToolProgress` events
+for product UI and session routing.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
 not require repeated prompts. Operators can inspect and revoke those remembered

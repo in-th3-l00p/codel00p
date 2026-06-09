@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use codel00p_harness::{Tool, ToolRegistry, Workspace};
 use codel00p_mcp::{
-    McpClient, McpClientNotification, McpResourceDescriptor, McpTool, McpToolCall,
-    McpSubscriptionEvent, McpToolDescriptor, McpToolOutput, discover_tool_registry,
+    McpClient, McpClientNotification, McpResourceDescriptor, McpSubscriptionEvent, McpTool,
+    McpToolCall, McpToolDescriptor, McpToolOutput, discover_tool_registry,
 };
 use codel00p_protocol::{AgentEvent, PermissionScope, SessionId, TurnId};
 use serde_json::json;
@@ -52,7 +52,11 @@ fn subscription_events_convert_to_harness_progress_events() {
         2,
         "mcp stdio transport failed for docs: server closed stdout",
     )
-    .to_harness_event(session_id.clone(), turn_id.clone(), "mcp.docs.__subscription");
+    .to_harness_event(
+        session_id.clone(),
+        turn_id.clone(),
+        "mcp.docs.__subscription",
+    );
 
     assert!(matches!(
         event,
