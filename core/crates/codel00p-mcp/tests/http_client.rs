@@ -1,5 +1,5 @@
 use codel00p_mcp::{HttpServerEndpoint, McpClientNotification, McpHttpClient, McpToolCall};
-use httpmock::{Method::POST, MockServer};
+use httpmock::{HttpMockRequest, Method::POST, MockServer};
 use serde_json::json;
 
 #[tokio::test]
@@ -159,6 +159,61 @@ async fn http_client_accepts_sse_json_rpc_responses() {
     let tools = client.list_tools().await.expect("list tools");
     assert!(tools.is_empty());
     list.assert();
+}
+
+#[tokio::test]
+async fn http_client_paginates_tool_lists_until_cursor_is_absent() {
+    let server = MockServer::start();
+    let first_page = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"tools/list""#)
+            .is_true(|request: &HttpMockRequest| !request.body_string().contains(r#""cursor""#));
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": [
+                    {
+                        "name": "search",
+                        "description": "Search remote docs.",
+                        "inputSchema": { "type": "object" }
+                    }
+                ],
+                "nextCursor": "tools-2"
+            }
+        }));
+    });
+    let second_page = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"tools/list""#)
+            .body_includes(r#""cursor":"tools-2""#);
+        then.status(200).json_body(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "tools": [
+                    {
+                        "name": "open",
+                        "description": "Open remote docs.",
+                        "inputSchema": { "type": "object" }
+                    }
+                ]
+            }
+        }));
+    });
+
+    let endpoint = HttpServerEndpoint::new("remote", format!("{}/mcp", server.base_url()));
+    let mut client = McpHttpClient::connect(endpoint).expect("connect http client");
+
+    let tools = client.list_tools().await.expect("list tools");
+
+    assert_eq!(tools.len(), 2);
+    assert_eq!(tools[0].harness_tool_name(), "mcp.remote.search");
+    assert_eq!(tools[1].harness_tool_name(), "mcp.remote.open");
+    first_page.assert();
+    second_page.assert();
 }
 
 #[tokio::test]

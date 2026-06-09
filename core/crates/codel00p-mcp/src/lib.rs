@@ -1081,44 +1081,74 @@ impl McpHttpClient {
     }
 
     pub async fn list_tools(&mut self) -> Result<Vec<McpToolDescriptor>, McpError> {
-        let response = self
-            .request("tools/list", Value::Object(Default::default()))
-            .await?;
-        parse_tool_descriptors(&self.server_id, response, |message| {
-            McpError::HttpTransport {
-                server_id: self.server_id.clone(),
-                message,
-            }
-        })
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request("tools/list", mcp_list_params(cursor.as_deref()))
+                .await?;
+            descriptors.extend(parse_tool_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| McpError::HttpTransport {
+                    server_id: self.server_id.clone(),
+                    message,
+                },
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn list_resources(&mut self) -> Result<Vec<McpResourceDescriptor>, McpError> {
-        let response = self
-            .request("resources/list", Value::Object(Default::default()))
-            .await?;
-        parse_resource_descriptors(&self.server_id, response, |message| {
-            McpError::HttpTransport {
-                server_id: self.server_id.clone(),
-                message,
-            }
-        })
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request("resources/list", mcp_list_params(cursor.as_deref()))
+                .await?;
+            descriptors.extend(parse_resource_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| McpError::HttpTransport {
+                    server_id: self.server_id.clone(),
+                    message,
+                },
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn list_resource_templates(
         &mut self,
     ) -> Result<Vec<McpResourceTemplateDescriptor>, McpError> {
-        let response = self
-            .request(
-                "resources/templates/list",
-                Value::Object(Default::default()),
-            )
-            .await?;
-        parse_resource_template_descriptors(&self.server_id, response, |message| {
-            McpError::HttpTransport {
-                server_id: self.server_id.clone(),
-                message,
-            }
-        })
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request(
+                    "resources/templates/list",
+                    mcp_list_params(cursor.as_deref()),
+                )
+                .await?;
+            descriptors.extend(parse_resource_template_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| McpError::HttpTransport {
+                    server_id: self.server_id.clone(),
+                    message,
+                },
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn read_resource(
@@ -1151,15 +1181,25 @@ impl McpHttpClient {
     }
 
     pub async fn list_prompts(&mut self) -> Result<Vec<McpPromptDescriptor>, McpError> {
-        let response = self
-            .request("prompts/list", Value::Object(Default::default()))
-            .await?;
-        parse_prompt_descriptors(&self.server_id, response, |message| {
-            McpError::HttpTransport {
-                server_id: self.server_id.clone(),
-                message,
-            }
-        })
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request("prompts/list", mcp_list_params(cursor.as_deref()))
+                .await?;
+            descriptors.extend(parse_prompt_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| McpError::HttpTransport {
+                    server_id: self.server_id.clone(),
+                    message,
+                },
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn get_prompt(
@@ -1269,6 +1309,21 @@ where
             .and_then(Value::as_str)
             .map(ToString::to_string),
     })
+}
+
+fn mcp_list_params(cursor: Option<&str>) -> Value {
+    match cursor {
+        Some(cursor) => serde_json::json!({ "cursor": cursor }),
+        None => Value::Object(Default::default()),
+    }
+}
+
+fn mcp_next_cursor(response: &Value) -> Option<String> {
+    response
+        .get("nextCursor")
+        .and_then(Value::as_str)
+        .filter(|cursor| !cursor.is_empty())
+        .map(ToString::to_string)
 }
 
 fn parse_tool_descriptors<F>(
@@ -1929,79 +1984,65 @@ impl McpStdioClient {
     }
 
     pub async fn list_tools(&mut self) -> Result<Vec<McpToolDescriptor>, McpError> {
-        let response = self
-            .request("tools/list", Value::Object(Default::default()))
-            .await?;
-        let tools = response
-            .get("tools")
-            .and_then(Value::as_array)
-            .ok_or_else(|| self.stdio_error("tools/list response omitted tools array"))?;
-
-        tools
-            .iter()
-            .map(|tool| {
-                let name = tool
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| self.stdio_error("tool descriptor omitted name"))?;
-                let description = tool
-                    .get("description")
-                    .and_then(Value::as_str)
-                    .unwrap_or("MCP tool.");
-                let input_schema = tool
-                    .get("inputSchema")
-                    .cloned()
-                    .unwrap_or_else(|| serde_json::json!({ "type": "object" }));
-                Ok(McpToolDescriptor::new(
-                    self.server_id.clone(),
-                    name,
-                    description,
-                    input_schema,
-                ))
-            })
-            .collect()
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request("tools/list", mcp_list_params(cursor.as_deref()))
+                .await?;
+            descriptors.extend(parse_tool_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| self.stdio_error(message),
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn list_resources(&mut self) -> Result<Vec<McpResourceDescriptor>, McpError> {
-        let response = self
-            .request("resources/list", Value::Object(Default::default()))
-            .await?;
-        let resources = response
-            .get("resources")
-            .and_then(Value::as_array)
-            .ok_or_else(|| self.stdio_error("resources/list response omitted resources array"))?;
-
-        resources
-            .iter()
-            .map(|resource| {
-                let uri = resource
-                    .get("uri")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| self.stdio_error("resource descriptor omitted uri"))?;
-                let name = resource.get("name").and_then(Value::as_str).unwrap_or(uri);
-                let mime_type = resource.get("mimeType").and_then(Value::as_str);
-                Ok(McpResourceDescriptor::new(
-                    self.server_id.clone(),
-                    uri,
-                    name,
-                    mime_type,
-                ))
-            })
-            .collect()
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request("resources/list", mcp_list_params(cursor.as_deref()))
+                .await?;
+            descriptors.extend(parse_resource_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| self.stdio_error(message),
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn list_resource_templates(
         &mut self,
     ) -> Result<Vec<McpResourceTemplateDescriptor>, McpError> {
-        let response = self
-            .request(
-                "resources/templates/list",
-                Value::Object(Default::default()),
-            )
-            .await?;
-        parse_resource_template_descriptors(&self.server_id, response, |message| {
-            self.stdio_error(message)
-        })
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request(
+                    "resources/templates/list",
+                    mcp_list_params(cursor.as_deref()),
+                )
+                .await?;
+            descriptors.extend(parse_resource_template_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| self.stdio_error(message),
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn read_resource(
@@ -2031,12 +2072,22 @@ impl McpStdioClient {
     }
 
     pub async fn list_prompts(&mut self) -> Result<Vec<McpPromptDescriptor>, McpError> {
-        let response = self
-            .request("prompts/list", Value::Object(Default::default()))
-            .await?;
-        parse_prompt_descriptors(&self.server_id, response, |message| {
-            self.stdio_error(message)
-        })
+        let mut cursor = None;
+        let mut descriptors = Vec::new();
+        loop {
+            let response = self
+                .request("prompts/list", mcp_list_params(cursor.as_deref()))
+                .await?;
+            descriptors.extend(parse_prompt_descriptors(
+                &self.server_id,
+                response.clone(),
+                |message| self.stdio_error(message),
+            )?);
+            let Some(next_cursor) = mcp_next_cursor(&response) else {
+                return Ok(descriptors);
+            };
+            cursor = Some(next_cursor);
+        }
     }
 
     pub async fn get_prompt(

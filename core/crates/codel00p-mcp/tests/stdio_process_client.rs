@@ -159,6 +159,67 @@ async fn stdio_client_reads_resources_templates_and_sets_logging_level() {
 }
 
 #[tokio::test]
+async fn stdio_client_paginates_list_methods_until_cursor_is_absent() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r##"read tools_first
+case "$tools_first" in *'"method":"tools/list"'*) ;; *) exit 11;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"search","description":"Search memory.","inputSchema":{"type":"object"}}],"nextCursor":"tools-2"}}'
+read tools_second
+case "$tools_second" in *'"method":"tools/list"'*'"cursor":"tools-2"'*) ;; *) exit 12;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"open","description":"Open resource.","inputSchema":{"type":"object"}}]}}'
+read resources_first
+case "$resources_first" in *'"method":"resources/list"'*) ;; *) exit 13;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"resources":[{"uri":"codel00p://memory/one","name":"Memory one","mimeType":"text/plain"}],"nextCursor":"resources-2"}}'
+read resources_second
+case "$resources_second" in *'"method":"resources/list"'*'"cursor":"resources-2"'*) ;; *) exit 14;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{"resources":[{"uri":"codel00p://memory/two","name":"Memory two","mimeType":"text/plain"}]}}'
+read templates_first
+case "$templates_first" in *'"method":"resources/templates/list"'*) ;; *) exit 15;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":5,"result":{"resourceTemplates":[{"uriTemplate":"file:///{path}","name":"workspace file","mimeType":"text/plain"}],"nextCursor":"templates-2"}}'
+read templates_second
+case "$templates_second" in *'"method":"resources/templates/list"'*'"cursor":"templates-2"'*) ;; *) exit 16;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":6,"result":{"resourceTemplates":[{"uriTemplate":"db:///{table}/{id}","name":"database row","mimeType":"application/json"}]}}'
+read prompts_first
+case "$prompts_first" in *'"method":"prompts/list"'*) ;; *) exit 17;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":7,"result":{"prompts":[{"name":"review","description":"Review code."}],"nextCursor":"prompts-2"}}'
+read prompts_second
+case "$prompts_second" in *'"method":"prompts/list"'*'"cursor":"prompts-2"'*) ;; *) exit 18;; esac
+printf '%s\n' '{"jsonrpc":"2.0","id":8,"result":{"prompts":[{"name":"summarize","description":"Summarize memory."}]}}'"##,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let tools = client.list_tools().await.expect("list tools");
+    assert_eq!(tools.len(), 2);
+    assert_eq!(tools[0].tool_name(), "search");
+    assert_eq!(tools[1].tool_name(), "open");
+
+    let resources = client.list_resources().await.expect("list resources");
+    assert_eq!(resources.len(), 2);
+    assert_eq!(resources[0].uri(), "codel00p://memory/one");
+    assert_eq!(resources[1].uri(), "codel00p://memory/two");
+
+    let templates = client
+        .list_resource_templates()
+        .await
+        .expect("list resource templates");
+    assert_eq!(templates.len(), 2);
+    assert_eq!(templates[0].uri_template(), "file:///{path}");
+    assert_eq!(templates[1].uri_template(), "db:///{table}/{id}");
+
+    let prompts = client.list_prompts().await.expect("list prompts");
+    assert_eq!(prompts.len(), 2);
+    assert_eq!(prompts[0].name(), "review");
+    assert_eq!(prompts[1].name(), "summarize");
+}
+
+#[tokio::test]
 async fn stdio_client_collects_notifications_before_tool_response() {
     let command = StdioServerCommand::new(
         "fake",
