@@ -118,11 +118,11 @@ Current foundation:
 
 - provider profiles, aliases, registry lookup, credential resolution, route
   inspection, allowlist policy, OpenAI-compatible Chat Completions transport,
-  tool calls, normalized responses, and live integration-test toggles.
+  Anthropic Messages transport, tool calls, normalized responses, and live
+  integration-test toggles.
 
 Next work:
 
-- Anthropic Messages transport;
 - OpenAI Responses transport;
 - AWS Bedrock Converse transport;
 - Gemini native transport;

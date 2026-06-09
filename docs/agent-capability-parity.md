@@ -37,7 +37,8 @@ Implemented today:
 - typed permission policy and lifecycle hook surfaces;
 - deterministic protocol events;
 - durable session metadata and append-only replay;
-- CLI agent runs through Chat-Completions-compatible providers;
+- CLI agent runs through Chat-Completions-compatible providers and Anthropic
+  Messages;
 - session resume through persisted replay;
 - project instructions from `CODEL00P.md`, `AGENTS.md`, and `CLAUDE.md`;
 - streamable harness events for CLI and future UI consumers;

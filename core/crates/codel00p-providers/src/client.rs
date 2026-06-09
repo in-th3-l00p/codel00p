@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use crate::{
     ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderPolicy,
     ProviderRegistry, ResolvedInferenceRoute, default_registry,
-    transports::chat_completions::ChatCompletionsTransport,
+    transports::{
+        anthropic_messages::AnthropicMessagesTransport, chat_completions::ChatCompletionsTransport,
+    },
 };
 
 /// High-level inference facade used by codel00p modules.
@@ -44,6 +46,11 @@ impl InferenceClient {
                         route.output_token_parameter,
                         request,
                     )
+                    .await
+            }
+            ApiMode::AnthropicMessages => {
+                AnthropicMessagesTransport::new()
+                    .complete(&route.provider, &route.base_url, credential, request)
                     .await
             }
             other => Err(ProviderError::InvalidResponse {

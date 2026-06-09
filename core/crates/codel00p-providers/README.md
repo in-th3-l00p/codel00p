@@ -41,21 +41,21 @@ Implemented:
 - credential injection by canonical provider or alias;
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport;
+- Anthropic Messages transport;
 - normalized responses, usage, and tool calls;
 - mocked integration tests for request payloads and response parsing.
 
 Not yet implemented:
 
-- Anthropic Messages transport;
 - OpenAI Responses transport;
 - AWS Bedrock Converse transport;
 - Gemini-native transport;
 - environment/cloud credential resolvers;
 - streaming.
 
-The current working transport is enough to use custom OpenAI-compatible
-endpoints, OpenRouter, Azure-style endpoints when a base URL is supplied, and
-other compatible gateways.
+The current working transports are enough to use Anthropic directly, custom
+OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints when a base URL
+is supplied, and other compatible gateways.
 
 ## Design rules
 
@@ -83,6 +83,11 @@ tests and provide credentials through environment variables:
 CODEL00P_INTEGRATION_TESTS=1 \
 CODEL00P_PROVIDER_GITHUB_TOKEN=... \
 cargo test -p codel00p-providers --test live_copilot -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_ANTHROPIC_API_KEY=... \
+CODEL00P_PROVIDER_ANTHROPIC_MODEL=claude-3-5-haiku-20241022 \
+cargo test -p codel00p-providers --test live_anthropic -- --ignored --nocapture
 ```
 
 Credential environment variables:

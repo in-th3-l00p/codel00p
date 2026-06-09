@@ -289,13 +289,15 @@ Implemented:
 - first-wave provider profiles and aliases;
 - inspectable `ResolvedInferenceRoute`;
 - provider allowlist policy;
-- OpenAI-compatible Chat Completions transport with mocked HTTP tests.
+- OpenAI-compatible Chat Completions transport with mocked HTTP tests;
+- Anthropic Messages transport with mocked HTTP tests, including native system
+  prompts, tool schemas, `tool_use` responses, tool-result replay, stop
+  reasons, and cache usage metadata.
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
 Next transports:
 
-- Anthropic Messages;
 - OpenAI Responses;
 - AWS Bedrock Converse;
 - Gemini native.
