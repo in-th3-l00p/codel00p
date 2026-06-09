@@ -3,7 +3,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use codel00p_mcp::{McpStdioClient, McpToolCall, StdioServerCommand};
+use codel00p_mcp::{McpClientNotification, McpStdioClient, McpToolCall, StdioServerCommand};
 use serde_json::json;
 
 #[tokio::test]
@@ -76,6 +76,35 @@ async fn stdio_client_lists_and_calls_mcp_tools() {
             ],
             "isError": false
         })
+    );
+}
+
+#[tokio::test]
+async fn stdio_client_collects_notifications_before_tool_response() {
+    let command = StdioServerCommand::new(
+        "fake",
+        "/bin/sh",
+        [
+            "-c",
+            r#"read line; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p1","progress":1,"total":2,"message":"Searching memory"}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"codel00p://memory/mem-1"}}'; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}],"isError":false}}'"#,
+        ],
+    );
+    let mut client = McpStdioClient::spawn(command)
+        .await
+        .expect("spawn stdio client");
+
+    let output = client
+        .call_tool(McpToolCall::new("fake", "echo", json!({})))
+        .await
+        .expect("call tool");
+
+    assert_eq!(output.content()["content"][0]["text"], "ok");
+    assert_eq!(
+        output.notifications(),
+        &[
+            McpClientNotification::progress(json!("p1"), 1.0, Some(2.0), Some("Searching memory")),
+            McpClientNotification::resource_updated("codel00p://memory/mem-1")
+        ]
     );
 }
 

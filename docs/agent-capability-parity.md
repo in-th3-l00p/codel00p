@@ -142,6 +142,8 @@ Current implementation:
   and resource update notifications;
 - reusable typed MCP server handler traits and stdio server runner wiring let
   future codel00p MCP servers be assembled without CLI-specific protocol loops;
+- stdio and HTTP MCP clients collect server progress/resource notifications
+  and surface them as structured harness `ToolProgress` events;
 - the stdio MCP server exposes `codel00p://memory/{id}` and
   `codel00p://sessions/{session_id}` JSON resource templates for direct
   context browsing;
@@ -156,8 +158,8 @@ Current implementation:
 
 Remaining work:
 
-- consume MCP progress and resource update notifications on the client side and
-  surface them as structured harness events;
+- add long-lived MCP resource subscriptions, reconnect behavior, and
+  list-changed/resource-changed background event routing;
 
 ### 7. Context Management
 

@@ -62,7 +62,10 @@ reviewed memory mutations, and tokenized tool/resource requests emit MCP
 shared server runtime for JSON-RPC response and error framing, progress
 notifications, resource subscriptions, resource update notifications, typed
 server handler dispatch, and reusable stdio server loops; the CLI server only
-supplies codel00p-specific memory and session behavior.
+supplies codel00p-specific memory and session behavior. On the client side,
+stdio and HTTP transports collect MCP progress/resource notifications before
+the final tool response and the MCP harness adapter emits them as structured
+`ToolProgress` events for CLI, desktop, cloud, and session replay consumers.
 Ask-mode MCP connector decisions can be remembered in the same project-scoped
 local store, keyed by tool name and permission scope, so trusted connectors do
 not require repeated prompts. Operators can inspect and revoke those remembered

@@ -87,6 +87,61 @@ async fn executes_tool_calls_and_continues_until_final_text() {
 }
 
 #[tokio::test]
+async fn tool_result_progress_is_emitted_as_harness_events() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![ModelToolCall::new("call-1", "progress_tool", json!({}))],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "Done."),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::new().with_tool(ProgressTool))
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-tool-progress"),
+            UserMessage::new("Use progress tool."),
+        )
+        .await
+        .expect("run turn");
+
+    assert!(outcome.events.iter().any(|event| {
+        matches!(
+            event,
+            HarnessEvent::ToolProgress {
+                tool_name,
+                phase,
+                message: Some(message),
+                ..
+            } if tool_name == "progress_tool"
+                && phase == "mcp_progress"
+                && message == "Half done"
+        )
+    }));
+    assert!(outcome.events.iter().any(|event| {
+        matches!(
+            event,
+            HarnessEvent::ToolProgress {
+                tool_name,
+                phase,
+                message: Some(message),
+                ..
+            } if tool_name == "progress_tool"
+                && phase == "mcp_resource_updated"
+                && message == "codel00p://memory/mem-1"
+        )
+    }));
+}
+
+#[tokio::test]
 async fn unknown_tool_call_is_recorded_as_failed_tool_result() {
     let dir = tempdir().expect("tempdir");
     let workspace = Workspace::new(dir.path()).expect("workspace");
@@ -829,6 +884,33 @@ impl Tool for TrackingTool {
 
 struct CountingTool {
     executions: Arc<AtomicUsize>,
+}
+
+struct ProgressTool;
+
+#[async_trait]
+impl Tool for ProgressTool {
+    fn name(&self) -> &str {
+        "progress_tool"
+    }
+
+    fn description(&self) -> &str {
+        "Returns tool progress metadata."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({ "type": "object" })
+    }
+
+    async fn execute(
+        &self,
+        _workspace: &Workspace,
+        _input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        Ok(ToolResult::json(json!({ "ok": true }))
+            .with_progress("mcp_progress", Some("Half done"))
+            .with_progress("mcp_resource_updated", Some("codel00p://memory/mem-1")))
+    }
 }
 
 #[async_trait]

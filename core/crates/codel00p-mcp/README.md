@@ -16,6 +16,8 @@ This crate owns the contract between MCP servers and the agent harness:
   notifications.
 - `McpServerHandler` and `serve_stdio_server`: typed server dispatch and
   newline-delimited stdio serving for codel00p MCP servers.
+- `McpClientNotification`: progress/resource notification metadata collected
+  by MCP clients and emitted through harness `ToolProgress` events.
 
 Harness tool names are prefixed as:
 
@@ -40,7 +42,10 @@ The HTTP transport sends each JSON-RPC client message as a POST to the MCP
 endpoint, accepts JSON or `text/event-stream` responses, stores
 `Mcp-Session-Id` returned by `initialize`, and sends that session header on
 later requests. It supports bearer tokens and static headers for enterprise
-connector gateways.
+connector gateways. Stdio and HTTP tool calls preserve
+`notifications/progress` and `notifications/resources/updated` messages that
+arrive before the final response; the harness adapter maps them into
+`mcp_progress` and `mcp_resource_updated` tool progress phases.
 
 Both transports support the MCP lifecycle handshake by sending `initialize`,
 recording the negotiated server metadata, and then sending

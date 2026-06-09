@@ -1,4 +1,4 @@
-use codel00p_mcp::{HttpServerEndpoint, McpHttpClient, McpToolCall};
+use codel00p_mcp::{HttpServerEndpoint, McpClientNotification, McpHttpClient, McpToolCall};
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
@@ -97,6 +97,44 @@ async fn http_client_calls_tools_over_json_rpc_post() {
         .await
         .expect("call tool");
     assert_eq!(output.content()["content"][0]["text"], "found");
+    call.assert();
+}
+
+#[tokio::test]
+async fn http_client_collects_sse_notifications_before_tool_response() {
+    let server = MockServer::start();
+    let call = server.mock(|when, then| {
+        when.method(POST)
+            .path("/mcp")
+            .body_includes(r#""method":"tools/call""#);
+        then.status(200)
+            .header("content-type", "text/event-stream")
+            .body(
+                "event: message\n\
+                 data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":\"p1\",\"progress\":1,\"total\":2,\"message\":\"Working\"}}\n\n\
+                 event: message\n\
+                 data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/resources/updated\",\"params\":{\"uri\":\"codel00p://memory/mem-1\"}}\n\n\
+                 event: message\n\
+                 data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}],\"isError\":false}}\n\n",
+            );
+    });
+
+    let endpoint = HttpServerEndpoint::new("remote", format!("{}/mcp", server.base_url()));
+    let mut client = McpHttpClient::connect(endpoint).expect("connect http client");
+
+    let output = client
+        .call_tool(McpToolCall::new("remote", "lookup", json!({})))
+        .await
+        .expect("call tool");
+
+    assert_eq!(output.content()["content"][0]["text"], "done");
+    assert_eq!(
+        output.notifications(),
+        &[
+            McpClientNotification::progress(json!("p1"), 1.0, Some(2.0), Some("Working")),
+            McpClientNotification::resource_updated("codel00p://memory/mem-1")
+        ]
+    );
     call.assert();
 }
 

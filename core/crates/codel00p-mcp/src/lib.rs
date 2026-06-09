@@ -138,6 +138,14 @@ impl JsonRpcNotification {
             params,
         }
     }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn params(&self) -> &Value {
+        &self.params
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -514,6 +522,52 @@ pub struct McpHttpClient {
     initialized: Option<McpInitialization>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpClientNotification {
+    Progress {
+        progress_token: Value,
+        progress: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    ResourceUpdated {
+        uri: String,
+    },
+    Other {
+        method: String,
+        params: Value,
+    },
+}
+
+impl McpClientNotification {
+    pub fn progress(
+        progress_token: Value,
+        progress: f64,
+        total: Option<f64>,
+        message: Option<impl Into<String>>,
+    ) -> Self {
+        Self::Progress {
+            progress_token,
+            progress,
+            total,
+            message: message.map(Into::into),
+        }
+    }
+
+    pub fn resource_updated(uri: impl Into<String>) -> Self {
+        Self::ResourceUpdated { uri: uri.into() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct McpClientExchange {
+    response: Value,
+    notifications: Vec<McpClientNotification>,
+}
+
 impl McpHttpClient {
     pub fn connect(endpoint: HttpServerEndpoint) -> Result<Self, McpError> {
         let client = reqwest::Client::builder()
@@ -570,15 +624,28 @@ impl McpHttpClient {
         method: impl Into<String>,
         params: Value,
     ) -> Result<Value, McpError> {
+        Ok(self.request_exchange(method, params).await?.response)
+    }
+
+    async fn request_exchange(
+        &mut self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<McpClientExchange, McpError> {
         let request_id = self.next_request_id;
         self.next_request_id += 1;
         let request = JsonRpcMessage::request(JsonRpcRequest::new(request_id, method, params));
-        let response = self.post_json_rpc(&request).await?;
-        json_rpc_result_from_response(&self.server_id, response, |message| {
-            McpError::HttpTransport {
-                server_id: self.server_id.clone(),
-                message,
-            }
+        let exchange = self.post_json_rpc(&request).await?;
+        let response =
+            json_rpc_result_from_response(&self.server_id, exchange.response, |message| {
+                McpError::HttpTransport {
+                    server_id: self.server_id.clone(),
+                    message,
+                }
+            })?;
+        Ok(McpClientExchange {
+            response,
+            notifications: exchange.notifications,
         })
     }
 
@@ -588,11 +655,11 @@ impl McpHttpClient {
         params: Value,
     ) -> Result<(), McpError> {
         let notification = JsonRpcMessage::Notification(JsonRpcNotification::new(method, params));
-        let response = self.post_json_rpc(&notification).await?;
-        if response.is_null() {
+        let exchange = self.post_json_rpc(&notification).await?;
+        if exchange.response.is_null() {
             return Ok(());
         }
-        json_rpc_result_from_response(&self.server_id, response, |message| {
+        json_rpc_result_from_response(&self.server_id, exchange.response, |message| {
             McpError::HttpTransport {
                 server_id: self.server_id.clone(),
                 message,
@@ -601,7 +668,10 @@ impl McpHttpClient {
         Ok(())
     }
 
-    async fn post_json_rpc(&mut self, message: &JsonRpcMessage) -> Result<Value, McpError> {
+    async fn post_json_rpc(
+        &mut self,
+        message: &JsonRpcMessage,
+    ) -> Result<McpClientExchange, McpError> {
         let mut request = self
             .client
             .post(&self.url)
@@ -644,16 +714,25 @@ impl McpHttpClient {
             return Err(self.http_error(format!("server returned HTTP {status}: {}", body.trim())));
         }
         if status == reqwest::StatusCode::ACCEPTED || body.trim().is_empty() {
-            return Ok(Value::Null);
+            return Ok(McpClientExchange {
+                response: Value::Null,
+                notifications: Vec::new(),
+            });
         }
         if content_type
             .to_ascii_lowercase()
             .starts_with("text/event-stream")
         {
-            return decode_sse_json_rpc_message(&body).map_err(|message| self.http_error(message));
+            let messages =
+                decode_sse_json_rpc_messages(&body).map_err(|message| self.http_error(message))?;
+            return client_exchange_from_messages(messages, |message| self.http_error(message));
         }
-        serde_json::from_str(&body)
-            .map_err(|error| self.http_error(format!("invalid json response: {error}")))
+        let response = serde_json::from_str(&body)
+            .map_err(|error| self.http_error(format!("invalid json response: {error}")))?;
+        Ok(McpClientExchange {
+            response,
+            notifications: Vec::new(),
+        })
     }
 
     fn http_error(&self, message: impl Into<String>) -> McpError {
@@ -696,8 +775,8 @@ impl McpHttpClient {
             });
         }
 
-        let response = self
-            .request(
+        let exchange = self
+            .request_exchange(
                 "tools/call",
                 serde_json::json!({
                     "name": call.tool_name(),
@@ -706,7 +785,7 @@ impl McpHttpClient {
             )
             .await?;
 
-        Ok(McpToolOutput::json(response))
+        Ok(McpToolOutput::json(exchange.response).with_notifications(exchange.notifications))
     }
 }
 
@@ -846,21 +925,109 @@ where
         .collect()
 }
 
-fn decode_sse_json_rpc_message(body: &str) -> Result<Value, String> {
+fn decode_sse_json_rpc_messages(body: &str) -> Result<Vec<Value>, String> {
+    let mut messages = Vec::new();
     let mut data = String::new();
     for line in body.lines() {
-        let Some(rest) = line.strip_prefix("data:") else {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() {
+            if !data.trim().is_empty() {
+                messages.push(
+                    serde_json::from_str(&data)
+                        .map_err(|error| format!("invalid sse json response: {error}"))?,
+                );
+                data.clear();
+            }
             continue;
-        };
-        if !data.is_empty() {
-            data.push('\n');
         }
-        data.push_str(rest.trim_start());
+        if let Some(rest) = line.strip_prefix("data:") {
+            if !data.is_empty() {
+                data.push('\n');
+            }
+            data.push_str(rest.trim_start());
+        }
     }
-    if data.trim().is_empty() {
+    if !data.trim().is_empty() {
+        messages.push(
+            serde_json::from_str(&data)
+                .map_err(|error| format!("invalid sse json response: {error}"))?,
+        );
+    }
+    if messages.is_empty() {
         return Err("sse response omitted data event".to_string());
     }
-    serde_json::from_str(&data).map_err(|error| format!("invalid sse json response: {error}"))
+    Ok(messages)
+}
+
+fn client_exchange_from_messages<F>(
+    messages: Vec<Value>,
+    error: F,
+) -> Result<McpClientExchange, McpError>
+where
+    F: Fn(String) -> McpError,
+{
+    let mut notifications = Vec::new();
+    for message in messages {
+        match serde_json::from_value::<JsonRpcMessage>(message.clone()) {
+            Ok(JsonRpcMessage::Notification(notification)) => {
+                notifications.push(client_notification_from_json_rpc(notification));
+            }
+            Ok(JsonRpcMessage::Response(_)) | Ok(JsonRpcMessage::Raw(_)) => {
+                return Ok(McpClientExchange {
+                    response: message,
+                    notifications,
+                });
+            }
+            Ok(JsonRpcMessage::Request(_)) => {
+                return Err(error(
+                    "server returned a request while awaiting response".to_string(),
+                ));
+            }
+            Err(_) => {
+                if message.get("id").is_some() || message.get("result").is_some() {
+                    return Ok(McpClientExchange {
+                        response: message,
+                        notifications,
+                    });
+                }
+                return Err(error(
+                    "server returned an invalid json-rpc message".to_string(),
+                ));
+            }
+        }
+    }
+    Err(error("server omitted json-rpc response".to_string()))
+}
+
+fn client_notification_from_json_rpc(notification: JsonRpcNotification) -> McpClientNotification {
+    match notification.method() {
+        "notifications/progress" => {
+            let params = notification.params();
+            McpClientNotification::progress(
+                params.get("progressToken").cloned().unwrap_or(Value::Null),
+                params
+                    .get("progress")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0),
+                params.get("total").and_then(Value::as_f64),
+                params.get("message").and_then(Value::as_str),
+            )
+        }
+        "notifications/resources/updated" => {
+            if let Some(uri) = notification.params().get("uri").and_then(Value::as_str) {
+                McpClientNotification::resource_updated(uri)
+            } else {
+                McpClientNotification::Other {
+                    method: notification.method().to_string(),
+                    params: notification.params().clone(),
+                }
+            }
+        }
+        method => McpClientNotification::Other {
+            method: method.to_string(),
+            params: notification.params().clone(),
+        },
+    }
 }
 
 impl McpStdioClient {
@@ -949,6 +1116,14 @@ impl McpStdioClient {
         method: impl Into<String>,
         params: Value,
     ) -> Result<Value, McpError> {
+        Ok(self.request_exchange(method, params).await?.response)
+    }
+
+    async fn request_exchange(
+        &mut self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<McpClientExchange, McpError> {
         let request_id = self.next_request_id;
         self.next_request_id += 1;
         let request = JsonRpcMessage::request(JsonRpcRequest::new(request_id, method, params));
@@ -978,36 +1153,52 @@ impl McpStdioClient {
             .await
             .map_err(|error| self.stdio_error(format!("failed to flush request: {error}")))?;
 
-        let mut line = String::new();
-        let bytes = timeout(self.request_timeout, self.stdout.read_line(&mut line))
-            .await
-            .map_err(|_| {
-                self.stdio_error(format!(
-                    "request timed out after {} ms",
-                    self.request_timeout.as_millis()
-                ))
-            })?
-            .map_err(|error| self.stdio_error(format!("failed to read response: {error}")))?;
-        if bytes == 0 {
-            return Err(self.stdio_error("server closed stdout before responding"));
-        }
-
-        match decode_stdio_message(&line)? {
-            JsonRpcMessage::Response(response) => {
-                if let Some(error) = response.error() {
-                    return Err(self.stdio_error(format!("json-rpc error response: {error}")));
-                }
-                response
-                    .result()
-                    .cloned()
-                    .ok_or_else(|| self.stdio_error("json-rpc response omitted result"))
+        let mut notifications = Vec::new();
+        loop {
+            let mut line = String::new();
+            let bytes = timeout(self.request_timeout, self.stdout.read_line(&mut line))
+                .await
+                .map_err(|_| {
+                    self.stdio_error(format!(
+                        "request timed out after {} ms",
+                        self.request_timeout.as_millis()
+                    ))
+                })?
+                .map_err(|error| self.stdio_error(format!("failed to read response: {error}")))?;
+            if bytes == 0 {
+                return Err(self.stdio_error("server closed stdout before responding"));
             }
-            JsonRpcMessage::Raw(value) => value
-                .get("result")
-                .cloned()
-                .ok_or_else(|| self.stdio_error("json-rpc response omitted result")),
-            JsonRpcMessage::Request(_) | JsonRpcMessage::Notification(_) => {
-                Err(self.stdio_error("server returned a non-response message"))
+
+            match decode_stdio_message(&line)? {
+                JsonRpcMessage::Response(response) => {
+                    if let Some(error) = response.error() {
+                        return Err(self.stdio_error(format!("json-rpc error response: {error}")));
+                    }
+                    let response = response
+                        .result()
+                        .cloned()
+                        .ok_or_else(|| self.stdio_error("json-rpc response omitted result"))?;
+                    return Ok(McpClientExchange {
+                        response,
+                        notifications,
+                    });
+                }
+                JsonRpcMessage::Raw(value) => {
+                    let response = value
+                        .get("result")
+                        .cloned()
+                        .ok_or_else(|| self.stdio_error("json-rpc response omitted result"))?;
+                    return Ok(McpClientExchange {
+                        response,
+                        notifications,
+                    });
+                }
+                JsonRpcMessage::Notification(notification) => {
+                    notifications.push(client_notification_from_json_rpc(notification));
+                }
+                JsonRpcMessage::Request(_) => {
+                    return Err(self.stdio_error("server returned a non-response message"));
+                }
             }
         }
     }
@@ -1144,8 +1335,8 @@ impl McpStdioClient {
             });
         }
 
-        let response = self
-            .request(
+        let exchange = self
+            .request_exchange(
                 "tools/call",
                 serde_json::json!({
                     "name": call.tool_name(),
@@ -1154,7 +1345,7 @@ impl McpStdioClient {
             )
             .await?;
 
-        Ok(McpToolOutput::json(response))
+        Ok(McpToolOutput::json(exchange.response).with_notifications(exchange.notifications))
     }
 }
 
@@ -1352,15 +1543,29 @@ impl McpToolCall {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct McpToolOutput {
     content: Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    notifications: Vec<McpClientNotification>,
 }
 
 impl McpToolOutput {
     pub fn json(content: Value) -> Self {
-        Self { content }
+        Self {
+            content,
+            notifications: Vec::new(),
+        }
+    }
+
+    pub fn with_notifications(mut self, notifications: Vec<McpClientNotification>) -> Self {
+        self.notifications = notifications;
+        self
     }
 
     pub fn content(&self) -> &Value {
         &self.content
+    }
+
+    pub fn notifications(&self) -> &[McpClientNotification] {
+        &self.notifications
     }
 }
 
@@ -1438,7 +1643,21 @@ impl Tool for McpTool {
                 message: error.to_string(),
             })?;
 
-        Ok(ToolResult::json(output.content().clone()))
+        let mut result = ToolResult::json(output.content().clone());
+        for notification in output.notifications() {
+            match notification {
+                McpClientNotification::Progress { message, .. } => {
+                    result = result.with_progress("mcp_progress", message.as_deref());
+                }
+                McpClientNotification::ResourceUpdated { uri } => {
+                    result = result.with_progress("mcp_resource_updated", Some(uri.as_str()));
+                }
+                McpClientNotification::Other { method, .. } => {
+                    result = result.with_progress("mcp_notification", Some(method.as_str()));
+                }
+            }
+        }
+        Ok(result)
     }
 }
 

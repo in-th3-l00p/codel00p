@@ -377,6 +377,20 @@ impl AgentHarness {
                 for (tool_call, result) in batch.iter().zip(results) {
                     let result = match result {
                         Ok(result) => {
+                            for progress in result.progress() {
+                                self.record_event(
+                                    &mut events,
+                                    HarnessEvent::ToolProgress {
+                                        event_id: EventId::new(),
+                                        session_id: session_state.session_id().clone(),
+                                        turn_id: turn_id.clone(),
+                                        tool_name: tool_call.name().to_string(),
+                                        phase: progress.phase().to_string(),
+                                        message: progress.message().map(ToString::to_string),
+                                    },
+                                )
+                                .await;
+                            }
                             self.record_event(
                                 &mut events,
                                 HarnessEvent::ToolCallCompleted {

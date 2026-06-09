@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use codel00p_harness::{Tool, ToolRegistry, Workspace};
 use codel00p_mcp::{
-    McpClient, McpResourceDescriptor, McpTool, McpToolCall, McpToolDescriptor, McpToolOutput,
-    discover_tool_registry,
+    McpClient, McpClientNotification, McpResourceDescriptor, McpTool, McpToolCall,
+    McpToolDescriptor, McpToolOutput, discover_tool_registry,
 };
 use codel00p_protocol::PermissionScope;
 use serde_json::json;
@@ -85,6 +85,36 @@ async fn mcp_tool_delegates_calls_to_client() {
 }
 
 #[tokio::test]
+async fn mcp_tool_maps_client_notifications_to_tool_progress() {
+    let workspace = Workspace::new(".").expect("workspace");
+    let client = RecordingMcpClient::default();
+    client.set_output(
+        McpToolOutput::json(json!({ "matches": ["memory.md"] })).with_notifications(vec![
+            McpClientNotification::progress(json!("p1"), 1.0, Some(2.0), Some("Searching")),
+            McpClientNotification::resource_updated("codel00p://memory/mem-1"),
+        ]),
+    );
+    let tool = McpTool::new(
+        McpToolDescriptor::new("docs", "search", "Search docs.", json!({})),
+        client,
+    );
+
+    let result = tool
+        .execute(&workspace, json!({ "query": "memory" }))
+        .await
+        .expect("execute mcp tool");
+
+    assert_eq!(result.content(), &json!({ "matches": ["memory.md"] }));
+    assert_eq!(result.progress()[0].phase(), "mcp_progress");
+    assert_eq!(result.progress()[0].message(), Some("Searching"));
+    assert_eq!(result.progress()[1].phase(), "mcp_resource_updated");
+    assert_eq!(
+        result.progress()[1].message(),
+        Some("codel00p://memory/mem-1")
+    );
+}
+
+#[tokio::test]
 async fn mcp_tools_can_be_registered_in_harness_registry() {
     let workspace = Workspace::new(".").expect("workspace");
     let client = RecordingMcpClient::default();
@@ -135,16 +165,26 @@ async fn discovers_mcp_tools_into_harness_registry() {
     assert_eq!(client.calls()[0].tool_name(), "search");
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct RecordingMcpClient {
     calls: Arc<Mutex<Vec<McpToolCall>>>,
+    output: Arc<Mutex<McpToolOutput>>,
     tools: Vec<McpToolDescriptor>,
+}
+
+impl Default for RecordingMcpClient {
+    fn default() -> Self {
+        Self::with_tools(Vec::new())
+    }
 }
 
 impl RecordingMcpClient {
     fn with_tools(tools: Vec<McpToolDescriptor>) -> Self {
         Self {
             calls: Arc::new(Mutex::new(Vec::new())),
+            output: Arc::new(Mutex::new(McpToolOutput::json(json!({
+                "matches": ["memory.md"]
+            })))),
             tools,
         }
     }
@@ -152,13 +192,17 @@ impl RecordingMcpClient {
     fn calls(&self) -> Vec<McpToolCall> {
         self.calls.lock().expect("calls").clone()
     }
+
+    fn set_output(&self, output: McpToolOutput) {
+        *self.output.lock().expect("output") = output;
+    }
 }
 
 #[async_trait]
 impl McpClient for RecordingMcpClient {
     async fn call_tool(&self, call: McpToolCall) -> Result<McpToolOutput, codel00p_mcp::McpError> {
         self.calls.lock().expect("calls").push(call);
-        Ok(McpToolOutput::json(json!({ "matches": ["memory.md"] })))
+        Ok(self.output.lock().expect("output").clone())
     }
 
     async fn list_tools(&self) -> Result<Vec<McpToolDescriptor>, codel00p_mcp::McpError> {
