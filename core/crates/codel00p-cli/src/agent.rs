@@ -1,4 +1,9 @@
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    io::{self, Write},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use codel00p_harness::{
@@ -312,11 +317,15 @@ fn build_tool_registry(tool_sets: &[AgentToolSet]) -> ToolRegistry {
 
 struct CliPermissionPolicy {
     mode: CliPermissionMode,
+    prompt_lock: Arc<Mutex<()>>,
 }
 
 impl CliPermissionPolicy {
     fn new(mode: CliPermissionMode) -> Self {
-        Self { mode }
+        Self {
+            mode,
+            prompt_lock: Arc::new(Mutex::new(())),
+        }
     }
 }
 
@@ -328,14 +337,7 @@ impl PermissionPolicy for CliPermissionPolicy {
                 request.id(),
                 PermissionMode::Allow,
             )),
-            CliPermissionMode::Ask => Ok(PermissionDecision::deny(
-                request.id(),
-                PermissionMode::Ask,
-                format!(
-                    "{} requires approval, but interactive permission prompts are not implemented",
-                    request.tool_name()
-                ),
-            )),
+            CliPermissionMode::Ask => self.decide_with_prompt(request),
             CliPermissionMode::Deny => Ok(PermissionDecision::deny(
                 request.id(),
                 PermissionMode::Deny,
@@ -343,6 +345,59 @@ impl PermissionPolicy for CliPermissionPolicy {
             )),
         }
     }
+}
+
+impl CliPermissionPolicy {
+    fn decide_with_prompt(
+        &self,
+        request: PermissionRequest,
+    ) -> Result<PermissionDecision, HarnessError> {
+        let _prompt = self
+            .prompt_lock
+            .lock()
+            .map_err(|_| HarnessError::ToolFailed {
+                name: request.tool_name().to_string(),
+                message: "permission prompt lock was poisoned".to_string(),
+            })?;
+
+        let approved =
+            prompt_for_permission(&request).map_err(|error| HarnessError::ToolFailed {
+                name: request.tool_name().to_string(),
+                message: format!("failed to read permission approval: {error}"),
+            })?;
+
+        if approved {
+            Ok(PermissionDecision::allow(request.id(), PermissionMode::Ask))
+        } else {
+            Ok(PermissionDecision::deny(
+                request.id(),
+                PermissionMode::Ask,
+                format!("{} rejected by CLI approval prompt", request.tool_name()),
+            ))
+        }
+    }
+}
+
+fn prompt_for_permission(request: &PermissionRequest) -> io::Result<bool> {
+    let mut stderr = io::stderr();
+    write!(
+        stderr,
+        "Allow tool `{}` for {:?}? [y/N] ",
+        request.tool_name(),
+        request.scope()
+    )?;
+    stderr.flush()?;
+
+    let mut answer = String::new();
+    let bytes = io::stdin().read_line(&mut answer)?;
+    if bytes == 0 {
+        return Ok(false);
+    }
+
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 struct StdoutJsonEventSink;

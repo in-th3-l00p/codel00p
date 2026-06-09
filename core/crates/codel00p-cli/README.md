@@ -65,8 +65,9 @@ Supported tool-set names:
 Tool calls run with `--permission-mode allow` by default. Use
 `--permission-mode deny` to exercise a turn without mutating the workspace or
 running commands; denied calls are returned to the model as structured tool
-results. `--permission-mode ask` currently fails closed in the non-interactive
-CLI until interactive approval prompts are implemented.
+results. Use `--permission-mode ask` to approve or reject each requested tool
+call from stdin; prompts are printed on stderr so stdout remains scriptable.
+When no approval input is available, `ask` denies the call.
 
 Use `--stream-events` when a caller wants one JSON event per line as the turn is
 running. Use `--json-events` when a caller wants the final assistant text first

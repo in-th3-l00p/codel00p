@@ -1,7 +1,8 @@
 use std::{
     fs,
+    io::Write,
     path::Path,
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
 };
 
 use httpmock::{Method::POST, MockServer};
@@ -40,6 +41,34 @@ fn run_codel00p_without_provider_env(db_path: &Path, args: &[&str]) -> Output {
         .args(args)
         .output()
         .expect("run codel00p")
+}
+
+fn run_codel00p_with_stdin(db_path: &Path, args: &[&str], stdin: &str) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .arg("--memory-db")
+        .arg(db_path)
+        .arg("--organization-id")
+        .arg("org-1")
+        .arg("--project-id")
+        .arg("project-1")
+        .arg("--project-name")
+        .arg("codel00p")
+        .env("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token")
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn codel00p");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(stdin.as_bytes())
+        .expect("write stdin");
+
+    child.wait_with_output().expect("run codel00p")
 }
 
 fn stdout(output: &Output) -> String {
@@ -370,8 +399,7 @@ fn agent_run_fails_closed_when_permission_mode_is_ask_without_interactive_prompt
             .path("/chat/completions")
             .body_includes(r#""role":"tool""#)
             .body_includes("permission_denied")
-            .body_includes("requires approval")
-            .body_includes("interactive permission prompts are not implemented");
+            .body_includes("rejected by CLI approval prompt");
         then.status(200).json_body(json!({
             "choices": [
                 {
@@ -408,6 +436,177 @@ fn agent_run_fails_closed_when_permission_mode_is_ask_without_interactive_prompt
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     assert_eq!(stdout(&output), "Approval unavailable.\n");
+    assert!(!workspace.join("created.txt").exists());
+    first.assert();
+    second.assert();
+}
+
+#[test]
+fn agent_run_allows_tool_execution_when_permission_mode_ask_is_approved() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""name":"create_file""#)
+            .body_excludes(r#""role":"tool""#);
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": null,
+                        "tool_calls": [
+                            {
+                                "id": "call-create",
+                                "type": "function",
+                                "function": {
+                                    "name": "create_file",
+                                    "arguments": "{\"path\":\"created.txt\",\"content\":\"created\"}"
+                                }
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls"
+                }
+            ]
+        }));
+    });
+    let second = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""role":"tool""#)
+            .body_includes("created.txt")
+            .body_includes("bytes_written")
+            .body_excludes("permission_denied");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Write approved."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Create the file.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--tool-set",
+            "edit",
+            "--permission-mode",
+            "ask",
+        ],
+        "y\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Write approved.\n");
+    assert_eq!(
+        fs::read_to_string(workspace.join("created.txt")).expect("created file"),
+        "created"
+    );
+    assert!(stderr(&output).contains("Allow tool `create_file`"));
+    first.assert();
+    second.assert();
+}
+
+#[test]
+fn agent_run_denies_tool_execution_when_permission_mode_ask_is_rejected() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""name":"create_file""#)
+            .body_excludes(r#""role":"tool""#);
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": null,
+                        "tool_calls": [
+                            {
+                                "id": "call-create",
+                                "type": "function",
+                                "function": {
+                                    "name": "create_file",
+                                    "arguments": "{\"path\":\"created.txt\",\"content\":\"nope\"}"
+                                }
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls"
+                }
+            ]
+        }));
+    });
+    let second = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""role":"tool""#)
+            .body_includes("permission_denied")
+            .body_includes("rejected by CLI approval prompt");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Write rejected."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Create the file.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--tool-set",
+            "edit",
+            "--permission-mode",
+            "ask",
+        ],
+        "n\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Write rejected.\n");
     assert!(!workspace.join("created.txt").exists());
     first.assert();
     second.assert();
