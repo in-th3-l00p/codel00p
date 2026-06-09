@@ -17,6 +17,93 @@ pub enum McpError {
         tool_name: String,
         message: String,
     },
+
+    #[error("invalid stdio transport message: {message}")]
+    InvalidStdioMessage { message: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JsonRpcId {
+    Number(u64),
+    String(String),
+}
+
+impl From<u64> for JsonRpcId {
+    fn from(value: u64) -> Self {
+        Self::Number(value)
+    }
+}
+
+impl From<&str> for JsonRpcId {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_string())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct JsonRpcRequest {
+    jsonrpc: String,
+    id: JsonRpcId,
+    method: String,
+    params: Value,
+}
+
+impl JsonRpcRequest {
+    pub fn new(id: impl Into<JsonRpcId>, method: impl Into<String>, params: Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id: id.into(),
+            method: method.into(),
+            params,
+        }
+    }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn params(&self) -> &Value {
+        &self.params
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JsonRpcMessage {
+    Request(JsonRpcRequest),
+    Raw(Value),
+}
+
+impl JsonRpcMessage {
+    pub fn request(request: JsonRpcRequest) -> Self {
+        Self::Request(request)
+    }
+}
+
+pub fn encode_stdio_message(message: &JsonRpcMessage) -> Result<String, McpError> {
+    let encoded =
+        serde_json::to_string(message).map_err(|error| McpError::InvalidStdioMessage {
+            message: error.to_string(),
+        })?;
+    if encoded.contains('\n') || encoded.contains('\r') {
+        return Err(McpError::InvalidStdioMessage {
+            message: "stdio messages must not contain embedded newlines".to_string(),
+        });
+    }
+    Ok(format!("{encoded}\n"))
+}
+
+pub fn decode_stdio_message(line: &str) -> Result<JsonRpcMessage, McpError> {
+    let trimmed = line.trim_end_matches(['\r', '\n']);
+    if trimmed.contains('\n') || trimmed.contains('\r') {
+        return Err(McpError::InvalidStdioMessage {
+            message: "stdio messages must not contain embedded newlines".to_string(),
+        });
+    }
+    serde_json::from_str(trimmed).map_err(|error| McpError::InvalidStdioMessage {
+        message: error.to_string(),
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
