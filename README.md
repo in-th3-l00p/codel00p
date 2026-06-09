@@ -57,6 +57,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 ## Documentation
 
 - [Project Description](docs/project.md)
+- [Product Roadmap](docs/product-roadmap.md)
 - [Subprojects](docs/subprojects.md)
 - [Repository Structure](docs/repository.md)
 - [Dependency Policy](docs/dependencies.md)
@@ -113,9 +114,10 @@ The first Rust modules have started:
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   tool calls, route inspection, and provider policy enforcement.
-- [codel00p-harness](core/crates/codel00p-harness): read-only agent turn loop,
-  workspace-safe tools, deterministic events, model-client boundary, and
-  provider adapter.
+- [codel00p-harness](core/crates/codel00p-harness): agent turn loop,
+  workspace-safe read/edit/command/git tools, project instructions,
+  permissions, compaction primitives, deterministic events, model-client
+  boundary, and provider adapter.
 - [codel00p-protocol](core/crates/codel00p-protocol): shared data contracts for
   sessions, turns, events, tool calls, providers, projects, and memory entries.
 - [codel00p-storage](core/crates/codel00p-storage): backend-neutral storage
@@ -128,12 +130,12 @@ The first Rust modules have started:
 
 ## Current status
 
-codel00p now has a working local CLI vertical slice: a read-only agent can call
-Chat-Completions-compatible providers, inspect a workspace with safe tools,
-persist session records, extract candidate memories, and reuse approved project
-memory in future runs.
+codel00p now has a working local CLI vertical slice: an agent can call
+Chat-Completions-compatible providers, inspect and modify a workspace through
+permissioned tools, run commands, inspect git state, persist and resume
+sessions, stream events, connect to MCP tools, extract candidate memories, and
+reuse approved project memory in future runs.
 
-The next production work is hardening the agent toward parity with serious code
-tools: session resume, project instructions, permissioned editing, shell
-execution, git workflows, streaming events, third-party MCP certification, and
-then the desktop/cloud surfaces.
+The next production work is hardening the product around richer agent parity,
+provider breadth, memory quality, third-party MCP certification, and then the
+desktop/cloud control surfaces for team usage, governance, and shared memory.

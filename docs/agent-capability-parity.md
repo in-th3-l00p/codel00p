@@ -32,40 +32,61 @@ workflow, convention, and decision can become reviewed, reusable team knowledge.
 Implemented today:
 
 - provider-neutral Rust inference crate for multiple provider strategies;
-- read-only harness with workspace-safe `list_files`, `read_file`, and
-  `search_text` tools;
+- workspace-safe harness with read-only, editing, shell command, git, and MCP
+  tool surfaces;
 - typed permission policy and lifecycle hook surfaces;
 - deterministic protocol events;
 - durable session metadata and append-only replay;
 - CLI agent runs through Chat-Completions-compatible providers;
+- session resume through persisted replay;
+- project instructions from `CODEL00P.md`, `AGENTS.md`, and `CLAUDE.md`;
+- streamable harness events for CLI and future UI consumers;
+- context compaction primitives and session summary insertion;
 - memory candidate extraction from completed turns;
 - human review for candidate memory;
 - approved project memory retrieval and injection into later agent turns;
-- backend-neutral storage contracts with SQLite-backed persistence.
+- backend-neutral storage contracts with SQLite-backed persistence;
+- MCP client/server runtime with diagnostics, subscriptions, reconnects,
+  resource/prompt support, pagination, remembered connector permissions, and
+  harness event routing.
 
-This is a real foundation, but it is still a read-only memory-aware assistant,
-not yet a production-class coding agent.
+This is now a real local coding-agent foundation. It still needs polish and
+hardening before it can claim Claude Code-grade product maturity: richer patch
+handling, cancellation, background command monitoring, web tools, worktree
+isolation, PR workflows, broader providers, stronger memory quality, live MCP
+certification, and desktop/cloud control surfaces.
 
 ## Required Parity Track
 
 ### 1. Session Continuity
 
-The agent must resume a specific session and continue with prior user,
-assistant, and tool messages in the next model request. Session replay should be
-the source of truth, and resumed turns must append only new messages and events.
+Implemented baseline: the agent can resume a specific persisted session and
+continue with prior user, assistant, and tool messages in the next model
+request. Session replay is the source of truth, and resumed turns append new
+messages and events.
 
-CLI target:
+Current CLI:
 
 ```bash
 codel00p agent resume <session-id> "Continue the implementation."
 ```
 
+Remaining work:
+
+- most-recent-session continue;
+- fork/branch session flows;
+- better resumed-session summaries for long-running work.
+
 ### 2. Project Instructions
 
-The runtime must discover and apply hierarchical project instructions:
+Implemented baseline: the runtime discovers and applies root-level project
+instructions:
 
 - repository-level `CODEL00P.md`;
 - compatibility imports from `AGENTS.md` and `CLAUDE.md`;
+
+Remaining work:
+
 - user-level preferences;
 - explicit precedence rules for nested directories.
 
@@ -74,36 +95,46 @@ access.
 
 ### 3. Editing Tools
 
-The harness needs write-capable tools before it can implement features:
+Implemented baseline:
 
 - apply patch;
 - create file;
 - update file;
 - delete file;
+
+Remaining work:
+
 - structured diff summary;
 - rollback metadata for failed turns.
+- richer patch/diff format beyond exact replacements.
 
 File mutation must require permission by default and remain scoped to approved
 workspace roots.
 
 ### 4. Shell Execution
 
-The agent needs command execution for tests, builds, formatters, code search,
-package managers, and project scripts. The first version should support:
+Implemented baseline: the agent can run structured commands inside the
+workspace with permission checks, working-directory restrictions, timeout, and
+output limits.
+
+Remaining work:
 
 - explicit command allow/deny policies;
-- working-directory restrictions;
-- timeout and output limits;
 - evented stdout/stderr summaries;
 - durable command audit records.
+- background command monitoring.
 
 ### 5. Git Workflow
 
-The agent should understand and operate on git state:
+Implemented baseline:
 
 - inspect status, diff, and log;
-- protect unrelated user changes;
 - create small commits without coauthor trailers;
+
+Remaining work:
+
+- protect unrelated user changes across richer edit flows;
+- resolve conflicts;
 - prepare PR-ready summaries;
 - avoid destructive operations unless explicitly requested.
 
@@ -184,9 +215,15 @@ Remaining hardening:
 
 Long-running work needs context pressure handling:
 
-- token budgets;
+Implemented baseline:
+
+- context pressure state on inference requests;
 - compaction hooks;
-- session summaries;
+- session-summary insertion;
+
+Remaining work:
+
+- token budgets;
 - memory promotion recommendations;
 - deterministic context manifests for debugging.
 
@@ -196,11 +233,15 @@ The CLI should support:
 
 - one-shot agent runs;
 - session resume;
-- most-recent session continue;
 - JSON event output;
 - streaming output;
+- permission mode selection;
+
+Remaining work:
+
+- most-recent session continue;
 - explicit plan mode;
-- permission mode selection.
+- richer setup/init flows.
 
 The desktop and cloud products should consume the same protocol events instead
 of inventing separate runtime contracts.

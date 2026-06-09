@@ -1,151 +1,209 @@
 # Roadmap
 
-The roadmap is ordered to prove the knowledge and memory thesis while building
-toward a strong team product.
+This roadmap turns the product direction in
+[Product Roadmap](product-roadmap.md) into implementation milestones.
 
-## Phase 1: Memory foundation
+codel00p is building toward three combined capabilities:
 
-Goal: define and validate useful project memory.
+- Claude Code-grade coding-agent execution;
+- Hermes-grade provider routing breadth;
+- a team control plane for project memory, provider policy, permissions, usage,
+  and audit history.
 
-Work:
+## Milestone 1: Local Agent Foundation
 
-- design the memory schema;
-- implement the first Rust `codel00p-memory` crate;
-- follow test-driven development for schema, lifecycle, storage, and retrieval;
-- choose initial storage and sync boundaries;
-- define memory categories;
-- build review and edit flows;
-- test retrieval against real repositories.
-
-Success means a user or team can connect a project, add reviewed memory, and
-retrieve useful context for future work.
-
-## Phase 2: Harness research and runtime
-
-Goal: decide the Hermes strategy and build the first agent runtime.
-
-Work:
-
-- evaluate Hermes as dependency, adapter target, fork, or reference;
-- define harness contracts;
-- run agent sessions;
-- connect workspace tools;
-- inject project memory into sessions;
-- emit traceable session events.
-
-Success means the harness can run useful work with memory-aware context.
-
-## Phase 3: CLI
-
-Goal: ship the first usable developer surface.
+Goal: prove that a local CLI agent can work in a repository and grow reviewed
+project memory.
 
 Implemented:
 
-- run one read-only agent turn through `codel00p agent run`;
-- call Chat-Completions-compatible providers with environment credentials;
-- inspect memory;
-- approve or reject memory candidates;
-- persist and inspect session records;
-- extract candidate memory from completed turns;
-- inject approved memory into later provider requests.
+- `codel00p-memory` candidate creation, review lifecycle, audit history, and
+  deterministic retrieval;
+- `codel00p-storage` in-memory and SQLite backends;
+- `codel00p-session` durable metadata and append-only replay;
+- `codel00p-protocol` shared sessions, events, tool, provider, project, and
+  memory contracts;
+- `codel00p-providers` registry, profiles, policy, route inspection,
+  credentials, OpenAI-compatible Chat Completions, tool calls, and live
+  integration-test toggles;
+- `codel00p-harness` session loop, provider adapter, memory injection,
+  lifecycle hooks, project instructions, context compaction primitives,
+  read-only tools, editing tools, shell command tool, git tools, permissions,
+  streamable events, concurrency-safe tool batching, and explicit memory
+  extraction;
+- `codel00p-cli` agent runs, session resume, session inspection, memory review,
+  provider-backed execution, JSON/streamed events, permission modes, tool-set
+  opt-ins, MCP attachment, MCP diagnostics, and remembered MCP connector
+  decisions;
+- `codel00p-mcp` stdio/HTTP client transports, codel00p MCP server mode,
+  tools, resources, prompts, logging, roots, pagination, subscriptions,
+  reconnects, diagnostics, and harness event routing.
 
-Remaining work:
+Next:
 
-- connect repositories;
-- resume sessions;
-- configure user or organization providers;
-- expose basic sync hooks for later phases.
+- richer patch/diff engine;
+- cancellation and interruption;
+- background command monitoring;
+- web fetch/search tools;
+- worktree-isolated execution;
+- PR preparation workflow;
+- most-recent session continue command;
+- deterministic context manifests.
 
-Success means early users can use codel00p from the terminal and grow reviewed
-project memory across repeated agent sessions.
+Exit criteria:
 
-## Phase 3.5: Coding agent parity
+- a user can ask codel00p to inspect, edit, test, commit, and resume work in a
+  real repository with safe defaults and durable memory review.
 
-Goal: close the practical gap with mature coding agents while preserving
-codel00p's reviewed-memory advantage.
+## Milestone 2: Provider Platform
 
-Work:
+Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
-- resume and continue persisted sessions;
-- load project instructions from codel00p-native files and compatibility files;
-- add permissioned editing tools;
-- add permissioned shell execution;
-- add git inspection, diff review, commit, and PR preparation workflows;
-- add MCP support for external team tools: stdio/HTTP client transports, tools,
-  resources, resource templates, prompts, logging controls, roots handling,
-  cursor pagination, reconnecting subscriptions, CLI workspace config,
-  redacted diagnostics, remembered connector decisions, and codel00p MCP server
-  mode are in place; ongoing hardening is live certification against common
-  third-party MCP servers;
-- add context compaction and session summaries;
-- stream events for interactive clients.
+Build:
 
-Success means a user can ask codel00p to implement a real repository change,
-watch the agent inspect, edit, test, and commit safely, and then review the
-project knowledge learned during the work.
+- Anthropic Messages transport;
+- OpenAI Responses transport;
+- AWS Bedrock Converse transport;
+- Gemini native transport;
+- Azure AI Foundry deployment-aware configuration;
+- GitHub Copilot and GitHub Models hardening;
+- model catalogs and model capability metadata;
+- normalized usage, cost, cache, and reasoning metadata;
+- fallback routing;
+- organization provider policy hooks;
+- cloud proxy routing.
 
-## Phase 4: Providers and protocol
+Exit criteria:
 
-Goal: stabilize contracts between modules.
+- the same harness and CLI can route through personal credentials,
+  organization-managed credentials, or a gateway without changing memory,
+  sessions, or tool contracts.
 
-Work:
+## Milestone 3: Memory 2.0
 
-- implement the Rust provider contract;
-- add initial corporate providers: Anthropic, OpenAI, Azure AI Foundry, AWS
-  Bedrock, Google Gemini, GitHub Copilot/GitHub Models, OpenRouter, and custom
-  OpenAI-compatible endpoints;
-- define session events;
-- define provider config shapes;
-- define memory candidate shapes;
-- add provider adapters;
-- separate local and organization-managed provider settings.
+Goal: make reviewed project memory accurate, maintainable, and valuable for
+teams.
 
-Success means CLI, harness, desktop, cloud, and sync can evolve without
-conflicting data formats.
+Build:
 
-## Phase 5: Desktop app
+- memory editing and revision history;
+- source evidence links;
+- duplicate and near-duplicate detection;
+- stale-memory detection;
+- sensitivity and visibility scopes;
+- merge/split workflows;
+- semantic retrieval behind deterministic filters;
+- memory quality scoring;
+- post-session memory recommendations;
+- imports from docs, issues, PRs, and existing project notes.
 
-Goal: build the polished developer control center.
+Exit criteria:
 
-Work:
+- a team can review, correct, trust, and share memory without polluting future
+  agent context.
 
-- supervise agent sessions;
-- review memory candidates;
-- browse project memory;
-- show provider state;
-- prepare team knowledge views.
+## Milestone 4: MCP Certification
 
-Success means users can understand and control codel00p visually.
+Goal: make external tool integration practical for real teams.
 
-## Phase 6: Cloud and sync
+Current baseline:
 
-Goal: add organization-scale knowledge and governance.
+- see [MCP Compatibility](mcp-compatibility.md).
 
-Work:
+Build:
 
-- organization and team management;
-- project membership;
-- shared memory sync;
-- provider policy;
-- audit history;
-- conflict handling;
-- permissions.
+- live certification against filesystem, git, GitHub, Linear, Jira, Postgres,
+  SQLite gateways, Playwright, Figma, Sentry, Grafana, and internal HTTP MCP
+  gateways;
+- OAuth and authenticated connector flows;
+- large tool-set search/filtering;
+- connector policy templates;
+- remote HTTP MCP gateway hardening;
+- codel00p MCP tools for agent/session control after policy design.
 
-Success means a team can share reviewed project memory and provider settings
-across its engineering workflow.
+Exit criteria:
 
-## Phase 7: Integrated codel00p
+- common MCP servers work predictably, and every discovered edge case becomes a
+  deterministic regression fixture.
 
-Goal: release the polished product.
+## Milestone 5: Team Cloud And Sync
 
-Work:
+Goal: let organizations manage AI usage, project memory, providers, and audit
+history centrally.
 
-- integrate stable modules;
-- simplify setup;
-- provide cohesive docs;
-- package CLI and desktop workflows;
-- coordinate cloud and runtime features;
-- define release channels.
+Build:
 
-Success means codel00p feels like one product instead of a collection of
-experiments.
+- organization, team, user, role, project, and invitation models;
+- shared project memory sync;
+- provider policy and organization credentials;
+- permission policy management;
+- usage, cost, and budget views;
+- audit history and activity feeds;
+- sync conflict representation and resolution;
+- cloud storage backend behind `codel00p-storage`.
+
+Exit criteria:
+
+- a team can share reviewed project memory and provider settings across its
+  engineering workflow with visible usage and audit controls.
+
+## Milestone 6: Desktop And Cloud Interfaces
+
+Goal: expose the agent, memory, and governance workflow through polished user
+interfaces.
+
+Build:
+
+- desktop session supervision timeline;
+- permission approval UI;
+- memory candidate review queue;
+- project knowledge browser;
+- provider status and configuration views;
+- team activity views;
+- cloud sign-in and workspace switching;
+- shared protocol event rendering across CLI, desktop, and cloud.
+
+Exit criteria:
+
+- users can understand and control codel00p visually while CLI workflows remain
+  scriptable.
+
+## Milestone 7: Multi-Agent Work
+
+Goal: coordinate long-horizon work across focused agents without losing memory,
+policy, or auditability.
+
+Build:
+
+- research, implementation, review, and memory-extraction agents;
+- worktree isolation for mutating subagents;
+- parallel task execution;
+- durable task plans;
+- resumable long-running goals;
+- team-visible task state;
+- review agents that can block or annotate risky work.
+
+Exit criteria:
+
+- codel00p can split large tasks across focused agents and preserve a coherent
+  session, memory, and audit record.
+
+## Milestone 8: Production Release
+
+Goal: package codel00p as a cohesive open-source product with an enterprise
+cloud path.
+
+Build:
+
+- installers and package distribution;
+- migrations and compatibility policy;
+- security review and sandboxing;
+- privacy controls;
+- eval suite for agent, provider, memory, and MCP behavior;
+- docs site;
+- release channels;
+- hosted cloud deployment.
+
+Exit criteria:
+
+- codel00p feels like one product instead of a collection of modules.

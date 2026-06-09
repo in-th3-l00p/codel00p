@@ -7,6 +7,11 @@ The product is not just a coding agent. It is a system for building, reviewing,
 retrieving, and sharing project knowledge across human developers, cloud
 workspaces, local runtimes, and agent sessions.
 
+In product terms, codel00p is aiming for Claude Code-grade coding-agent
+execution, Hermes-grade provider breadth, and a team control plane for project
+memory, AI usage, providers, permissions, and audit history. See
+[Product Roadmap](product-roadmap.md) for the staged path.
+
 ## Core thesis
 
 The strongest long-term advantage of an agentic coding system is not only model
