@@ -11,6 +11,9 @@ This crate owns the contract between MCP servers and the agent harness:
 - `discover_tool_registry`: builds a harness `ToolRegistry` from `list_tools`.
 - stdio JSON-RPC line encoding/decoding helpers.
 - `McpStdioClient`: process-backed stdio JSON-RPC client for MCP servers.
+- `McpServerRuntime`: reusable server-side JSON-RPC response/error framing,
+  progress notifications, resource subscriptions, and resource update
+  notifications.
 
 Harness tool names are prefixed as:
 
@@ -41,3 +44,11 @@ Both transports support the MCP lifecycle handshake by sending `initialize`,
 recording the negotiated server metadata, and then sending
 `notifications/initialized` before normal operation. Both map `tools/list`,
 `resources/list`, and `tools/call` into codel00p descriptors and outputs.
+
+The server runtime is deliberately transport-neutral. Callers provide the
+method dispatcher and the runtime handles protocol mechanics around the final
+result: ignored client notifications, JSON-RPC errors, optional progress
+notifications from `_meta.progressToken`, subscription bookkeeping for
+`resources/subscribe` and `resources/unsubscribe`, and
+`notifications/resources/updated` for subscribed resources changed by a
+successful operation.

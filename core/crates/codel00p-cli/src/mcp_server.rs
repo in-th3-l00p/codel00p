@@ -1,8 +1,6 @@
-use std::{
-    collections::HashSet,
-    io::{self, BufRead, Write},
-};
+use std::io::{self, BufRead, Write};
 
+use codel00p_mcp::{McpServerResponse, McpServerRuntime};
 use codel00p_memory::{
     MemoryCandidateInput, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
 };
@@ -93,7 +91,7 @@ fn permissions_forget(config: &CliConfig, args: &[String]) -> CliResult<String> 
 fn serve_stdio(config: CliConfig) -> CliResult<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
-    let mut state = McpServerState::default();
+    let mut runtime = McpServerRuntime::default();
     for line in stdin.lock().lines() {
         let line = line.map_err(|error| error.to_string())?;
         if line.trim().is_empty() {
@@ -101,7 +99,9 @@ fn serve_stdio(config: CliConfig) -> CliResult<()> {
         }
         let request: Value = serde_json::from_str(&line)
             .map_err(|error| format!("invalid json-rpc request: {error}"))?;
-        for response in handle_json_rpc(&config, &mut state, request) {
+        for response in runtime.handle_request(request, |method, params| {
+            dispatch_json_rpc(&config, method, params)
+        }) {
             writeln!(
                 stdout,
                 "{}",
@@ -114,23 +114,13 @@ fn serve_stdio(config: CliConfig) -> CliResult<()> {
     Ok(())
 }
 
-#[derive(Default)]
-struct McpServerState {
-    resource_subscriptions: HashSet<String>,
-}
-
-fn handle_json_rpc(config: &CliConfig, state: &mut McpServerState, request: Value) -> Vec<Value> {
-    let Some(method) = request.get("method").and_then(Value::as_str) else {
-        return Vec::new();
-    };
-    let id = request.get("id").cloned();
-    let Some(id) = id else {
-        return Vec::new();
-    };
-    let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
-
+fn dispatch_json_rpc(
+    config: &CliConfig,
+    method: &str,
+    params: &Value,
+) -> Result<McpServerResponse, String> {
     let result = match method {
-        "initialize" => Ok(json!({
+        "initialize" => json!({
             "protocolVersion": "2025-06-18",
             "capabilities": {
                 "tools": {},
@@ -142,94 +132,17 @@ fn handle_json_rpc(config: &CliConfig, state: &mut McpServerState, request: Valu
                 "name": "codel00p",
                 "version": env!("CARGO_PKG_VERSION")
             }
-        })),
-        "tools/list" => Ok(json!({ "tools": mcp_tools() })),
-        "tools/call" => call_tool(config, &params),
-        "resources/list" => Ok(json!({
+        }),
+        "tools/list" => json!({ "tools": mcp_tools() }),
+        "tools/call" => return call_tool(config, params),
+        "resources/list" => json!({
             "resources": [],
             "resourceTemplates": mcp_resource_templates()
-        })),
-        "resources/read" => read_resource(config, &params),
-        "resources/subscribe" => subscribe_resource(state, &params),
-        "resources/unsubscribe" => unsubscribe_resource(state, &params),
-        _ => Err(format!("unsupported method: {method}")),
+        }),
+        "resources/read" => read_resource(config, params)?,
+        _ => return Err(format!("unsupported method: {method}")),
     };
-
-    let progress_token = progress_token_for_method(method, &params);
-    match result {
-        Ok(result) => {
-            let updated_resource_uris = result
-                .get("_codel00p_updated_resource_uris")
-                .and_then(Value::as_array)
-                .map(|values| {
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_string)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            let mut result = result;
-            if let Some(object) = result.as_object_mut() {
-                object.remove("_codel00p_updated_resource_uris");
-            }
-            let mut messages = progress_notifications(progress_token.as_ref());
-            messages.push(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
-            for uri in updated_resource_uris {
-                if state.resource_subscriptions.contains(&uri) {
-                    messages.push(resource_updated_notification(&uri));
-                }
-            }
-            messages
-        }
-        Err(message) => {
-            let mut messages = progress_notifications(progress_token.as_ref());
-            messages.push(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": {
-                    "code": -32000,
-                    "message": message
-                }
-            }));
-            messages
-        }
-    }
-}
-
-fn progress_token_for_method(method: &str, params: &Value) -> Option<Value> {
-    if !matches!(method, "tools/call" | "resources/read") {
-        return None;
-    }
-    let token = params.get("_meta")?.get("progressToken")?;
-    if token.is_string() || token.is_number() {
-        Some(token.clone())
-    } else {
-        None
-    }
-}
-
-fn progress_notifications(progress_token: Option<&Value>) -> Vec<Value> {
-    let Some(progress_token) = progress_token else {
-        return Vec::new();
-    };
-    vec![
-        progress_notification(progress_token, 1, "Processing request"),
-        progress_notification(progress_token, 2, "Completing request"),
-    ]
-}
-
-fn progress_notification(progress_token: &Value, progress: u64, message: &str) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/progress",
-        "params": {
-            "progressToken": progress_token,
-            "progress": progress,
-            "total": 2,
-            "message": message
-        }
-    })
+    Ok(McpServerResponse::new(result))
 }
 
 fn mcp_tools() -> Vec<Value> {
@@ -356,7 +269,7 @@ fn mcp_resource_templates() -> Vec<Value> {
     ]
 }
 
-fn call_tool(config: &CliConfig, params: &Value) -> Result<Value, String> {
+fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, String> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -376,45 +289,16 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<Value, String> {
         "session_show" => (session_show(config, &arguments)?, Vec::new()),
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
-    Ok(json!({
+    let mut response = McpServerResponse::new(json!({
         "content": [
             { "type": "text", "text": text }
         ],
-        "isError": false,
-        "_codel00p_updated_resource_uris": updated_resource_uris
-    }))
-}
-
-fn subscribe_resource(state: &mut McpServerState, params: &Value) -> Result<Value, String> {
-    let uri = required_string(params, "uri")?;
-    validate_resource_uri(uri)?;
-    state.resource_subscriptions.insert(uri.to_string());
-    Ok(json!({}))
-}
-
-fn unsubscribe_resource(state: &mut McpServerState, params: &Value) -> Result<Value, String> {
-    let uri = required_string(params, "uri")?;
-    validate_resource_uri(uri)?;
-    state.resource_subscriptions.remove(uri);
-    Ok(json!({}))
-}
-
-fn validate_resource_uri(uri: &str) -> Result<(), String> {
-    if uri.starts_with("codel00p://memory/") || uri.starts_with("codel00p://sessions/") {
-        Ok(())
-    } else {
-        Err(format!("unsupported codel00p resource uri: {uri}"))
+        "isError": false
+    }));
+    for uri in updated_resource_uris {
+        response = response.with_updated_resource(uri);
     }
-}
-
-fn resource_updated_notification(uri: &str) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/resources/updated",
-        "params": {
-            "uri": uri
-        }
-    })
+    Ok(response)
 }
 
 fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {

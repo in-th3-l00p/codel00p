@@ -137,6 +137,9 @@ Current implementation:
 - `codel00p mcp serve` exposes memory search/list/show, reviewed memory
   create/approve/reject/archive tools, and read-only session replay to other
   MCP clients over stdio;
+- `codel00p-mcp` provides reusable server runtime helpers for JSON-RPC
+  response/error framing, MCP progress notifications, resource subscriptions,
+  and resource update notifications;
 - the stdio MCP server exposes `codel00p://memory/{id}` and
   `codel00p://sessions/{session_id}` JSON resource templates for direct
   context browsing;
@@ -151,7 +154,8 @@ Current implementation:
 
 Remaining work:
 
-- move reusable MCP server protocol helpers out of the CLI into a crate layer;
+- add reusable typed server handler traits and stdio server runner wiring so
+  future codel00p MCP servers can be assembled without CLI-specific dispatch;
 
 ### 7. Context Management
 
