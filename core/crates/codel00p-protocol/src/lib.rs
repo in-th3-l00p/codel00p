@@ -259,6 +259,15 @@ pub enum AgentEvent {
         turn_id: TurnId,
         message_count: usize,
     },
+    ContextCompacted {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        before_message_count: usize,
+        after_message_count: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+    },
     InferenceRequested {
         event_id: EventId,
         session_id: SessionId,

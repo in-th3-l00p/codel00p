@@ -66,6 +66,7 @@ fn agent_event_label(event: &AgentEvent) -> &'static str {
         AgentEvent::SessionStarted { .. } => "session_started",
         AgentEvent::TurnStarted { .. } => "turn_started",
         AgentEvent::ContextBuilt { .. } => "context_built",
+        AgentEvent::ContextCompacted { .. } => "context_compacted",
         AgentEvent::InferenceRequested { .. } => "inference_requested",
         AgentEvent::InferenceCompleted { .. } => "inference_completed",
         AgentEvent::ToolCallRequested { .. } => "tool_call_requested",

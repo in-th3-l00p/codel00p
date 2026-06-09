@@ -38,7 +38,9 @@ pub use permissions::{
     PermissionRequest, PermissionScope,
 };
 pub use provider_adapter::ProviderModelClient;
-pub use session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage};
+pub use session::{
+    SessionCompactionRecord, SessionId, SessionMessage, SessionState, TurnId, UserMessage,
+};
 pub use tool_registry::ToolRegistry;
 pub use tool_result::ToolResult;
 pub use tools::Tool;

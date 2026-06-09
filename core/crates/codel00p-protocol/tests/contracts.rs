@@ -176,6 +176,19 @@ fn context_and_compaction_contracts_track_pressure() {
     assert!(!window.is_at_blocking_limit());
     assert_eq!(compaction.before_message_count(), 42);
     assert_eq!(compaction.after_message_count(), 12);
+
+    let event = AgentEvent::ContextCompacted {
+        event_id: EventId::from_static("event-context-compacted"),
+        session_id: SessionId::from_static("session-1"),
+        turn_id: TurnId::from_static("turn-1"),
+        before_message_count: 42,
+        after_message_count: 12,
+        summary: Some("Preserved active task.".to_string()),
+    };
+    let encoded = serde_json::to_value(event).expect("serialize compaction event");
+    assert_eq!(encoded["kind"], "context_compacted");
+    assert_eq!(encoded["before_message_count"], 42);
+    assert_eq!(encoded["after_message_count"], 12);
 }
 
 #[test]

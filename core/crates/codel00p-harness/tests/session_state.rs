@@ -24,6 +24,29 @@ fn session_state_accumulates_messages_in_order() {
 }
 
 #[test]
+fn session_state_compacts_older_messages_into_system_summary() {
+    let mut state = SessionState::new(SessionId::from_static("session-compact"));
+    state.push_user(UserMessage::new("Initial request."));
+    state.push_assistant("Initial answer.");
+    state.push_user(UserMessage::new("Follow-up."));
+    state.push_assistant("Follow-up answer.");
+    state.push_user(UserMessage::new("Current request."));
+
+    let record = state.compact_with_summary("Preserved previous implementation context.", 2);
+
+    assert_eq!(record.before_message_count(), 5);
+    assert_eq!(record.after_message_count(), 3);
+    assert_eq!(
+        state.messages(),
+        &[
+            SessionMessage::system("Session summary:\nPreserved previous implementation context."),
+            SessionMessage::assistant("Follow-up answer."),
+            SessionMessage::user("Current request."),
+        ]
+    );
+}
+
+#[test]
 fn session_state_serializes_without_losing_messages() {
     let mut state = SessionState::new(SessionId::from_static("session-json"));
     state.push_user(UserMessage::new("Summarize docs."));

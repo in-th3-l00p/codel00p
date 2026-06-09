@@ -14,7 +14,7 @@ use crate::{
         TurnMemoryExtractionRequest, TurnMemoryExtractor,
     },
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
-    session::{SessionId, SessionState, TurnId, UserMessage},
+    session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage},
     tool_registry::ToolRegistry,
     tool_result::ToolResult,
     turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TurnOutcome},
@@ -22,6 +22,8 @@ use crate::{
 };
 use codel00p_protocol::{ContextWindowState, EventId, RuntimeErrorKind};
 use serde_json::json;
+
+const DEFAULT_COMPACTION_RECENT_MESSAGES: usize = 4;
 
 pub struct AgentHarness {
     model_client: Arc<dyn ModelClient>,
@@ -68,16 +70,6 @@ impl AgentHarness {
         )
         .await;
         session_state.push_user(user_message);
-        self.record_event(
-            &mut events,
-            HarnessEvent::ContextBuilt {
-                event_id: EventId::new(),
-                session_id: session_state.session_id().clone(),
-                turn_id: turn_id.clone(),
-                message_count: session_state.messages().len(),
-            },
-        )
-        .await;
         self.run_lifecycle_hook(
             "turn_started",
             TurnLifecycleContext::new(
@@ -86,6 +78,18 @@ impl AgentHarness {
                 session_state.messages().len(),
             ),
             &mut events,
+        )
+        .await;
+        self.compact_context_if_needed(&mut session_state, &turn_id, &mut events)
+            .await;
+        self.record_event(
+            &mut events,
+            HarnessEvent::ContextBuilt {
+                event_id: EventId::new(),
+                session_id: session_state.session_id().clone(),
+                turn_id: turn_id.clone(),
+                message_count: session_state.messages().len(),
+            },
         )
         .await;
 
@@ -463,6 +467,52 @@ impl AgentHarness {
         }
     }
 
+    async fn compact_context_if_needed(
+        &self,
+        session_state: &mut SessionState,
+        turn_id: &TurnId,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        let Some(context_window) = &self.context_window else {
+            return;
+        };
+        if !context_window.is_at_blocking_limit()
+            || session_state.messages().len() <= DEFAULT_COMPACTION_RECENT_MESSAGES + 1
+        {
+            return;
+        }
+
+        self.run_lifecycle_hook(
+            "pre_compact",
+            TurnLifecycleContext::new(
+                session_state.session_id().clone(),
+                turn_id.clone(),
+                session_state.messages().len(),
+            ),
+            events,
+        )
+        .await;
+
+        let summary = summarize_compacted_messages(
+            session_state.messages(),
+            DEFAULT_COMPACTION_RECENT_MESSAGES,
+        );
+        let record =
+            session_state.compact_with_summary(summary.clone(), DEFAULT_COMPACTION_RECENT_MESSAGES);
+        self.record_event(
+            events,
+            HarnessEvent::ContextCompacted {
+                event_id: EventId::new(),
+                session_id: session_state.session_id().clone(),
+                turn_id: turn_id.clone(),
+                before_message_count: record.before_message_count(),
+                after_message_count: record.after_message_count(),
+                summary: Some(summary),
+            },
+        )
+        .await;
+    }
+
     async fn run_post_tool_hook(
         &self,
         context: TurnLifecycleContext,
@@ -551,6 +601,22 @@ impl AgentHarness {
         }
         events.push(event);
     }
+}
+
+fn summarize_compacted_messages(messages: &[SessionMessage], keep_recent: usize) -> String {
+    let compacted_count = messages.len().saturating_sub(keep_recent);
+    let mut lines = vec![format!(
+        "Compacted {compacted_count} older session messages."
+    )];
+    for (index, message) in messages.iter().take(compacted_count).enumerate() {
+        let mut content = message.content().replace('\n', " ");
+        if content.len() > 200 {
+            content.truncate(200);
+            content.push_str("...");
+        }
+        lines.push(format!("{}. {:?}: {}", index + 1, message.role(), content));
+    }
+    lines.join("\n")
 }
 
 #[derive(Default)]

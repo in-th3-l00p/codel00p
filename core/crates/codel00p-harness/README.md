@@ -13,6 +13,8 @@ This crate owns the first read-only harness loop:
 - typed project memory context from `codel00p-memory`;
 - opt-in candidate memory extraction after completed turns;
 - typed events;
+- optional event sinks for live progress;
+- blocking context-window compaction into session-summary messages;
 - bounded tool-call iteration.
 
 Session IDs, turn IDs, session messages, agent events, and model tool calls are
@@ -29,6 +31,12 @@ auditable.
 
 Read-only default tools opt in to concurrency-safe execution. Custom tools are
 serial unless they explicitly declare that a given input can run concurrently.
+
+When a configured `ContextWindowState` reaches its blocking threshold, the
+harness runs `on_pre_compact`, summarizes older transcript messages into one
+system message, preserves recent messages, and emits `context_compacted`.
+Callers that need live progress can attach an `AgentEventSink`; it receives the
+same event sequence returned in `TurnOutcome.events`.
 
 Editing tools are available through `ToolRegistry::editing_defaults()`:
 

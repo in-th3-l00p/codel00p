@@ -266,7 +266,11 @@ The harness has a control layer inspired by Hermes and Claude Code:
 - permission request/denial and tool progress events are emitted through the
   shared protocol event stream;
 - `ContextWindowState` can be attached to inference requests so context engines,
-  UI, and provider routing see the same pressure information.
+  UI, and provider routing see the same pressure information;
+- when `ContextWindowState::is_at_blocking_limit()` is true, the harness runs
+  `pre_compact`, replaces older transcript messages with one session-summary
+  system message, preserves the latest messages, and emits `context_compacted`
+  before inference.
 
 ## Project Instructions
 
@@ -319,6 +323,11 @@ pub enum HarnessEvent {
     SessionStarted { session_id: SessionId },
     TurnStarted { session_id: SessionId, turn_id: TurnId },
     ContextBuilt { message_count: usize },
+    ContextCompacted {
+        before_message_count: usize,
+        after_message_count: usize,
+        summary: Option<String>,
+    },
     InferenceRequested { provider: String, model: String },
     InferenceCompleted { finish_reason: Option<String> },
     ToolCallRequested { name: String },
