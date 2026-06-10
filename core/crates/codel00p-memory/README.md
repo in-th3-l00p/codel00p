@@ -31,6 +31,13 @@ MCP memory JSON, including show/resource/list/search responses, includes the
 same values as `source.session_id` and `source.turn_id` when source evidence is
 available.
 
+## Retrieval contract
+
+`MemoryRepository::retrieve` returns approved project memory only, filtered by
+optional text, kind, tag, and limit values. The CLI exposes this as
+`memory search` with stable TSV output and `memory search --json` for the same
+machine-readable records returned by the MCP `memory_search` tool.
+
 ## Edit audit contract
 
 `MemoryRepository::edit` replaces memory content while preserving the memory

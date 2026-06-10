@@ -151,6 +151,12 @@ fn memory_help_documents_edit_command() {
         stdout(&output)
     );
     assert!(
+        stdout(&output)
+            .contains("search   Search approved memory records; use --json for JSON output"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
         stdout(&output).contains("list     List memory records; use --json for JSON output"),
         "stdout: {}",
         stdout(&output)

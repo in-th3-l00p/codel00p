@@ -1,4 +1,6 @@
-use codel00p_memory::{MemoryEdit, MemoryListFilter, MemoryRepository, ReviewDecision};
+use codel00p_memory::{
+    MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
+};
 use codel00p_protocol::{MemoryKind, MemoryStatus};
 use serde_json::{Value, json};
 
@@ -10,6 +12,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     };
 
     match command.as_str() {
+        "search" => memory_search(config, rest),
         "list" => memory_list(config, rest),
         "show" => memory_show(config, rest),
         "audit" => memory_audit(config, rest),
@@ -19,6 +22,63 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "edit" => memory_edit(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
+}
+
+fn memory_search(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let mut query = MemoryQuery::new(config.project.clone());
+    let mut json_output = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--text" => {
+                query = query.with_text(required_value(args, index, "--text")?);
+                index += 2;
+            }
+            "--kind" => {
+                query = query.with_kind(parse_kind(&required_value(args, index, "--kind")?)?);
+                index += 2;
+            }
+            "--tag" => {
+                query = query.with_tag(required_value(args, index, "--tag")?);
+                index += 2;
+            }
+            "--limit" => {
+                let limit = required_value(args, index, "--limit")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid --limit".to_string())?;
+                query = query.with_limit(limit);
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory search option: {flag}")),
+        }
+    }
+
+    let store = open_memory_store(&config)?;
+    let records = store.retrieve(query).map_err(|error| error.to_string())?;
+    if json_output {
+        let items = records
+            .iter()
+            .map(retrieved_memory_json)
+            .collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
+    let mut output = String::new();
+    for memory in records {
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            memory.entry().id(),
+            status_label(memory.entry().status()),
+            kind_label(memory.entry().kind()),
+            memory.reason(),
+            memory.entry().content()
+        ));
+    }
+    Ok(output)
 }
 
 fn memory_list(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -118,7 +178,16 @@ fn memory_show(config: CliConfig, args: &[String]) -> CliResult<String> {
 }
 
 fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
-    let entry = record.entry();
+    memory_entry_json(record.entry())
+}
+
+fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["reason"] = json!(memory.reason());
+    item
+}
+
+fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
     let mut item = json!({
         "id": entry.id(),
         "status": status_label(entry.status()),

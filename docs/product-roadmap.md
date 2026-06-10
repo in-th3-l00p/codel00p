@@ -152,7 +152,7 @@ Current foundation:
 - candidate creation;
 - explicit review lifecycle;
 - audit history with CLI/MCP inspection;
-- deterministic approved-memory retrieval;
+- deterministic approved-memory retrieval with CLI/MCP search;
 - explicit memory extraction from completed turns;
 - source session/turn evidence visible in CLI memory detail text plus CLI
   list/show JSON and MCP show/resource/list/search memory JSON;

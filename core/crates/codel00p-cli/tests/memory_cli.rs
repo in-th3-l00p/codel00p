@@ -139,6 +139,70 @@ fn memory_list_prints_filtered_candidates() {
 }
 
 #[test]
+fn memory_search_retrieves_approved_memory() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-workflow",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+    );
+    seed_candidate(
+        &db_path,
+        "mem-candidate",
+        MemoryKind::Workflow,
+        "Candidate verify reminder.",
+        "verify",
+    );
+    approve_candidate(&db_path, "mem-workflow", "alice");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "memory", "search", "--text", "verify", "--kind", "workflow", "--tag", "verify",
+        ],
+    );
+    let output_json = run_codel00p(
+        &db_path,
+        &[
+            "memory", "search", "--text", "verify", "--kind", "workflow", "--tag", "verify",
+            "--json",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        output_json.status.success(),
+        "stderr: {}",
+        stderr(&output_json)
+    );
+    assert_eq!(
+        stdout(&output),
+        "mem-workflow\tapproved\tworkflow\tmatched kind workflow and tag verify and text verify\tRun pnpm verify before pushing main.\n"
+    );
+    let records: serde_json::Value =
+        serde_json::from_str(&stdout(&output_json)).expect("search json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-workflow");
+    assert_eq!(records[0]["status"], "approved");
+    assert_eq!(records[0]["kind"], "workflow");
+    assert_eq!(
+        records[0]["content"],
+        "Run pnpm verify before pushing main."
+    );
+    assert_eq!(
+        records[0]["reason"],
+        "matched kind workflow and tag verify and text verify"
+    );
+    assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
+    assert_eq!(records[0]["source"]["session_id"], "session-cli");
+    assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
+}
+
+#[test]
 fn memory_show_and_audit_print_stable_details() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
