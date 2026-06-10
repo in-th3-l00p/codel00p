@@ -37,9 +37,10 @@ Build:
   revisions;
 - deterministic approved-memory retrieval; started with CLI/MCP search over
   approved project memory by text, kind, tag, and limit;
-- source evidence links; started with CLI detail text plus CLI list/show JSON
-  source session/turn metadata and MCP show/resource/list/search JSON source
-  metadata;
+- source evidence links; started with CLI detail text plus CLI
+  list/show/search/similar JSON source session/turn metadata, replay
+  `source_uri`, and MCP
+  show/resource/list/search/similar JSON source metadata;
 - duplicate and near-duplicate detection; started with exact active duplicate
   candidate rejection, repository-level active memory similarity scoring, and
   CLI/MCP review access to near-duplicate scores;

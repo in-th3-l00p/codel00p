@@ -145,6 +145,7 @@ fn memory_list_prints_filtered_candidates() {
     assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
     assert_eq!(records[0]["source"]["session_id"], "session-cli");
     assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
+    assert_eq!(records[0]["source_uri"], "codel00p://sessions/session-cli");
 }
 
 #[test]
@@ -209,6 +210,7 @@ fn memory_search_retrieves_approved_memory() {
     assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
     assert_eq!(records[0]["source"]["session_id"], "session-cli");
     assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
+    assert_eq!(records[0]["source_uri"], "codel00p://sessions/session-cli");
 }
 
 #[test]
@@ -291,6 +293,7 @@ fn memory_similar_scores_active_near_duplicates() {
         "Run pnpm verify before pushing main."
     );
     assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
+    assert_eq!(records[0]["source_uri"], "codel00p://sessions/session-cli");
 }
 
 #[test]
@@ -314,7 +317,7 @@ fn memory_show_and_audit_print_stable_details() {
     assert!(audit.status.success(), "stderr: {}", stderr(&audit));
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: candidate\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run pnpm verify before pushing main.\n"
+        "id: mem-workflow\nstatus: candidate\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
     );
     let record: serde_json::Value = serde_json::from_str(&stdout(&show_json)).expect("show json");
     assert_eq!(record["id"], "mem-workflow");
@@ -324,6 +327,7 @@ fn memory_show_and_audit_print_stable_details() {
     assert_eq!(record["tags"], serde_json::json!(["verify"]));
     assert_eq!(record["source"]["session_id"], "session-cli");
     assert_eq!(record["source"]["turn_id"], "turn-cli");
+    assert_eq!(record["source_uri"], "codel00p://sessions/session-cli");
     assert_eq!(stdout(&audit), "1\tcandidate_created\tsystem\t\n");
 }
 
@@ -415,7 +419,7 @@ fn memory_edit_updates_content_and_prints_audit_event() {
     assert_eq!(stdout(&edit), "mem-workflow\tapproved\n");
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run pnpm verify before pushing main.\n"
+        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
     );
     assert_eq!(
         stdout(&audit),
@@ -490,7 +494,7 @@ fn memory_restore_reverts_to_previous_edit_content() {
     assert_eq!(stdout(&restore), "mem-workflow\tapproved\n");
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run tests before pushing.\n"
+        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run tests before pushing.\n"
     );
     let audit_events: serde_json::Value =
         serde_json::from_str(&stdout(&audit_json)).expect("audit json");

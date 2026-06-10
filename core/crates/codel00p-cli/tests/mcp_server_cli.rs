@@ -228,6 +228,7 @@ fn mcp_serve_exposes_memory_and_session_resources() {
         memory_text
             .contains(r#""source":{"session_id":"session-resource","turn_id":"turn-resource"}"#)
     );
+    assert!(memory_text.contains(r#""source_uri":"codel00p://sessions/session-resource""#));
 
     send(
         &mut child,
@@ -609,6 +610,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
     assert!(
         searched_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#)
     );
+    assert!(searched_text.contains(r#""source_uri":"codel00p://sessions/session-mcp""#));
 
     send(
         &mut child,
@@ -629,6 +631,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         .expect("listed text");
     assert!(listed_text.contains(r#""id":"mem-mcp-1""#));
     assert!(listed_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#));
+    assert!(listed_text.contains(r#""source_uri":"codel00p://sessions/session-mcp""#));
 
     send(
         &mut child,
@@ -654,6 +657,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
     assert!(similar_text.contains(r#""id":"mem-mcp-1""#));
     assert!(similar_text.contains(r#""score":89"#));
     assert!(similar_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#));
+    assert!(similar_text.contains(r#""source_uri":"codel00p://sessions/session-mcp""#));
 
     send(
         &mut child,

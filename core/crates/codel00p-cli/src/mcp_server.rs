@@ -612,8 +612,13 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
             "session_id": source.session_id().as_str(),
             "turn_id": source.turn_id().as_str(),
         });
+        item["source_uri"] = json!(source_uri(source));
     }
     item
+}
+
+fn source_uri(source: &MemorySource) -> String {
+    format!("codel00p://sessions/{}", source.session_id().as_str())
 }
 
 fn required_string<'a>(arguments: &'a Value, key: &str) -> Result<&'a str, String> {

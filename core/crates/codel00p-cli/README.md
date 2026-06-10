@@ -256,7 +256,8 @@ Output is intentionally stable and scriptable:
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
   and `content`; add `--json` for MCP-compatible records with reasons.
 - `memory show` prints a single memory record with source evidence; add
-  `--json` for the MCP-compatible record object.
+  `--json` for the MCP-compatible record object. Memory detail text and JSON
+  records include `source_uri` when source evidence is available.
 - review commands print `id` and the resulting status.
 - `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
   `--json` for machine-readable revision metadata.

@@ -154,8 +154,9 @@ Current foundation:
 - audit history with CLI/MCP inspection;
 - deterministic approved-memory retrieval with CLI/MCP search;
 - explicit memory extraction from completed turns;
-- source session/turn evidence visible in CLI memory detail text plus CLI
-  list/show JSON and MCP show/resource/list/search memory JSON;
+- source session/turn evidence and replay `source_uri` visible in CLI memory
+  detail text plus CLI list/show/search/similar JSON and MCP
+  show/resource/list/search/similar memory JSON;
 - CLI/MCP-backed content edits that preserve status/source/tags and append
   CLI/MCP-visible `edited` audit events with previous/new content metadata;
 - CLI restore from edit audit revision metadata;
@@ -167,7 +168,7 @@ Current foundation:
 Next work:
 
 - richer memory revision history;
-- source evidence links beyond session/turn references;
+- source evidence links beyond session replay references;
 - near-duplicate detection;
 - stale-memory detection;
 - visibility and sensitivity scopes;

@@ -2,7 +2,7 @@ use codel00p_memory::{
     MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
     ReviewDecision,
 };
-use codel00p_protocol::{MemoryKind, MemoryStatus};
+use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus};
 use serde_json::{Value, json};
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
@@ -246,9 +246,10 @@ fn memory_show(config: CliConfig, args: &[String]) -> CliResult<String> {
     );
     if let Some(source) = record.entry().source() {
         output.push_str(&format!(
-            "source_session: {}\nsource_turn: {}\n",
+            "source_session: {}\nsource_turn: {}\nsource_uri: {}\n",
             source.session_id().as_str(),
-            source.turn_id().as_str()
+            source.turn_id().as_str(),
+            source_uri(source)
         ));
     }
     output.push_str(&format!("content: {}\n", record.entry().content()));
@@ -285,8 +286,13 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
             "session_id": source.session_id().as_str(),
             "turn_id": source.turn_id().as_str(),
         });
+        item["source_uri"] = json!(source_uri(source));
     }
     item
+}
+
+fn source_uri(source: &MemorySource) -> String {
+    format!("codel00p://sessions/{}", source.session_id().as_str())
 }
 
 fn memory_audit(config: CliConfig, args: &[String]) -> CliResult<String> {
