@@ -39,6 +39,7 @@ codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>
 
 The MCP server exposes the same operation as the `memory_edit` tool with
 `id`, `actor`, `content`, and optional `reason` arguments.
+It also exposes `memory_audit` for machine-readable audit history.
 
 Rich revision storage is still a separate Memory 2.0 follow-up.
 

@@ -2,8 +2,8 @@ use std::io;
 
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
-    MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository,
-    ReviewDecision,
+    MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQuery,
+    MemoryRepository, ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
@@ -177,6 +177,17 @@ fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_audit",
+            "description": "Show audit history for one codel00p memory record.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": { "type": "string" }
+                }
+            }
+        }),
+        json!({
             "name": "memory_create_candidate",
             "description": "Create candidate codel00p project memory for review.",
             "inputSchema": {
@@ -288,6 +299,7 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, St
         "memory_search" => (memory_search(config, &arguments)?, Vec::new()),
         "memory_list" => (memory_list(config, &arguments)?, Vec::new()),
         "memory_show" => (memory_show(config, &arguments)?, Vec::new()),
+        "memory_audit" => (memory_audit(config, &arguments)?, Vec::new()),
         "memory_create_candidate" => memory_create_candidate(config, &arguments)?,
         "memory_approve" => memory_review(config, &arguments, MemoryReviewAction::Approve)?,
         "memory_reject" => memory_review(config, &arguments, MemoryReviewAction::Reject)?,
@@ -399,6 +411,27 @@ fn memory_show(config: &CliConfig, arguments: &Value) -> Result<String, String> 
     let store = open_memory_store(config)?;
     let record = store.get(id).map_err(|error| error.to_string())?;
     serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())
+}
+
+fn memory_audit(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+    let id = required_string(arguments, "id")?;
+    let store = open_memory_store(config)?;
+    let events = store.audit_log(id).map_err(|error| error.to_string())?;
+    let items = events
+        .iter()
+        .map(|event| {
+            let mut item = json!({
+                "sequence": event.sequence(),
+                "action": audit_action_label(event.action()),
+                "actor": event.actor(),
+            });
+            if let Some(reason) = event.reason() {
+                item["reason"] = json!(reason);
+            }
+            item
+        })
+        .collect::<Vec<_>>();
+    serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 
 fn memory_create_candidate(
@@ -612,6 +645,16 @@ fn status_label(status: MemoryStatus) -> &'static str {
         MemoryStatus::Approved => "approved",
         MemoryStatus::Rejected => "rejected",
         MemoryStatus::Archived => "archived",
+    }
+}
+
+fn audit_action_label(action: MemoryAuditAction) -> &'static str {
+    match action {
+        MemoryAuditAction::CandidateCreated => "candidate_created",
+        MemoryAuditAction::Approved => "approved",
+        MemoryAuditAction::Rejected => "rejected",
+        MemoryAuditAction::Archived => "archived",
+        MemoryAuditAction::Edited => "edited",
     }
 }
 

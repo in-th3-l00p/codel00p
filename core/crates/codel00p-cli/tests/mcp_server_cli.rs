@@ -103,6 +103,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert!(tool_names.contains(&"memory_reject"));
     assert!(tool_names.contains(&"memory_archive"));
     assert!(tool_names.contains(&"memory_edit"));
+    assert!(tool_names.contains(&"memory_audit"));
     assert!(tool_names.contains(&"session_show"));
 
     send(
@@ -557,6 +558,30 @@ fn mcp_serve_can_create_and_review_project_memory() {
             "id": 5,
             "method": "tools/call",
             "params": {
+                "name": "memory_audit",
+                "arguments": {
+                    "id": "mem-mcp-1"
+                }
+            }
+        }),
+    );
+    let audit = read_response(&mut stdout);
+    assert_eq!(audit["result"]["isError"], false);
+    let audit_text = audit["result"]["content"][0]["text"]
+        .as_str()
+        .expect("audit text");
+    assert!(audit_text.contains(r#""sequence":3"#));
+    assert!(audit_text.contains(r#""action":"edited""#));
+    assert!(audit_text.contains(r#""actor":"mcp-client""#));
+    assert!(audit_text.contains(r#""reason":"clarified editable workflow""#));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_search",
                 "arguments": { "text": "MCP edit tools" }
             }
@@ -574,7 +599,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 6,
+            "id": 7,
             "method": "tools/call",
             "params": {
                 "name": "memory_create_candidate",
@@ -596,7 +621,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 7,
+            "id": 8,
             "method": "tools/call",
             "params": {
                 "name": "memory_reject",
@@ -619,7 +644,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 8,
+            "id": 9,
             "method": "tools/call",
             "params": {
                 "name": "memory_archive",
