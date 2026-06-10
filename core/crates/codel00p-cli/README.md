@@ -260,7 +260,7 @@ Output is intentionally stable and scriptable:
   records include `source_uri` when source evidence is available.
 - review commands print `id` and the resulting status.
 - `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
-  `--json` for machine-readable revision metadata.
+  `--json` for machine-readable revision metadata including `memory_id`.
 - `memory restore` restores content from an edit audit event's
   `previous_content` and prints `id` plus resulting status.
 

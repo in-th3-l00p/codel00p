@@ -51,7 +51,8 @@ codel00p memory restore <id> --sequence <audit-sequence> --actor <actor> [--reas
 The MCP server exposes the same operation as the `memory_edit` tool with
 `id`, `actor`, `content`, and optional `reason` arguments.
 The CLI `memory audit <id> --json` command and MCP `memory_audit` tool expose
-machine-readable audit history, including edit revision content when available.
+machine-readable audit history, including `memory_id` and edit revision content
+when available.
 The CLI `memory restore` command and MCP `memory_restore` tool use an edit
 audit event's `previous_content` to write a new auditable edit that restores
 older content.

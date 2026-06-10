@@ -158,7 +158,8 @@ Current foundation:
   detail text plus CLI list/show/search/similar JSON and MCP
   show/resource/list/search/similar memory JSON;
 - CLI/MCP-backed content edits that preserve status/source/tags and append
-  CLI/MCP-visible `edited` audit events with previous/new content metadata;
+  CLI/MCP-visible `edited` audit events with memory id and previous/new content
+  metadata;
 - CLI/MCP restore from edit audit revision metadata;
 - exact active duplicate candidate rejection;
 - repository-level active memory similarity scoring with CLI/MCP review access;

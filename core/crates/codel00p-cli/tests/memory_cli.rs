@@ -427,7 +427,11 @@ fn memory_edit_updates_content_and_prints_audit_event() {
     );
     let audit_events: serde_json::Value =
         serde_json::from_str(&stdout(&audit_json)).expect("audit json");
-    let edit_event = &audit_events.as_array().expect("audit array")[2];
+    let audit_events = audit_events.as_array().expect("audit array");
+    for event in audit_events {
+        assert_eq!(event["memory_id"], "mem-workflow");
+    }
+    let edit_event = &audit_events[2];
     assert_eq!(edit_event["sequence"], 3);
     assert_eq!(edit_event["action"], "edited");
     assert_eq!(edit_event["actor"], "bob");
@@ -500,6 +504,9 @@ fn memory_restore_reverts_to_previous_edit_content() {
         serde_json::from_str(&stdout(&audit_json)).expect("audit json");
     let audit_events = audit_events.as_array().expect("audit array");
     assert_eq!(audit_events.len(), 4);
+    for event in audit_events {
+        assert_eq!(event["memory_id"], "mem-workflow");
+    }
     let restore_event = &audit_events[3];
     assert_eq!(restore_event["sequence"], 4);
     assert_eq!(restore_event["action"], "edited");

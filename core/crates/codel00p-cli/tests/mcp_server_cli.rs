@@ -577,6 +577,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
     let audit_text = audit["result"]["content"][0]["text"]
         .as_str()
         .expect("audit text");
+    assert!(audit_text.contains(r#""memory_id":"mem-mcp-1""#));
     assert!(audit_text.contains(r#""sequence":3"#));
     assert!(audit_text.contains(r#""action":"edited""#));
     assert!(audit_text.contains(r#""actor":"mcp-client""#));
@@ -704,6 +705,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
     let restored_audit_text = restored_audit["result"]["content"][0]["text"]
         .as_str()
         .expect("restored audit text");
+    assert!(restored_audit_text.contains(r#""memory_id":"mem-mcp-1""#));
     assert!(restored_audit_text.contains(r#""sequence":4"#));
     assert!(restored_audit_text.contains(r#""action":"edited""#));
     assert!(restored_audit_text.contains(r#""reason":"undo edit""#));

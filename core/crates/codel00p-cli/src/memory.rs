@@ -333,6 +333,7 @@ fn memory_audit(config: CliConfig, args: &[String]) -> CliResult<String> {
 
 fn audit_event_json(event: &codel00p_memory::MemoryAuditEvent) -> Value {
     let mut item = json!({
+        "memory_id": event.memory_id(),
         "sequence": event.sequence(),
         "action": audit_action_label(event.action()),
         "actor": event.actor(),
