@@ -407,3 +407,46 @@ async fn list_model_catalog_reports_policy_metadata() {
     assert_eq!(result.models.len(), 1);
     assert_eq!(result.models[0].id, "tool-vision-model");
 }
+
+#[tokio::test]
+async fn list_model_catalog_reports_credential_source() {
+    let server = MockServer::start_async().await;
+    let catalog = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/models")
+                .header("authorization", "Bearer managed-key");
+            then.status(200).json_body(json!({
+                "data": [
+                    {"id": "local-model", "name": "Local Model"}
+                ]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .organization_credential(
+            "local",
+            Credential::api_key("managed-key"),
+            "team-ai/local-catalog",
+        )
+        .build();
+
+    let result = client
+        .list_model_catalog(
+            ModelCatalogRequest::builder("local")
+                .base_url(server.base_url())
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    catalog.assert_async().await;
+    assert_eq!(
+        result.credential_source.as_deref(),
+        Some("organization:team-ai/local-catalog")
+    );
+    assert_eq!(result.models.len(), 1);
+    assert_eq!(result.models[0].id, "local-model");
+}

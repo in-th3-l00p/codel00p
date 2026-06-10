@@ -53,6 +53,7 @@ pub struct ProviderModelCatalog {
     pub requested_provider: String,
     pub provider: String,
     pub models_url: String,
+    pub credential_source: Option<String>,
     pub policy_decision: ProviderPolicyDecision,
     pub policy: ProviderModelCatalogPolicy,
     pub catalog_model_count: usize,

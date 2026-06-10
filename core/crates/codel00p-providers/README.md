@@ -43,8 +43,8 @@ Implemented:
   capabilities;
 - `InferenceClient::list_model_catalog` and `list_models` with
   `ModelCatalogRequest`, normalized `ProviderModel` descriptors, and safe
-  catalog policy metadata for requested/canonical provider, catalog URL,
-  active model filters, and pre/post-filter model counts;
+  catalog metadata for requested/canonical provider, catalog URL, credential
+  source, active model filters, and pre/post-filter model counts;
 - opt-in fallback routing across provider/model candidates for retryable
   provider failures, with ordered route-attempt metadata, catalog URLs,
   output-token parameters, and capabilities attached to successful responses;

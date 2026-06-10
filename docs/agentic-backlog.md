@@ -16,7 +16,8 @@ Build:
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
   base URL source, policy decision, model catalog URL, and provider
   capabilities, plus organization credential source labels;
-- model catalog listing with normalized model descriptors;
+- model catalog listing with normalized model descriptors and safe credential
+  source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;
 - normalized usage and explicit request-priced cost metadata;
 - provider and model allowlist policy hooks for project and organization rules;

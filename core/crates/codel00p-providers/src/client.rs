@@ -208,6 +208,7 @@ impl InferenceClient {
             requested_provider: request.provider,
             provider: profile.id.to_string(),
             models_url,
+            credential_source: Some(credential.source.clone()),
             policy_decision: ProviderPolicyDecision::Allowed,
             policy: self.policy.catalog_policy(profile.id),
             catalog_model_count,
