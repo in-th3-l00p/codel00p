@@ -11,7 +11,7 @@ pub enum MessageRole {
 
 use serde_json::Value;
 
-use crate::ToolCall;
+use crate::{ToolCall, UsagePricing};
 
 /// Provider-neutral chat message.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -82,6 +82,7 @@ pub struct InferenceRequest {
     pub max_output_tokens: Option<u32>,
     pub base_url: Option<String>,
     pub fallback_routes: Vec<InferenceFallbackRoute>,
+    pub pricing: Option<UsagePricing>,
 }
 
 impl InferenceRequest {
@@ -99,6 +100,7 @@ impl InferenceRequest {
                 max_output_tokens: None,
                 base_url: None,
                 fallback_routes: Vec::new(),
+                pricing: None,
             },
         }
     }
@@ -197,6 +199,11 @@ impl InferenceRequestBuilder {
         self.request
             .fallback_routes
             .push(InferenceFallbackRoute::new(provider, model).base_url(base_url));
+        self
+    }
+
+    pub fn pricing(mut self, value: UsagePricing) -> Self {
+        self.request.pricing = Some(value);
         self
     }
 

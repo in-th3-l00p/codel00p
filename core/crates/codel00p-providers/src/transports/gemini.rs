@@ -393,6 +393,7 @@ impl GeminiResponse {
             finish_reason: candidate.finish_reason,
             reasoning: None,
             usage: self.usage_metadata.map(GeminiUsageMetadata::normalize),
+            cost: None,
             provider_data,
         })
     }

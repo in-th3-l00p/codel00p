@@ -280,6 +280,7 @@ impl AnthropicMessagesResponse {
             finish_reason: self.stop_reason,
             reasoning: None,
             usage: self.usage.map(AnthropicUsage::normalize),
+            cost: None,
             provider_data,
         })
     }

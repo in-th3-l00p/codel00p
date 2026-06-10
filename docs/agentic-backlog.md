@@ -16,7 +16,7 @@ Build:
   base URL source, policy decision, model catalog URL, and provider
   capabilities;
 - fallback routing for retryable failures with ordered route-attempt metadata;
-- normalized usage and cost metadata;
+- normalized usage and explicit request-priced cost metadata;
 - provider policy hooks for project and organization rules.
 
 Why now: native provider execution is implemented, so routing quality is the

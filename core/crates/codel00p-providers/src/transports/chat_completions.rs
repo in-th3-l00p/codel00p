@@ -233,6 +233,7 @@ impl ChatCompletionsResponse {
             finish_reason: choice.finish_reason,
             reasoning: None,
             usage: self.usage.map(ChatUsage::normalize),
+            cost: None,
             provider_data: Default::default(),
         })
     }

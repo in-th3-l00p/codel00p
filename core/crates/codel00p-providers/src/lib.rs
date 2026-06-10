@@ -45,5 +45,5 @@ pub use request::{
     ChatMessage, InferenceFallbackRoute, InferenceRequest, InferenceRequestBuilder, MessageRole,
     ToolDefinition,
 };
-pub use response::{InferenceResponse, ToolCall, Usage};
+pub use response::{InferenceResponse, ToolCall, Usage, UsageCostEstimate, UsagePricing};
 pub use runtime::{ProviderPolicyDecision, ResolvedInferenceRoute, RouteValueSource};

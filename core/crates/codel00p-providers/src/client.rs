@@ -39,6 +39,7 @@ impl InferenceClient {
         let mut last_error = match self.complete_one(request.clone()).await {
             Ok((route, response)) => {
                 attempts.push(successful_attempt(&route, &request.model));
+                let response = attach_cost_estimate(response, &request);
                 return Ok(attach_route_metadata(
                     response,
                     &route,
@@ -76,6 +77,7 @@ impl InferenceClient {
             match self.complete_one(fallback_request).await {
                 Ok((route, response)) => {
                     attempts.push(successful_attempt(&route, &fallback.model));
+                    let response = attach_cost_estimate(response, &request);
                     return Ok(attach_route_metadata(
                         response,
                         &route,
@@ -208,6 +210,16 @@ impl InferenceClient {
             output_token_parameter: profile.output_token_parameter,
         })
     }
+}
+
+fn attach_cost_estimate(
+    mut response: InferenceResponse,
+    request: &InferenceRequest,
+) -> InferenceResponse {
+    if let (Some(usage), Some(pricing)) = (&response.usage, &request.pricing) {
+        response.cost = Some(usage.estimate_cost(pricing));
+    }
+    response
 }
 
 #[derive(Debug)]

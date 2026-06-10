@@ -376,6 +376,7 @@ impl BedrockConverseResponse {
             finish_reason: self.stop_reason,
             reasoning: None,
             usage: self.usage.map(BedrockUsage::normalize),
+            cost: None,
             provider_data: Default::default(),
         })
     }

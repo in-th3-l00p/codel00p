@@ -51,6 +51,7 @@ Implemented:
 - AWS Bedrock Converse transport;
 - Gemini-native GenerateContent transport;
 - normalized responses, usage, and tool calls;
+- optional request-supplied pricing with normalized response cost estimates;
 - mocked integration tests for request payloads and response parsing.
 
 Not yet implemented:
@@ -70,6 +71,8 @@ base URL is supplied, and other compatible gateways.
 - Keep route resolution inspectable and safe to log.
 - Never expose credential values in route/debug types.
 - Normalize every provider response into one codel00p response shape.
+- Keep cost estimates explicit: callers supply pricing, providers supply usage,
+  and the crate derives deterministic fixed-point estimates.
 - Preserve provider-specific replay data under `provider_data`, not top-level
   fields.
 - Test every transport with mocked HTTP and exact payload assertions.

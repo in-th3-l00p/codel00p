@@ -1,6 +1,6 @@
 use codel00p_providers::{
     ChatMessage, Credential, InferenceClient, InferenceRequest, InferenceResponse, MessageRole,
-    ProviderError, default_registry,
+    ProviderError, UsagePricing, default_registry,
 };
 
 #[tokio::test]
@@ -70,6 +70,23 @@ fn request_builder_preserves_fallback_routes() {
     assert_eq!(request.fallback_routes[1].provider, "anthropic");
     assert_eq!(request.fallback_routes[1].model, "claude-3-5-haiku-latest");
     assert_eq!(request.fallback_routes[1].base_url, None);
+}
+
+#[test]
+fn request_builder_preserves_usage_pricing() {
+    let pricing = UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000)
+        .with_cache_read_nanos_per_million_tokens(50_000_000)
+        .with_cache_write_nanos_per_million_tokens(75_000_000)
+        .with_reasoning_nanos_per_million_tokens(600_000_000);
+
+    let request = InferenceRequest::builder("openai", "gpt-5-mini")
+        .message(ChatMessage::user("Estimate cost."))
+        .pricing(pricing.clone())
+        .build();
+
+    assert_eq!(request.provider, "openai");
+    assert_eq!(request.model, "gpt-5-mini");
+    assert_eq!(request.pricing, Some(pricing));
 }
 
 #[test]

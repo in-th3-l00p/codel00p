@@ -209,6 +209,7 @@ fn maps_provider_response_to_harness_response() {
         finish_reason: Some("tool_calls".to_string()),
         reasoning: None,
         usage: None,
+        cost: None,
         provider_data: Default::default(),
     };
 

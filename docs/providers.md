@@ -307,12 +307,14 @@ Implemented:
 - Gemini GenerateContent transport with mocked HTTP tests, including
   `systemInstruction`, content parts, function declarations, `functionCall`
   responses, `functionResponse` replay, finish reasons, and usage metadata.
+- request-supplied `UsagePricing` and response-level `UsageCostEstimate`
+  metadata using deterministic nano-unit fixed-point math.
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
 Next provider work should focus on enterprise variants: Azure deployment-aware
 configuration, GitHub Copilot/GitHub Models hardening, model catalogs,
-normalized cost metadata, and organization policy.
+organization policy, and cloud-managed pricing injection.
 
 ## Non-goals for the first pass
 

@@ -16,7 +16,7 @@
 - Modify: `core/crates/codel00p-providers/tests/client_interface.rs`
 - Create: `core/crates/codel00p-providers/tests/usage_cost.rs`
 
-- [ ] **Step 1: Test request pricing shape**
+- [x] **Step 1: Test request pricing shape**
 
 Add a test that builds an `InferenceRequest` with:
 
@@ -30,7 +30,7 @@ UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000)
 Assert the request stores the pricing object exactly and keeps provider/model
 fields unchanged.
 
-- [ ] **Step 2: Test deterministic cost math**
+- [x] **Step 2: Test deterministic cost math**
 
 Add a pure unit test that estimates cost for:
 
@@ -53,13 +53,13 @@ Expected component costs in nano-USD:
 - reasoning: `600`
 - total: `4350`
 
-- [ ] **Step 3: Test response cost attachment**
+- [x] **Step 3: Test response cost attachment**
 
 Use mocked Chat Completions with a response usage payload. Build an
 `InferenceClient`, attach pricing to the request, and assert the returned
 `InferenceResponse.cost` contains the normalized estimate.
 
-- [ ] **Step 4: Verify red state**
+- [x] **Step 4: Verify red state**
 
 Run:
 
@@ -78,7 +78,7 @@ do not exist.
 - Modify: `core/crates/codel00p-providers/src/request.rs`
 - Modify: `core/crates/codel00p-providers/src/lib.rs`
 
-- [ ] **Step 1: Add `UsagePricing`**
+- [x] **Step 1: Add `UsagePricing`**
 
 Add a public serializable pricing struct:
 
@@ -95,7 +95,7 @@ pub struct UsagePricing {
 
 Add builder helpers for USD and optional cache/reasoning rates.
 
-- [ ] **Step 2: Add `UsageCostEstimate`**
+- [x] **Step 2: Add `UsageCostEstimate`**
 
 Add a public serializable estimate struct:
 
@@ -113,7 +113,7 @@ pub struct UsageCostEstimate {
 
 Add `Usage::estimate_cost(&UsagePricing) -> UsageCostEstimate`.
 
-- [ ] **Step 3: Extend request and response structs**
+- [x] **Step 3: Extend request and response structs**
 
 Add:
 
@@ -137,17 +137,17 @@ to `InferenceResponse`.
 - Modify: `core/crates/codel00p-providers/src/client.rs`
 - Update transport response literals if required by the new response field.
 
-- [ ] **Step 1: Attach estimates after successful primary route**
+- [x] **Step 1: Attach estimates after successful primary route**
 
 After a successful single-route completion, if both `request.pricing` and
 `response.usage` are present, set `response.cost`.
 
-- [ ] **Step 2: Attach estimates after successful fallback route**
+- [x] **Step 2: Attach estimates after successful fallback route**
 
 When a fallback route succeeds, use the fallback request pricing inherited from
 the original request and set `response.cost` before returning.
 
-- [ ] **Step 3: Leave unknown costs explicit**
+- [x] **Step 3: Leave unknown costs explicit**
 
 If pricing is absent or provider usage is absent, leave `response.cost` as
 `None`.
@@ -161,11 +161,11 @@ If pricing is absent or provider usage is absent, leave `response.cost` as
 - Modify: `docs/product-roadmap.md`
 - Modify: `docs/roadmap.md`
 
-- [ ] **Step 1: Document the new public API**
+- [x] **Step 1: Document the new public API**
 
 Mention explicit request pricing and normalized response cost estimates.
 
-- [ ] **Step 2: Run targeted provider checks**
+- [x] **Step 2: Run targeted provider checks**
 
 Run:
 
@@ -173,7 +173,7 @@ Run:
 cd core && cargo fmt --all && cargo test -p codel00p-providers --test client_interface request_builder_preserves_usage_pricing && cargo test -p codel00p-providers --test usage_cost && cargo test -p codel00p-providers && cargo clippy -p codel00p-providers --all-targets -- -D warnings
 ```
 
-- [ ] **Step 3: Run repo verification**
+- [x] **Step 3: Run repo verification**
 
 Run:
 
@@ -181,7 +181,7 @@ Run:
 pnpm verify
 ```
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 

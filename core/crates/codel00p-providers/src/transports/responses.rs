@@ -297,6 +297,7 @@ impl ResponsesResponse {
             finish_reason: self.status,
             reasoning: None,
             usage: self.usage.map(ResponsesUsage::normalize),
+            cost: None,
             provider_data,
         })
     }
