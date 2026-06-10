@@ -42,7 +42,8 @@ pub use policy::ProviderPolicy;
 pub use profile::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
 pub use request::{
-    ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole, ToolDefinition,
+    ChatMessage, InferenceFallbackRoute, InferenceRequest, InferenceRequestBuilder, MessageRole,
+    ToolDefinition,
 };
 pub use response::{InferenceResponse, ToolCall, Usage};
 pub use runtime::{ProviderPolicyDecision, ResolvedInferenceRoute, RouteValueSource};

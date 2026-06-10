@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 
+use serde_json::{Value, json};
+
 use crate::{
-    ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderPolicy,
-    ProviderPolicyDecision, ProviderRegistry, ResolvedInferenceRoute, RouteValueSource,
-    default_registry,
+    ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
+    ProviderError, ProviderPolicy, ProviderPolicyDecision, ProviderRegistry,
+    ResolvedInferenceRoute, RouteValueSource, classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport, bedrock_converse::BedrockConverseTransport,
         chat_completions::ChatCompletionsTransport, gemini::GeminiTransport,
@@ -32,14 +34,94 @@ impl InferenceClient {
         &self,
         request: InferenceRequest,
     ) -> Result<InferenceResponse, ProviderError> {
-        let route = self.resolve(&request)?;
-        let credential = self.credentials.get(&route.provider).ok_or_else(|| {
-            ProviderError::MissingCredential {
-                provider: route.provider.clone(),
+        let fallback_routes = request.fallback_routes.clone();
+        let mut attempts = Vec::new();
+        let mut last_error = match self.complete_one(request.clone()).await {
+            Ok((route, response)) => {
+                attempts.push(successful_attempt(&route, &request.model));
+                return Ok(attach_route_metadata(
+                    response,
+                    &route,
+                    &request.model,
+                    attempts,
+                ));
             }
-        })?;
+            Err(failed) => {
+                let classified = classify_provider_error(&failed.error);
+                attempts.push(failed_attempt(
+                    failed.route.as_ref(),
+                    &request.provider,
+                    &request.model,
+                    &classified,
+                    if classified.should_fallback() && !fallback_routes.is_empty() {
+                        "fallback"
+                    } else {
+                        "error"
+                    },
+                ));
+                if !classified.should_fallback() {
+                    return Err(failed.error);
+                }
+                failed.error
+            }
+        };
 
-        match route.api_mode {
+        for fallback in fallback_routes {
+            let mut fallback_request = request.clone();
+            fallback_request.provider = fallback.provider.clone();
+            fallback_request.model = fallback.model.clone();
+            fallback_request.base_url = fallback.base_url.clone();
+            fallback_request.fallback_routes.clear();
+
+            match self.complete_one(fallback_request).await {
+                Ok((route, response)) => {
+                    attempts.push(successful_attempt(&route, &fallback.model));
+                    return Ok(attach_route_metadata(
+                        response,
+                        &route,
+                        &fallback.model,
+                        attempts,
+                    ));
+                }
+                Err(failed) => {
+                    let classified = classify_provider_error(&failed.error);
+                    attempts.push(failed_attempt(
+                        failed.route.as_ref(),
+                        &fallback.provider,
+                        &fallback.model,
+                        &classified,
+                        if classified.should_fallback() {
+                            "fallback"
+                        } else {
+                            "error"
+                        },
+                    ));
+                    if !classified.should_fallback() {
+                        return Err(failed.error);
+                    }
+                    last_error = failed.error;
+                }
+            }
+        }
+
+        Err(last_error)
+    }
+
+    async fn complete_one(
+        &self,
+        request: InferenceRequest,
+    ) -> Result<(ResolvedInferenceRoute, InferenceResponse), FailedRouteAttempt> {
+        let route = self.resolve(&request)?;
+        let Some(credential) = self.credentials.get(&route.provider) else {
+            return Err(FailedRouteAttempt {
+                route: Some(route.clone()),
+                error: ProviderError::MissingCredential {
+                    provider: route.provider.clone(),
+                },
+            });
+        };
+
+        let response = match route.api_mode {
             ApiMode::ChatCompletions => {
                 ChatCompletionsTransport::new()
                     .complete(
@@ -72,10 +154,16 @@ impl InferenceClient {
                     .await
             }
             other => Err(ProviderError::InvalidResponse {
-                provider: route.provider,
+                provider: route.provider.clone(),
                 message: format!("api mode {other:?} is not implemented yet"),
             }),
         }
+        .map_err(|error| FailedRouteAttempt {
+            route: Some(route.clone()),
+            error,
+        })?;
+
+        Ok((route, response))
     }
 
     /// Resolve provider, API mode, base URL, and credential presence without sending a request.
@@ -120,6 +208,73 @@ impl InferenceClient {
             output_token_parameter: profile.output_token_parameter,
         })
     }
+}
+
+#[derive(Debug)]
+struct FailedRouteAttempt {
+    route: Option<ResolvedInferenceRoute>,
+    error: ProviderError,
+}
+
+impl From<ProviderError> for FailedRouteAttempt {
+    fn from(error: ProviderError) -> Self {
+        Self { route: None, error }
+    }
+}
+
+fn attach_route_metadata(
+    mut response: InferenceResponse,
+    route: &ResolvedInferenceRoute,
+    model: &str,
+    attempts: Vec<Value>,
+) -> InferenceResponse {
+    response.provider_data.insert(
+        "codel00p_route".to_string(),
+        json!({
+            "selected": route_metadata(route, model),
+            "attempts": attempts,
+        }),
+    );
+    response
+}
+
+fn route_metadata(route: &ResolvedInferenceRoute, model: &str) -> Value {
+    json!({
+        "requested_provider": route.requested_provider,
+        "provider": route.provider,
+        "model": model,
+        "api_mode": format!("{:?}", route.api_mode),
+        "base_url_source": format!("{:?}", route.base_url_source),
+        "credential_source": route.credential_source,
+        "policy_decision": format!("{:?}", route.policy_decision),
+    })
+}
+
+fn successful_attempt(route: &ResolvedInferenceRoute, model: &str) -> Value {
+    let mut attempt = route_metadata(route, model);
+    attempt["outcome"] = Value::String("success".to_string());
+    attempt
+}
+
+fn failed_attempt(
+    route: Option<&ResolvedInferenceRoute>,
+    fallback_provider: &str,
+    model: &str,
+    classified: &ClassifiedProviderError,
+    outcome: &str,
+) -> Value {
+    let mut attempt = if let Some(route) = route {
+        route_metadata(route, model)
+    } else {
+        json!({
+            "requested_provider": fallback_provider,
+            "provider": fallback_provider,
+            "model": model,
+        })
+    };
+    attempt["outcome"] = Value::String(outcome.to_string());
+    attempt["error_kind"] = Value::String(format!("{:?}", classified.kind()));
+    attempt
 }
 
 /// Builder for [`InferenceClient`].

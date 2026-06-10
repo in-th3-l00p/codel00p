@@ -40,6 +40,9 @@ Implemented:
 - inspectable `resolve()` route API with safe audit metadata for provider,
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
+- opt-in fallback routing across provider/model candidates for retryable
+  provider failures, with ordered route-attempt metadata attached to successful
+  responses;
 - credential injection by canonical provider or alias;
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport;

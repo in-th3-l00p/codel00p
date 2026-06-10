@@ -290,6 +290,8 @@ Implemented:
 - inspectable `ResolvedInferenceRoute` with safe audit metadata for provider,
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
+- opt-in fallback routing with ordered route-attempt metadata and conservative
+  fallback only for classified retryable/provider-unavailable failures;
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - Anthropic Messages transport with mocked HTTP tests, including native system
@@ -308,9 +310,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on fallback routing and enterprise variants:
-Azure deployment-aware configuration, GitHub Copilot/GitHub Models hardening,
-model catalogs, normalized cost metadata, and organization policy.
+Next provider work should focus on enterprise variants: Azure deployment-aware
+configuration, GitHub Copilot/GitHub Models hardening, model catalogs,
+normalized cost metadata, and organization policy.
 
 ## Non-goals for the first pass
 

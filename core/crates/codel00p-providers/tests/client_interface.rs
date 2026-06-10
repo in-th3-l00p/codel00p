@@ -50,6 +50,29 @@ fn request_builder_preserves_a_clean_message_shape() {
 }
 
 #[test]
+fn request_builder_preserves_fallback_routes() {
+    let request = InferenceRequest::builder("openrouter", "anthropic/claude-sonnet")
+        .base_url("https://openrouter.example/api/v1")
+        .message(ChatMessage::user("Summarize the memory plan."))
+        .fallback_route_with_base_url("custom", "local-model", "http://127.0.0.1:11434/v1")
+        .fallback_route("anthropic", "claude-3-5-haiku-latest")
+        .build();
+
+    assert_eq!(request.provider, "openrouter");
+    assert_eq!(request.model, "anthropic/claude-sonnet");
+    assert_eq!(request.fallback_routes.len(), 2);
+    assert_eq!(request.fallback_routes[0].provider, "custom");
+    assert_eq!(request.fallback_routes[0].model, "local-model");
+    assert_eq!(
+        request.fallback_routes[0].base_url.as_deref(),
+        Some("http://127.0.0.1:11434/v1")
+    );
+    assert_eq!(request.fallback_routes[1].provider, "anthropic");
+    assert_eq!(request.fallback_routes[1].model, "claude-3-5-haiku-latest");
+    assert_eq!(request.fallback_routes[1].base_url, None);
+}
+
+#[test]
 fn normalized_response_is_provider_neutral_but_keeps_provider_data() {
     let response = InferenceResponse::assistant("done")
         .with_finish_reason("stop")

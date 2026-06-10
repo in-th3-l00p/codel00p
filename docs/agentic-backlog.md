@@ -15,8 +15,8 @@ Build:
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
   base URL source, policy decision, model catalog URL, and provider
   capabilities;
+- fallback routing for retryable failures with ordered route-attempt metadata;
 - normalized usage and cost metadata;
-- fallback routing for retryable failures;
 - provider policy hooks for project and organization rules.
 
 Why now: native provider execution is implemented, so routing quality is the

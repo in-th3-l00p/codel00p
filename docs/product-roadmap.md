@@ -120,7 +120,7 @@ Current foundation:
   inspection, allowlist policy, OpenAI-compatible Chat Completions transport,
   Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
   Converse transport, Gemini GenerateContent transport, tool calls, normalized
-  responses, and live integration-test toggles.
+  responses, fallback routing, and live integration-test toggles.
 
 Next work:
 
@@ -128,7 +128,6 @@ Next work:
 - GitHub Copilot and GitHub Models hardening;
 - model catalogs;
 - normalized usage and cost metadata;
-- fallback routing;
 - organization provider policy and cloud proxy routing.
 
 Exit criteria:

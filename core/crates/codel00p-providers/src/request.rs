@@ -81,6 +81,7 @@ pub struct InferenceRequest {
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
     pub base_url: Option<String>,
+    pub fallback_routes: Vec<InferenceFallbackRoute>,
 }
 
 impl InferenceRequest {
@@ -97,8 +98,32 @@ impl InferenceRequest {
                 temperature: None,
                 max_output_tokens: None,
                 base_url: None,
+                fallback_routes: Vec::new(),
             },
         }
+    }
+}
+
+/// Provider/model candidate used if the primary route can safely fall back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InferenceFallbackRoute {
+    pub provider: String,
+    pub model: String,
+    pub base_url: Option<String>,
+}
+
+impl InferenceFallbackRoute {
+    pub fn new(provider: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            provider: provider.into(),
+            model: model.into(),
+            base_url: None,
+        }
+    }
+
+    pub fn base_url(mut self, value: impl Into<String>) -> Self {
+        self.base_url = Some(value.into());
+        self
     }
 }
 
@@ -153,6 +178,25 @@ impl InferenceRequestBuilder {
 
     pub fn base_url(mut self, value: impl Into<String>) -> Self {
         self.request.base_url = Some(value.into());
+        self
+    }
+
+    pub fn fallback_route(mut self, provider: impl Into<String>, model: impl Into<String>) -> Self {
+        self.request
+            .fallback_routes
+            .push(InferenceFallbackRoute::new(provider, model));
+        self
+    }
+
+    pub fn fallback_route_with_base_url(
+        mut self,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        base_url: impl Into<String>,
+    ) -> Self {
+        self.request
+            .fallback_routes
+            .push(InferenceFallbackRoute::new(provider, model).base_url(base_url));
         self
     }
 
