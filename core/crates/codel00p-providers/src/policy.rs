@@ -2,6 +2,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{ProviderError, ProviderModel, ProviderRegistry};
 
+const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
+    "openai",
+    "anthropic",
+    "azure-foundry",
+    "bedrock",
+    "gemini",
+    "github",
+    "github-models",
+];
+
 /// Provider policy enforced during route resolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderPolicy {
@@ -15,6 +25,10 @@ impl ProviderPolicy {
             allowed_providers: None,
             allowed_models: BTreeMap::new(),
         }
+    }
+
+    pub fn enterprise_direct() -> Self {
+        Self::allow_only(ENTERPRISE_DIRECT_PROVIDERS.iter().copied())
     }
 
     pub fn allow_only<I, S>(providers: I) -> Self

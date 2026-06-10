@@ -68,7 +68,6 @@ Build:
 - richer provider-specific catalog metadata and model capability metadata;
 - cloud or organization-managed pricing injection;
 - expanded cache and reasoning metadata;
-- organization policy templates;
 - cloud proxy routing.
 
 Exit criteria:

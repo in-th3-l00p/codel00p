@@ -47,7 +47,7 @@ Implemented:
   provider failures, with ordered route-attempt metadata attached to successful
   responses;
 - credential injection by canonical provider or alias;
-- provider and model allowlist policy;
+- provider and model allowlist policy, including an enterprise-direct template;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
@@ -101,6 +101,8 @@ uses `max_tokens`, and lists models from
 - Normalize common catalog metadata such as capabilities, modalities, and token
   limits into typed fields before provider-specific policy or UI code needs it.
 - Enforce policy before inference and reflect model policy in catalog listings.
+- Keep policy templates conservative: direct corporate providers can be allowed
+  by default while broker and custom endpoints remain explicit choices.
 - Never expose credential values in route/debug types.
 - Normalize every provider response into one codel00p response shape.
 - Keep cost estimates explicit: callers supply pricing, providers supply usage,

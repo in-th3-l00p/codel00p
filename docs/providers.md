@@ -319,7 +319,7 @@ Implemented:
 - opt-in fallback routing with ordered route-attempt metadata and conservative
   fallback only for classified retryable/provider-unavailable failures;
 - provider and model allowlist policy, including catalog filtering for
-  disallowed models;
+  disallowed models and an enterprise-direct provider template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
@@ -327,6 +327,8 @@ Implemented:
   `github-models` profile and model override;
 - typed catalog metadata for provider capabilities, supported modalities, and
   token limits while preserving raw provider fields in `provider_data`;
+- `ProviderPolicy::enterprise_direct()` for organizations that want direct
+  first-wave providers while leaving broker/custom endpoints as explicit opt-ins;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -351,9 +353,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: organization policy
-templates, cloud-managed pricing injection, and richer provider-specific
-catalog metadata where common typed fields are not enough.
+Next provider work should focus on enterprise variants: cloud-managed pricing
+injection and richer provider-specific catalog metadata where common typed
+fields are not enough.
 
 ## Non-goals for the first pass
 
