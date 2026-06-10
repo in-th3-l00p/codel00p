@@ -51,15 +51,17 @@ The CLI exposes edits as:
 ```bash
 codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>]
 codel00p memory audit <id> --json
+codel00p memory restore <id> --sequence <audit-sequence> --actor <actor> [--reason <reason>]
 ```
 
 The MCP server exposes the same operation as the `memory_edit` tool with
 `id`, `actor`, `content`, and optional `reason` arguments.
 The CLI `memory audit <id> --json` command and MCP `memory_audit` tool expose
 machine-readable audit history, including edit revision content when available.
+The CLI `memory restore` command uses an edit audit event's `previous_content`
+to write a new auditable edit that restores older content.
 
-Richer revision browsing and restore workflows are still separate Memory 2.0
-follow-ups.
+Richer revision browsing is still a separate Memory 2.0 follow-up.
 
 ## Duplicate detection contract
 

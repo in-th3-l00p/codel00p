@@ -151,6 +151,11 @@ fn memory_help_documents_edit_command() {
         stdout(&output)
     );
     assert!(
+        stdout(&output).contains("restore  Restore content from an edit audit sequence"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
         stdout(&output)
             .contains("search   Search approved memory records; use --json for JSON output"),
         "stdout: {}",

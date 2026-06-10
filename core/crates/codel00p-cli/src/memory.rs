@@ -20,6 +20,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "reject" => memory_review(config, rest, ReviewCommand::Reject),
         "archive" => memory_review(config, rest, ReviewCommand::Archive),
         "edit" => memory_edit(config, rest),
+        "restore" => memory_restore(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
 }
@@ -346,6 +347,62 @@ fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<String> {
     }
 
     let mut store = open_memory_store(&config)?;
+    let record = store.edit(id, edit).map_err(|error| error.to_string())?;
+
+    Ok(format!(
+        "{}\t{}\n",
+        record.entry().id(),
+        status_label(record.entry().status())
+    ))
+}
+
+fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some(id) = args.first() else {
+        return Err("missing memory id".to_string());
+    };
+    let mut sequence = None;
+    let mut actor = None;
+    let mut reason = None;
+    let mut index = 1;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--sequence" => {
+                sequence = Some(
+                    required_value(args, index, "--sequence")?
+                        .parse::<u64>()
+                        .map_err(|_| "invalid --sequence".to_string())?,
+                );
+                index += 2;
+            }
+            "--actor" => {
+                actor = Some(required_value(args, index, "--actor")?);
+                index += 2;
+            }
+            "--reason" => {
+                reason = Some(required_value(args, index, "--reason")?);
+                index += 2;
+            }
+            flag => return Err(format!("unknown memory restore option: {flag}")),
+        }
+    }
+
+    let sequence = sequence.ok_or_else(|| "missing required --sequence".to_string())?;
+    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+
+    let mut store = open_memory_store(&config)?;
+    let audit = store.audit_log(id).map_err(|error| error.to_string())?;
+    let previous_content = audit
+        .iter()
+        .find(|event| event.sequence() == sequence)
+        .ok_or_else(|| format!("memory audit sequence not found: {sequence}"))?
+        .previous_content()
+        .ok_or_else(|| format!("memory audit sequence {sequence} has no previous content"))?
+        .to_string();
+
+    let mut edit = MemoryEdit::replace_content(actor, previous_content);
+    edit = edit.with_reason(reason.unwrap_or_else(|| format!("restore audit sequence {sequence}")));
+
     let record = store.edit(id, edit).map_err(|error| error.to_string())?;
 
     Ok(format!(

@@ -158,6 +158,7 @@ Current foundation:
   list/show JSON and MCP show/resource/list/search memory JSON;
 - CLI/MCP-backed content edits that preserve status/source/tags and append
   CLI/MCP-visible `edited` audit events with previous/new content metadata;
+- CLI restore from edit audit revision metadata;
 - exact active duplicate candidate rejection;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.

@@ -240,6 +240,7 @@ codel00p ... memory reject mem-1 --actor alice --reason "too vague"
 codel00p ... memory archive mem-1 --actor alice --reason "obsolete"
 codel00p ... memory audit mem-1
 codel00p ... memory audit mem-1 --json
+codel00p ... memory restore mem-1 --sequence 3 --actor alice --reason "undo edit"
 ```
 
 Output is intentionally stable and scriptable:
@@ -253,6 +254,8 @@ Output is intentionally stable and scriptable:
 - review commands print `id` and the resulting status.
 - `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
   `--json` for machine-readable revision metadata.
+- `memory restore` restores content from an edit audit event's
+  `previous_content` and prints `id` plus resulting status.
 
 ## Session Replay
 

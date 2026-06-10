@@ -160,6 +160,7 @@ Commands:
   show     Show one memory record; use --json for JSON output
   audit    Show memory audit history; use --json for JSON output
   edit     Edit memory content
+  restore  Restore content from an edit audit sequence
   approve  Approve candidate memory
   reject   Reject candidate memory
   archive  Archive memory

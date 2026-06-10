@@ -345,6 +345,79 @@ fn memory_edit_updates_content_and_prints_audit_event() {
 }
 
 #[test]
+fn memory_restore_reverts_to_previous_edit_content() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-workflow",
+        MemoryKind::Workflow,
+        "Run tests before pushing.",
+        "verify",
+    );
+    approve_candidate(&db_path, "mem-workflow", "alice");
+
+    let edit = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "edit",
+            "mem-workflow",
+            "--actor",
+            "bob",
+            "--content",
+            "Run pnpm verify before pushing main.",
+            "--reason",
+            "clarified command",
+        ],
+    );
+    let restore = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "restore",
+            "mem-workflow",
+            "--sequence",
+            "3",
+            "--actor",
+            "carol",
+            "--reason",
+            "undo edit",
+        ],
+    );
+    let show = run_codel00p(&db_path, &["memory", "show", "mem-workflow"]);
+    let audit_json = run_codel00p(&db_path, &["memory", "audit", "mem-workflow", "--json"]);
+
+    assert!(edit.status.success(), "stderr: {}", stderr(&edit));
+    assert!(restore.status.success(), "stderr: {}", stderr(&restore));
+    assert!(show.status.success(), "stderr: {}", stderr(&show));
+    assert!(
+        audit_json.status.success(),
+        "stderr: {}",
+        stderr(&audit_json)
+    );
+    assert_eq!(stdout(&restore), "mem-workflow\tapproved\n");
+    assert_eq!(
+        stdout(&show),
+        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run tests before pushing.\n"
+    );
+    let audit_events: serde_json::Value =
+        serde_json::from_str(&stdout(&audit_json)).expect("audit json");
+    let audit_events = audit_events.as_array().expect("audit array");
+    assert_eq!(audit_events.len(), 4);
+    let restore_event = &audit_events[3];
+    assert_eq!(restore_event["sequence"], 4);
+    assert_eq!(restore_event["action"], "edited");
+    assert_eq!(restore_event["actor"], "carol");
+    assert_eq!(restore_event["reason"], "undo edit");
+    assert_eq!(
+        restore_event["previous_content"],
+        "Run pnpm verify before pushing main."
+    );
+    assert_eq!(restore_event["new_content"], "Run tests before pushing.");
+}
+
+#[test]
 fn memory_reject_requires_reason() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
