@@ -43,6 +43,23 @@ fn run_codel00p_without_provider_env(db_path: &Path, args: &[&str]) -> Output {
         .expect("run codel00p")
 }
 
+fn run_codel00p_with_env(db_path: &Path, env: &[(&str, &str)], args: &[&str]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_codel00p"));
+    command
+        .arg("--memory-db")
+        .arg(db_path)
+        .arg("--organization-id")
+        .arg("org-1")
+        .arg("--project-id")
+        .arg("project-1")
+        .arg("--project-name")
+        .arg("codel00p");
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    command.args(args).output().expect("run codel00p")
+}
+
 fn run_codel00p_with_stdin(db_path: &Path, args: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_codel00p"))
         .arg("--memory-db")
@@ -134,6 +151,251 @@ fn agent_run_calls_provider_with_read_only_tools_and_prints_final_text() {
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     assert_eq!(stdout(&output), "The project has a README.\n");
+    provider.assert();
+}
+
+#[test]
+fn native_provider_agent_run_supports_openai_responses() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/responses")
+            .header("authorization", "Bearer openai-token")
+            .body_includes(r#""model":"gpt-5""#)
+            .body_includes(r#""role":"user""#)
+            .body_includes("Inspect through OpenAI Responses.")
+            .body_includes(r#""name":"read_file""#)
+            .body_includes(r#""name":"search_text""#)
+            .body_includes(r#""name":"list_files""#);
+        then.status(200).json_body(json!({
+            "id": "resp_cli_native",
+            "status": "completed",
+            "model": "gpt-5",
+            "output": [{
+                "type": "message",
+                "id": "msg_cli_native",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{
+                    "type": "output_text",
+                    "text": "Responses agent ready."
+                }]
+            }],
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 4
+            }
+        }));
+    });
+
+    let output = run_codel00p_with_env(
+        &db_path,
+        &[("CODEL00P_PROVIDER_OPENAI_API_KEY", "openai-token")],
+        &[
+            "agent",
+            "run",
+            "Inspect through OpenAI Responses.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "openai",
+            "--model",
+            "gpt-5",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Responses agent ready.\n");
+    provider.assert();
+}
+
+#[test]
+fn native_provider_agent_run_supports_anthropic_messages() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/messages")
+            .header("x-api-key", "anthropic-token")
+            .header("anthropic-version", "2023-06-01")
+            .body_includes(r#""model":"claude-3-5-sonnet-latest""#)
+            .body_includes(r#""role":"user""#)
+            .body_includes("Inspect through Anthropic Messages.")
+            .body_includes(r#""name":"read_file""#)
+            .body_includes(r#""name":"search_text""#)
+            .body_includes(r#""name":"list_files""#);
+        then.status(200).json_body(json!({
+            "id": "msg_cli_native",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3-5-sonnet-latest",
+            "content": [{
+                "type": "text",
+                "text": "Anthropic agent ready."
+            }],
+            "stop_reason": "end_turn",
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 4
+            }
+        }));
+    });
+
+    let output = run_codel00p_with_env(
+        &db_path,
+        &[("CODEL00P_PROVIDER_ANTHROPIC_API_KEY", "anthropic-token")],
+        &[
+            "agent",
+            "run",
+            "Inspect through Anthropic Messages.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "anthropic",
+            "--model",
+            "claude-3-5-sonnet-latest",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Anthropic agent ready.\n");
+    provider.assert();
+}
+
+#[test]
+fn native_provider_agent_run_supports_bedrock_converse() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/model/test-model/converse")
+            .header("content-type", "application/json")
+            .header("x-amz-security-token", "bedrock-session")
+            .header_matches(
+                "authorization",
+                "AWS4-HMAC-SHA256 Credential=bedrock-access/[0-9]{8}/us-east-1/bedrock/aws4_request, SignedHeaders=.*",
+            )
+            .header_matches("x-amz-date", "[0-9]{8}T[0-9]{6}Z")
+            .body_includes("Inspect through Bedrock Converse.")
+            .body_includes(r#""toolConfig""#)
+            .body_includes(r#""name":"read_file""#)
+            .body_includes(r#""name":"search_text""#)
+            .body_includes(r#""name":"list_files""#);
+        then.status(200).json_body(json!({
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [{"text": "Bedrock agent ready."}]
+                }
+            },
+            "stopReason": "end_turn",
+            "usage": {
+                "inputTokens": 12,
+                "outputTokens": 4,
+                "totalTokens": 16
+            }
+        }));
+    });
+
+    let output = run_codel00p_with_env(
+        &db_path,
+        &[
+            ("CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID", "bedrock-access"),
+            ("CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY", "bedrock-secret"),
+            ("CODEL00P_PROVIDER_AWS_SESSION_TOKEN", "bedrock-session"),
+            ("CODEL00P_PROVIDER_AWS_REGION", "us-east-1"),
+        ],
+        &[
+            "agent",
+            "run",
+            "Inspect through Bedrock Converse.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "bedrock",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Bedrock agent ready.\n");
+    provider.assert();
+}
+
+#[test]
+fn native_provider_agent_run_supports_gemini_generate_content() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1beta/models/gemini-2.5-flash:generateContent")
+            .header("x-goog-api-key", "gemini-token")
+            .body_includes(r#""role":"user""#)
+            .body_includes("Inspect through Gemini GenerateContent.")
+            .body_includes(r#""name":"read_file""#)
+            .body_includes(r#""name":"search_text""#)
+            .body_includes(r#""name":"list_files""#);
+        then.status(200).json_body(json!({
+            "responseId": "gemini_cli_native",
+            "modelVersion": "gemini-2.5-flash",
+            "candidates": [{
+                "content": {
+                    "role": "model",
+                    "parts": [{"text": "Gemini agent ready."}]
+                },
+                "finishReason": "STOP"
+            }],
+            "usageMetadata": {
+                "promptTokenCount": 12,
+                "candidatesTokenCount": 4
+            }
+        }));
+    });
+
+    let output = run_codel00p_with_env(
+        &db_path,
+        &[("CODEL00P_PROVIDER_GEMINI_API_KEY", "gemini-token")],
+        &[
+            "agent",
+            "run",
+            "Inspect through Gemini GenerateContent.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "gemini",
+            "--model",
+            "gemini-2.5-flash",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "Gemini agent ready.\n");
     provider.assert();
 }
 
@@ -2452,7 +2714,7 @@ fn agent_run_missing_credential_lists_supported_environment_variables() {
 }
 
 #[test]
-fn agent_run_rejects_provider_modes_that_are_not_implemented_for_cli_agent() {
+fn agent_run_rejects_unknown_providers_before_credential_lookup() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
     let workspace = dir.path().join("workspace");
@@ -2467,7 +2729,7 @@ fn agent_run_rejects_provider_modes_that_are_not_implemented_for_cli_agent() {
             "--workspace",
             workspace.to_str().expect("workspace path"),
             "--provider",
-            "openai",
+            "not-a-provider",
             "--model",
             "gpt-5",
         ],
@@ -2475,6 +2737,5 @@ fn agent_run_rejects_provider_modes_that_are_not_implemented_for_cli_agent() {
 
     assert!(!output.status.success());
     let error = stderr(&output);
-    assert!(error.contains("provider `openai` uses responses"));
-    assert!(error.contains("agent run currently supports chat_completions providers"));
+    assert!(error.contains("unknown provider: not-a-provider"));
 }

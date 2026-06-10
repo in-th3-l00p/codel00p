@@ -23,9 +23,11 @@ codel00p \
 ## Agent Run
 
 `agent run` executes one harness turn against a workspace. It supports
-OpenAI-compatible Chat Completions providers first: GitHub Copilot/GitHub
-Models, OpenRouter, Azure AI Foundry compatible endpoints, and custom/local
-OpenAI-compatible endpoints.
+OpenAI-compatible Chat Completions providers plus native OpenAI Responses,
+Anthropic Messages, AWS Bedrock Converse, and Gemini GenerateContent transports.
+That covers GitHub Copilot/GitHub Models, OpenRouter, Azure AI Foundry
+compatible endpoints, custom/local OpenAI-compatible endpoints, OpenAI,
+Anthropic, AWS Bedrock, and Google Gemini.
 
 ```bash
 CODEL00P_PROVIDER_CUSTOM_API_KEY=local-dev-key \

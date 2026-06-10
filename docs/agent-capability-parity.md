@@ -40,8 +40,9 @@ Implemented today:
 - provider layer routes through OpenAI Responses, Anthropic Messages, AWS
   Bedrock Converse, Gemini GenerateContent, and Chat-Completions-compatible
   providers;
-- CLI agent runs currently enable Chat-Completions-compatible providers while
-  native provider modes remain gated at the CLI boundary;
+- CLI agent runs use Chat-Completions-compatible providers plus native OpenAI
+  Responses, Anthropic Messages, AWS Bedrock Converse, and Gemini
+  GenerateContent transports;
 - session resume through persisted replay;
 - project instructions from `CODEL00P.md`, `AGENTS.md`, and `CLAUDE.md`;
 - streamable harness events for CLI and future UI consumers;
@@ -57,8 +58,8 @@ Implemented today:
 This is now a real local coding-agent foundation. It still needs polish and
 hardening before it can claim Claude Code-grade product maturity: richer patch
 handling, cancellation, background command monitoring, web tools, worktree
-isolation, PR workflows, broader providers, stronger memory quality, live MCP
-certification, and desktop/cloud control surfaces.
+isolation, PR workflows, provider routing policy, stronger memory quality, live
+MCP certification, and desktop/cloud control surfaces.
 
 ## Required Parity Track
 

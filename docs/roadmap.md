@@ -24,7 +24,8 @@ Implemented:
 - `codel00p-protocol` shared sessions, events, tool, provider, project, and
   memory contracts;
 - `codel00p-providers` registry, profiles, policy, route inspection,
-  credentials, OpenAI-compatible Chat Completions, tool calls, and live
+  credentials, OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic
+  Messages, AWS Bedrock Converse, Gemini GenerateContent, tool calls, and live
   integration-test toggles;
 - `codel00p-harness` session loop, provider adapter, memory injection,
   lifecycle hooks, project instructions, context compaction primitives,

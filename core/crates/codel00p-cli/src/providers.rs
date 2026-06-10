@@ -1,11 +1,15 @@
 use std::env;
 
-use codel00p_providers::{ApiMode, Credential, InferenceClient, default_registry};
+use codel00p_providers::{Credential, InferenceClient, default_registry};
 
 use crate::config::CliResult;
 
 pub fn build_provider_client(provider: &str) -> CliResult<InferenceClient> {
-    validate_agent_provider(provider)?;
+    let registry = default_registry();
+    if registry.resolve(provider).is_none() {
+        return Err(format!("unknown provider: {provider}"));
+    }
+
     let credential = provider_credential(provider).ok_or_else(|| {
         let env_vars = provider_env_vars(provider);
         if env_vars.is_empty() {
@@ -19,35 +23,9 @@ pub fn build_provider_client(provider: &str) -> CliResult<InferenceClient> {
     })?;
 
     Ok(InferenceClient::builder()
-        .registry(default_registry())
+        .registry(registry)
         .credential(provider, credential)
         .build())
-}
-
-fn validate_agent_provider(provider: &str) -> CliResult<()> {
-    let registry = default_registry();
-    let profile = registry
-        .resolve(provider)
-        .ok_or_else(|| format!("unknown provider: {provider}"))?;
-    if profile.api_mode != ApiMode::ChatCompletions {
-        return Err(format!(
-            "provider `{}` uses {}; agent run currently supports chat_completions providers",
-            profile.id,
-            api_mode_label(profile.api_mode)
-        ));
-    }
-    Ok(())
-}
-
-fn api_mode_label(api_mode: ApiMode) -> &'static str {
-    match api_mode {
-        ApiMode::ChatCompletions => "chat_completions",
-        ApiMode::AnthropicMessages => "anthropic_messages",
-        ApiMode::Responses => "responses",
-        ApiMode::BedrockConverse => "bedrock_converse",
-        ApiMode::Gemini => "gemini",
-        ApiMode::ExternalProcess => "external_process",
-    }
 }
 
 pub fn provider_env_vars(provider: &str) -> Vec<&'static str> {

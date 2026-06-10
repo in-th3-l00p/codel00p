@@ -133,13 +133,11 @@ The first Rust modules have started:
 ## Current status
 
 codel00p now has a working CLI vertical slice: an agent can call
-Chat-Completions-compatible providers, inspect and modify a workspace through
-permissioned tools, run commands, inspect git state, persist and resume
-sessions, stream events, connect to MCP tools, extract candidate memories, and
-reuse approved project memory in future runs. The provider layer also has native
-transports for OpenAI Responses, Anthropic Messages, AWS Bedrock Converse, and
-Gemini GenerateContent; CLI enablement for those native modes is a follow-on
-integration step.
+Chat-Completions-compatible providers plus native OpenAI Responses, Anthropic
+Messages, AWS Bedrock Converse, and Gemini GenerateContent transports; inspect
+and modify a workspace through permissioned tools; run commands; inspect git
+state; persist and resume sessions; stream events; connect to MCP tools; extract
+candidate memories; and reuse approved project memory in future runs.
 
 The next production work is hardening the product around richer agent parity,
 provider breadth, memory quality, third-party MCP certification, and then the
