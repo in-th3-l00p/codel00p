@@ -1,0 +1,468 @@
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::{
+    ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
+    ToolCall, ToolDefinition, Usage,
+};
+
+pub(crate) struct GeminiTransport {
+    http: reqwest::Client,
+}
+
+impl GeminiTransport {
+    pub(crate) fn new() -> Self {
+        Self {
+            http: reqwest::Client::new(),
+        }
+    }
+
+    pub(crate) async fn complete(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        request: InferenceRequest,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::ApiKey(api_key) = credential else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let model = request.model.clone();
+        let wire_request = GeminiRequest::from_request(provider, request)?;
+        let response = self
+            .http
+            .post(generate_content_url(base_url, &model))
+            .header("x-goog-api-key", api_key)
+            .json(&wire_request)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Http {
+                provider: provider.to_string(),
+                message: format!("status {status}: {body}"),
+            });
+        }
+
+        let wire_response = response.json::<GeminiResponse>().await.map_err(|error| {
+            ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            }
+        })?;
+
+        wire_response.normalize(provider)
+    }
+}
+
+fn generate_content_url(base_url: &str, model: &str) -> String {
+    let model = model.strip_prefix("models/").unwrap_or(model);
+    let base_url = base_url.trim_end_matches('/');
+    if base_url.ends_with("/v1beta") {
+        format!("{base_url}/models/{model}:generateContent")
+    } else {
+        format!("{base_url}/v1beta/models/{model}:generateContent")
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiRequest {
+    contents: Vec<GeminiContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system_instruction: Option<GeminiSystemInstruction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation_config: Option<GeminiGenerationConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<GeminiTool>,
+}
+
+impl GeminiRequest {
+    fn from_request(provider: &str, request: InferenceRequest) -> Result<Self, ProviderError> {
+        let mut system_parts = Vec::new();
+        let mut contents = Vec::new();
+        let mut tool_call_names = BTreeMap::new();
+
+        for message in request.messages {
+            match message.role {
+                MessageRole::System | MessageRole::Developer => {
+                    if let Some(content) = message.content
+                        && !content.is_empty()
+                    {
+                        system_parts.push(GeminiPart::Text { text: content });
+                    }
+                }
+                MessageRole::Assistant => {
+                    for tool_call in &message.tool_calls {
+                        if let Some(id) = &tool_call.id {
+                            tool_call_names.insert(id.clone(), tool_call.name.clone());
+                        }
+                    }
+                    contents.push(GeminiContent::from_chat_message(
+                        provider,
+                        message,
+                        &tool_call_names,
+                    )?);
+                }
+                _ => contents.push(GeminiContent::from_chat_message(
+                    provider,
+                    message,
+                    &tool_call_names,
+                )?),
+            }
+        }
+
+        Ok(Self {
+            contents,
+            system_instruction: GeminiSystemInstruction::from_parts(system_parts),
+            generation_config: GeminiGenerationConfig::from_options(
+                request.temperature,
+                request.max_output_tokens,
+            ),
+            tools: GeminiTool::from_tools(request.tools),
+        })
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct GeminiSystemInstruction {
+    parts: Vec<GeminiPart>,
+}
+
+impl GeminiSystemInstruction {
+    fn from_parts(parts: Vec<GeminiPart>) -> Option<Self> {
+        if parts.is_empty() {
+            None
+        } else {
+            Some(Self { parts })
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiGenerationConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_output_tokens: Option<u32>,
+}
+
+impl GeminiGenerationConfig {
+    fn from_options(temperature: Option<f32>, max_output_tokens: Option<u32>) -> Option<Self> {
+        if temperature.is_none() && max_output_tokens.is_none() {
+            None
+        } else {
+            Some(Self {
+                temperature,
+                max_output_tokens,
+            })
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct GeminiContent {
+    role: &'static str,
+    parts: Vec<GeminiPart>,
+}
+
+impl GeminiContent {
+    fn from_chat_message(
+        provider: &str,
+        message: ChatMessage,
+        tool_call_names: &BTreeMap<String, String>,
+    ) -> Result<Self, ProviderError> {
+        match message.role {
+            MessageRole::User => Ok(Self {
+                role: "user",
+                parts: vec![GeminiPart::Text {
+                    text: message.content.unwrap_or_default(),
+                }],
+            }),
+            MessageRole::Assistant => Ok(Self {
+                role: "model",
+                parts: assistant_parts(message.content, message.tool_calls),
+            }),
+            MessageRole::Tool => Ok(Self {
+                role: "user",
+                parts: vec![GeminiPart::FunctionResponse {
+                    function_response: GeminiFunctionResponse {
+                        id: message.tool_call_id.clone(),
+                        name: tool_result_name(provider, &message, tool_call_names)?,
+                        response: parse_tool_response(message.content.unwrap_or_default()),
+                    },
+                }],
+            }),
+            MessageRole::System | MessageRole::Developer => unreachable!("handled by caller"),
+        }
+    }
+}
+
+fn assistant_parts(content: Option<String>, tool_calls: Vec<ToolCall>) -> Vec<GeminiPart> {
+    let mut parts = Vec::new();
+    if let Some(content) = content
+        && !content.is_empty()
+    {
+        parts.push(GeminiPart::Text { text: content });
+    }
+    parts.extend(tool_calls.into_iter().map(GeminiPart::from));
+    parts
+}
+
+fn tool_result_name(
+    provider: &str,
+    message: &ChatMessage,
+    tool_call_names: &BTreeMap<String, String>,
+) -> Result<String, ProviderError> {
+    let tool_call_id =
+        message
+            .tool_call_id
+            .clone()
+            .ok_or_else(|| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: "tool result message is missing tool_call_id".to_string(),
+            })?;
+    Ok(tool_call_names
+        .get(&tool_call_id)
+        .cloned()
+        .unwrap_or(tool_call_id))
+}
+
+fn parse_tool_response(content: String) -> Value {
+    match serde_json::from_str::<Value>(&content) {
+        Ok(Value::Object(map)) => Value::Object(map),
+        Ok(other) => {
+            let mut map = serde_json::Map::new();
+            map.insert("result".to_string(), other);
+            Value::Object(map)
+        }
+        Err(_) => {
+            let mut map = serde_json::Map::new();
+            map.insert("result".to_string(), Value::String(content));
+            Value::Object(map)
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum GeminiPart {
+    Text {
+        text: String,
+    },
+    FunctionCall {
+        #[serde(rename = "functionCall")]
+        function_call: GeminiFunctionCall,
+    },
+    FunctionResponse {
+        #[serde(rename = "functionResponse")]
+        function_response: GeminiFunctionResponse,
+    },
+}
+
+impl From<ToolCall> for GeminiPart {
+    fn from(tool_call: ToolCall) -> Self {
+        Self::FunctionCall {
+            function_call: GeminiFunctionCall {
+                id: tool_call.id,
+                name: tool_call.name,
+                args: tool_call.arguments,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct GeminiFunctionCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    name: String,
+    args: Value,
+}
+
+#[derive(Debug, Serialize)]
+struct GeminiFunctionResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    name: String,
+    response: Value,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiTool {
+    function_declarations: Vec<GeminiFunctionDeclaration>,
+}
+
+impl GeminiTool {
+    fn from_tools(tools: Vec<ToolDefinition>) -> Vec<Self> {
+        if tools.is_empty() {
+            Vec::new()
+        } else {
+            vec![Self {
+                function_declarations: tools
+                    .into_iter()
+                    .map(GeminiFunctionDeclaration::from)
+                    .collect(),
+            }]
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct GeminiFunctionDeclaration {
+    name: String,
+    description: String,
+    parameters: Value,
+}
+
+impl From<ToolDefinition> for GeminiFunctionDeclaration {
+    fn from(tool: ToolDefinition) -> Self {
+        Self {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiResponse {
+    #[serde(default)]
+    candidates: Vec<GeminiCandidate>,
+    usage_metadata: Option<GeminiUsageMetadata>,
+    response_id: Option<String>,
+    model_version: Option<String>,
+}
+
+impl GeminiResponse {
+    fn normalize(self, provider: &str) -> Result<InferenceResponse, ProviderError> {
+        let candidate =
+            self.candidates
+                .into_iter()
+                .next()
+                .ok_or_else(|| ProviderError::InvalidResponse {
+                    provider: provider.to_string(),
+                    message: "missing candidates[0]".to_string(),
+                })?;
+
+        let mut text_blocks = Vec::new();
+        let mut tool_calls = Vec::new();
+        for part in candidate.content.parts {
+            match part {
+                GeminiResponsePart::Text { text } => {
+                    if !text.is_empty() {
+                        text_blocks.push(text);
+                    }
+                }
+                GeminiResponsePart::FunctionCall { function_call } => {
+                    tool_calls.push(function_call.normalize());
+                }
+                GeminiResponsePart::Other {} => {}
+            }
+        }
+
+        let mut provider_data = BTreeMap::new();
+        if let Some(response_id) = self.response_id {
+            provider_data.insert("response_id".to_string(), Value::String(response_id));
+        }
+        if let Some(model_version) = self.model_version {
+            provider_data.insert("model_version".to_string(), Value::String(model_version));
+        }
+
+        Ok(InferenceResponse {
+            content: if text_blocks.is_empty() {
+                None
+            } else {
+                Some(text_blocks.join("\n"))
+            },
+            tool_calls,
+            finish_reason: candidate.finish_reason,
+            reasoning: None,
+            usage: self.usage_metadata.map(GeminiUsageMetadata::normalize),
+            provider_data,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiCandidate {
+    content: GeminiResponseContent,
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiResponseContent {
+    #[allow(dead_code)]
+    role: Option<String>,
+    #[serde(default)]
+    parts: Vec<GeminiResponsePart>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GeminiResponsePart {
+    Text {
+        text: String,
+    },
+    FunctionCall {
+        #[serde(rename = "functionCall")]
+        function_call: GeminiResponseFunctionCall,
+    },
+    Other {},
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiResponseFunctionCall {
+    id: Option<String>,
+    name: String,
+    args: Option<Value>,
+}
+
+impl GeminiResponseFunctionCall {
+    fn normalize(self) -> ToolCall {
+        ToolCall {
+            id: self.id,
+            name: self.name,
+            arguments: self.args.unwrap_or(Value::Object(Default::default())),
+            provider_data: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiUsageMetadata {
+    prompt_token_count: Option<u64>,
+    cached_content_token_count: Option<u64>,
+    candidates_token_count: Option<u64>,
+    thoughts_token_count: Option<u64>,
+}
+
+impl GeminiUsageMetadata {
+    fn normalize(self) -> Usage {
+        let input_total = self.prompt_token_count.unwrap_or_default();
+        let cache_read = self.cached_content_token_count.unwrap_or_default();
+        Usage {
+            input_tokens: input_total.saturating_sub(cache_read),
+            output_tokens: self.candidates_token_count.unwrap_or_default(),
+            cache_read_tokens: cache_read,
+            cache_write_tokens: 0,
+            reasoning_tokens: self.thoughts_token_count.unwrap_or_default(),
+        }
+    }
+}

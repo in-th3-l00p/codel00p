@@ -114,8 +114,8 @@ The first Rust modules have started:
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
-  Converse transport, tool calls, route inspection, and provider policy
-  enforcement.
+  Converse transport, Gemini GenerateContent transport, tool calls, route
+  inspection, and provider policy enforcement.
 - [codel00p-harness](core/crates/codel00p-harness): agent turn loop,
   workspace-safe read/edit/command/git tools, project instructions,
   permissions, compaction primitives, deterministic events, model-client
@@ -137,8 +137,9 @@ Chat-Completions-compatible providers, inspect and modify a workspace through
 permissioned tools, run commands, inspect git state, persist and resume
 sessions, stream events, connect to MCP tools, extract candidate memories, and
 reuse approved project memory in future runs. The provider layer also has native
-transports for OpenAI Responses, Anthropic Messages, and AWS Bedrock Converse;
-CLI enablement for those native modes is a follow-on integration step.
+transports for OpenAI Responses, Anthropic Messages, AWS Bedrock Converse, and
+Gemini GenerateContent; CLI enablement for those native modes is a follow-on
+integration step.
 
 The next production work is hardening the product around richer agent parity,
 provider breadth, memory quality, third-party MCP certification, and then the

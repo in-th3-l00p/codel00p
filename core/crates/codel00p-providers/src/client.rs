@@ -5,7 +5,8 @@ use crate::{
     ProviderRegistry, ResolvedInferenceRoute, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport, bedrock_converse::BedrockConverseTransport,
-        chat_completions::ChatCompletionsTransport, responses::ResponsesTransport,
+        chat_completions::ChatCompletionsTransport, gemini::GeminiTransport,
+        responses::ResponsesTransport,
     },
 };
 
@@ -61,6 +62,11 @@ impl InferenceClient {
             }
             ApiMode::BedrockConverse => {
                 BedrockConverseTransport::new()
+                    .complete(&route.provider, &route.base_url, credential, request)
+                    .await
+            }
+            ApiMode::Gemini => {
+                GeminiTransport::new()
                     .complete(&route.provider, &route.base_url, credential, request)
                     .await
             }

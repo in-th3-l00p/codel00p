@@ -27,6 +27,9 @@ fn with_env_lock(test: impl FnOnce()) {
         "AWS_SESSION_TOKEN",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
+        "CODEL00P_PROVIDER_GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
     ];
     for key in keys {
         unsafe {
@@ -163,6 +166,24 @@ fn bedrock_credential_prefers_codel00p_specific_aws_variables() {
                 Some("preferred-session"),
                 "eu-central-1",
             ))
+        );
+    });
+}
+
+#[test]
+fn gemini_credential_prefers_codel00p_specific_variable() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_GEMINI_API_KEY", "preferred");
+            std::env::set_var("GOOGLE_API_KEY", "fallback");
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(
+            config.credential("gemini"),
+            Some(Credential::api_key("preferred"))
         );
     });
 }

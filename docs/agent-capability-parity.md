@@ -38,7 +38,8 @@ Implemented today:
 - deterministic protocol events;
 - durable session metadata and append-only replay;
 - provider layer routes through OpenAI Responses, Anthropic Messages, AWS
-  Bedrock Converse, and Chat-Completions-compatible providers;
+  Bedrock Converse, Gemini GenerateContent, and Chat-Completions-compatible
+  providers;
 - CLI agent runs currently enable Chat-Completions-compatible providers while
   native provider modes remain gated at the CLI boundary;
 - session resume through persisted replay;

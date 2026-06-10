@@ -44,19 +44,19 @@ Implemented:
 - Anthropic Messages transport;
 - OpenAI Responses transport;
 - AWS Bedrock Converse transport;
+- Gemini-native GenerateContent transport;
 - normalized responses, usage, and tool calls;
 - mocked integration tests for request payloads and response parsing.
 
 Not yet implemented:
 
-- Gemini-native transport;
 - environment/cloud credential resolvers;
 - streaming.
 
 The current working transports are enough to use OpenAI Responses, Anthropic
-directly, AWS Bedrock Converse with SigV4 credentials, custom
-OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints when a base URL
-is supplied, and other compatible gateways.
+directly, AWS Bedrock Converse with SigV4 credentials, Gemini GenerateContent,
+custom OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints when a
+base URL is supplied, and other compatible gateways.
 
 ## Design rules
 
@@ -101,6 +101,11 @@ CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY=... \
 CODEL00P_PROVIDER_AWS_REGION=us-east-1 \
 CODEL00P_PROVIDER_BEDROCK_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
 cargo test -p codel00p-providers --test live_bedrock -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_GEMINI_API_KEY=... \
+CODEL00P_PROVIDER_GEMINI_MODEL=gemini-2.5-flash \
+cargo test -p codel00p-providers --test live_gemini -- --ignored --nocapture
 ```
 
 Credential environment variables:

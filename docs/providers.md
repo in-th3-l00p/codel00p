@@ -267,7 +267,7 @@ optional API key, model ID, timeout, custom headers, and health-check behavior.
 6. Implement `anthropic_messages`.
 7. Implement `responses`.
 8. Implement `bedrock_converse`.
-9. Implement Gemini-native support.
+9. Implement Gemini-native GenerateContent support.
 10. Add organization policy enforcement and cloud proxy routing.
 11. Add model catalog fetching and fallback model lists.
 12. Add normalized usage and audit metadata.
@@ -299,13 +299,16 @@ Implemented:
   metadata;
 - AWS Bedrock Converse transport with mocked HTTP tests, including SigV4 request
   signing, system prompts, message blocks, tool specs, `toolUse` responses,
-  `toolResult` replay, stop reasons, and cache usage metadata.
+  `toolResult` replay, stop reasons, and cache usage metadata;
+- Gemini GenerateContent transport with mocked HTTP tests, including
+  `systemInstruction`, content parts, function declarations, `functionCall`
+  responses, `functionResponse` replay, finish reasons, and usage metadata.
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next transports:
-
-- Gemini native.
+Next transport work should focus on provider variants and hardening: Azure
+deployment-aware configuration, GitHub Copilot/GitHub Models hardening, model
+catalogs, fallback routing, and organization policy.
 
 ## Non-goals for the first pass
 

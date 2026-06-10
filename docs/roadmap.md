@@ -61,7 +61,6 @@ Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
 Build:
 
-- Gemini native transport;
 - Azure AI Foundry deployment-aware configuration;
 - GitHub Copilot and GitHub Models hardening;
 - model catalogs and model capability metadata;
