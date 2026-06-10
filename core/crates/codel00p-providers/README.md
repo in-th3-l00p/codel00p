@@ -41,7 +41,8 @@ Implemented:
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
 - `InferenceClient::list_models` with `ModelCatalogRequest` and normalized
-  `ProviderModel` descriptors for provider setup and future policy;
+  `ProviderModel` descriptors, including common capabilities, modalities, and
+  token limits for provider setup and future policy;
 - opt-in fallback routing across provider/model candidates for retryable
   provider failures, with ordered route-attempt metadata attached to successful
   responses;
@@ -97,6 +98,8 @@ uses `max_tokens`, and lists models from
 - Keep route resolution inspectable and safe to log.
 - Keep model catalog listing provider-neutral while preserving provider-specific
   fields in `provider_data`.
+- Normalize common catalog metadata such as capabilities, modalities, and token
+  limits into typed fields before provider-specific policy or UI code needs it.
 - Enforce policy before inference and reflect model policy in catalog listings.
 - Never expose credential values in route/debug types.
 - Normalize every provider response into one codel00p response shape.

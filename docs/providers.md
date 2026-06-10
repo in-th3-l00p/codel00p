@@ -314,7 +314,8 @@ Implemented:
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
 - model catalog listing through `ModelCatalogRequest`,
-  `InferenceClient::list_models`, and normalized `ProviderModel` descriptors;
+  `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
+  with common capabilities, modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata and conservative
   fallback only for classified retryable/provider-unavailable failures;
 - provider and model allowlist policy, including catalog filtering for
@@ -324,6 +325,8 @@ Implemented:
   and top-level array model catalogs;
 - opt-in GitHub Models live smoke-test coverage using the official
   `github-models` profile and model override;
+- typed catalog metadata for provider capabilities, supported modalities, and
+  token limits while preserving raw provider fields in `provider_data`;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -348,9 +351,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: richer
-provider-specific catalog metadata, organization policy templates, and
-cloud-managed pricing injection.
+Next provider work should focus on enterprise variants: organization policy
+templates, cloud-managed pricing injection, and richer provider-specific
+catalog metadata where common typed fields are not enough.
 
 ## Non-goals for the first pass
 

@@ -64,7 +64,7 @@ Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
 Build:
 
-- richer GitHub catalog metadata;
+- provider catalog metadata surfaced in policy templates;
 - richer provider-specific catalog metadata and model capability metadata;
 - cloud or organization-managed pricing injection;
 - expanded cache and reasoning metadata;

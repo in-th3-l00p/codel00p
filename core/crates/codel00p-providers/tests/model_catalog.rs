@@ -51,6 +51,7 @@ async fn list_models_fetches_and_normalizes_openai_compatible_catalog() {
         models[1].provider_data.get("context_length"),
         Some(&json!(200000))
     );
+    assert_eq!(models[1].limits.max_input_tokens, Some(200000));
 }
 
 #[tokio::test]
@@ -68,7 +69,13 @@ async fn list_models_normalizes_github_models_catalog() {
                     "publisher": "OpenAI",
                     "summary": "Fast model for everyday tasks",
                     "rate_limit_tier": "low",
-                    "capabilities": ["chat", "tool-calling"]
+                    "capabilities": ["chat", "tool-calling"],
+                    "limits": {
+                        "max_input_tokens": 128000,
+                        "max_output_tokens": 16384
+                    },
+                    "supported_input_modalities": ["text", "image"],
+                    "supported_output_modalities": ["text"]
                 }
             ]));
         })
@@ -96,6 +103,11 @@ async fn list_models_normalizes_github_models_catalog() {
         Some("OpenAI GPT-4.1 Mini")
     );
     assert_eq!(models[0].owned_by.as_deref(), Some("OpenAI"));
+    assert_eq!(models[0].capabilities, vec!["chat", "tool-calling"]);
+    assert_eq!(models[0].limits.max_input_tokens, Some(128000));
+    assert_eq!(models[0].limits.max_output_tokens, Some(16384));
+    assert_eq!(models[0].input_modalities, vec!["text", "image"]);
+    assert_eq!(models[0].output_modalities, vec!["text"]);
     assert_eq!(
         models[0].provider_data.get("publisher"),
         Some(&json!("OpenAI"))
@@ -111,6 +123,21 @@ async fn list_models_normalizes_github_models_catalog() {
     assert_eq!(
         models[0].provider_data.get("capabilities"),
         Some(&json!(["chat", "tool-calling"]))
+    );
+    assert_eq!(
+        models[0].provider_data.get("limits"),
+        Some(&json!({
+            "max_input_tokens": 128000,
+            "max_output_tokens": 16384
+        }))
+    );
+    assert_eq!(
+        models[0].provider_data.get("supported_input_modalities"),
+        Some(&json!(["text", "image"]))
+    );
+    assert_eq!(
+        models[0].provider_data.get("supported_output_modalities"),
+        Some(&json!(["text"]))
     );
 }
 

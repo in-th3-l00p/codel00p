@@ -39,7 +39,9 @@ pub use client::{InferenceClient, InferenceClientBuilder};
 pub use credentials::Credential;
 pub use error::ProviderError;
 pub use error_classifier::{ClassifiedProviderError, classify_provider_error};
-pub use model_catalog::{ModelCatalogRequest, ModelCatalogRequestBuilder, ProviderModel};
+pub use model_catalog::{
+    ModelCatalogRequest, ModelCatalogRequestBuilder, ProviderModel, ProviderModelLimits,
+};
 pub use policy::ProviderPolicy;
 pub use profile::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
