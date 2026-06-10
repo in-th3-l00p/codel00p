@@ -327,6 +327,8 @@ Implemented:
 - client-level provider cloud proxy routing, including proxy credential use,
   request-level base URL override precedence, and safe `CloudProxy` route
   metadata;
+- organization-managed credential injection with safe
+  `organization:<ref>` route source metadata;
 - environment credential loading for API-key providers and AWS SigV4 Bedrock
   credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,

@@ -481,6 +481,22 @@ impl InferenceClientBuilder {
         self
     }
 
+    pub fn organization_credential(
+        mut self,
+        provider: impl Into<String>,
+        credential: Credential,
+        organization_ref: impl Into<String>,
+    ) -> Self {
+        self.credentials.insert(
+            provider.into(),
+            ResolvedProviderCredential {
+                credential,
+                source: format!("organization:{}", organization_ref.into()),
+            },
+        );
+        self
+    }
+
     pub fn credentials_from_env(mut self) -> Self {
         let loaded_credentials: Vec<_> = self
             .registry

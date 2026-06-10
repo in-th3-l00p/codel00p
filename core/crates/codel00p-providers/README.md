@@ -49,6 +49,8 @@ Implemented:
   provider failures, with ordered route-attempt metadata, catalog URLs,
   output-token parameters, and capabilities attached to successful responses;
 - credential injection by canonical provider or alias;
+- organization-managed credential injection with safe `organization:<ref>`
+  route source metadata;
 - client-level provider cloud proxy routes with safe route metadata and
   request-level base URL override precedence;
 - environment credential loading through `credentials_from_env()`, with safe
@@ -126,6 +128,25 @@ let client = InferenceClient::builder()
     .build();
 # let _ = client;
 ```
+
+Organization-managed callers can inject credentials with a safe source label for
+route audit surfaces:
+
+```rust
+# use codel00p_providers::{Credential, InferenceClient, default_registry};
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .organization_credential(
+        "openai",
+        Credential::api_key("secret"),
+        "team-ai/openai-prod",
+    )
+    .build();
+# let _ = client;
+```
+
+Resolved routes report `credential_source` as
+`organization:team-ai/openai-prod`, never the credential value.
 
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.

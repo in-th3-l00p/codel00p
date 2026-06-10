@@ -210,6 +210,32 @@ fn client_builder_loads_api_key_credentials_from_env() {
 }
 
 #[test]
+fn client_builder_preserves_organization_credential_source() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .organization_credential(
+            "gpt",
+            Credential::api_key("managed-openai-key"),
+            "team-ai/openai-prod",
+        )
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "openai");
+    assert_eq!(
+        route.credential_source.as_deref(),
+        Some("organization:team-ai/openai-prod")
+    );
+}
+
+#[test]
 fn client_builder_preserves_explicit_credentials_over_env() {
     with_env_lock(|| {
         unsafe {
