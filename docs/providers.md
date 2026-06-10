@@ -22,7 +22,8 @@ engineering environments.
 | Azure AI Foundry | Enterprise Microsoft procurement and Azure governance | `azure_chat_completions` | API key plus customer endpoint and deployment |
 | AWS Bedrock | Enterprise AWS procurement and region/governance controls | `bedrock_converse` | AWS SDK credential chain |
 | Google Gemini | Google AI Studio and Google Cloud model access | `gemini` and OpenAI-compatible variants | API key, OAuth, or organization secret |
-| GitHub Copilot / GitHub Models | Common developer-seat entitlement and GitHub-native teams | mixed per model | Copilot/GitHub token or external auth |
+| GitHub Copilot | Common developer-seat entitlement path | `chat_completions` | Copilot-compatible GitHub token |
+| GitHub Models | GitHub-native model access for teams and experiments | `chat_completions` | GitHub token or organization secret |
 | OpenRouter | Brokered access, experimentation, and broad model fallback | `chat_completions` | API key or cloud proxy |
 | Custom OpenAI-compatible | Self-hosted, vendor gateways, Vercel AI Gateway, vLLM, Ollama-compatible endpoints | `chat_completions` | configured endpoint plus optional secret |
 
@@ -244,12 +245,23 @@ provider-specific response shape. OpenAI-compatible Gemini endpoints can be
 supported through `chat_completions`, but they should still use Gemini-aware
 profile hooks.
 
-### GitHub Copilot / GitHub Models
+### GitHub Copilot
 
 Support GitHub as a corporate developer-seat path, but keep it behind a clear
-credential boundary. Model routing may choose different API modes per model:
-Responses for GPT/Codex-style models, Anthropic Messages for Claude models, and
-Chat Completions for the rest.
+credential boundary. The current `github` provider profile targets
+`https://api.githubcopilot.com` through the Chat Completions-compatible
+transport and uses `max_completion_tokens`, matching the Copilot-style request
+shape already covered by mocked tests.
+
+### GitHub Models
+
+Treat official GitHub Models as a separate provider profile instead of an alias
+for Copilot. The `github-models` profile targets
+`https://models.github.ai/inference`, posts chat requests to
+`/inference/chat/completions`, uses `max_tokens`, and lists catalog entries from
+`https://models.github.ai/catalog/models`. Catalog parsing accepts GitHub's
+top-level model array and normalizes `publisher` into `owned_by` while
+preserving GitHub-specific metadata in `provider_data`.
 
 ### OpenRouter
 
@@ -296,7 +308,8 @@ Implemented:
 - chat messages and function tool definitions;
 - normalized tool calls and token usage;
 - `ProviderProfile`, `ProviderRegistry`, `ApiMode`, and `AuthType`;
-- first-wave provider profiles and aliases;
+- first-wave provider profiles and aliases, including separate `github`
+  Copilot and `github-models` GitHub Models profiles;
 - inspectable `ResolvedInferenceRoute` with safe audit metadata for provider,
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
@@ -307,6 +320,8 @@ Implemented:
 - provider and model allowlist policy, including catalog filtering for
   disallowed models;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
+- GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
+  and top-level array model catalogs;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -331,9 +346,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: GitHub Copilot/GitHub
-Models hardening, richer provider-specific catalog metadata, organization
-policy templates, and cloud-managed pricing injection.
+Next provider work should focus on enterprise variants: live GitHub Models smoke
+tests, richer provider-specific catalog metadata, organization policy templates,
+and cloud-managed pricing injection.
 
 ## Non-goals for the first pass
 

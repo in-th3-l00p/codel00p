@@ -37,7 +37,7 @@ teams actually approve:
 - Azure AI Foundry;
 - AWS Bedrock;
 - Google Gemini;
-- GitHub Copilot and GitHub Models;
+- GitHub Copilot and GitHub Models as separate provider profiles;
 - OpenRouter;
 - custom OpenAI-compatible gateways;
 - future self-hosted or local endpoints.
@@ -121,12 +121,13 @@ Current foundation:
   Azure AI Foundry deployment Chat Completions transport, Anthropic Messages
   transport, OpenAI Responses transport, AWS Bedrock Converse transport, Gemini
   GenerateContent transport, tool calls, normalized responses, model catalog
-  listing, fallback routing, request-priced cost estimates, provider/model
-  allowlist policy, and live integration-test toggles.
+  listing, GitHub Copilot and GitHub Models profile split, fallback routing,
+  request-priced cost estimates, provider/model allowlist policy, and live
+  integration-test toggles.
 
 Next work:
 
-- GitHub Copilot and GitHub Models hardening;
+- live GitHub Models smoke tests;
 - richer provider-specific catalog metadata;
 - organization-managed pricing injection;
 - organization policy templates and cloud proxy routing.

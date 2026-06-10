@@ -56,36 +56,52 @@ pub struct ProviderModel {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct ModelCatalogWireResponse {
+#[serde(untagged)]
+pub(crate) enum ModelCatalogWireResponse {
+    OpenAiCompatible(ModelCatalogWireList),
+    GitHubModels(Vec<ModelCatalogWireModel>),
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ModelCatalogWireList {
     data: Vec<ModelCatalogWireModel>,
 }
 
 impl ModelCatalogWireResponse {
     pub(crate) fn into_models(self) -> Vec<ProviderModel> {
-        self.data
-            .into_iter()
-            .map(ModelCatalogWireModel::into_model)
-            .collect()
+        match self {
+            Self::OpenAiCompatible(list) => list.data,
+            Self::GitHubModels(models) => models,
+        }
+        .into_iter()
+        .map(ModelCatalogWireModel::into_model)
+        .collect()
     }
 }
 
 #[derive(Debug, Deserialize)]
-struct ModelCatalogWireModel {
+pub(crate) struct ModelCatalogWireModel {
     id: String,
     name: Option<String>,
     display_name: Option<String>,
     owned_by: Option<String>,
+    publisher: Option<String>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
 
 impl ModelCatalogWireModel {
     fn into_model(self) -> ProviderModel {
+        let mut provider_data = self.extra;
+        if let Some(publisher) = self.publisher.as_ref() {
+            provider_data.insert("publisher".to_string(), Value::String(publisher.clone()));
+        }
+
         ProviderModel {
             id: self.id,
             display_name: self.display_name.or(self.name),
-            owned_by: self.owned_by,
-            provider_data: self.extra,
+            owned_by: self.owned_by.or(self.publisher),
+            provider_data,
         }
     }
 }

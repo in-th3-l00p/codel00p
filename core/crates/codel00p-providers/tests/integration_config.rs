@@ -9,6 +9,7 @@ fn with_env_lock(test: impl FnOnce()) {
     let keys = [
         "CODEL00P_INTEGRATION_TESTS",
         "CODEL00P_PROVIDER_GITHUB_TOKEN",
+        "CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN",
         "COPILOT_GITHUB_TOKEN",
         "GH_TOKEN",
         "GITHUB_TOKEN",
@@ -110,6 +111,42 @@ fn github_credential_falls_back_to_copilot_environment_order() {
         assert_eq!(
             config.credential("github"),
             Some(Credential::api_key("gh-token"))
+        );
+    });
+}
+
+#[test]
+fn github_models_credential_prefers_models_specific_variable() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN", "preferred");
+            std::env::set_var("GITHUB_TOKEN", "fallback");
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(
+            config.credential("github-models"),
+            Some(Credential::api_key("preferred"))
+        );
+    });
+}
+
+#[test]
+fn github_models_credential_falls_back_to_github_token_before_gh_token() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("GITHUB_TOKEN", "github-token");
+            std::env::set_var("GH_TOKEN", "gh-token");
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(
+            config.credential("gh-models"),
+            Some(Credential::api_key("github-token"))
         );
     });
 }

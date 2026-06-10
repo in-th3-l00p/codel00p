@@ -25,7 +25,7 @@ codel00p \
 `agent run` executes one harness turn against a workspace. It supports
 OpenAI-compatible Chat Completions providers plus native OpenAI Responses,
 Anthropic Messages, AWS Bedrock Converse, and Gemini GenerateContent transports.
-That covers GitHub Copilot/GitHub Models, OpenRouter, Azure AI Foundry
+That covers GitHub Copilot, GitHub Models, OpenRouter, Azure AI Foundry
 compatible endpoints, custom/local OpenAI-compatible endpoints, OpenAI,
 Anthropic, AWS Bedrock, and Google Gemini.
 
@@ -176,8 +176,10 @@ and the complete event list after the turn completes.
 
 Provider credentials are read from environment variables:
 
-- GitHub/Copilot: `CODEL00P_PROVIDER_GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`,
-  `GH_TOKEN`, `GITHUB_TOKEN`.
+- GitHub Copilot (`github`): `CODEL00P_PROVIDER_GITHUB_TOKEN`,
+  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`.
+- GitHub Models (`github-models`): `CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN`,
+  `GITHUB_TOKEN`, `GH_TOKEN`.
 - OpenAI: `CODEL00P_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`.
 - Anthropic: `CODEL00P_PROVIDER_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`,
   `ANTHROPIC_TOKEN`.

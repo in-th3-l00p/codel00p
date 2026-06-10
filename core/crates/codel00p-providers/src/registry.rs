@@ -121,9 +121,9 @@ pub fn default_registry() -> ProviderRegistry {
         })
         .register(ProviderProfile {
             id: "github",
-            aliases: &["github-copilot", "github-models", "github-model", "copilot"],
-            display_name: "GitHub Models",
-            description: "GitHub Copilot and GitHub Models",
+            aliases: &["github-copilot", "copilot"],
+            display_name: "GitHub Copilot",
+            description: "GitHub Copilot Chat Completions-compatible endpoint",
             api_mode: ApiMode::ChatCompletions,
             auth_type: AuthType::GitHubCopilot,
             env_vars: &["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
@@ -131,6 +131,24 @@ pub fn default_registry() -> ProviderRegistry {
             models_url: None,
             default_aux_model: None,
             output_token_parameter: OutputTokenParameter::MaxCompletionTokens,
+            capabilities: ProviderCapabilities::agentic(),
+        })
+        .register(ProviderProfile {
+            id: "github-models",
+            aliases: &["github-model", "gh-models"],
+            display_name: "GitHub Models",
+            description: "GitHub Models OpenAI-compatible inference endpoint",
+            api_mode: ApiMode::ChatCompletions,
+            auth_type: AuthType::ApiKey,
+            env_vars: &[
+                "CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN",
+                "GITHUB_TOKEN",
+                "GH_TOKEN",
+            ],
+            default_base_url: Some("https://models.github.ai/inference"),
+            models_url: Some("https://models.github.ai/catalog/models"),
+            default_aux_model: None,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {

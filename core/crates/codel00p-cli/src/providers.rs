@@ -36,6 +36,11 @@ pub fn provider_env_vars(provider: &str) -> Vec<&'static str> {
             "GH_TOKEN",
             "GITHUB_TOKEN",
         ],
+        "github-models" | "github-model" | "gh-models" => vec![
+            "CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+        ],
         "openrouter" | "or" => vec!["CODEL00P_PROVIDER_OPENROUTER_API_KEY", "OPENROUTER_API_KEY"],
         "openai" => vec!["CODEL00P_PROVIDER_OPENAI_API_KEY", "OPENAI_API_KEY"],
         "anthropic" | "claude" => vec![
@@ -120,4 +125,38 @@ fn aws_sigv4_credential() -> Option<Credential> {
 
 fn read_first_secret(keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| read_secret(key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::provider_env_vars;
+
+    #[test]
+    fn github_models_uses_models_specific_token_before_generic_github_tokens() {
+        assert_eq!(
+            provider_env_vars("github-models"),
+            vec![
+                "CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN",
+                "GITHUB_TOKEN",
+                "GH_TOKEN",
+            ]
+        );
+        assert_eq!(
+            provider_env_vars("github-model"),
+            provider_env_vars("gh-models")
+        );
+    }
+
+    #[test]
+    fn github_keeps_copilot_token_priority() {
+        assert_eq!(
+            provider_env_vars("github"),
+            vec![
+                "CODEL00P_PROVIDER_GITHUB_TOKEN",
+                "COPILOT_GITHUB_TOKEN",
+                "GH_TOKEN",
+                "GITHUB_TOKEN",
+            ]
+        );
+    }
 }

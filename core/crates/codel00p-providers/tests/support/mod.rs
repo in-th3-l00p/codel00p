@@ -162,6 +162,11 @@ fn provider_env_vars(provider: &str) -> Vec<&'static str> {
             "GH_TOKEN",
             "GITHUB_TOKEN",
         ],
+        "github-models" | "github-model" | "gh-models" => vec![
+            "CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+        ],
         "openrouter" | "or" => vec!["CODEL00P_PROVIDER_OPENROUTER_API_KEY", "OPENROUTER_API_KEY"],
         "openai" => vec!["CODEL00P_PROVIDER_OPENAI_API_KEY", "OPENAI_API_KEY"],
         "anthropic" | "claude" => vec![

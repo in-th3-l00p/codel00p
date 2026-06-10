@@ -154,8 +154,8 @@ Pitch:
 > personal, organization-managed, or self-hosted.
 
 The first supported providers should focus on corporate engineering adoption:
-Anthropic, OpenAI, Azure AI Foundry, AWS Bedrock, Google Gemini, GitHub
-Copilot/GitHub Models, OpenRouter, and custom OpenAI-compatible endpoints. See
+Anthropic, OpenAI, Azure AI Foundry, AWS Bedrock, Google Gemini, GitHub Copilot,
+GitHub Models, OpenRouter, and custom OpenAI-compatible endpoints. See
 [Inference Providers](providers.md) for the Rust technical design.
 
 ## codel00p-protocol

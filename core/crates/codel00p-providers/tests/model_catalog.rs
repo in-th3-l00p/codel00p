@@ -54,6 +54,67 @@ async fn list_models_fetches_and_normalizes_openai_compatible_catalog() {
 }
 
 #[tokio::test]
+async fn list_models_normalizes_github_models_catalog() {
+    let server = MockServer::start_async().await;
+    let catalog = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/catalog/models")
+                .header("authorization", "Bearer github-models-key");
+            then.status(200).json_body(json!([
+                {
+                    "id": "openai/gpt-4.1-mini",
+                    "name": "OpenAI GPT-4.1 Mini",
+                    "publisher": "OpenAI",
+                    "summary": "Fast model for everyday tasks",
+                    "rate_limit_tier": "low",
+                    "capabilities": ["chat", "tool-calling"]
+                }
+            ]));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("github-models", Credential::api_key("github-models-key"))
+        .build();
+
+    let models = client
+        .list_models(
+            ModelCatalogRequest::builder("github-models")
+                .models_url(format!("{}/catalog/models", server.base_url()))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    catalog.assert_async().await;
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].id, "openai/gpt-4.1-mini");
+    assert_eq!(
+        models[0].display_name.as_deref(),
+        Some("OpenAI GPT-4.1 Mini")
+    );
+    assert_eq!(models[0].owned_by.as_deref(), Some("OpenAI"));
+    assert_eq!(
+        models[0].provider_data.get("publisher"),
+        Some(&json!("OpenAI"))
+    );
+    assert_eq!(
+        models[0].provider_data.get("summary"),
+        Some(&json!("Fast model for everyday tasks"))
+    );
+    assert_eq!(
+        models[0].provider_data.get("rate_limit_tier"),
+        Some(&json!("low"))
+    );
+    assert_eq!(
+        models[0].provider_data.get("capabilities"),
+        Some(&json!(["chat", "tool-calling"]))
+    );
+}
+
+#[tokio::test]
 async fn list_models_reports_missing_catalog_configuration() {
     let client = InferenceClient::builder()
         .registry(default_registry())

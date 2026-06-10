@@ -1,5 +1,6 @@
 use codel00p_providers::{
-    ApiMode, AuthType, ChatMessage, Credential, InferenceClient, InferenceRequest, default_registry,
+    ApiMode, AuthType, ChatMessage, Credential, InferenceClient, InferenceRequest,
+    OutputTokenParameter, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
@@ -32,9 +33,15 @@ fn default_registry_contains_the_initial_corporate_provider_set() {
         ("gemini", "Google Gemini", ApiMode::Gemini, AuthType::ApiKey),
         (
             "github",
-            "GitHub Models",
+            "GitHub Copilot",
             ApiMode::ChatCompletions,
             AuthType::GitHubCopilot,
+        ),
+        (
+            "github-models",
+            "GitHub Models",
+            ApiMode::ChatCompletions,
+            AuthType::ApiKey,
         ),
         (
             "openrouter",
@@ -67,7 +74,47 @@ fn default_registry_resolves_common_corporate_aliases() {
     assert_eq!(registry.resolve("aws").unwrap().id, "bedrock");
     assert_eq!(registry.resolve("google").unwrap().id, "gemini");
     assert_eq!(registry.resolve("github-copilot").unwrap().id, "github");
+    assert_eq!(registry.resolve("copilot").unwrap().id, "github");
+    assert_eq!(
+        registry.resolve("github-model").unwrap().id,
+        "github-models"
+    );
+    assert_eq!(
+        registry.resolve("github-models").unwrap().id,
+        "github-models"
+    );
+    assert_eq!(registry.resolve("gh-models").unwrap().id, "github-models");
     assert_eq!(registry.resolve("vllm").unwrap().id, "custom");
+}
+
+#[test]
+fn github_profiles_have_separate_endpoints_and_token_parameters() {
+    let registry = default_registry();
+
+    let copilot = registry.resolve("github").unwrap();
+    assert_eq!(
+        copilot.default_base_url,
+        Some("https://api.githubcopilot.com")
+    );
+    assert_eq!(copilot.models_url, None);
+    assert_eq!(
+        copilot.output_token_parameter,
+        OutputTokenParameter::MaxCompletionTokens
+    );
+
+    let models = registry.resolve("github-models").unwrap();
+    assert_eq!(
+        models.default_base_url,
+        Some("https://models.github.ai/inference")
+    );
+    assert_eq!(
+        models.models_url,
+        Some("https://models.github.ai/catalog/models")
+    );
+    assert_eq!(
+        models.output_token_parameter,
+        OutputTokenParameter::MaxTokens
+    );
 }
 
 #[tokio::test]

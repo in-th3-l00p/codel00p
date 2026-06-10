@@ -141,6 +141,54 @@ async fn github_copilot_uses_max_completion_tokens() {
 }
 
 #[tokio::test]
+async fn github_models_uses_models_endpoint_and_max_tokens() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/inference/chat/completions")
+                .header("authorization", "Bearer github-models-key")
+                .json_body(json!({
+                    "model": "openai/gpt-4.1-mini",
+                    "messages": [
+                        {"role": "user", "content": "Say hello."}
+                    ],
+                    "max_tokens": 64
+                }));
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello"
+                    }
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("github-models", Credential::api_key("github-models-key"))
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("github-models", "openai/gpt-4.1-mini")
+                .base_url(format!("{}/inference", server.base_url()))
+                .message(ChatMessage::user("Say hello."))
+                .max_output_tokens(64)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(response.content.as_deref(), Some("hello"));
+}
+
+#[tokio::test]
 async fn chat_completions_sends_tool_call_ids_for_tool_result_messages() {
     let server = MockServer::start_async().await;
     let chat = server

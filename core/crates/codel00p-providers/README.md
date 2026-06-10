@@ -34,7 +34,7 @@ Implemented:
 
 - provider registry with canonical IDs and aliases;
 - initial provider profiles for OpenAI, Anthropic, Azure AI Foundry, AWS
-  Bedrock, Google Gemini, GitHub Models, OpenRouter, and custom
+  Bedrock, Google Gemini, GitHub Copilot, GitHub Models, OpenRouter, and custom
   OpenAI-compatible endpoints;
 - high-level `InferenceClient` facade;
 - inspectable `resolve()` route API with safe audit metadata for provider,
@@ -65,7 +65,7 @@ Not yet implemented:
 The current working transports are enough to use OpenAI Responses, Anthropic
 directly, Azure AI Foundry deployment endpoints, AWS Bedrock Converse with
 SigV4 credentials, Gemini GenerateContent, custom OpenAI-compatible endpoints,
-OpenRouter, and other compatible gateways.
+GitHub Copilot, GitHub Models, OpenRouter, and other compatible gateways.
 
 Azure requests use the resource endpoint as `base_url` and can set deployment
 and API version explicitly:
@@ -82,6 +82,13 @@ let request = InferenceRequest::builder("azure", "gpt-4.1")
 ```
 
 If `deployment` is omitted, the request model is used as the deployment name.
+
+GitHub has two distinct profiles. Use `github` for the Copilot-compatible
+endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.
+Use `github-models` for the official GitHub Models API at
+`https://models.github.ai/inference`; it posts to `/inference/chat/completions`,
+uses `max_tokens`, and lists models from
+`https://models.github.ai/catalog/models`.
 
 ## Design rules
 
@@ -148,7 +155,8 @@ Credential environment variables:
 
 | Provider | Variables, in priority order |
 | --- | --- |
-| GitHub Copilot / GitHub Models | `CODEL00P_PROVIDER_GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` |
+| GitHub Copilot (`github`) | `CODEL00P_PROVIDER_GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` |
+| GitHub Models (`github-models`) | `CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` |
 | OpenRouter | `CODEL00P_PROVIDER_OPENROUTER_API_KEY`, `OPENROUTER_API_KEY` |
 | OpenAI | `CODEL00P_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY` |
 | Anthropic | `CODEL00P_PROVIDER_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_TOKEN` |
