@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::ProviderCapabilities;
+use crate::{ProviderCapabilities, ProviderPolicyDecision};
 
 /// Request for listing models from a provider catalog endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +45,28 @@ impl ModelCatalogRequestBuilder {
     pub fn build(self) -> ModelCatalogRequest {
         self.request
     }
+}
+
+/// Normalized provider model catalog with safe policy/audit metadata.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ProviderModelCatalog {
+    pub requested_provider: String,
+    pub provider: String,
+    pub models_url: String,
+    pub policy_decision: ProviderPolicyDecision,
+    pub policy: ProviderModelCatalogPolicy,
+    pub catalog_model_count: usize,
+    pub returned_model_count: usize,
+    pub models: Vec<ProviderModel>,
+}
+
+/// Provider policy filters applied to a model catalog result.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct ProviderModelCatalogPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_models: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]
+    pub required_capabilities: ProviderCapabilities,
 }
 
 /// Normalized provider model descriptor.

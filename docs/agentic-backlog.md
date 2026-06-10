@@ -20,7 +20,8 @@ Build:
 - fallback routing for retryable failures with ordered route-attempt metadata;
 - normalized usage and explicit request-priced cost metadata;
 - provider and model allowlist policy hooks for project and organization rules;
-  started with catalog filtering by required typed model capabilities.
+  started with catalog filtering by required typed model capabilities and safe
+  catalog policy metadata.
 
 Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.

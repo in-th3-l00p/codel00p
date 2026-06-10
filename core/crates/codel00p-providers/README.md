@@ -41,10 +41,10 @@ Implemented:
   fields for provider, API mode, base URL source, credential presence, policy
   decision, model catalog URL, output-token parameter, and provider
   capabilities;
-- `InferenceClient::list_models` with `ModelCatalogRequest` and normalized
-  `ProviderModel` descriptors, including descriptions, provider-specific
-  annotations, raw capability labels, typed capability flags, modalities, and
-  token limits for provider setup and future policy;
+- `InferenceClient::list_model_catalog` and `list_models` with
+  `ModelCatalogRequest`, normalized `ProviderModel` descriptors, and safe
+  catalog policy metadata for requested/canonical provider, catalog URL,
+  active model filters, and pre/post-filter model counts;
 - opt-in fallback routing across provider/model candidates for retryable
   provider failures, with ordered route-attempt metadata, catalog URLs,
   output-token parameters, and capabilities attached to successful responses;
@@ -144,7 +144,9 @@ uses `max_tokens`, and lists models from
 - Normalize common catalog metadata, common capability flags, and known
   provider-specific annotations into typed fields before policy or UI code needs
   it.
-- Enforce policy before inference and reflect model policy in catalog listings.
+- Enforce policy before inference and reflect model policy in catalog listings;
+  use `list_model_catalog` when a caller needs auditable policy metadata and
+  `list_models` when it only needs the filtered model descriptors.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices.
 - Never expose credential values in route/debug types.

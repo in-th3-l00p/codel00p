@@ -5,9 +5,10 @@ use serde_json::{Value, json};
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
-    ModelCatalogRequest, ProviderError, ProviderModel, ProviderPolicy, ProviderPolicyDecision,
-    ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute, ResolvedProviderCredential,
-    RouteValueSource, UsagePricing, classify_provider_error, default_registry,
+    ModelCatalogRequest, ProviderError, ProviderModel, ProviderModelCatalog, ProviderPolicy,
+    ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute,
+    ResolvedProviderCredential, RouteValueSource, UsagePricing, classify_provider_error,
+    default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -126,6 +127,13 @@ impl InferenceClient {
         &self,
         request: ModelCatalogRequest,
     ) -> Result<Vec<ProviderModel>, ProviderError> {
+        Ok(self.list_model_catalog(request).await?.models)
+    }
+
+    pub async fn list_model_catalog(
+        &self,
+        request: ModelCatalogRequest,
+    ) -> Result<ProviderModelCatalog, ProviderError> {
         let profile = self.registry.resolve(&request.provider).ok_or_else(|| {
             ProviderError::UnknownProvider {
                 provider: request.provider.clone(),
@@ -153,7 +161,7 @@ impl InferenceClient {
                 .ok_or_else(|| ProviderError::MissingCredential {
                     provider: profile.id.to_string(),
                 })?;
-        let mut request_builder = reqwest::Client::new().get(models_url);
+        let mut request_builder = reqwest::Client::new().get(models_url.clone());
         match &credential.credential {
             Credential::ApiKey(api_key) => {
                 request_builder = request_builder.bearer_auth(api_key);
@@ -191,9 +199,21 @@ impl InferenceClient {
                 provider: profile.id.to_string(),
                 message: error.to_string(),
             })?;
-        Ok(self
-            .policy
-            .filter_models(profile.id, wire_response.into_models()))
+        let raw_models = wire_response.into_models();
+        let catalog_model_count = raw_models.len();
+        let models = self.policy.filter_models(profile.id, raw_models);
+        let returned_model_count = models.len();
+
+        Ok(ProviderModelCatalog {
+            requested_provider: request.provider,
+            provider: profile.id.to_string(),
+            models_url,
+            policy_decision: ProviderPolicyDecision::Allowed,
+            policy: self.policy.catalog_policy(profile.id),
+            catalog_model_count,
+            returned_model_count,
+            models,
+        })
     }
 
     async fn complete_one(

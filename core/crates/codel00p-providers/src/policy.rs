@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{ProviderCapabilities, ProviderError, ProviderModel, ProviderRegistry};
+use crate::{
+    ProviderCapabilities, ProviderError, ProviderModel, ProviderModelCatalogPolicy,
+    ProviderRegistry,
+};
 
 const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
     "openai",
@@ -139,6 +142,20 @@ impl ProviderPolicy {
                 .collect()
         } else {
             models
+        }
+    }
+
+    pub(crate) fn catalog_policy(&self, provider: &str) -> ProviderModelCatalogPolicy {
+        ProviderModelCatalogPolicy {
+            allowed_models: self
+                .allowed_models
+                .get(provider)
+                .map(|models| models.iter().cloned().collect()),
+            required_capabilities: self
+                .required_model_capabilities
+                .get(provider)
+                .copied()
+                .unwrap_or_default(),
         }
     }
 }

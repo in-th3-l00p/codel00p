@@ -330,14 +330,15 @@ Implemented:
 - environment credential loading for API-key providers and AWS SigV4 Bedrock
   credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,
-  `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
-  with descriptions, provider-specific annotations, raw capability labels, typed
+  `InferenceClient::list_model_catalog`, `InferenceClient::list_models`, and
+  normalized `ProviderModel` descriptors with safe catalog policy metadata,
+  descriptions, provider-specific annotations, raw capability labels, typed
   capability flags, modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
-- provider and model allowlist policy, including catalog filtering for
-  disallowed models, required model capabilities, and an enterprise-direct
+- provider and model allowlist policy, including catalog filtering and metadata
+  for disallowed models, required model capabilities, and an enterprise-direct
   provider template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
