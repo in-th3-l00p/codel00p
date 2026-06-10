@@ -1,6 +1,7 @@
 use codel00p_providers::Credential;
 
 const DEFAULT_AZURE_API_VERSION: &str = "2024-10-21";
+const DEFAULT_GITHUB_MODELS_MODEL: &str = "openai/gpt-4o-mini";
 const AZURE_ENDPOINT_ENV_VARS: &[&str] = &[
     "CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT",
     "AZURE_FOUNDRY_ENDPOINT",
@@ -80,6 +81,11 @@ impl IntegrationConfig {
             ));
         }
         None
+    }
+
+    pub fn github_models_model(&self) -> String {
+        read_secret("CODEL00P_PROVIDER_GITHUB_MODELS_MODEL")
+            .unwrap_or_else(|| DEFAULT_GITHUB_MODELS_MODEL.to_string())
     }
 
     pub fn azure_foundry(&self) -> Option<AzureFoundryLiveConfig> {

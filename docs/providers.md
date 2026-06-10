@@ -322,6 +322,8 @@ Implemented:
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
+- opt-in GitHub Models live smoke-test coverage using the official
+  `github-models` profile and model override;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -346,9 +348,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: live GitHub Models smoke
-tests, richer provider-specific catalog metadata, organization policy templates,
-and cloud-managed pricing injection.
+Next provider work should focus on enterprise variants: richer
+provider-specific catalog metadata, organization policy templates, and
+cloud-managed pricing injection.
 
 ## Non-goals for the first pass
 

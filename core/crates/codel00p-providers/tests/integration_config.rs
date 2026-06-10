@@ -10,6 +10,7 @@ fn with_env_lock(test: impl FnOnce()) {
         "CODEL00P_INTEGRATION_TESTS",
         "CODEL00P_PROVIDER_GITHUB_TOKEN",
         "CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN",
+        "CODEL00P_PROVIDER_GITHUB_MODELS_MODEL",
         "COPILOT_GITHUB_TOKEN",
         "GH_TOKEN",
         "GITHUB_TOKEN",
@@ -148,6 +149,31 @@ fn github_models_credential_falls_back_to_github_token_before_gh_token() {
             config.credential("gh-models"),
             Some(Credential::api_key("github-token"))
         );
+    });
+}
+
+#[test]
+fn github_models_model_defaults_to_a_low_cost_catalog_model() {
+    with_env_lock(|| {
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(config.github_models_model(), "openai/gpt-4o-mini");
+    });
+}
+
+#[test]
+fn github_models_model_reads_provider_specific_override() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var(
+                "CODEL00P_PROVIDER_GITHUB_MODELS_MODEL",
+                "openai/gpt-4.1-mini",
+            );
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(config.github_models_model(), "openai/gpt-4.1-mini");
     });
 }
 

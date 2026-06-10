@@ -121,13 +121,12 @@ Current foundation:
   Azure AI Foundry deployment Chat Completions transport, Anthropic Messages
   transport, OpenAI Responses transport, AWS Bedrock Converse transport, Gemini
   GenerateContent transport, tool calls, normalized responses, model catalog
-  listing, GitHub Copilot and GitHub Models profile split, fallback routing,
-  request-priced cost estimates, provider/model allowlist policy, and live
-  integration-test toggles.
+  listing, GitHub Copilot and GitHub Models profile split, GitHub Models live
+  smoke-test coverage, fallback routing, request-priced cost estimates,
+  provider/model allowlist policy, and live integration-test toggles.
 
 Next work:
 
-- live GitHub Models smoke tests;
 - richer provider-specific catalog metadata;
 - organization-managed pricing injection;
 - organization policy templates and cloud proxy routing.

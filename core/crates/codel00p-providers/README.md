@@ -123,6 +123,11 @@ CODEL00P_PROVIDER_GITHUB_TOKEN=... \
 cargo test -p codel00p-providers --test live_copilot -- --ignored --nocapture
 
 CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_GITHUB_MODELS_TOKEN=... \
+CODEL00P_PROVIDER_GITHUB_MODELS_MODEL=openai/gpt-4o-mini \
+cargo test -p codel00p-providers --test live_github_models -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
 CODEL00P_PROVIDER_ANTHROPIC_API_KEY=... \
 CODEL00P_PROVIDER_ANTHROPIC_MODEL=claude-3-5-haiku-20241022 \
 cargo test -p codel00p-providers --test live_anthropic -- --ignored --nocapture
@@ -172,6 +177,9 @@ Azure live tests also need:
 | Endpoint | `CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_ENDPOINT`, `AZURE_OPENAI_ENDPOINT` |
 | Deployment | `CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT`, `AZURE_FOUNDRY_DEPLOYMENT`, `AZURE_OPENAI_DEPLOYMENT` |
 | API version | `CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION`, `AZURE_FOUNDRY_API_VERSION`, `AZURE_OPENAI_API_VERSION`; defaults to `2024-10-21` |
+
+GitHub Models live tests can set `CODEL00P_PROVIDER_GITHUB_MODELS_MODEL`; it
+defaults to `openai/gpt-4o-mini`.
 
 The `CODEL00P_PROVIDER_*` variables are preferred so local integration tests do
 not accidentally consume unrelated shell credentials. The fallback variables

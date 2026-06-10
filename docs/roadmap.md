@@ -64,7 +64,7 @@ Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
 Build:
 
-- live GitHub Models smoke tests and richer GitHub catalog metadata;
+- richer GitHub catalog metadata;
 - richer provider-specific catalog metadata and model capability metadata;
 - cloud or organization-managed pricing injection;
 - expanded cache and reasoning metadata;
