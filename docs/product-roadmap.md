@@ -125,12 +125,13 @@ Current foundation:
   labels, typed capability flags, modalities, and token limits, GitHub Copilot
   and GitHub Models profile split,
   GitHub Models live smoke-test coverage, fallback routing, request-priced cost
-  estimates, provider/model allowlist policy, enterprise-direct policy
-  template, client-injected provider/model pricing, published provider pricing
-  catalogs, client-level cloud proxy routing, shared environment credential
-  loading for provider clients and CLI agent runs, enriched route audit metadata
-  for catalog URLs, output-token parameters, and capabilities, expanded
-  cache/reasoning usage metadata, and live integration-test toggles.
+  estimates, provider/model allowlist policy, catalog filtering by required
+  model capabilities, enterprise-direct policy template, client-injected
+  provider/model pricing, published provider pricing catalogs, client-level
+  cloud proxy routing, shared environment credential loading for provider
+  clients and CLI agent runs, enriched route audit metadata for catalog URLs,
+  output-token parameters, and capabilities, expanded cache/reasoning usage
+  metadata, and live integration-test toggles.
 
 Next work:
 

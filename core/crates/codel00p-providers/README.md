@@ -53,7 +53,8 @@ Implemented:
   request-level base URL override precedence;
 - environment credential loading through `credentials_from_env()`, with safe
   route metadata that records the source variable name instead of secret values;
-- provider and model allowlist policy, including an enterprise-direct template;
+- provider and model allowlist policy, catalog capability requirements, and an
+  enterprise-direct template;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;

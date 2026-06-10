@@ -337,7 +337,8 @@ Implemented:
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
 - provider and model allowlist policy, including catalog filtering for
-  disallowed models and an enterprise-direct provider template;
+  disallowed models, required model capabilities, and an enterprise-direct
+  provider template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
