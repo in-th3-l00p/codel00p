@@ -42,7 +42,7 @@ Build:
   metadata;
 - duplicate and near-duplicate detection; started with exact active duplicate
   candidate rejection, repository-level active memory similarity scoring, and
-  CLI review access to near-duplicate scores;
+  CLI/MCP review access to near-duplicate scores;
 - stale-memory detection;
 - visibility and sensitivity scopes;
 - memory quality scoring.

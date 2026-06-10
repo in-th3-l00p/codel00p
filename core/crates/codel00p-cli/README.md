@@ -128,8 +128,8 @@ Expose codel00p itself as a stdio MCP server for other agents/tools:
 codel00p ... mcp serve
 ```
 
-The server exposes `memory_search`, `memory_list`, `memory_show`,
-`memory_create_candidate`, `memory_approve`, `memory_reject`,
+The server exposes `memory_similar`, `memory_search`, `memory_list`,
+`memory_show`, `memory_create_candidate`, `memory_approve`, `memory_reject`,
 `memory_archive`, and read-only `session_show` tools backed by the same
 project-scoped memory/session database. Memory writes keep the review lifecycle:
 external clients create candidates first, then explicitly approve, reject, or
@@ -252,6 +252,7 @@ Output is intentionally stable and scriptable:
   fields; add `--json` for MCP-compatible record objects.
 - `memory similar` prints active near-duplicate candidates as `id`, `status`,
   `kind`, `score`, and `content`; add `--json` for record objects with scores.
+  The MCP `memory_similar` tool returns the same scored record objects.
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
   and `content`; add `--json` for MCP-compatible records with reasons.
 - `memory show` prints a single memory record with source evidence; add

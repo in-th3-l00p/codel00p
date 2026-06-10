@@ -95,6 +95,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
         .iter()
         .map(|tool| tool["name"].as_str().expect("tool name"))
         .collect::<Vec<_>>();
+    assert!(tool_names.contains(&"memory_similar"));
     assert!(tool_names.contains(&"memory_search"));
     assert!(tool_names.contains(&"memory_list"));
     assert!(tool_names.contains(&"memory_show"));
@@ -491,7 +492,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
                 "name": "memory_create_candidate",
                 "arguments": {
                     "id": "mem-mcp-1",
-                    "kind": "decision",
+                    "kind": "workflow",
                     "content": "Use MCP write tools for reviewed project memory.",
                     "session_id": "session-mcp",
                     "turn_id": "turn-mcp",
@@ -636,6 +637,31 @@ fn mcp_serve_can_create_and_review_project_memory() {
             "id": 8,
             "method": "tools/call",
             "params": {
+                "name": "memory_similar",
+                "arguments": {
+                    "content": "Use MCP edit tools for reviewed project memory updates.",
+                    "kind": "workflow",
+                    "threshold": 70
+                }
+            }
+        }),
+    );
+    let similar = read_response(&mut stdout);
+    assert_eq!(similar["result"]["isError"], false);
+    let similar_text = similar["result"]["content"][0]["text"]
+        .as_str()
+        .expect("similar text");
+    assert!(similar_text.contains(r#""id":"mem-mcp-1""#));
+    assert!(similar_text.contains(r#""score":89"#));
+    assert!(similar_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_create_candidate",
                 "arguments": {
                     "id": "mem-mcp-reject",
@@ -655,7 +681,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 9,
+            "id": 10,
             "method": "tools/call",
             "params": {
                 "name": "memory_reject",
@@ -678,7 +704,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 10,
+            "id": 11,
             "method": "tools/call",
             "params": {
                 "name": "memory_archive",

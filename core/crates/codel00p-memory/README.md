@@ -27,9 +27,9 @@ Candidates keep the source session and turn that produced them. The CLI
 candidate back to the originating agent turn before approving it. CLI
 `memory list --json` and `memory show <id> --json` expose the same values as
 scriptable record objects.
-MCP memory JSON, including show/resource/list/search responses, includes the
-same values as `source.session_id` and `source.turn_id` when source evidence is
-available.
+MCP memory JSON, including show/resource/list/search/similar responses,
+includes the same values as `source.session_id` and `source.turn_id` when
+source evidence is available.
 
 ## Edit audit contract
 
@@ -67,7 +67,8 @@ memories do not block replacement candidates.
 candidate and approved memory in the same project and kind. It returns
 deterministic token-overlap scores for review workflows without changing exact
 duplicate rejection semantics. The CLI exposes this as `memory similar` with
-stable TSV output and `memory similar --json` for scored record objects.
+stable TSV output and `memory similar --json` for scored record objects. The
+MCP server exposes the same scored records through `memory_similar`.
 
 ## Review listing contract
 

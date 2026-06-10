@@ -3,7 +3,7 @@ use std::io;
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
     MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQuery,
-    MemoryRepository, ReviewDecision,
+    MemoryRepository, MemorySimilarityQuery, ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
@@ -139,6 +139,20 @@ fn dispatch_json_rpc(
 
 fn mcp_tools() -> Vec<Value> {
     vec![
+        json!({
+            "name": "memory_similar",
+            "description": "Score active near-duplicate codel00p project memory.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["content", "kind"],
+                "properties": {
+                    "content": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "limit": { "type": "integer", "minimum": 1 }
+                }
+            }
+        }),
         json!({
             "name": "memory_search",
             "description": "Search approved codel00p project memory.",
@@ -296,6 +310,7 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, St
         .cloned()
         .unwrap_or_else(|| json!({}));
     let (text, updated_resource_uris) = match name {
+        "memory_similar" => (memory_similar(config, &arguments)?, Vec::new()),
         "memory_search" => (memory_search(config, &arguments)?, Vec::new()),
         "memory_list" => (memory_list(config, &arguments)?, Vec::new()),
         "memory_show" => (memory_show(config, &arguments)?, Vec::new()),
@@ -340,6 +355,28 @@ fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {
             }
         ]
     }))
+}
+
+fn memory_similar(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+    let content = required_string(arguments, "content")?;
+    let kind = parse_kind(required_string(arguments, "kind")?)?;
+    let mut query = MemorySimilarityQuery::new(config.project.clone(), kind, content);
+    if let Some(threshold) = optional_usize(arguments, "threshold")? {
+        if threshold > 100 {
+            return Err("argument `threshold` must be between 0 and 100".to_string());
+        }
+        query = query.with_min_score(threshold as u8);
+    }
+    if let Some(limit) = optional_usize(arguments, "limit")? {
+        query = query.with_limit(limit);
+    }
+
+    let store = open_memory_store(config)?;
+    let records = store
+        .similar_active(query)
+        .map_err(|error| error.to_string())?;
+    let items = records.iter().map(similar_memory_json).collect::<Vec<_>>();
+    serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 
 fn memory_search(config: &CliConfig, arguments: &Value) -> Result<String, String> {
@@ -553,6 +590,12 @@ fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
 fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
     item["reason"] = json!(memory.reason());
+    item
+}
+
+fn similar_memory_json(memory: &codel00p_memory::SimilarMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["score"] = json!(memory.score());
     item
 }
 
