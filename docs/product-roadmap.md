@@ -154,8 +154,8 @@ Current foundation:
 - audit history with CLI/MCP inspection;
 - deterministic approved-memory retrieval;
 - explicit memory extraction from completed turns;
-- source session/turn evidence visible in CLI memory detail output and MCP
-  show/resource/list/search memory JSON;
+- source session/turn evidence visible in CLI memory detail text/JSON output
+  and MCP show/resource/list/search memory JSON;
 - CLI/MCP-backed content edits that preserve status/source/tags and append
   CLI/MCP-visible `edited` audit events with previous/new content metadata;
 - exact active duplicate candidate rejection;

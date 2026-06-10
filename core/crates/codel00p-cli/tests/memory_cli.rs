@@ -118,14 +118,24 @@ fn memory_show_and_audit_print_stable_details() {
     );
 
     let show = run_codel00p(&db_path, &["memory", "show", "mem-workflow"]);
+    let show_json = run_codel00p(&db_path, &["memory", "show", "mem-workflow", "--json"]);
     let audit = run_codel00p(&db_path, &["memory", "audit", "mem-workflow"]);
 
     assert!(show.status.success(), "stderr: {}", stderr(&show));
+    assert!(show_json.status.success(), "stderr: {}", stderr(&show_json));
     assert!(audit.status.success(), "stderr: {}", stderr(&audit));
     assert_eq!(
         stdout(&show),
         "id: mem-workflow\nstatus: candidate\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run pnpm verify before pushing main.\n"
     );
+    let record: serde_json::Value = serde_json::from_str(&stdout(&show_json)).expect("show json");
+    assert_eq!(record["id"], "mem-workflow");
+    assert_eq!(record["status"], "candidate");
+    assert_eq!(record["kind"], "workflow");
+    assert_eq!(record["content"], "Run pnpm verify before pushing main.");
+    assert_eq!(record["tags"], serde_json::json!(["verify"]));
+    assert_eq!(record["source"]["session_id"], "session-cli");
+    assert_eq!(record["source"]["turn_id"], "turn-cli");
     assert_eq!(stdout(&audit), "1\tcandidate_created\tsystem\t\n");
 }
 

@@ -230,6 +230,7 @@ codel00p \
 codel00p ... memory list --status candidate
 
 codel00p ... memory show mem-1
+codel00p ... memory show mem-1 --json
 codel00p ... memory approve mem-1 --actor alice
 codel00p ... memory reject mem-1 --actor alice --reason "too vague"
 codel00p ... memory archive mem-1 --actor alice --reason "obsolete"
@@ -241,6 +242,8 @@ Output is intentionally stable and scriptable:
 
 - `memory list` prints `id`, `status`, `kind`, and `content` as tab-separated
   fields.
+- `memory show` prints a single memory record with source evidence; add
+  `--json` for the MCP-compatible record object.
 - review commands print `id` and the resulting status.
 - `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
   `--json` for machine-readable revision metadata.

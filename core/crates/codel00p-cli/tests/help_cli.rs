@@ -151,6 +151,11 @@ fn memory_help_documents_edit_command() {
         stdout(&output)
     );
     assert!(
+        stdout(&output).contains("show     Show one memory record; use --json for JSON output"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
         stdout(&output).contains("audit    Show memory audit history; use --json for JSON output"),
         "stdout: {}",
         stdout(&output)

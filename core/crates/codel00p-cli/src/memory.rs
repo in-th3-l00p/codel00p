@@ -2,7 +2,7 @@ use codel00p_memory::{MemoryEdit, MemoryListFilter, MemoryRepository, ReviewDeci
 use codel00p_protocol::{MemoryKind, MemoryStatus};
 use serde_json::{Value, json};
 
-use crate::config::{CliConfig, CliResult, open_memory_store, required_value, single_id};
+use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     let Some((command, rest)) = args.split_first() else {
@@ -66,9 +66,27 @@ fn memory_list(config: CliConfig, args: &[String]) -> CliResult<String> {
 }
 
 fn memory_show(config: CliConfig, args: &[String]) -> CliResult<String> {
-    let id = single_id(args, "memory show")?;
+    let Some(id) = args.first() else {
+        return Err("memory show expects exactly one memory id".to_string());
+    };
+    let mut json_output = false;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory show option: {flag}")),
+        }
+    }
+
     let store = open_memory_store(&config)?;
     let record = store.get(id).map_err(|error| error.to_string())?;
+    if json_output {
+        return serde_json::to_string(&memory_record_json(&record))
+            .map_err(|error| error.to_string());
+    }
 
     let mut output = format!(
         "id: {}\nstatus: {}\nkind: {}\ntags: {}\n",
@@ -87,6 +105,24 @@ fn memory_show(config: CliConfig, args: &[String]) -> CliResult<String> {
     output.push_str(&format!("content: {}\n", record.entry().content()));
 
     Ok(output)
+}
+
+fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
+    let entry = record.entry();
+    let mut item = json!({
+        "id": entry.id(),
+        "status": status_label(entry.status()),
+        "kind": kind_label(entry.kind()),
+        "content": entry.content(),
+        "tags": entry.tags(),
+    });
+    if let Some(source) = entry.source() {
+        item["source"] = json!({
+            "session_id": source.session_id().as_str(),
+            "turn_id": source.turn_id().as_str(),
+        });
+    }
+    item
 }
 
 fn memory_audit(config: CliConfig, args: &[String]) -> CliResult<String> {
