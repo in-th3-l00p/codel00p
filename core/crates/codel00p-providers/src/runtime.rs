@@ -4,6 +4,7 @@ use crate::{ApiMode, OutputTokenParameter, ProviderCapabilities};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteValueSource {
     RequestOverride,
+    CloudProxy,
     ProviderDefault,
 }
 

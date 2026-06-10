@@ -47,6 +47,8 @@ Implemented:
   provider failures, with ordered route-attempt metadata attached to successful
   responses;
 - credential injection by canonical provider or alias;
+- client-level provider cloud proxy routes with safe route metadata and
+  request-level base URL override precedence;
 - provider and model allowlist policy, including an enterprise-direct template;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
@@ -105,6 +107,8 @@ uses `max_tokens`, and lists models from
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices.
 - Never expose credential values in route/debug types.
+- Prefer explicit request base URL overrides over configured provider proxies,
+  then provider defaults.
 - Normalize every provider response into one codel00p response shape.
 - Keep cost estimates explicit: callers or organization-managed clients supply
   pricing, providers supply usage, and the crate derives deterministic

@@ -313,6 +313,9 @@ Implemented:
 - inspectable `ResolvedInferenceRoute` with safe audit metadata for provider,
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
+- client-level provider cloud proxy routing, including proxy credential use,
+  request-level base URL override precedence, and safe `CloudProxy` route
+  metadata;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
   with common capabilities, modalities, and token limits;
@@ -355,9 +358,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: cloud proxy routing and
-richer provider-specific catalog metadata where common typed fields are not
-enough.
+Next provider work should focus on enterprise variants: cloud-managed pricing
+publication and richer provider-specific catalog metadata where common typed
+fields are not enough.
 
 ## Non-goals for the first pass
 

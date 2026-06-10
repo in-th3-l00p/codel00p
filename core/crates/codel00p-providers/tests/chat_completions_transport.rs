@@ -94,6 +94,55 @@ async fn chat_completions_requires_credentials_for_remote_requests() {
 }
 
 #[tokio::test]
+async fn cloud_proxy_routes_chat_completions_through_configured_gateway() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/proxy/custom/chat/completions")
+                .header("authorization", "Bearer proxy-key")
+                .json_body(json!({
+                    "model": "test-model",
+                    "messages": [
+                        {"role": "user", "content": "Say hello."}
+                    ]
+                }));
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello"
+                    }
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "custom",
+            format!("{}/proxy/custom", server.base_url()),
+            Credential::api_key("proxy-key"),
+        )
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .message(ChatMessage::user("Say hello."))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(response.content.as_deref(), Some("hello"));
+}
+
+#[tokio::test]
 async fn github_copilot_uses_max_completion_tokens() {
     let server = MockServer::start_async().await;
     let chat = server

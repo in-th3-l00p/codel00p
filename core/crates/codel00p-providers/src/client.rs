@@ -23,6 +23,7 @@ pub struct InferenceClient {
     credentials: BTreeMap<String, Credential>,
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
+    provider_proxies: BTreeMap<String, ProviderProxyRoute>,
 }
 
 impl InferenceClient {
@@ -32,6 +33,7 @@ impl InferenceClient {
             credentials: BTreeMap::new(),
             policy: ProviderPolicy::allow_all(),
             model_pricing: BTreeMap::new(),
+            provider_proxies: BTreeMap::new(),
         }
     }
 
@@ -199,7 +201,7 @@ impl InferenceClient {
         request: InferenceRequest,
     ) -> Result<(ResolvedInferenceRoute, InferenceResponse), FailedRouteAttempt> {
         let route = self.resolve(&request)?;
-        let Some(credential) = self.credentials.get(&route.provider) else {
+        let Some(credential) = self.credential_for_route(&route, &request.provider) else {
             return Err(FailedRouteAttempt {
                 route: Some(route.clone()),
                 error: ProviderError::MissingCredential {
@@ -264,6 +266,23 @@ impl InferenceClient {
         Ok((route, response))
     }
 
+    fn credential_for_route(
+        &self,
+        route: &ResolvedInferenceRoute,
+        requested_provider: &str,
+    ) -> Option<&Credential> {
+        if route.base_url_source == RouteValueSource::CloudProxy {
+            return self
+                .provider_proxies
+                .get(&route.provider)
+                .map(|proxy| &proxy.credential);
+        }
+
+        self.credentials
+            .get(&route.provider)
+            .or_else(|| self.credentials.get(requested_provider))
+    }
+
     /// Resolve provider, API mode, base URL, and credential presence without sending a request.
     pub fn resolve(
         &self,
@@ -277,6 +296,8 @@ impl InferenceClient {
 
         let (base_url, base_url_source) = if let Some(base_url) = request.base_url.clone() {
             (base_url, RouteValueSource::RequestOverride)
+        } else if let Some(proxy) = self.provider_proxies.get(profile.id) {
+            (proxy.base_url.clone(), RouteValueSource::CloudProxy)
         } else if let Some(base_url) = profile.default_base_url {
             (base_url.to_string(), RouteValueSource::ProviderDefault)
         } else {
@@ -285,11 +306,16 @@ impl InferenceClient {
             });
         };
 
-        let credential_source = self
-            .credentials
-            .get(profile.id)
-            .or_else(|| self.credentials.get(&request.provider))
-            .map(|_| "configured".to_string());
+        let credential_source = if base_url_source == RouteValueSource::CloudProxy {
+            self.provider_proxies
+                .contains_key(profile.id)
+                .then(|| "cloud_proxy".to_string())
+        } else {
+            self.credentials
+                .get(profile.id)
+                .or_else(|| self.credentials.get(&request.provider))
+                .map(|_| "configured".to_string())
+        };
 
         self.policy.check_provider(profile.id)?;
         self.policy.check_model(profile.id, &request.model)?;
@@ -330,6 +356,12 @@ impl InferenceClient {
 struct FailedRouteAttempt {
     route: Option<ResolvedInferenceRoute>,
     error: ProviderError,
+}
+
+#[derive(Debug, Clone)]
+struct ProviderProxyRoute {
+    base_url: String,
+    credential: Credential,
 }
 
 impl From<ProviderError> for FailedRouteAttempt {
@@ -400,6 +432,7 @@ pub struct InferenceClientBuilder {
     credentials: BTreeMap<String, Credential>,
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
+    provider_proxies: BTreeMap<String, ProviderProxyRoute>,
 }
 
 impl InferenceClientBuilder {
@@ -431,6 +464,22 @@ impl InferenceClientBuilder {
         self
     }
 
+    pub fn provider_proxy(
+        mut self,
+        provider: impl Into<String>,
+        base_url: impl Into<String>,
+        credential: Credential,
+    ) -> Self {
+        self.provider_proxies.insert(
+            provider.into(),
+            ProviderProxyRoute {
+                base_url: base_url.into(),
+                credential,
+            },
+        );
+        self
+    }
+
     pub fn build(self) -> InferenceClient {
         let policy = self.policy.canonicalize(&self.registry);
         let model_pricing = self
@@ -443,6 +492,18 @@ impl InferenceClientBuilder {
                     .map(|profile| profile.id.to_string())
                     .unwrap_or(provider);
                 (canonical, prices)
+            })
+            .collect();
+        let provider_proxies = self
+            .provider_proxies
+            .into_iter()
+            .map(|(provider, proxy)| {
+                let canonical = self
+                    .registry
+                    .resolve(&provider)
+                    .map(|profile| profile.id.to_string())
+                    .unwrap_or(provider);
+                (canonical, proxy)
             })
             .collect();
         let credentials = self
@@ -462,6 +523,7 @@ impl InferenceClientBuilder {
             credentials,
             policy,
             model_pricing,
+            provider_proxies,
         }
     }
 }

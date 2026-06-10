@@ -85,6 +85,57 @@ fn client_resolve_marks_request_base_url_overrides() {
 }
 
 #[test]
+fn client_resolve_uses_configured_provider_proxy() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "gpt",
+            "https://proxy.codel00p.example/openai/v1",
+            Credential::api_key("proxy-key"),
+        )
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "openai");
+    assert_eq!(route.base_url, "https://proxy.codel00p.example/openai/v1");
+    assert_eq!(route.base_url_source, RouteValueSource::CloudProxy);
+    assert_eq!(route.credential_source.as_deref(), Some("cloud_proxy"));
+    assert_eq!(route.policy_decision, ProviderPolicyDecision::Allowed);
+}
+
+#[test]
+fn client_resolve_preserves_request_base_url_over_provider_proxy() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "openai",
+            "https://proxy.codel00p.example/openai/v1",
+            Credential::api_key("proxy-key"),
+        )
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .base_url("https://one-off.example/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "openai");
+    assert_eq!(route.base_url, "https://one-off.example/v1");
+    assert_eq!(route.base_url_source, RouteValueSource::RequestOverride);
+}
+
+#[test]
 fn client_resolve_reports_missing_base_url_before_credentials() {
     let client = InferenceClient::builder()
         .registry(default_registry())
