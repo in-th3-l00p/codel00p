@@ -46,7 +46,7 @@ Implemented:
   provider failures, with ordered route-attempt metadata attached to successful
   responses;
 - credential injection by canonical provider or alias;
-- provider allowlist policy;
+- provider and model allowlist policy;
 - OpenAI-compatible Chat Completions transport;
 - Anthropic Messages transport;
 - OpenAI Responses transport;
@@ -73,6 +73,7 @@ base URL is supplied, and other compatible gateways.
 - Keep route resolution inspectable and safe to log.
 - Keep model catalog listing provider-neutral while preserving provider-specific
   fields in `provider_data`.
+- Enforce policy before inference and reflect model policy in catalog listings.
 - Never expose credential values in route/debug types.
 - Normalize every provider response into one codel00p response shape.
 - Keep cost estimates explicit: callers supply pricing, providers supply usage,

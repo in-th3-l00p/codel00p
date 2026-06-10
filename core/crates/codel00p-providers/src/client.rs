@@ -180,7 +180,9 @@ impl InferenceClient {
                 provider: profile.id.to_string(),
                 message: error.to_string(),
             })?;
-        Ok(wire_response.into_models())
+        Ok(self
+            .policy
+            .filter_models(profile.id, wire_response.into_models()))
     }
 
     async fn complete_one(
@@ -270,6 +272,7 @@ impl InferenceClient {
             .map(|_| "configured".to_string());
 
         self.policy.check_provider(profile.id)?;
+        self.policy.check_model(profile.id, &request.model)?;
 
         Ok(ResolvedInferenceRoute {
             requested_provider: request.provider.clone(),

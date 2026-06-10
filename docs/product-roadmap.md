@@ -121,7 +121,7 @@ Current foundation:
   Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
   Converse transport, Gemini GenerateContent transport, tool calls, normalized
   responses, model catalog listing, fallback routing, request-priced cost
-  estimates, and live integration-test toggles.
+  estimates, provider/model allowlist policy, and live integration-test toggles.
 
 Next work:
 
@@ -129,7 +129,7 @@ Next work:
 - GitHub Copilot and GitHub Models hardening;
 - richer provider-specific catalog metadata;
 - organization-managed pricing injection;
-- organization provider policy and cloud proxy routing.
+- organization policy templates and cloud proxy routing.
 
 Exit criteria:
 

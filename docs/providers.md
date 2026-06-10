@@ -294,7 +294,8 @@ Implemented:
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors;
 - opt-in fallback routing with ordered route-attempt metadata and conservative
   fallback only for classified retryable/provider-unavailable failures;
-- provider allowlist policy;
+- provider and model allowlist policy, including catalog filtering for
+  disallowed models;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - Anthropic Messages transport with mocked HTTP tests, including native system
   prompts, tool schemas, `tool_use` responses, tool-result replay, stop
@@ -316,7 +317,8 @@ Implemented:
 
 Next provider work should focus on enterprise variants: Azure deployment-aware
 configuration, GitHub Copilot/GitHub Models hardening, richer provider-specific
-catalog metadata, organization policy, and cloud-managed pricing injection.
+catalog metadata, organization policy templates, and cloud-managed pricing
+injection.
 
 ## Non-goals for the first pass
 

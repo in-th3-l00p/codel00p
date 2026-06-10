@@ -1,5 +1,6 @@
 use codel00p_providers::{
-    Credential, InferenceClient, ModelCatalogRequest, ProviderError, default_registry,
+    Credential, InferenceClient, ModelCatalogRequest, ProviderError, ProviderPolicy,
+    default_registry,
 };
 use httpmock::Method::GET;
 use httpmock::prelude::*;
@@ -94,4 +95,39 @@ async fn list_models_rejects_invalid_catalog_payload() {
     assert!(
         matches!(error, ProviderError::InvalidResponse { provider, .. } if provider == "custom")
     );
+}
+
+#[tokio::test]
+async fn list_models_filters_disallowed_models() {
+    let server = MockServer::start_async().await;
+    let catalog = server
+        .mock_async(|when, then| {
+            when.method(GET).path("/models");
+            then.status(200).json_body(json!({
+                "data": [
+                    {"id": "allowed-model", "name": "Allowed"},
+                    {"id": "blocked-model", "name": "Blocked"}
+                ]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .policy(ProviderPolicy::allow_all().with_allowed_models("custom", ["allowed-model"]))
+        .build();
+
+    let models = client
+        .list_models(
+            ModelCatalogRequest::builder("custom")
+                .base_url(server.base_url())
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    catalog.assert_async().await;
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].id, "allowed-model");
 }

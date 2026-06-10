@@ -16,7 +16,7 @@
 - Modify: `core/crates/codel00p-providers/tests/provider_policy.rs`
 - Modify: `core/crates/codel00p-providers/tests/model_catalog.rs`
 
-- [ ] **Step 1: Test model policy blocks disallowed model**
+- [x] **Step 1: Test model policy blocks disallowed model**
 
 Create a client with:
 
@@ -29,7 +29,7 @@ Resolve a request for `openrouter` model `openai/gpt-test`. Assert
 `ProviderError::PolicyDenied` with provider `openrouter` and a reason containing
 `model is not allowed`.
 
-- [ ] **Step 2: Test model policy accepts allowed aliases**
+- [x] **Step 2: Test model policy accepts allowed aliases**
 
 Create a client with:
 
@@ -41,12 +41,12 @@ ProviderPolicy::allow_all()
 Resolve a request for canonical provider `openrouter` model
 `anthropic/claude-sonnet`. Assert route provider is `openrouter`.
 
-- [ ] **Step 3: Test catalog listing filters disallowed models**
+- [x] **Step 3: Test catalog listing filters disallowed models**
 
 Mock a catalog returning two models. Configure model policy to allow only one.
 Assert `list_models` returns the allowed model only.
 
-- [ ] **Step 4: Verify red state**
+- [x] **Step 4: Verify red state**
 
 Run:
 
@@ -64,7 +64,7 @@ not exist.
 - Modify: `core/crates/codel00p-providers/src/policy.rs`
 - Modify: `core/crates/codel00p-providers/src/client.rs`
 
-- [ ] **Step 1: Extend `ProviderPolicy`**
+- [x] **Step 1: Extend `ProviderPolicy`**
 
 Add:
 
@@ -81,17 +81,17 @@ where
     S: Into<String>,
 ```
 
-- [ ] **Step 2: Canonicalize provider keys**
+- [x] **Step 2: Canonicalize provider keys**
 
 During `InferenceClientBuilder::build`, canonicalize model policy provider keys
 through the provider registry the same way provider allowlists are canonicalized.
 
-- [ ] **Step 3: Enforce model policy during route resolution**
+- [x] **Step 3: Enforce model policy during route resolution**
 
 After provider policy passes in `InferenceClient::resolve`, call a new
 `ProviderPolicy::check_model(provider, model)` helper.
 
-- [ ] **Step 4: Filter model catalogs**
+- [x] **Step 4: Filter model catalogs**
 
 After `list_models` parses a catalog, filter returned models through
 `ProviderPolicy::filter_models(provider, models)`.
@@ -106,11 +106,11 @@ After `list_models` parses a catalog, filter returned models through
 - Modify: `docs/roadmap.md`
 - Modify: `docs/superpowers/plans/2026-06-10-provider-model-policy.md`
 
-- [ ] **Step 1: Document model policy**
+- [x] **Step 1: Document model policy**
 
 Mention provider-level and model-level allowlists in provider docs and roadmap.
 
-- [ ] **Step 2: Run targeted provider checks**
+- [x] **Step 2: Run targeted provider checks**
 
 Run:
 
@@ -118,7 +118,7 @@ Run:
 cd core && cargo fmt --all && cargo test -p codel00p-providers --test provider_policy && cargo test -p codel00p-providers --test model_catalog && cargo test -p codel00p-providers && cargo clippy -p codel00p-providers --all-targets -- -D warnings
 ```
 
-- [ ] **Step 3: Run repo verification**
+- [x] **Step 3: Run repo verification**
 
 Run:
 
@@ -126,7 +126,7 @@ Run:
 pnpm verify
 ```
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 

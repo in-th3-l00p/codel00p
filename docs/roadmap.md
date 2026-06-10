@@ -26,8 +26,8 @@ Implemented:
 - `codel00p-providers` registry, profiles, policy, route inspection,
   credentials, OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic
   Messages, AWS Bedrock Converse, Gemini GenerateContent, tool calls, fallback
-  routing, model catalog listing, request-priced cost estimates, and live
-  integration-test toggles;
+  routing, model catalog listing, request-priced cost estimates, provider/model
+  allowlist policy, and live integration-test toggles;
 - `codel00p-harness` session loop, provider adapter, memory injection,
   lifecycle hooks, project instructions, context compaction primitives,
   read-only tools, editing tools, shell command tool, git tools, permissions,
@@ -68,7 +68,7 @@ Build:
 - richer provider-specific catalog metadata and model capability metadata;
 - cloud or organization-managed pricing injection;
 - expanded cache and reasoning metadata;
-- organization provider policy hooks;
+- organization policy templates;
 - cloud proxy routing.
 
 Exit criteria:
