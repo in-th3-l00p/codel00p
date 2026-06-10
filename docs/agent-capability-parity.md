@@ -37,8 +37,10 @@ Implemented today:
 - typed permission policy and lifecycle hook surfaces;
 - deterministic protocol events;
 - durable session metadata and append-only replay;
-- CLI agent runs through OpenAI Responses, Anthropic Messages, and
-  Chat-Completions-compatible providers;
+- provider layer routes through OpenAI Responses, Anthropic Messages, AWS
+  Bedrock Converse, and Chat-Completions-compatible providers;
+- CLI agent runs currently enable Chat-Completions-compatible providers while
+  native provider modes remain gated at the CLI boundary;
 - session resume through persisted replay;
 - project instructions from `CODEL00P.md`, `AGENTS.md`, and `CLAUDE.md`;
 - streamable harness events for CLI and future UI consumers;

@@ -18,6 +18,15 @@ fn with_env_lock(test: impl FnOnce()) {
         "CODEL00P_PROVIDER_ANTHROPIC_API_KEY",
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_TOKEN",
+        "CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID",
+        "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+        "CODEL00P_PROVIDER_AWS_SESSION_TOKEN",
+        "CODEL00P_PROVIDER_AWS_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
     ];
     for key in keys {
         unsafe {
@@ -123,6 +132,37 @@ fn openai_credential_prefers_codel00p_specific_variable() {
         assert_eq!(
             config.credential("openai"),
             Some(Credential::api_key("preferred"))
+        );
+    });
+}
+
+#[test]
+fn bedrock_credential_prefers_codel00p_specific_aws_variables() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID", "preferred-access");
+            std::env::set_var(
+                "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+                "preferred-secret",
+            );
+            std::env::set_var("CODEL00P_PROVIDER_AWS_SESSION_TOKEN", "preferred-session");
+            std::env::set_var("CODEL00P_PROVIDER_AWS_REGION", "eu-central-1");
+            std::env::set_var("AWS_ACCESS_KEY_ID", "fallback-access");
+            std::env::set_var("AWS_SECRET_ACCESS_KEY", "fallback-secret");
+            std::env::set_var("AWS_REGION", "us-east-1");
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(
+            config.credential("bedrock"),
+            Some(Credential::aws_sigv4(
+                "preferred-access",
+                "preferred-secret",
+                Some("preferred-session"),
+                "eu-central-1",
+            ))
         );
     });
 }

@@ -118,12 +118,12 @@ Current foundation:
 
 - provider profiles, aliases, registry lookup, credential resolution, route
   inspection, allowlist policy, OpenAI-compatible Chat Completions transport,
-  Anthropic Messages transport, OpenAI Responses transport, tool calls,
-  normalized responses, and live integration-test toggles.
+  Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
+  Converse transport, tool calls, normalized responses, and live
+  integration-test toggles.
 
 Next work:
 
-- AWS Bedrock Converse transport;
 - Gemini native transport;
 - Azure deployment-aware configuration;
 - GitHub Copilot and GitHub Models hardening;
@@ -282,8 +282,8 @@ Exit criteria:
 ## Prioritized Next Moves
 
 1. Align docs and status so contributors know what is already built.
-2. Harden provider breadth: Bedrock Converse, Gemini native, and provider
-   catalogs.
+2. Harden provider breadth: Gemini native transport, provider catalogs, and
+   routing policy.
 3. Improve memory quality: evidence, revision, duplicate, and stale handling.
 4. Certify MCP against real third-party servers.
 5. Add worktree isolation, richer patching, cancellation, and web tools.

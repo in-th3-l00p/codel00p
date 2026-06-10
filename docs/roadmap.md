@@ -61,7 +61,6 @@ Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
 Build:
 
-- AWS Bedrock Converse transport;
 - Gemini native transport;
 - Azure AI Foundry deployment-aware configuration;
 - GitHub Copilot and GitHub Models hardening;

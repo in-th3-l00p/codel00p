@@ -296,13 +296,15 @@ Implemented:
 - OpenAI Responses transport with mocked HTTP tests, including stateless
   requests, system/developer/user messages, function tools, function-call
   replay, text/tool-call normalization, provider replay data, and usage
-  metadata.
+  metadata;
+- AWS Bedrock Converse transport with mocked HTTP tests, including SigV4 request
+  signing, system prompts, message blocks, tool specs, `toolUse` responses,
+  `toolResult` replay, stop reasons, and cache usage metadata.
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
 Next transports:
 
-- AWS Bedrock Converse;
 - Gemini native.
 
 ## Non-goals for the first pass

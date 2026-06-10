@@ -74,6 +74,17 @@ pub fn provider_env_vars(provider: &str) -> Vec<&'static str> {
             "GOOGLE_API_KEY",
             "GEMINI_API_KEY",
         ],
+        "bedrock" | "aws" | "aws-bedrock" => vec![
+            "CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID",
+            "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+            "CODEL00P_PROVIDER_AWS_SESSION_TOKEN",
+            "CODEL00P_PROVIDER_AWS_REGION",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+        ],
         "custom" | "ollama" | "local" | "vllm" | "llamacpp" | "llama.cpp" | "llama-cpp" => {
             vec!["CODEL00P_PROVIDER_CUSTOM_API_KEY"]
         }
@@ -82,6 +93,10 @@ pub fn provider_env_vars(provider: &str) -> Vec<&'static str> {
 }
 
 fn provider_credential(provider: &str) -> Option<Credential> {
+    if is_bedrock(provider) {
+        return aws_sigv4_credential();
+    }
+
     provider_env_vars(provider)
         .iter()
         .find_map(|key| read_secret(key))
@@ -93,4 +108,38 @@ fn read_secret(key: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn is_bedrock(provider: &str) -> bool {
+    matches!(
+        provider.trim().to_ascii_lowercase().as_str(),
+        "bedrock" | "aws" | "aws-bedrock"
+    )
+}
+
+fn aws_sigv4_credential() -> Option<Credential> {
+    let access_key_id =
+        read_first_secret(&["CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"])?;
+    let secret_access_key = read_first_secret(&[
+        "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+        "AWS_SECRET_ACCESS_KEY",
+    ])?;
+    let region = read_first_secret(&[
+        "CODEL00P_PROVIDER_AWS_REGION",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+    ])?;
+    let session_token =
+        read_first_secret(&["CODEL00P_PROVIDER_AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"]);
+
+    Some(Credential::aws_sigv4(
+        access_key_id,
+        secret_access_key,
+        session_token.as_deref(),
+        region,
+    ))
+}
+
+fn read_first_secret(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| read_secret(key))
 }

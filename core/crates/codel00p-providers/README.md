@@ -43,19 +43,20 @@ Implemented:
 - OpenAI-compatible Chat Completions transport;
 - Anthropic Messages transport;
 - OpenAI Responses transport;
+- AWS Bedrock Converse transport;
 - normalized responses, usage, and tool calls;
 - mocked integration tests for request payloads and response parsing.
 
 Not yet implemented:
 
-- AWS Bedrock Converse transport;
 - Gemini-native transport;
 - environment/cloud credential resolvers;
 - streaming.
 
 The current working transports are enough to use OpenAI Responses, Anthropic
-directly, custom OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints
-when a base URL is supplied, and other compatible gateways.
+directly, AWS Bedrock Converse with SigV4 credentials, custom
+OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints when a base URL
+is supplied, and other compatible gateways.
 
 ## Design rules
 
@@ -93,6 +94,13 @@ CODEL00P_INTEGRATION_TESTS=1 \
 CODEL00P_PROVIDER_OPENAI_API_KEY=... \
 CODEL00P_PROVIDER_OPENAI_MODEL=gpt-5-mini \
 cargo test -p codel00p-providers --test live_openai -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID=... \
+CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY=... \
+CODEL00P_PROVIDER_AWS_REGION=us-east-1 \
+CODEL00P_PROVIDER_BEDROCK_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
+cargo test -p codel00p-providers --test live_bedrock -- --ignored --nocapture
 ```
 
 Credential environment variables:
@@ -103,6 +111,7 @@ Credential environment variables:
 | OpenRouter | `CODEL00P_PROVIDER_OPENROUTER_API_KEY`, `OPENROUTER_API_KEY` |
 | OpenAI | `CODEL00P_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY` |
 | Anthropic | `CODEL00P_PROVIDER_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_TOKEN` |
+| AWS Bedrock | `CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID`, `CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY`, `CODEL00P_PROVIDER_AWS_SESSION_TOKEN`, `CODEL00P_PROVIDER_AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_DEFAULT_REGION` |
 | Azure AI Foundry | `CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY`, `AZURE_FOUNDRY_API_KEY` |
 | Gemini | `CODEL00P_PROVIDER_GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY` |
 | Custom endpoint | `CODEL00P_PROVIDER_CUSTOM_API_KEY` |

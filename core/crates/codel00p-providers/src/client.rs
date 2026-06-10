@@ -4,8 +4,8 @@ use crate::{
     ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderPolicy,
     ProviderRegistry, ResolvedInferenceRoute, default_registry,
     transports::{
-        anthropic_messages::AnthropicMessagesTransport, chat_completions::ChatCompletionsTransport,
-        responses::ResponsesTransport,
+        anthropic_messages::AnthropicMessagesTransport, bedrock_converse::BedrockConverseTransport,
+        chat_completions::ChatCompletionsTransport, responses::ResponsesTransport,
     },
 };
 
@@ -56,6 +56,11 @@ impl InferenceClient {
             }
             ApiMode::Responses => {
                 ResponsesTransport::new()
+                    .complete(&route.provider, &route.base_url, credential, request)
+                    .await
+            }
+            ApiMode::BedrockConverse => {
+                BedrockConverseTransport::new()
                     .complete(&route.provider, &route.base_url, credential, request)
                     .await
             }

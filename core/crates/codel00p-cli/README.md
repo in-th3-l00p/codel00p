@@ -176,14 +176,24 @@ Provider credentials are read from environment variables:
 
 - GitHub/Copilot: `CODEL00P_PROVIDER_GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`,
   `GH_TOKEN`, `GITHUB_TOKEN`.
+- OpenAI: `CODEL00P_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`.
+- Anthropic: `CODEL00P_PROVIDER_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_TOKEN`.
+- AWS Bedrock: `CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID`,
+  `CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY`,
+  `CODEL00P_PROVIDER_AWS_SESSION_TOKEN`, `CODEL00P_PROVIDER_AWS_REGION`,
+  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
+  `AWS_REGION`, `AWS_DEFAULT_REGION`.
 - OpenRouter: `CODEL00P_PROVIDER_OPENROUTER_API_KEY`, `OPENROUTER_API_KEY`.
 - Azure AI Foundry compatible: `CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY`,
   `AZURE_FOUNDRY_API_KEY`.
+- Gemini: `CODEL00P_PROVIDER_GEMINI_API_KEY`, `GOOGLE_API_KEY`,
+  `GEMINI_API_KEY`.
 - Custom/local OpenAI-compatible: `CODEL00P_PROVIDER_CUSTOM_API_KEY`.
 
 `openai`, `anthropic`, `bedrock`, and native `gemini` registry entries exist in
-the provider layer, but `agent run` currently rejects non-Chat-Completions modes
-until their transports are implemented.
+the provider layer. `agent run` currently rejects non-Chat-Completions modes
+until the CLI agent loop is enabled for each native transport.
 
 ## Agent Resume
 
