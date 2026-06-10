@@ -228,6 +228,7 @@ codel00p \
 
 ```bash
 codel00p ... memory list --status candidate
+codel00p ... memory list --status candidate --json
 
 codel00p ... memory show mem-1
 codel00p ... memory show mem-1 --json
@@ -241,7 +242,7 @@ codel00p ... memory audit mem-1 --json
 Output is intentionally stable and scriptable:
 
 - `memory list` prints `id`, `status`, `kind`, and `content` as tab-separated
-  fields.
+  fields; add `--json` for MCP-compatible record objects.
 - `memory show` prints a single memory record with source evidence; add
   `--json` for the MCP-compatible record object.
 - review commands print `id` and the resulting status.

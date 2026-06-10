@@ -23,6 +23,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
 
 fn memory_list(config: CliConfig, args: &[String]) -> CliResult<String> {
     let mut filter = MemoryListFilter::new(config.project.clone());
+    let mut json_output = false;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -46,12 +47,21 @@ fn memory_list(config: CliConfig, args: &[String]) -> CliResult<String> {
                 filter = filter.with_limit(limit);
                 index += 2;
             }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
             flag => return Err(format!("unknown memory list option: {flag}")),
         }
     }
 
     let store = open_memory_store(&config)?;
     let records = store.list(filter).map_err(|error| error.to_string())?;
+    if json_output {
+        let items = records.iter().map(memory_record_json).collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
     let mut output = String::new();
     for record in records {
         output.push_str(&format!(

@@ -97,12 +97,45 @@ fn memory_list_prints_filtered_candidates() {
             "verify",
         ],
     );
+    let output_json = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "list",
+            "--status",
+            "candidate",
+            "--kind",
+            "workflow",
+            "--tag",
+            "verify",
+            "--json",
+        ],
+    );
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        output_json.status.success(),
+        "stderr: {}",
+        stderr(&output_json)
+    );
     assert_eq!(
         stdout(&output),
         "mem-workflow\tcandidate\tworkflow\tRun pnpm verify before pushing main.\n"
     );
+    let records: serde_json::Value =
+        serde_json::from_str(&stdout(&output_json)).expect("list json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-workflow");
+    assert_eq!(records[0]["status"], "candidate");
+    assert_eq!(records[0]["kind"], "workflow");
+    assert_eq!(
+        records[0]["content"],
+        "Run pnpm verify before pushing main."
+    );
+    assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
+    assert_eq!(records[0]["source"]["session_id"], "session-cli");
+    assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
 }
 
 #[test]

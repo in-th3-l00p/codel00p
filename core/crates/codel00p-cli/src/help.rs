@@ -155,7 +155,7 @@ const MEMORY_HELP: &str = "\
 Usage: codel00p [global options] memory <command>
 
 Commands:
-  list     List memory records
+  list     List memory records; use --json for JSON output
   show     Show one memory record; use --json for JSON output
   audit    Show memory audit history; use --json for JSON output
   edit     Edit memory content
