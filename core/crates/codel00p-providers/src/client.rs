@@ -23,7 +23,7 @@ pub struct InferenceClient {
     registry: ProviderRegistry,
     credentials: BTreeMap<String, ResolvedProviderCredential>,
     policy: ProviderPolicy,
-    model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
+    model_pricing: BTreeMap<String, BTreeMap<String, StoredUsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
 }
 
@@ -358,19 +358,38 @@ impl InferenceClient {
 
     fn attach_cost_estimate(
         &self,
-        mut response: InferenceResponse,
+        response: InferenceResponse,
         request: &InferenceRequest,
         provider: &str,
         model: &str,
     ) -> InferenceResponse {
-        let pricing = request
-            .pricing
-            .as_ref()
-            .or_else(|| self.model_pricing.get(provider)?.get(model));
-        if let (Some(usage), Some(pricing)) = (&response.usage, pricing) {
-            response.cost = Some(usage.estimate_cost(pricing));
-        }
+        let Some(usage) = &response.usage else {
+            return response;
+        };
+        let Some((pricing, pricing_source)) = self.pricing_for_response(request, provider, model)
+        else {
+            return response;
+        };
+
+        let mut cost = usage.estimate_cost(pricing);
+        cost.pricing_source = Some(pricing_source);
+        let mut response = response;
+        response.cost = Some(cost);
         response
+    }
+
+    fn pricing_for_response<'a>(
+        &'a self,
+        request: &'a InferenceRequest,
+        provider: &str,
+        model: &str,
+    ) -> Option<(&'a UsagePricing, String)> {
+        if let Some(pricing) = request.pricing.as_ref() {
+            return Some((pricing, "request".to_string()));
+        }
+
+        let stored = self.model_pricing.get(provider)?.get(model)?;
+        Some((&stored.pricing, stored.source.clone()))
     }
 }
 
@@ -384,6 +403,12 @@ struct FailedRouteAttempt {
 struct ProviderProxyRoute {
     base_url: String,
     credential: Credential,
+}
+
+#[derive(Debug, Clone)]
+struct StoredUsagePricing {
+    pricing: UsagePricing,
+    source: String,
 }
 
 impl From<ProviderError> for FailedRouteAttempt {
@@ -461,7 +486,7 @@ pub struct InferenceClientBuilder {
     registry: ProviderRegistry,
     credentials: BTreeMap<String, ResolvedProviderCredential>,
     policy: ProviderPolicy,
-    model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
+    model_pricing: BTreeMap<String, BTreeMap<String, StoredUsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
 }
 
@@ -530,16 +555,29 @@ impl InferenceClientBuilder {
         self.model_pricing
             .entry(provider.into())
             .or_default()
-            .insert(model.into(), pricing);
+            .insert(
+                model.into(),
+                StoredUsagePricing {
+                    pricing,
+                    source: "configured".to_string(),
+                },
+            );
         self
     }
 
     pub fn pricing_catalog(mut self, catalog: ProviderPricingCatalog) -> Self {
+        let source = catalog.source.unwrap_or_else(|| "catalog".to_string());
         for entry in catalog.entries {
             self.model_pricing
                 .entry(entry.provider)
                 .or_default()
-                .insert(entry.model, entry.pricing);
+                .insert(
+                    entry.model,
+                    StoredUsagePricing {
+                        pricing: entry.pricing,
+                        source: source.clone(),
+                    },
+                );
         }
         self
     }

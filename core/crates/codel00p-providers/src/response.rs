@@ -43,6 +43,7 @@ impl Usage {
 
         UsageCostEstimate {
             currency: pricing.currency.clone(),
+            pricing_source: None,
             input_nanos,
             output_nanos,
             cache_read_nanos,
@@ -115,6 +116,8 @@ impl UsagePricing {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UsageCostEstimate {
     pub currency: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pricing_source: Option<String>,
     pub input_nanos: u64,
     pub output_nanos: u64,
     pub cache_read_nanos: u64,

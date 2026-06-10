@@ -119,6 +119,7 @@ async fn complete_attaches_usage_cost_when_pricing_is_supplied() {
     let cost = response.cost.expect("cost should be estimated");
     assert_eq!(response.content.as_deref(), Some("hello"));
     assert_eq!(cost.currency, "USD");
+    assert_eq!(cost.pricing_source.as_deref(), Some("request"));
     assert_eq!(cost.input_nanos, 900);
     assert_eq!(cost.output_nanos, 1800);
     assert_eq!(cost.cache_read_nanos, 200);
@@ -176,6 +177,7 @@ async fn complete_attaches_usage_cost_from_client_model_pricing() {
     chat.assert_async().await;
     let cost = response.cost.expect("cost should be estimated");
     assert_eq!(cost.currency, "USD");
+    assert_eq!(cost.pricing_source.as_deref(), Some("configured"));
     assert_eq!(cost.input_nanos, 1500);
     assert_eq!(cost.output_nanos, 1800);
     assert_eq!(cost.total_nanos, 3300);
@@ -211,7 +213,8 @@ async fn complete_attaches_usage_cost_from_pricing_catalog() {
         "custom",
         "test-model",
         UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000),
-    )]);
+    )])
+    .with_source("catalog:team-ai-2026-06");
     let client = InferenceClient::builder()
         .registry(default_registry())
         .credential("custom", Credential::api_key("test-key"))
@@ -231,6 +234,10 @@ async fn complete_attaches_usage_cost_from_pricing_catalog() {
     chat.assert_async().await;
     let cost = response.cost.expect("cost should be estimated");
     assert_eq!(cost.currency, "USD");
+    assert_eq!(
+        cost.pricing_source.as_deref(),
+        Some("catalog:team-ai-2026-06")
+    );
     assert_eq!(cost.input_nanos, 1500);
     assert_eq!(cost.output_nanos, 1800);
     assert_eq!(cost.total_nanos, 3300);

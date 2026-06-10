@@ -106,7 +106,8 @@ let pricing = ProviderPricingCatalog::new([ProviderModelPricing::new(
     "openai",
     "gpt-5-mini",
     UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000),
-)]);
+)])
+.with_source("catalog:team-ai-2026-06");
 
 let client = InferenceClient::builder()
     .registry(default_registry())
@@ -115,6 +116,10 @@ let client = InferenceClient::builder()
     .build();
 # let _ = client;
 ```
+
+`UsageCostEstimate.pricing_source` records whether pricing came from the request,
+configured client pricing, or a published catalog source such as
+`catalog:team-ai-2026-06`.
 
 Clients can also load supported provider credentials from environment variables.
 Explicit `credential(...)` calls take precedence over values loaded from the

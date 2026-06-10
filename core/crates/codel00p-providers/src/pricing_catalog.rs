@@ -3,6 +3,8 @@ use crate::UsagePricing;
 /// Published provider/model pricing rows for organization-managed clients.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ProviderPricingCatalog {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     #[serde(default)]
     pub entries: Vec<ProviderModelPricing>,
 }
@@ -10,8 +12,14 @@ pub struct ProviderPricingCatalog {
 impl ProviderPricingCatalog {
     pub fn new(entries: impl IntoIterator<Item = ProviderModelPricing>) -> Self {
         Self {
+            source: None,
             entries: entries.into_iter().collect(),
         }
+    }
+
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = Some(source.into());
+        self
     }
 }
 

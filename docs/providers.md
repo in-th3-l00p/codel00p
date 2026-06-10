@@ -355,7 +355,8 @@ Implemented:
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
 - published `ProviderPricingCatalog` ingestion for cloud or organization-managed
-  provider/model pricing tables;
+  provider/model pricing tables, with response cost metadata that records
+  request, configured, or catalog pricing source labels;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -376,7 +377,8 @@ Implemented:
   `systemInstruction`, content parts, function declarations, `functionCall`
   responses, `functionResponse` replay, finish reasons, and usage metadata.
 - request-supplied `UsagePricing` and response-level `UsageCostEstimate`
-  metadata using deterministic nano-unit fixed-point math.
+  metadata using deterministic nano-unit fixed-point math and safe pricing
+  source labels.
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 

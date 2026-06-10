@@ -19,7 +19,8 @@ Build:
 - model catalog listing with normalized model descriptors and safe credential
   source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;
-- normalized usage and explicit request-priced cost metadata;
+- normalized usage and explicit request-priced cost metadata, including safe
+  pricing source labels;
 - provider and model allowlist policy hooks for project and organization rules;
   started with catalog filtering by required typed model capabilities and safe
   catalog policy metadata.
