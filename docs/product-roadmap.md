@@ -155,7 +155,7 @@ Current foundation:
 - deterministic approved-memory retrieval;
 - explicit memory extraction from completed turns;
 - source session/turn evidence visible in CLI memory detail output;
-- CLI-backed content edits that preserve status/source/tags and append
+- CLI/MCP-backed content edits that preserve status/source/tags and append
   `edited` audit events;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.

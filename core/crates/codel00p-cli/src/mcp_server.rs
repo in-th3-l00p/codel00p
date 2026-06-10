@@ -2,7 +2,8 @@ use std::io;
 
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
-    MemoryCandidateInput, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
+    MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository,
+    ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
@@ -230,6 +231,20 @@ fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_edit",
+            "description": "Edit one codel00p project memory record.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "actor", "content"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "actor": { "type": "string" },
+                    "content": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
             "name": "session_show",
             "description": "Replay one codel00p agent session by id.",
             "inputSchema": {
@@ -277,6 +292,7 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, St
         "memory_approve" => memory_review(config, &arguments, MemoryReviewAction::Approve)?,
         "memory_reject" => memory_review(config, &arguments, MemoryReviewAction::Reject)?,
         "memory_archive" => memory_review(config, &arguments, MemoryReviewAction::Archive)?,
+        "memory_edit" => memory_edit(config, &arguments)?,
         "session_show" => (session_show(config, &arguments)?, Vec::new()),
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
@@ -445,6 +461,22 @@ fn memory_review(
     let record = store
         .review(id, decision)
         .map_err(|error| error.to_string())?;
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((text, vec![memory_resource_uri(id)]))
+}
+
+fn memory_edit(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<String>), String> {
+    let id = required_string(arguments, "id")?;
+    let actor = required_string(arguments, "actor")?;
+    let content = required_string(arguments, "content")?;
+    let mut edit = MemoryEdit::replace_content(actor, content);
+    if let Some(reason) = optional_string(arguments, "reason") {
+        edit = edit.with_reason(reason);
+    }
+
+    let mut store = open_memory_store(config)?;
+    let record = store.edit(id, edit).map_err(|error| error.to_string())?;
     let text =
         serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
     Ok((text, vec![memory_resource_uri(id)]))

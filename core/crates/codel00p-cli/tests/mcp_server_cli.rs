@@ -102,6 +102,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert!(tool_names.contains(&"memory_approve"));
     assert!(tool_names.contains(&"memory_reject"));
     assert!(tool_names.contains(&"memory_archive"));
+    assert!(tool_names.contains(&"memory_edit"));
     assert!(tool_names.contains(&"session_show"));
 
     send(
@@ -531,8 +532,33 @@ fn mcp_serve_can_create_and_review_project_memory() {
             "id": 4,
             "method": "tools/call",
             "params": {
+                "name": "memory_edit",
+                "arguments": {
+                    "id": "mem-mcp-1",
+                    "actor": "mcp-client",
+                    "content": "Use MCP edit tools for reviewed project memory.",
+                    "reason": "clarified editable workflow"
+                }
+            }
+        }),
+    );
+    let edited = read_response(&mut stdout);
+    assert_eq!(edited["result"]["isError"], false);
+    let edited_text = edited["result"]["content"][0]["text"]
+        .as_str()
+        .expect("edited text");
+    assert!(edited_text.contains(r#""status":"approved""#));
+    assert!(edited_text.contains("Use MCP edit tools for reviewed project memory."));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_search",
-                "arguments": { "text": "MCP write tools" }
+                "arguments": { "text": "MCP edit tools" }
             }
         }),
     );
@@ -548,7 +574,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 5,
+            "id": 6,
             "method": "tools/call",
             "params": {
                 "name": "memory_create_candidate",
@@ -570,7 +596,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 6,
+            "id": 7,
             "method": "tools/call",
             "params": {
                 "name": "memory_reject",
@@ -593,7 +619,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 7,
+            "id": 8,
             "method": "tools/call",
             "params": {
                 "name": "memory_archive",

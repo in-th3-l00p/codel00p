@@ -37,6 +37,9 @@ and optional reason. The CLI exposes this as:
 codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>]
 ```
 
+The MCP server exposes the same operation as the `memory_edit` tool with
+`id`, `actor`, `content`, and optional `reason` arguments.
+
 Rich revision storage is still a separate Memory 2.0 follow-up.
 
 ## Review listing contract
