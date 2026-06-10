@@ -223,6 +223,10 @@ fn mcp_serve_exposes_memory_and_session_resources() {
         .expect("memory text");
     assert!(memory_text.contains(r#""id":"mem-resource-1""#));
     assert!(memory_text.contains(r#""kind":"architecture""#));
+    assert!(
+        memory_text
+            .contains(r#""source":{"session_id":"session-resource","turn_id":"turn-resource"}"#)
+    );
 
     send(
         &mut child,

@@ -560,13 +560,20 @@ fn session_records_json(records: &[codel00p_session::PersistedSessionRecord]) ->
 }
 
 fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
-    json!({
+    let mut item = json!({
         "id": record.entry().id(),
         "status": status_label(record.entry().status()),
         "kind": kind_label(record.entry().kind()),
         "content": record.entry().content(),
         "tags": record.entry().tags(),
-    })
+    });
+    if let Some(source) = record.entry().source() {
+        item["source"] = json!({
+            "session_id": source.session_id().as_str(),
+            "turn_id": source.turn_id().as_str(),
+        });
+    }
+    item
 }
 
 fn required_string<'a>(arguments: &'a Value, key: &str) -> Result<&'a str, String> {
