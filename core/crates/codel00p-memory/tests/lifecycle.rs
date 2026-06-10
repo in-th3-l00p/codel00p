@@ -218,6 +218,7 @@ fn memory_edit_updates_content_and_audits_revision() {
         )
         .expect("edit memory");
     let audit = store.audit_log("mem-1").expect("audit log");
+    let edit_event = serde_json::to_value(&audit[2]).expect("serialize edit audit");
 
     assert_eq!(edited.entry().status(), MemoryStatus::Approved);
     assert_eq!(
@@ -231,6 +232,11 @@ fn memory_edit_updates_content_and_audits_revision() {
     assert_eq!(audit[2].action(), MemoryAuditAction::Edited);
     assert_eq!(audit[2].actor(), "bob");
     assert_eq!(audit[2].reason(), Some("clarified verification command"));
+    assert_eq!(edit_event["previous_content"], "Run tests before pushing.");
+    assert_eq!(
+        edit_event["new_content"],
+        "Run pnpm verify before pushing main."
+    );
 }
 
 #[test]

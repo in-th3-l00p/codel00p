@@ -34,7 +34,10 @@ available.
 `MemoryRepository::edit` replaces memory content while preserving the memory
 id, project, kind, status, source evidence, and tags. Empty replacement content
 is rejected, and successful edits append an `edited` audit event with the actor
-and optional reason. The CLI exposes this as:
+and optional reason. Edit audit events also preserve machine-readable
+`previous_content` and `new_content` revision fields.
+
+The CLI exposes edits as:
 
 ```bash
 codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>]
@@ -42,9 +45,11 @@ codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>
 
 The MCP server exposes the same operation as the `memory_edit` tool with
 `id`, `actor`, `content`, and optional `reason` arguments.
-It also exposes `memory_audit` for machine-readable audit history.
+It also exposes `memory_audit` for machine-readable audit history, including
+edit revision content when available.
 
-Rich revision storage is still a separate Memory 2.0 follow-up.
+Richer revision browsing and restore workflows are still separate Memory 2.0
+follow-ups.
 
 ## Duplicate detection contract
 

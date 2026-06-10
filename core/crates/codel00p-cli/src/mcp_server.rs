@@ -409,6 +409,12 @@ fn memory_audit(config: &CliConfig, arguments: &Value) -> Result<String, String>
             if let Some(reason) = event.reason() {
                 item["reason"] = json!(reason);
             }
+            if let Some(previous_content) = event.previous_content() {
+                item["previous_content"] = json!(previous_content);
+            }
+            if let Some(new_content) = event.new_content() {
+                item["new_content"] = json!(new_content);
+            }
             item
         })
         .collect::<Vec<_>>();

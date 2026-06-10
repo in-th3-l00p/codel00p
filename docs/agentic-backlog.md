@@ -32,7 +32,8 @@ Goal: make project memory trusted, maintainable, and visibly sourced.
 Build:
 
 - memory editing and revision history; started with CLI/MCP-backed content
-  edits that preserve metadata and append MCP-visible `edited` audit events;
+  edits that preserve metadata and append MCP-visible `edited` audit events
+  with previous/new content metadata;
 - source evidence links; started with CLI-visible source session/turn metadata
   and MCP show/resource/list/search JSON source metadata;
 - duplicate and near-duplicate detection; started with exact active duplicate

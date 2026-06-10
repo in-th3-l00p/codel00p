@@ -578,6 +578,13 @@ fn mcp_serve_can_create_and_review_project_memory() {
     assert!(audit_text.contains(r#""action":"edited""#));
     assert!(audit_text.contains(r#""actor":"mcp-client""#));
     assert!(audit_text.contains(r#""reason":"clarified editable workflow""#));
+    assert!(
+        audit_text
+            .contains(r#""previous_content":"Use MCP write tools for reviewed project memory.""#)
+    );
+    assert!(
+        audit_text.contains(r#""new_content":"Use MCP edit tools for reviewed project memory.""#)
+    );
 
     send(
         &mut child,

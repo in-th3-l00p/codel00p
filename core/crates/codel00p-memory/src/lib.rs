@@ -319,6 +319,10 @@ pub struct MemoryAuditEvent {
     actor: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_content: Option<String>,
 }
 
 impl MemoryAuditEvent {
@@ -329,6 +333,8 @@ impl MemoryAuditEvent {
             action: MemoryAuditAction::CandidateCreated,
             actor: "system".to_string(),
             reason: None,
+            previous_content: None,
+            new_content: None,
         }
     }
 
@@ -339,16 +345,25 @@ impl MemoryAuditEvent {
             action: decision.action(),
             actor: decision.actor().to_string(),
             reason: decision.reason().map(ToString::to_string),
+            previous_content: None,
+            new_content: None,
         }
     }
 
-    fn edited(memory_id: impl Into<String>, edit: &MemoryEdit) -> Self {
+    fn edited(
+        memory_id: impl Into<String>,
+        edit: &MemoryEdit,
+        previous_content: impl Into<String>,
+        new_content: impl Into<String>,
+    ) -> Self {
         Self {
             memory_id: memory_id.into(),
             sequence: 0,
             action: MemoryAuditAction::Edited,
             actor: edit.actor().to_string(),
             reason: edit.reason().map(ToString::to_string),
+            previous_content: Some(previous_content.into()),
+            new_content: Some(new_content.into()),
         }
     }
 
@@ -370,6 +385,14 @@ impl MemoryAuditEvent {
 
     pub fn reason(&self) -> Option<&str> {
         self.reason.as_deref()
+    }
+
+    pub fn previous_content(&self) -> Option<&str> {
+        self.previous_content.as_deref()
+    }
+
+    pub fn new_content(&self) -> Option<&str> {
+        self.new_content.as_deref()
     }
 
     fn from_log_entry(entry: AppendLogEntry) -> Result<Self, MemoryError> {
@@ -609,11 +632,18 @@ where
     fn edit(&mut self, id: &str, edit: MemoryEdit) -> Result<MemoryRecord, MemoryError> {
         edit.validate()?;
         let current = self.get(id)?;
-        let entry = replace_content(current.entry(), edit.content().to_string());
+        let previous_content = current.entry().content().to_string();
+        let new_content = edit.content().to_string();
+        let entry = replace_content(current.entry(), new_content.clone());
         let record = MemoryRecord::new(entry);
 
         self.put_record(&record)?;
-        self.append_audit(MemoryAuditEvent::edited(id, &edit))?;
+        self.append_audit(MemoryAuditEvent::edited(
+            id,
+            &edit,
+            previous_content,
+            new_content,
+        ))?;
 
         Ok(record)
     }
