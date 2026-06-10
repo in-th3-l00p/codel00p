@@ -287,7 +287,9 @@ Implemented:
 - normalized tool calls and token usage;
 - `ProviderProfile`, `ProviderRegistry`, `ApiMode`, and `AuthType`;
 - first-wave provider profiles and aliases;
-- inspectable `ResolvedInferenceRoute`;
+- inspectable `ResolvedInferenceRoute` with safe audit metadata for provider,
+  API mode, base URL source, credential presence, policy decision, model catalog
+  URL, and provider capabilities;
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - Anthropic Messages transport with mocked HTTP tests, including native system
@@ -306,9 +308,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next transport work should focus on provider variants and hardening: Azure
-deployment-aware configuration, GitHub Copilot/GitHub Models hardening, model
-catalogs, fallback routing, and organization policy.
+Next provider work should focus on fallback routing and enterprise variants:
+Azure deployment-aware configuration, GitHub Copilot/GitHub Models hardening,
+model catalogs, normalized cost metadata, and organization policy.
 
 ## Non-goals for the first pass
 

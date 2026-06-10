@@ -45,4 +45,4 @@ pub use request::{
     ChatMessage, InferenceRequest, InferenceRequestBuilder, MessageRole, ToolDefinition,
 };
 pub use response::{InferenceResponse, ToolCall, Usage};
-pub use runtime::ResolvedInferenceRoute;
+pub use runtime::{ProviderPolicyDecision, ResolvedInferenceRoute, RouteValueSource};

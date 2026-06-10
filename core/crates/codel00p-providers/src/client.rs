@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::{
     ApiMode, Credential, InferenceRequest, InferenceResponse, ProviderError, ProviderPolicy,
-    ProviderRegistry, ResolvedInferenceRoute, default_registry,
+    ProviderPolicyDecision, ProviderRegistry, ResolvedInferenceRoute, RouteValueSource,
+    default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport, bedrock_converse::BedrockConverseTransport,
         chat_completions::ChatCompletionsTransport, gemini::GeminiTransport,
@@ -88,13 +89,15 @@ impl InferenceClient {
             }
         })?;
 
-        let base_url = request
-            .base_url
-            .clone()
-            .or_else(|| profile.default_base_url.map(str::to_string))
-            .ok_or_else(|| ProviderError::MissingBaseUrl {
+        let (base_url, base_url_source) = if let Some(base_url) = request.base_url.clone() {
+            (base_url, RouteValueSource::RequestOverride)
+        } else if let Some(base_url) = profile.default_base_url {
+            (base_url.to_string(), RouteValueSource::ProviderDefault)
+        } else {
+            return Err(ProviderError::MissingBaseUrl {
                 provider: profile.id.to_string(),
-            })?;
+            });
+        };
 
         let credential_source = self
             .credentials
@@ -109,7 +112,11 @@ impl InferenceClient {
             provider: profile.id.to_string(),
             api_mode: profile.api_mode,
             base_url,
+            base_url_source,
             credential_source,
+            policy_decision: ProviderPolicyDecision::Allowed,
+            capabilities: profile.capabilities,
+            models_url: profile.models_url.map(str::to_string),
             output_token_parameter: profile.output_token_parameter,
         })
     }

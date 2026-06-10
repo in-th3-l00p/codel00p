@@ -1,4 +1,17 @@
-use crate::{ApiMode, OutputTokenParameter};
+use crate::{ApiMode, OutputTokenParameter, ProviderCapabilities};
+
+/// Source used for a resolved route value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteValueSource {
+    RequestOverride,
+    ProviderDefault,
+}
+
+/// Provider policy decision attached to a resolved route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderPolicyDecision {
+    Allowed,
+}
 
 /// Resolved runtime route for an inference request.
 ///
@@ -10,6 +23,10 @@ pub struct ResolvedInferenceRoute {
     pub provider: String,
     pub api_mode: ApiMode,
     pub base_url: String,
+    pub base_url_source: RouteValueSource,
     pub credential_source: Option<String>,
+    pub policy_decision: ProviderPolicyDecision,
+    pub capabilities: ProviderCapabilities,
+    pub models_url: Option<String>,
     pub output_token_parameter: OutputTokenParameter,
 }

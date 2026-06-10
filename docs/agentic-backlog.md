@@ -12,7 +12,9 @@ Goal: make provider routing policy-aware, auditable, and ready for team control.
 Build:
 
 - model capability metadata;
-- route audit metadata;
+- route audit metadata; started with safe `ResolvedInferenceRoute` fields for
+  base URL source, policy decision, model catalog URL, and provider
+  capabilities;
 - normalized usage and cost metadata;
 - fallback routing for retryable failures;
 - provider policy hooks for project and organization rules.

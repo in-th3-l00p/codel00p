@@ -37,7 +37,9 @@ Implemented:
   Bedrock, Google Gemini, GitHub Models, OpenRouter, and custom
   OpenAI-compatible endpoints;
 - high-level `InferenceClient` facade;
-- inspectable `resolve()` route API;
+- inspectable `resolve()` route API with safe audit metadata for provider,
+  API mode, base URL source, credential presence, policy decision, model catalog
+  URL, and provider capabilities;
 - credential injection by canonical provider or alias;
 - provider allowlist policy;
 - OpenAI-compatible Chat Completions transport;
