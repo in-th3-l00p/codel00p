@@ -114,7 +114,7 @@ fn memory_show_and_audit_print_stable_details() {
     assert!(audit.status.success(), "stderr: {}", stderr(&audit));
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: candidate\nkind: workflow\ntags: verify\ncontent: Run pnpm verify before pushing main.\n"
+        "id: mem-workflow\nstatus: candidate\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run pnpm verify before pushing main.\n"
     );
     assert_eq!(stdout(&audit), "1\tcandidate_created\tsystem\t\n");
 }

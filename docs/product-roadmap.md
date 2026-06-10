@@ -154,13 +154,14 @@ Current foundation:
 - audit history;
 - deterministic approved-memory retrieval;
 - explicit memory extraction from completed turns;
+- source session/turn evidence visible in CLI memory detail output;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.
 
 Next work:
 
 - memory editing and revision history;
-- source evidence links;
+- source evidence links beyond session/turn references;
 - duplicate and near-duplicate detection;
 - stale-memory detection;
 - visibility and sensitivity scopes;

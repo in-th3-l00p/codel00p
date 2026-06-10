@@ -20,6 +20,12 @@ The default kind is `decision`. Unknown kinds, empty content, and ordinary prose
 are ignored. Extracted candidates use deterministic IDs based on source session,
 source turn, and extracted candidate order.
 
+## Source evidence
+
+Candidates keep the source session and turn that produced them. The CLI
+`memory show` command prints this source evidence so reviewers can trace a
+candidate back to the originating agent turn before approving it.
+
 ## Review listing contract
 
 `MemoryListFilter` lists memory records for human review. Unlike inference

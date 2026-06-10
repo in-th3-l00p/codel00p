@@ -68,14 +68,23 @@ fn memory_show(config: CliConfig, args: &[String]) -> CliResult<String> {
     let store = open_memory_store(&config)?;
     let record = store.get(id).map_err(|error| error.to_string())?;
 
-    Ok(format!(
-        "id: {}\nstatus: {}\nkind: {}\ntags: {}\ncontent: {}\n",
+    let mut output = format!(
+        "id: {}\nstatus: {}\nkind: {}\ntags: {}\n",
         record.entry().id(),
         status_label(record.entry().status()),
         kind_label(record.entry().kind()),
-        record.entry().tags().join(","),
-        record.entry().content()
-    ))
+        record.entry().tags().join(",")
+    );
+    if let Some(source) = record.entry().source() {
+        output.push_str(&format!(
+            "source_session: {}\nsource_turn: {}\n",
+            source.session_id().as_str(),
+            source.turn_id().as_str()
+        ));
+    }
+    output.push_str(&format!("content: {}\n", record.entry().content()));
+
+    Ok(output)
 }
 
 fn memory_audit(config: CliConfig, args: &[String]) -> CliResult<String> {
