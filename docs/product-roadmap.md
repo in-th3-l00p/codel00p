@@ -118,14 +118,14 @@ Current foundation:
 
 - provider profiles, aliases, registry lookup, credential resolution, route
   inspection, allowlist policy, OpenAI-compatible Chat Completions transport,
-  Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
-  Converse transport, Gemini GenerateContent transport, tool calls, normalized
-  responses, model catalog listing, fallback routing, request-priced cost
-  estimates, provider/model allowlist policy, and live integration-test toggles.
+  Azure AI Foundry deployment Chat Completions transport, Anthropic Messages
+  transport, OpenAI Responses transport, AWS Bedrock Converse transport, Gemini
+  GenerateContent transport, tool calls, normalized responses, model catalog
+  listing, fallback routing, request-priced cost estimates, provider/model
+  allowlist policy, and live integration-test toggles.
 
 Next work:
 
-- Azure deployment-aware configuration;
 - GitHub Copilot and GitHub Models hardening;
 - richer provider-specific catalog metadata;
 - organization-managed pricing injection;

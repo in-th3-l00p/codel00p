@@ -20,7 +20,7 @@ fn default_registry_contains_the_initial_corporate_provider_set() {
         (
             "azure-foundry",
             "Azure AI Foundry",
-            ApiMode::ChatCompletions,
+            ApiMode::AzureChatCompletions,
             AuthType::ApiKey,
         ),
         (

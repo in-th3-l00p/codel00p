@@ -9,9 +9,10 @@ use crate::{
     ProviderRegistry, ResolvedInferenceRoute, RouteValueSource, classify_provider_error,
     default_registry,
     transports::{
-        anthropic_messages::AnthropicMessagesTransport, bedrock_converse::BedrockConverseTransport,
-        chat_completions::ChatCompletionsTransport, gemini::GeminiTransport,
-        responses::ResponsesTransport,
+        anthropic_messages::AnthropicMessagesTransport,
+        azure_chat_completions::AzureChatCompletionsTransport,
+        bedrock_converse::BedrockConverseTransport, chat_completions::ChatCompletionsTransport,
+        gemini::GeminiTransport, responses::ResponsesTransport,
     },
 };
 
@@ -202,6 +203,17 @@ impl InferenceClient {
         let response = match route.api_mode {
             ApiMode::ChatCompletions => {
                 ChatCompletionsTransport::new()
+                    .complete(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        route.output_token_parameter,
+                        request,
+                    )
+                    .await
+            }
+            ApiMode::AzureChatCompletions => {
+                AzureChatCompletionsTransport::new()
                     .complete(
                         &route.provider,
                         &route.base_url,

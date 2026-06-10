@@ -19,7 +19,7 @@ engineering environments.
 | --- | --- | --- | --- |
 | Anthropic | Common Claude deployment for engineering teams | `anthropic_messages` | API key, organization secret, or cloud proxy |
 | OpenAI | Common GPT deployment and Responses-style agent support | `responses` and `chat_completions` | API key, organization secret, or cloud proxy |
-| Azure AI Foundry | Enterprise Microsoft procurement and Azure governance | `chat_completions` | API key plus customer endpoint |
+| Azure AI Foundry | Enterprise Microsoft procurement and Azure governance | `azure_chat_completions` | API key plus customer endpoint and deployment |
 | AWS Bedrock | Enterprise AWS procurement and region/governance controls | `bedrock_converse` | AWS SDK credential chain |
 | Google Gemini | Google AI Studio and Google Cloud model access | `gemini` and OpenAI-compatible variants | API key, OAuth, or organization secret |
 | GitHub Copilot / GitHub Models | Common developer-seat entitlement and GitHub-native teams | mixed per model | Copilot/GitHub token or external auth |
@@ -120,6 +120,7 @@ becomes feature-rich:
 ```rust
 pub enum ApiMode {
     ChatCompletions,
+    AzureChatCompletions,
     AnthropicMessages,
     Responses,
     BedrockConverse,
@@ -216,9 +217,18 @@ memory.
 
 ### Azure AI Foundry
 
-Treat Azure as an OpenAI-compatible provider with user-supplied endpoint
-configuration. The key difference is enterprise configuration: resource-specific
-base URLs, organization policy, and likely separate model deployment names.
+Treat Azure as a deployment-aware Chat Completions provider, not a plain
+OpenAI-compatible clone. Requests use the customer resource endpoint as
+`base_url`, then post to:
+
+```text
+/openai/deployments/{deployment}/chat/completions?api-version={api_version}
+```
+
+The request can set `deployment` and `api_version`; if deployment is omitted,
+the request model is used as the deployment name. This keeps enterprise
+configuration explicit: resource-specific endpoints, organization policy,
+separate model deployment names, and auditable request routing.
 
 ### AWS Bedrock
 
@@ -297,6 +307,10 @@ Implemented:
 - provider and model allowlist policy, including catalog filtering for
   disallowed models;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
+- Azure AI Foundry deployment Chat Completions transport with mocked HTTP
+  tests for deployment URLs, API version query parameters, `api-key` auth,
+  omitted request model fields, default deployment behavior, and missing
+  credentials;
 - Anthropic Messages transport with mocked HTTP tests, including native system
   prompts, tool schemas, `tool_use` responses, tool-result replay, stop
   reasons, and cache usage metadata;
@@ -315,10 +329,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: Azure deployment-aware
-configuration, GitHub Copilot/GitHub Models hardening, richer provider-specific
-catalog metadata, organization policy templates, and cloud-managed pricing
-injection.
+Next provider work should focus on enterprise variants: GitHub Copilot/GitHub
+Models hardening, richer provider-specific catalog metadata, organization
+policy templates, and cloud-managed pricing injection.
 
 ## Non-goals for the first pass
 

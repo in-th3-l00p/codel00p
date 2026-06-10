@@ -81,6 +81,8 @@ pub struct InferenceRequest {
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
     pub base_url: Option<String>,
+    pub deployment: Option<String>,
+    pub api_version: Option<String>,
     pub fallback_routes: Vec<InferenceFallbackRoute>,
     pub pricing: Option<UsagePricing>,
 }
@@ -99,6 +101,8 @@ impl InferenceRequest {
                 temperature: None,
                 max_output_tokens: None,
                 base_url: None,
+                deployment: None,
+                api_version: None,
                 fallback_routes: Vec::new(),
                 pricing: None,
             },
@@ -180,6 +184,16 @@ impl InferenceRequestBuilder {
 
     pub fn base_url(mut self, value: impl Into<String>) -> Self {
         self.request.base_url = Some(value.into());
+        self
+    }
+
+    pub fn deployment(mut self, value: impl Into<String>) -> Self {
+        self.request.deployment = Some(value.into());
+        self
+    }
+
+    pub fn api_version(mut self, value: impl Into<String>) -> Self {
+        self.request.api_version = Some(value.into());
         self
     }
 

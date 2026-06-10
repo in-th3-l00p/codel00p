@@ -16,7 +16,7 @@
 - Modify: `core/crates/codel00p-providers/tests/client_interface.rs`
 - Create: `core/crates/codel00p-providers/tests/azure_foundry_transport.rs`
 
-- [ ] **Step 1: Test request deployment options**
+- [x] **Step 1: Test request deployment options**
 
 Add a test building:
 
@@ -30,7 +30,7 @@ InferenceRequest::builder("azure", "gpt-4.1")
 
 Assert provider, model, deployment, and API version are preserved.
 
-- [ ] **Step 2: Test Azure deployment URL and API key header**
+- [x] **Step 2: Test Azure deployment URL and API key header**
 
 Mock Azure chat completions:
 
@@ -42,17 +42,17 @@ api-key: azure-key
 Assert the JSON body contains `messages`, `temperature`, and `max_tokens`, but
 does not require an OpenAI-style `/chat/completions` URL or bearer token.
 
-- [ ] **Step 3: Test default deployment and API version**
+- [x] **Step 3: Test default deployment and API version**
 
 Build a request without deployment or API version. Assert the transport uses the
 request model as the deployment and defaults API version to `2024-10-21`.
 
-- [ ] **Step 4: Test missing Azure credential**
+- [x] **Step 4: Test missing Azure credential**
 
 Build an Azure request with a base URL and no credential. Assert
 `ProviderError::MissingCredential { provider: "azure-foundry" }`.
 
-- [ ] **Step 5: Verify red state**
+- [x] **Step 5: Verify red state**
 
 Run:
 
@@ -72,7 +72,7 @@ the Azure-specific transport do not exist.
 - Modify: `core/crates/codel00p-providers/src/registry.rs`
 - Modify: `core/crates/codel00p-providers/src/client.rs`
 
-- [ ] **Step 1: Extend `InferenceRequest`**
+- [x] **Step 1: Extend `InferenceRequest`**
 
 Add:
 
@@ -88,11 +88,11 @@ pub fn deployment(mut self, value: impl Into<String>) -> Self
 pub fn api_version(mut self, value: impl Into<String>) -> Self
 ```
 
-- [ ] **Step 2: Add Azure API mode**
+- [x] **Step 2: Add Azure API mode**
 
 Add `ApiMode::AzureChatCompletions` and set the Azure profile to that mode.
 
-- [ ] **Step 3: Use Azure max token parameter**
+- [x] **Step 3: Use Azure max token parameter**
 
 Set the Azure profile output token parameter to `OutputTokenParameter::MaxTokens`
 for the deployment chat completions REST shape.
@@ -105,12 +105,12 @@ for the deployment chat completions REST shape.
 - Modify: `core/crates/codel00p-providers/src/transports/chat_completions.rs`
 - Modify: `core/crates/codel00p-providers/src/client.rs`
 
-- [ ] **Step 1: Reuse Chat Completions wire helpers**
+- [x] **Step 1: Reuse Chat Completions wire helpers**
 
 Expose the existing Chat Completions request/response wire helpers as
 `pub(crate)` so Azure can reuse parsing and message/tool serialization.
 
-- [ ] **Step 2: Implement URL construction**
+- [x] **Step 2: Implement URL construction**
 
 Build:
 
@@ -121,12 +121,12 @@ Build:
 Use request `deployment` when present; otherwise use request `model`. Default
 API version is `2024-10-21`.
 
-- [ ] **Step 3: Implement Azure HTTP behavior**
+- [x] **Step 3: Implement Azure HTTP behavior**
 
 Send `api-key` with `Credential::ApiKey`, reject non-API-key credentials, post
 the JSON body, reject non-2xx status codes, and normalize the response.
 
-- [ ] **Step 4: Wire client dispatch**
+- [x] **Step 4: Wire client dispatch**
 
 Add an `ApiMode::AzureChatCompletions` match arm in `InferenceClient`.
 
@@ -139,12 +139,12 @@ Add an `ApiMode::AzureChatCompletions` match arm in `InferenceClient`.
 - Modify: `docs/product-roadmap.md`
 - Modify: `docs/superpowers/plans/2026-06-10-azure-foundry-deployments.md`
 
-- [ ] **Step 1: Document Azure deployment routing**
+- [x] **Step 1: Document Azure deployment routing**
 
 Mention deployment/API version request options and Azure-specific chat
 completions URL behavior.
 
-- [ ] **Step 2: Run targeted provider checks**
+- [x] **Step 2: Run targeted provider checks**
 
 Run:
 
@@ -152,7 +152,7 @@ Run:
 cd core && cargo fmt --all && cargo test -p codel00p-providers --test client_interface request_builder_preserves_deployment_options && cargo test -p codel00p-providers --test azure_foundry_transport && cargo test -p codel00p-providers && cargo clippy -p codel00p-providers --all-targets -- -D warnings
 ```
 
-- [ ] **Step 3: Run repo verification**
+- [x] **Step 3: Run repo verification**
 
 Run:
 
@@ -160,7 +160,7 @@ Run:
 pnpm verify
 ```
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 

@@ -90,6 +90,20 @@ fn request_builder_preserves_usage_pricing() {
 }
 
 #[test]
+fn request_builder_preserves_deployment_options() {
+    let request = InferenceRequest::builder("azure", "gpt-4.1")
+        .deployment("team-chat")
+        .api_version("2024-10-21")
+        .message(ChatMessage::user("hello"))
+        .build();
+
+    assert_eq!(request.provider, "azure");
+    assert_eq!(request.model, "gpt-4.1");
+    assert_eq!(request.deployment.as_deref(), Some("team-chat"));
+    assert_eq!(request.api_version.as_deref(), Some("2024-10-21"));
+}
+
+#[test]
 fn model_catalog_request_preserves_overrides() {
     let request = ModelCatalogRequest::builder("custom")
         .base_url("http://127.0.0.1:11434/v1")

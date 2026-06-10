@@ -2,6 +2,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ApiMode {
     ChatCompletions,
+    AzureChatCompletions,
     AnthropicMessages,
     Responses,
     BedrockConverse,

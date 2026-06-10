@@ -48,6 +48,7 @@ Implemented:
 - credential injection by canonical provider or alias;
 - provider and model allowlist policy;
 - OpenAI-compatible Chat Completions transport;
+- Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
 - OpenAI Responses transport;
 - AWS Bedrock Converse transport;
@@ -62,9 +63,25 @@ Not yet implemented:
 - streaming.
 
 The current working transports are enough to use OpenAI Responses, Anthropic
-directly, AWS Bedrock Converse with SigV4 credentials, Gemini GenerateContent,
-custom OpenAI-compatible endpoints, OpenRouter, Azure-style endpoints when a
-base URL is supplied, and other compatible gateways.
+directly, Azure AI Foundry deployment endpoints, AWS Bedrock Converse with
+SigV4 credentials, Gemini GenerateContent, custom OpenAI-compatible endpoints,
+OpenRouter, and other compatible gateways.
+
+Azure requests use the resource endpoint as `base_url` and can set deployment
+and API version explicitly:
+
+```rust
+# use codel00p_providers::{ChatMessage, InferenceRequest};
+let request = InferenceRequest::builder("azure", "gpt-4.1")
+    .base_url("https://example.openai.azure.com")
+    .deployment("team-chat")
+    .api_version("2024-10-21")
+    .message(ChatMessage::user("Summarize this project."))
+    .build();
+# let _ = request;
+```
+
+If `deployment` is omitted, the request model is used as the deployment name.
 
 ## Design rules
 

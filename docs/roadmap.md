@@ -24,10 +24,11 @@ Implemented:
 - `codel00p-protocol` shared sessions, events, tool, provider, project, and
   memory contracts;
 - `codel00p-providers` registry, profiles, policy, route inspection,
-  credentials, OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic
-  Messages, AWS Bedrock Converse, Gemini GenerateContent, tool calls, fallback
-  routing, model catalog listing, request-priced cost estimates, provider/model
-  allowlist policy, and live integration-test toggles;
+  credentials, OpenAI-compatible Chat Completions, Azure AI Foundry deployment
+  Chat Completions, OpenAI Responses, Anthropic Messages, AWS Bedrock Converse,
+  Gemini GenerateContent, tool calls, fallback routing, model catalog listing,
+  request-priced cost estimates, provider/model allowlist policy, and live
+  integration-test toggles;
 - `codel00p-harness` session loop, provider adapter, memory injection,
   lifecycle hooks, project instructions, context compaction primitives,
   read-only tools, editing tools, shell command tool, git tools, permissions,
@@ -63,7 +64,6 @@ Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
 Build:
 
-- Azure AI Foundry deployment-aware configuration;
 - GitHub Copilot and GitHub Models hardening;
 - richer provider-specific catalog metadata and model capability metadata;
 - cloud or organization-managed pricing injection;

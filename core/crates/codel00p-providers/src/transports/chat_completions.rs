@@ -67,8 +67,9 @@ impl ChatCompletionsTransport {
 }
 
 #[derive(Debug, Serialize)]
-struct ChatCompletionsRequest {
-    model: String,
+pub(crate) struct ChatCompletionsRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
     messages: Vec<ChatCompletionsMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -81,7 +82,7 @@ struct ChatCompletionsRequest {
 }
 
 impl ChatCompletionsRequest {
-    fn from_request(
+    pub(crate) fn from_request(
         request: InferenceRequest,
         output_token_parameter: OutputTokenParameter,
     ) -> Self {
@@ -90,7 +91,7 @@ impl ChatCompletionsRequest {
             OutputTokenParameter::MaxCompletionTokens => (None, request.max_output_tokens),
         };
         Self {
-            model: request.model,
+            model: Some(request.model),
             messages: request
                 .messages
                 .into_iter()
@@ -105,6 +106,11 @@ impl ChatCompletionsRequest {
                 .map(ChatCompletionsTool::from)
                 .collect(),
         }
+    }
+
+    pub(crate) fn without_model(mut self) -> Self {
+        self.model = None;
+        self
     }
 }
 
@@ -202,13 +208,13 @@ struct ChatCompletionsFunctionTool {
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatCompletionsResponse {
+pub(crate) struct ChatCompletionsResponse {
     choices: Vec<ChatChoice>,
     usage: Option<ChatUsage>,
 }
 
 impl ChatCompletionsResponse {
-    fn normalize(self, provider: &str) -> Result<InferenceResponse, ProviderError> {
+    pub(crate) fn normalize(self, provider: &str) -> Result<InferenceResponse, ProviderError> {
         let choice =
             self.choices
                 .into_iter()

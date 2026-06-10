@@ -76,14 +76,14 @@ pub fn default_registry() -> ProviderRegistry {
             id: "azure-foundry",
             aliases: &["azure", "azure-ai", "azure-ai-foundry"],
             display_name: "Azure AI Foundry",
-            description: "Microsoft Azure AI Foundry OpenAI-compatible endpoint",
-            api_mode: ApiMode::ChatCompletions,
+            description: "Microsoft Azure AI Foundry deployment chat completions endpoint",
+            api_mode: ApiMode::AzureChatCompletions,
             auth_type: AuthType::ApiKey,
             env_vars: &["AZURE_FOUNDRY_API_KEY"],
             default_base_url: None,
             models_url: None,
             default_aux_model: None,
-            output_token_parameter: OutputTokenParameter::MaxCompletionTokens,
+            output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
         .register(ProviderProfile {
