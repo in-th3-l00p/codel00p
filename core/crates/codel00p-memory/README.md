@@ -41,12 +41,13 @@ The CLI exposes edits as:
 
 ```bash
 codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>]
+codel00p memory audit <id> --json
 ```
 
 The MCP server exposes the same operation as the `memory_edit` tool with
 `id`, `actor`, `content`, and optional `reason` arguments.
-It also exposes `memory_audit` for machine-readable audit history, including
-edit revision content when available.
+The CLI `memory audit <id> --json` command and MCP `memory_audit` tool expose
+machine-readable audit history, including edit revision content when available.
 
 Richer revision browsing and restore workflows are still separate Memory 2.0
 follow-ups.

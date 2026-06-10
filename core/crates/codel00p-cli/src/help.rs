@@ -157,7 +157,7 @@ Usage: codel00p [global options] memory <command>
 Commands:
   list     List memory records
   show     Show one memory record
-  audit    Show memory audit history
+  audit    Show memory audit history; use --json for JSON output
   edit     Edit memory content
   approve  Approve candidate memory
   reject   Reject candidate memory

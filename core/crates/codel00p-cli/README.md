@@ -234,6 +234,7 @@ codel00p ... memory approve mem-1 --actor alice
 codel00p ... memory reject mem-1 --actor alice --reason "too vague"
 codel00p ... memory archive mem-1 --actor alice --reason "obsolete"
 codel00p ... memory audit mem-1
+codel00p ... memory audit mem-1 --json
 ```
 
 Output is intentionally stable and scriptable:
@@ -241,7 +242,8 @@ Output is intentionally stable and scriptable:
 - `memory list` prints `id`, `status`, `kind`, and `content` as tab-separated
   fields.
 - review commands print `id` and the resulting status.
-- `memory audit` prints `sequence`, `action`, `actor`, and `reason`.
+- `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
+  `--json` for machine-readable revision metadata.
 
 ## Session Replay
 

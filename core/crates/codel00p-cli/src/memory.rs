@@ -1,5 +1,6 @@
 use codel00p_memory::{MemoryEdit, MemoryListFilter, MemoryRepository, ReviewDecision};
 use codel00p_protocol::{MemoryKind, MemoryStatus};
+use serde_json::{Value, json};
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value, single_id};
 
@@ -89,9 +90,28 @@ fn memory_show(config: CliConfig, args: &[String]) -> CliResult<String> {
 }
 
 fn memory_audit(config: CliConfig, args: &[String]) -> CliResult<String> {
-    let id = single_id(args, "memory audit")?;
+    let Some(id) = args.first() else {
+        return Err("missing memory id".to_string());
+    };
+    let mut json_output = false;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory audit option: {flag}")),
+        }
+    }
+
     let store = open_memory_store(&config)?;
     let audit = store.audit_log(id).map_err(|error| error.to_string())?;
+    if json_output {
+        let items = audit.iter().map(audit_event_json).collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
     let mut output = String::new();
     for event in audit {
         output.push_str(&format!(
@@ -103,6 +123,24 @@ fn memory_audit(config: CliConfig, args: &[String]) -> CliResult<String> {
         ));
     }
     Ok(output)
+}
+
+fn audit_event_json(event: &codel00p_memory::MemoryAuditEvent) -> Value {
+    let mut item = json!({
+        "sequence": event.sequence(),
+        "action": audit_action_label(event.action()),
+        "actor": event.actor(),
+    });
+    if let Some(reason) = event.reason() {
+        item["reason"] = json!(reason);
+    }
+    if let Some(previous_content) = event.previous_content() {
+        item["previous_content"] = json!(previous_content);
+    }
+    if let Some(new_content) = event.new_content() {
+        item["new_content"] = json!(new_content);
+    }
+    item
 }
 
 enum ReviewCommand {

@@ -204,10 +204,16 @@ fn memory_edit_updates_content_and_prints_audit_event() {
     );
     let show = run_codel00p(&db_path, &["memory", "show", "mem-workflow"]);
     let audit = run_codel00p(&db_path, &["memory", "audit", "mem-workflow"]);
+    let audit_json = run_codel00p(&db_path, &["memory", "audit", "mem-workflow", "--json"]);
 
     assert!(edit.status.success(), "stderr: {}", stderr(&edit));
     assert!(show.status.success(), "stderr: {}", stderr(&show));
     assert!(audit.status.success(), "stderr: {}", stderr(&audit));
+    assert!(
+        audit_json.status.success(),
+        "stderr: {}",
+        stderr(&audit_json)
+    );
     assert_eq!(stdout(&edit), "mem-workflow\tapproved\n");
     assert_eq!(
         stdout(&show),
@@ -216,6 +222,18 @@ fn memory_edit_updates_content_and_prints_audit_event() {
     assert_eq!(
         stdout(&audit),
         "1\tcandidate_created\tsystem\t\n2\tapproved\talice\t\n3\tedited\tbob\tclarified command\n"
+    );
+    let audit_events: serde_json::Value =
+        serde_json::from_str(&stdout(&audit_json)).expect("audit json");
+    let edit_event = &audit_events.as_array().expect("audit array")[2];
+    assert_eq!(edit_event["sequence"], 3);
+    assert_eq!(edit_event["action"], "edited");
+    assert_eq!(edit_event["actor"], "bob");
+    assert_eq!(edit_event["reason"], "clarified command");
+    assert_eq!(edit_event["previous_content"], "Run tests before pushing.");
+    assert_eq!(
+        edit_event["new_content"],
+        "Run pnpm verify before pushing main."
     );
 }
 
