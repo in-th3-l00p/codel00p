@@ -11,7 +11,8 @@ Goal: make provider routing policy-aware, auditable, and ready for team control.
 
 Build:
 
-- model capability metadata;
+- model capability metadata; started with raw catalog labels plus typed tools,
+  streaming, vision, and reasoning flags;
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
   base URL source, policy decision, model catalog URL, and provider
   capabilities;

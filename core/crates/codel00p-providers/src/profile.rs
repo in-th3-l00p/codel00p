@@ -28,8 +28,8 @@ pub enum OutputTokenParameter {
     MaxCompletionTokens,
 }
 
-/// High-level provider capabilities used by policy and UI layers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// High-level provider and model capabilities used by policy and UI layers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ProviderCapabilities {
     pub tools: bool,
     pub streaming: bool,
@@ -45,6 +45,10 @@ impl ProviderCapabilities {
             vision: false,
             reasoning: true,
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        !self.tools && !self.streaming && !self.vision && !self.reasoning
     }
 }
 

@@ -331,8 +331,8 @@ Implemented:
   credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
-  with descriptions, provider-specific annotations, common capabilities,
-  modalities, and token limits;
+  with descriptions, provider-specific annotations, raw capability labels, typed
+  capability flags, modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
@@ -344,7 +344,7 @@ Implemented:
 - opt-in GitHub Models live smoke-test coverage using the official
   `github-models` profile and model override;
 - typed catalog metadata for descriptions, provider-specific annotations,
-  provider capabilities, supported modalities, and token limits while
+  provider capability flags, supported modalities, and token limits while
   preserving raw provider fields in `provider_data`;
 - `ProviderPolicy::enterprise_direct()` for organizations that want direct
   first-wave providers while leaving broker/custom endpoints as explicit opt-ins;

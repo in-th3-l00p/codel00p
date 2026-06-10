@@ -121,6 +121,10 @@ async fn list_models_normalizes_github_models_catalog() {
     );
     assert_eq!(models[0].owned_by.as_deref(), Some("OpenAI"));
     assert_eq!(models[0].capabilities, vec!["chat", "tool-calling"]);
+    assert!(models[0].capability_flags.tools);
+    assert!(!models[0].capability_flags.streaming);
+    assert!(models[0].capability_flags.vision);
+    assert!(models[0].capability_flags.reasoning);
     assert_eq!(
         models[0].description.as_deref(),
         Some("Fast model for everyday tasks")

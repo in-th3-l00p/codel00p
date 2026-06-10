@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::ProviderCapabilities;
+
 /// Request for listing models from a provider catalog endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelCatalogRequest {
@@ -54,6 +56,8 @@ pub struct ProviderModel {
     pub owned_by: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]
+    pub capability_flags: ProviderCapabilities,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub input_modalities: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -167,6 +171,11 @@ pub(crate) struct ModelCatalogWireModel {
 impl ModelCatalogWireModel {
     fn into_model(self) -> ProviderModel {
         let mut provider_data = self.extra;
+        let capability_flags = model_capability_flags(
+            &self.capabilities,
+            &self.supported_input_modalities,
+            &self.tags,
+        );
         let limits = ProviderModelLimits::from_catalog_values(
             self.limits.as_ref(),
             provider_data.get("context_length"),
@@ -229,6 +238,7 @@ impl ModelCatalogWireModel {
             description: self.description.or(self.summary),
             owned_by: self.owned_by.or(self.publisher),
             capabilities: self.capabilities,
+            capability_flags,
             input_modalities: self.supported_input_modalities,
             output_modalities: self.supported_output_modalities,
             annotations: ProviderModelAnnotations {
@@ -242,6 +252,51 @@ impl ModelCatalogWireModel {
             provider_data,
         }
     }
+}
+
+fn model_capability_flags(
+    capabilities: &[String],
+    input_modalities: &[String],
+    tags: &[String],
+) -> ProviderCapabilities {
+    let catalog_labels = capabilities
+        .iter()
+        .chain(tags.iter())
+        .map(|value| normalized_catalog_label(value))
+        .collect::<Vec<_>>();
+
+    ProviderCapabilities {
+        tools: has_catalog_label(
+            &catalog_labels,
+            &[
+                "tools",
+                "toolcalling",
+                "functioncalling",
+                "functioncalls",
+                "functions",
+            ],
+        ),
+        streaming: has_catalog_label(&catalog_labels, &["streaming", "stream"]),
+        vision: has_catalog_label(&catalog_labels, &["vision", "multimodal", "imageinput"])
+            || input_modalities
+                .iter()
+                .any(|value| normalized_catalog_label(value) == "image"),
+        reasoning: has_catalog_label(&catalog_labels, &["reasoning", "thinking"]),
+    }
+}
+
+fn has_catalog_label(labels: &[String], candidates: &[&str]) -> bool {
+    labels
+        .iter()
+        .any(|label| candidates.iter().any(|candidate| label == candidate))
+}
+
+fn normalized_catalog_label(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
 }
 
 fn object_u64(object: Option<&Value>, key: &str) -> Option<u64> {
