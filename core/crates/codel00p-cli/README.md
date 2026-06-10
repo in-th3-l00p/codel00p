@@ -242,9 +242,11 @@ codel00p ... memory approve mem-1 --actor alice
 codel00p ... memory approve mem-1 --actor alice --json
 codel00p ... memory reject mem-1 --actor alice --reason "too vague"
 codel00p ... memory archive mem-1 --actor alice --reason "obsolete"
+codel00p ... memory edit mem-1 --actor alice --content "Run pnpm verify before pushing main." --json
 codel00p ... memory audit mem-1
 codel00p ... memory audit mem-1 --json
 codel00p ... memory restore mem-1 --sequence 3 --actor alice --reason "undo edit"
+codel00p ... memory restore mem-1 --sequence 3 --actor alice --reason "undo edit" --json
 ```
 
 Output is intentionally stable and scriptable:
@@ -261,10 +263,13 @@ Output is intentionally stable and scriptable:
   records include `source_uri` when source evidence is available.
 - review commands print `id` and the resulting status; add `--json` for the
   MCP-compatible record object.
+- `memory edit` replaces content and prints `id` plus resulting status; add
+  `--json` for the MCP-compatible record object.
 - `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
   `--json` for machine-readable revision metadata including `memory_id`.
 - `memory restore` restores content from an edit audit event's
-  `previous_content` and prints `id` plus resulting status.
+  `previous_content` and prints `id` plus resulting status; add `--json` for
+  the MCP-compatible record object.
 
 ## Session Replay
 

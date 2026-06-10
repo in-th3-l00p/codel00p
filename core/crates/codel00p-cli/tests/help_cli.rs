@@ -146,12 +146,14 @@ fn memory_help_documents_edit_command() {
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     assert!(
-        stdout(&output).contains("edit     Edit memory content"),
+        stdout(&output).contains("edit     Edit memory content; use --json for JSON output"),
         "stdout: {}",
         stdout(&output)
     );
     assert!(
-        stdout(&output).contains("restore  Restore content from an edit audit sequence"),
+        stdout(&output).contains(
+            "restore  Restore content from an edit audit sequence; use --json for JSON output"
+        ),
         "stdout: {}",
         stdout(&output)
     );

@@ -419,6 +419,7 @@ fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<String> {
     let mut actor = None;
     let mut content = None;
     let mut reason = None;
+    let mut json_output = false;
     let mut index = 1;
 
     while index < args.len() {
@@ -435,6 +436,10 @@ fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<String> {
                 reason = Some(required_value(args, index, "--reason")?);
                 index += 2;
             }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
             flag => return Err(format!("unknown memory edit option: {flag}")),
         }
     }
@@ -448,6 +453,10 @@ fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<String> {
 
     let mut store = open_memory_store(&config)?;
     let record = store.edit(id, edit).map_err(|error| error.to_string())?;
+    if json_output {
+        return serde_json::to_string(&memory_record_json(&record))
+            .map_err(|error| error.to_string());
+    }
 
     Ok(format!(
         "{}\t{}\n",
@@ -463,6 +472,7 @@ fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<String> {
     let mut sequence = None;
     let mut actor = None;
     let mut reason = None;
+    let mut json_output = false;
     let mut index = 1;
 
     while index < args.len() {
@@ -482,6 +492,10 @@ fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<String> {
             "--reason" => {
                 reason = Some(required_value(args, index, "--reason")?);
                 index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
             }
             flag => return Err(format!("unknown memory restore option: {flag}")),
         }
@@ -504,6 +518,10 @@ fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<String> {
     edit = edit.with_reason(reason.unwrap_or_else(|| format!("restore audit sequence {sequence}")));
 
     let record = store.edit(id, edit).map_err(|error| error.to_string())?;
+    if json_output {
+        return serde_json::to_string(&memory_record_json(&record))
+            .map_err(|error| error.to_string());
+    }
 
     Ok(format!(
         "{}\t{}\n",

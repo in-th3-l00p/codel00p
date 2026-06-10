@@ -426,6 +426,7 @@ fn memory_edit_updates_content_and_prints_audit_event() {
             "Run pnpm verify before pushing main.",
             "--reason",
             "clarified command",
+            "--json",
         ],
     );
     let show = run_codel00p(&db_path, &["memory", "show", "mem-workflow"]);
@@ -440,7 +441,12 @@ fn memory_edit_updates_content_and_prints_audit_event() {
         "stderr: {}",
         stderr(&audit_json)
     );
-    assert_eq!(stdout(&edit), "mem-workflow\tapproved\n");
+    let edited: serde_json::Value = serde_json::from_str(&stdout(&edit)).expect("edit json");
+    assert_eq!(edited["id"], "mem-workflow");
+    assert_eq!(edited["status"], "approved");
+    assert_eq!(edited["kind"], "workflow");
+    assert_eq!(edited["content"], "Run pnpm verify before pushing main.");
+    assert_eq!(edited["source_uri"], "codel00p://sessions/session-cli");
     assert_eq!(
         stdout(&show),
         "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
@@ -506,6 +512,7 @@ fn memory_restore_reverts_to_previous_edit_content() {
             "carol",
             "--reason",
             "undo edit",
+            "--json",
         ],
     );
     let show = run_codel00p(&db_path, &["memory", "show", "mem-workflow"]);
@@ -519,7 +526,13 @@ fn memory_restore_reverts_to_previous_edit_content() {
         "stderr: {}",
         stderr(&audit_json)
     );
-    assert_eq!(stdout(&restore), "mem-workflow\tapproved\n");
+    let restored: serde_json::Value =
+        serde_json::from_str(&stdout(&restore)).expect("restore json");
+    assert_eq!(restored["id"], "mem-workflow");
+    assert_eq!(restored["status"], "approved");
+    assert_eq!(restored["kind"], "workflow");
+    assert_eq!(restored["content"], "Run tests before pushing.");
+    assert_eq!(restored["source_uri"], "codel00p://sessions/session-cli");
     assert_eq!(
         stdout(&show),
         "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run tests before pushing.\n"
