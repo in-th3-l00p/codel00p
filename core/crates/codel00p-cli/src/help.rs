@@ -162,9 +162,9 @@ Commands:
   audit    Show memory audit history; use --json for JSON output
   edit     Edit memory content
   restore  Restore content from an edit audit sequence
-  approve  Approve candidate memory
-  reject   Reject candidate memory
-  archive  Archive memory
+  approve  Approve candidate memory; use --json for JSON output
+  reject   Reject candidate memory; use --json for JSON output
+  archive  Archive memory; use --json for JSON output
 ";
 
 const SESSION_HELP: &str = "\

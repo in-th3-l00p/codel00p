@@ -345,7 +345,14 @@ fn memory_review_commands_persist_state_across_invocations() {
 
     let approve = run_codel00p(
         &db_path,
-        &["memory", "approve", "mem-workflow", "--actor", "alice"],
+        &[
+            "memory",
+            "approve",
+            "mem-workflow",
+            "--actor",
+            "alice",
+            "--json",
+        ],
     );
     let archive = run_codel00p(
         &db_path,
@@ -357,13 +364,30 @@ fn memory_review_commands_persist_state_across_invocations() {
             "bob",
             "--reason",
             "obsolete",
+            "--json",
         ],
     );
 
     assert!(approve.status.success(), "stderr: {}", stderr(&approve));
     assert!(archive.status.success(), "stderr: {}", stderr(&archive));
-    assert_eq!(stdout(&approve), "mem-workflow\tapproved\n");
-    assert_eq!(stdout(&archive), "mem-workflow\tarchived\n");
+    let approved: serde_json::Value =
+        serde_json::from_str(&stdout(&approve)).expect("approve json");
+    assert_eq!(approved["id"], "mem-workflow");
+    assert_eq!(approved["status"], "approved");
+    assert_eq!(approved["kind"], "workflow");
+    assert_eq!(approved["content"], "Run pnpm verify before pushing main.");
+    assert_eq!(approved["tags"], serde_json::json!(["verify"]));
+    assert_eq!(approved["source"]["session_id"], "session-cli");
+    assert_eq!(approved["source"]["turn_id"], "turn-cli");
+    assert_eq!(approved["source_uri"], "codel00p://sessions/session-cli");
+
+    let archived: serde_json::Value =
+        serde_json::from_str(&stdout(&archive)).expect("archive json");
+    assert_eq!(archived["id"], "mem-workflow");
+    assert_eq!(archived["status"], "archived");
+    assert_eq!(archived["kind"], "workflow");
+    assert_eq!(archived["content"], "Run pnpm verify before pushing main.");
+    assert_eq!(archived["source_uri"], "codel00p://sessions/session-cli");
 
     let storage = SqliteStorage::open(&db_path).expect("reopen sqlite storage");
     let store = StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);

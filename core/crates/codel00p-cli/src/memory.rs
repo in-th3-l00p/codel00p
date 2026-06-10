@@ -362,6 +362,7 @@ fn memory_review(config: CliConfig, args: &[String], command: ReviewCommand) -> 
     };
     let mut actor = None;
     let mut reason = None;
+    let mut json_output = false;
     let mut index = 1;
 
     while index < args.len() {
@@ -373,6 +374,10 @@ fn memory_review(config: CliConfig, args: &[String], command: ReviewCommand) -> 
             "--reason" => {
                 reason = Some(required_value(args, index, "--reason")?);
                 index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
             }
             flag => return Err(format!("unknown review option: {flag}")),
         }
@@ -395,6 +400,10 @@ fn memory_review(config: CliConfig, args: &[String], command: ReviewCommand) -> 
     let record = store
         .review(id, decision)
         .map_err(|error| error.to_string())?;
+    if json_output {
+        return serde_json::to_string(&memory_record_json(&record))
+            .map_err(|error| error.to_string());
+    }
 
     Ok(format!(
         "{}\t{}\n",

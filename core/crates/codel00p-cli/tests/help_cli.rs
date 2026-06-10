@@ -182,4 +182,19 @@ fn memory_help_documents_edit_command() {
         "stdout: {}",
         stdout(&output)
     );
+    assert!(
+        stdout(&output).contains("approve  Approve candidate memory; use --json for JSON output"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
+        stdout(&output).contains("reject   Reject candidate memory; use --json for JSON output"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
+        stdout(&output).contains("archive  Archive memory; use --json for JSON output"),
+        "stdout: {}",
+        stdout(&output)
+    );
 }
