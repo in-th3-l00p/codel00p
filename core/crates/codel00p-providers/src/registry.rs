@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use crate::profile::{
     ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile,
 };
+use crate::{Credential, ResolvedProviderCredential};
 
 /// In-memory provider registry with canonical IDs and aliases.
 #[derive(Debug, Clone, Default)]
@@ -33,6 +34,11 @@ impl ProviderRegistry {
 
     pub fn profiles(&self) -> impl Iterator<Item = &ProviderProfile> {
         self.providers.values()
+    }
+
+    pub fn credential_from_env(&self, id_or_alias: &str) -> Option<ResolvedProviderCredential> {
+        let profile = self.resolve(id_or_alias)?;
+        env_credential_for_profile(profile)
     }
 }
 
@@ -213,4 +219,62 @@ pub fn default_registry() -> ProviderRegistry {
             output_token_parameter: OutputTokenParameter::MaxTokens,
             capabilities: ProviderCapabilities::agentic(),
         })
+}
+
+fn env_credential_for_profile(profile: &ProviderProfile) -> Option<ResolvedProviderCredential> {
+    match profile.auth_type {
+        AuthType::ApiKey | AuthType::GitHubCopilot | AuthType::Custom => {
+            let (source, secret) = read_first_env_secret(profile.env_vars)?;
+            Some(environment_credential(source, Credential::api_key(secret)))
+        }
+        AuthType::AwsSdk => aws_sigv4_env_credential(),
+        AuthType::OAuthExternal | AuthType::CloudProxy => None,
+    }
+}
+
+fn aws_sigv4_env_credential() -> Option<ResolvedProviderCredential> {
+    let (source, access_key_id) =
+        read_first_env_secret(&["CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"])?;
+    let (_, secret_access_key) = read_first_env_secret(&[
+        "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+        "AWS_SECRET_ACCESS_KEY",
+    ])?;
+    let session_token =
+        read_first_env_secret(&["CODEL00P_PROVIDER_AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"])
+            .map(|(_, value)| value);
+    let (_, region) = read_first_env_secret(&[
+        "CODEL00P_PROVIDER_AWS_REGION",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+    ])?;
+
+    Some(environment_credential(
+        source,
+        Credential::aws_sigv4(
+            access_key_id,
+            secret_access_key,
+            session_token.as_deref(),
+            region,
+        ),
+    ))
+}
+
+fn environment_credential(
+    source_key: impl Into<String>,
+    credential: Credential,
+) -> ResolvedProviderCredential {
+    ResolvedProviderCredential {
+        credential,
+        source: format!("environment:{}", source_key.into()),
+    }
+}
+
+fn read_first_env_secret(keys: &[&str]) -> Option<(String, String)> {
+    keys.iter().find_map(|key| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| ((*key).to_string(), value))
+    })
 }

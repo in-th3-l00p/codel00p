@@ -11,6 +11,13 @@ pub enum Credential {
     None,
 }
 
+/// Provider credential loaded with safe source metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedProviderCredential {
+    pub credential: Credential,
+    pub source: String,
+}
+
 impl Credential {
     pub fn api_key(value: impl Into<String>) -> Self {
         Self::ApiKey(value.into())

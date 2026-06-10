@@ -195,6 +195,10 @@ Provider credentials are read from environment variables:
   `GEMINI_API_KEY`.
 - Custom/local OpenAI-compatible: `CODEL00P_PROVIDER_CUSTOM_API_KEY`.
 
+The CLI uses the shared provider registry resolver for these credentials. Route
+metadata records safe source labels such as
+`environment:CODEL00P_PROVIDER_OPENAI_API_KEY`, never the secret value.
+
 `openai`, `anthropic`, `bedrock`, and native `gemini` registry entries exist in
 the provider layer. `agent run` currently rejects non-Chat-Completions modes
 until the CLI agent loop is enabled for each native transport.

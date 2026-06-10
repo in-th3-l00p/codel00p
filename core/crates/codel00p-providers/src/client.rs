@@ -4,9 +4,9 @@ use serde_json::{Value, json};
 
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
-    ApiMode, AuthType, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
+    ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
     ModelCatalogRequest, ProviderError, ProviderModel, ProviderPolicy, ProviderPolicyDecision,
-    ProviderPricingCatalog, ProviderProfile, ProviderRegistry, ResolvedInferenceRoute,
+    ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute, ResolvedProviderCredential,
     RouteValueSource, UsagePricing, classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct InferenceClient {
     registry: ProviderRegistry,
-    credentials: BTreeMap<String, StoredCredential>,
+    credentials: BTreeMap<String, ResolvedProviderCredential>,
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
@@ -360,28 +360,6 @@ struct FailedRouteAttempt {
 }
 
 #[derive(Debug, Clone)]
-struct StoredCredential {
-    credential: Credential,
-    source: String,
-}
-
-impl StoredCredential {
-    fn configured(credential: Credential) -> Self {
-        Self {
-            credential,
-            source: "configured".to_string(),
-        }
-    }
-
-    fn environment(source_key: impl Into<String>, credential: Credential) -> Self {
-        Self {
-            credential,
-            source: format!("environment:{}", source_key.into()),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 struct ProviderProxyRoute {
     base_url: String,
     credential: Credential,
@@ -452,7 +430,7 @@ fn failed_attempt(
 #[derive(Debug, Clone)]
 pub struct InferenceClientBuilder {
     registry: ProviderRegistry,
-    credentials: BTreeMap<String, StoredCredential>,
+    credentials: BTreeMap<String, ResolvedProviderCredential>,
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
@@ -465,8 +443,13 @@ impl InferenceClientBuilder {
     }
 
     pub fn credential(mut self, provider: impl Into<String>, credential: Credential) -> Self {
-        self.credentials
-            .insert(provider.into(), StoredCredential::configured(credential));
+        self.credentials.insert(
+            provider.into(),
+            ResolvedProviderCredential {
+                credential,
+                source: "configured".to_string(),
+            },
+        );
         self
     }
 
@@ -475,7 +458,8 @@ impl InferenceClientBuilder {
             .registry
             .profiles()
             .filter_map(|profile| {
-                env_credential_for_profile(profile)
+                self.registry
+                    .credential_from_env(profile.id)
                     .map(|credential| (profile.id.to_string(), credential))
             })
             .collect();
@@ -577,55 +561,4 @@ impl InferenceClientBuilder {
             provider_proxies,
         }
     }
-}
-
-fn env_credential_for_profile(profile: &ProviderProfile) -> Option<StoredCredential> {
-    match profile.auth_type {
-        AuthType::ApiKey | AuthType::GitHubCopilot | AuthType::Custom => {
-            let (source, secret) = read_first_env_secret(profile.env_vars)?;
-            Some(StoredCredential::environment(
-                source,
-                Credential::api_key(secret),
-            ))
-        }
-        AuthType::AwsSdk => aws_sigv4_env_credential(),
-        AuthType::OAuthExternal | AuthType::CloudProxy => None,
-    }
-}
-
-fn aws_sigv4_env_credential() -> Option<StoredCredential> {
-    let (source, access_key_id) =
-        read_first_env_secret(&["CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"])?;
-    let (_, secret_access_key) = read_first_env_secret(&[
-        "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
-        "AWS_SECRET_ACCESS_KEY",
-    ])?;
-    let session_token =
-        read_first_env_secret(&["CODEL00P_PROVIDER_AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"])
-            .map(|(_, value)| value);
-    let (_, region) = read_first_env_secret(&[
-        "CODEL00P_PROVIDER_AWS_REGION",
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-    ])?;
-
-    Some(StoredCredential::environment(
-        source,
-        Credential::aws_sigv4(
-            access_key_id,
-            secret_access_key,
-            session_token.as_deref(),
-            region,
-        ),
-    ))
-}
-
-fn read_first_env_secret(keys: &[&str]) -> Option<(String, String)> {
-    keys.iter().find_map(|key| {
-        std::env::var(key)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .map(|value| ((*key).to_string(), value))
-    })
 }

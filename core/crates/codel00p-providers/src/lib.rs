@@ -37,7 +37,7 @@ mod runtime;
 mod transports;
 
 pub use client::{InferenceClient, InferenceClientBuilder};
-pub use credentials::Credential;
+pub use credentials::{Credential, ResolvedProviderCredential};
 pub use error::ProviderError;
 pub use error_classifier::{ClassifiedProviderError, classify_provider_error};
 pub use model_catalog::{

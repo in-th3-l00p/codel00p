@@ -126,8 +126,9 @@ Current foundation:
   GitHub Models live smoke-test coverage, fallback routing, request-priced cost
   estimates, provider/model allowlist policy, enterprise-direct policy
   template, client-injected provider/model pricing, published provider pricing
-  catalogs, client-level cloud proxy routing, environment credential loading,
-  expanded cache/reasoning usage metadata, and live integration-test toggles.
+  catalogs, client-level cloud proxy routing, shared environment credential
+  loading for provider clients and CLI agent runs, expanded cache/reasoning
+  usage metadata, and live integration-test toggles.
 
 Next work:
 
