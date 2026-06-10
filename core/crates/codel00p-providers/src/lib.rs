@@ -28,6 +28,7 @@ mod error;
 mod error_classifier;
 mod model_catalog;
 mod policy;
+mod pricing_catalog;
 mod profile;
 mod registry;
 mod request;
@@ -43,6 +44,7 @@ pub use model_catalog::{
     ModelCatalogRequest, ModelCatalogRequestBuilder, ProviderModel, ProviderModelLimits,
 };
 pub use policy::ProviderPolicy;
+pub use pricing_catalog::{ProviderModelPricing, ProviderPricingCatalog};
 pub use profile::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};
 pub use request::{

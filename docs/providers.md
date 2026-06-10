@@ -334,6 +334,8 @@ Implemented:
   first-wave providers while leaving broker/custom endpoints as explicit opt-ins;
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
+- published `ProviderPricingCatalog` ingestion for cloud or organization-managed
+  provider/model pricing tables;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -358,9 +360,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: cloud-managed pricing
-publication and richer provider-specific catalog metadata where common typed
-fields are not enough.
+Next provider work should focus on enterprise variants: richer provider-specific
+catalog metadata where common typed fields are not enough, plus expanded cache
+and reasoning metadata.
 
 ## Non-goals for the first pass
 

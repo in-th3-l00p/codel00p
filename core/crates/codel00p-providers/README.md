@@ -57,8 +57,8 @@ Implemented:
 - AWS Bedrock Converse transport;
 - Gemini-native GenerateContent transport;
 - normalized responses, usage, and tool calls;
-- optional request-supplied or client-injected model pricing with normalized
-  response cost estimates;
+- optional request-supplied, client-injected, or published catalog model pricing
+  with normalized response cost estimates;
 - mocked integration tests for request payloads and response parsing.
 
 Not yet implemented:
@@ -87,6 +87,28 @@ let request = InferenceRequest::builder("azure", "gpt-4.1")
 
 If `deployment` is omitted, the request model is used as the deployment name.
 
+Published pricing catalogs can be loaded into a client and reused across
+requests:
+
+```rust
+# use codel00p_providers::{
+#     Credential, InferenceClient, ProviderModelPricing, ProviderPricingCatalog,
+#     UsagePricing, default_registry,
+# };
+let pricing = ProviderPricingCatalog::new([ProviderModelPricing::new(
+    "openai",
+    "gpt-5-mini",
+    UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000),
+)]);
+
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .credential("openai", Credential::api_key("secret"))
+    .pricing_catalog(pricing)
+    .build();
+# let _ = client;
+```
+
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.
 Use `github-models` for the official GitHub Models API at
@@ -111,10 +133,11 @@ uses `max_tokens`, and lists models from
   then provider defaults.
 - Normalize every provider response into one codel00p response shape.
 - Keep cost estimates explicit: callers or organization-managed clients supply
-  pricing, providers supply usage, and the crate derives deterministic
-  fixed-point estimates.
-- Prefer request pricing over client model pricing when both are configured for
-  the same provider/model route.
+  request pricing, direct model pricing, or published pricing catalogs;
+  providers supply usage, and the crate derives deterministic fixed-point
+  estimates.
+- Prefer request pricing over client and catalog model pricing when both are
+  configured for the same provider/model route.
 - Preserve provider-specific replay data under `provider_data`, not top-level
   fields.
 - Test every transport with mocked HTTP and exact payload assertions.

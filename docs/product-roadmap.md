@@ -125,11 +125,12 @@ Current foundation:
   and GitHub Models profile split, GitHub Models live smoke-test coverage,
   fallback routing, request-priced cost estimates, provider/model allowlist
   policy, enterprise-direct policy template, client-injected provider/model
-  pricing, client-level cloud proxy routing, and live integration-test toggles.
+  pricing, published provider pricing catalogs, client-level cloud proxy
+  routing, and live integration-test toggles.
 
 Next work:
 
-- cloud-managed pricing publication.
+- richer provider-specific catalog metadata.
 
 Exit criteria:
 

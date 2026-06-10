@@ -6,8 +6,8 @@ use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
     ModelCatalogRequest, ProviderError, ProviderModel, ProviderPolicy, ProviderPolicyDecision,
-    ProviderRegistry, ResolvedInferenceRoute, RouteValueSource, UsagePricing,
-    classify_provider_error, default_registry,
+    ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute, RouteValueSource,
+    UsagePricing, classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -461,6 +461,16 @@ impl InferenceClientBuilder {
             .entry(provider.into())
             .or_default()
             .insert(model.into(), pricing);
+        self
+    }
+
+    pub fn pricing_catalog(mut self, catalog: ProviderPricingCatalog) -> Self {
+        for entry in catalog.entries {
+            self.model_pricing
+                .entry(entry.provider)
+                .or_default()
+                .insert(entry.model, entry.pricing);
+        }
         self
     }
 
