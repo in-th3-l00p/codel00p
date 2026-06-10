@@ -56,7 +56,7 @@ Implemented:
 - OpenAI Responses transport;
 - AWS Bedrock Converse transport;
 - Gemini-native GenerateContent transport;
-- normalized responses, usage, and tool calls;
+- normalized responses, usage, cache tokens, reasoning tokens, and tool calls;
 - optional request-supplied, client-injected, or published catalog model pricing
   with normalized response cost estimates;
 - mocked integration tests for request payloads and response parsing.
@@ -132,6 +132,8 @@ uses `max_tokens`, and lists models from
 - Prefer explicit request base URL overrides over configured provider proxies,
   then provider defaults.
 - Normalize every provider response into one codel00p response shape.
+- Preserve provider usage detail that affects accounting, including cache-read,
+  cache-write, and reasoning-token counters when providers expose them.
 - Keep cost estimates explicit: callers or organization-managed clients supply
   request pricing, direct model pricing, or published pricing catalogs;
   providers supply usage, and the crate derives deterministic fixed-point

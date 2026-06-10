@@ -287,6 +287,7 @@ struct ChatUsage {
     prompt_tokens: Option<u64>,
     completion_tokens: Option<u64>,
     prompt_tokens_details: Option<PromptTokenDetails>,
+    completion_tokens_details: Option<CompletionTokenDetails>,
 }
 
 impl ChatUsage {
@@ -296,12 +297,16 @@ impl ChatUsage {
             .prompt_tokens_details
             .and_then(|details| details.cached_tokens)
             .unwrap_or_default();
+        let reasoning_tokens = self
+            .completion_tokens_details
+            .and_then(|details| details.reasoning_tokens)
+            .unwrap_or_default();
         Usage {
             input_tokens: prompt_total.saturating_sub(cache_read),
             output_tokens: self.completion_tokens.unwrap_or_default(),
             cache_read_tokens: cache_read,
             cache_write_tokens: 0,
-            reasoning_tokens: 0,
+            reasoning_tokens,
         }
     }
 }
@@ -309,6 +314,13 @@ impl ChatUsage {
 #[derive(Debug, Deserialize)]
 struct PromptTokenDetails {
     cached_tokens: Option<u64>,
+    #[allow(dead_code)]
+    other: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CompletionTokenDetails {
+    reasoning_tokens: Option<u64>,
     #[allow(dead_code)]
     other: Option<Value>,
 }

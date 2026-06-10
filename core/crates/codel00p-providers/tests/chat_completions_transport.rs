@@ -40,6 +40,9 @@ async fn chat_completions_posts_openai_compatible_payload_and_normalizes_respons
                     "total_tokens": 13,
                     "prompt_tokens_details": {
                         "cached_tokens": 4
+                    },
+                    "completion_tokens_details": {
+                        "reasoning_tokens": 2
                     }
                 }
             }));
@@ -71,6 +74,7 @@ async fn chat_completions_posts_openai_compatible_payload_and_normalizes_respons
     assert_eq!(usage.input_tokens, 6);
     assert_eq!(usage.output_tokens, 3);
     assert_eq!(usage.cache_read_tokens, 4);
+    assert_eq!(usage.reasoning_tokens, 2);
 }
 
 #[tokio::test]

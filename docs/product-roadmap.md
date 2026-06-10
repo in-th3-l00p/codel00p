@@ -126,7 +126,8 @@ Current foundation:
   fallback routing, request-priced cost estimates, provider/model allowlist
   policy, enterprise-direct policy template, client-injected provider/model
   pricing, published provider pricing catalogs, client-level cloud proxy
-  routing, and live integration-test toggles.
+  routing, expanded cache/reasoning usage metadata, and live integration-test
+  toggles.
 
 Next work:
 

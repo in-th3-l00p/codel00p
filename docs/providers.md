@@ -307,6 +307,8 @@ Implemented:
 - `InferenceRequest` and `InferenceResponse`;
 - chat messages and function tool definitions;
 - normalized tool calls and token usage;
+- expanded usage normalization for cache-read, cache-write, and reasoning-token
+  counters, including Chat Completions reasoning-token details;
 - `ProviderProfile`, `ProviderRegistry`, `ApiMode`, and `AuthType`;
 - first-wave provider profiles and aliases, including separate `github`
   Copilot and `github-models` GitHub Models profiles;
