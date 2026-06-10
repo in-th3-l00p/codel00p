@@ -52,8 +52,9 @@ The MCP server exposes the same operation as the `memory_edit` tool with
 `id`, `actor`, `content`, and optional `reason` arguments.
 The CLI `memory audit <id> --json` command and MCP `memory_audit` tool expose
 machine-readable audit history, including edit revision content when available.
-The CLI `memory restore` command uses an edit audit event's `previous_content`
-to write a new auditable edit that restores older content.
+The CLI `memory restore` command and MCP `memory_restore` tool use an edit
+audit event's `previous_content` to write a new auditable edit that restores
+older content.
 
 Richer revision browsing is still a separate Memory 2.0 follow-up.
 

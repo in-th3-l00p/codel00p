@@ -104,6 +104,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert!(tool_names.contains(&"memory_reject"));
     assert!(tool_names.contains(&"memory_archive"));
     assert!(tool_names.contains(&"memory_edit"));
+    assert!(tool_names.contains(&"memory_restore"));
     assert!(tool_names.contains(&"memory_audit"));
     assert!(tool_names.contains(&"session_show"));
 
@@ -666,6 +667,62 @@ fn mcp_serve_can_create_and_review_project_memory() {
             "id": 9,
             "method": "tools/call",
             "params": {
+                "name": "memory_restore",
+                "arguments": {
+                    "id": "mem-mcp-1",
+                    "sequence": 3,
+                    "actor": "mcp-client",
+                    "reason": "undo edit"
+                }
+            }
+        }),
+    );
+    let restored = read_response(&mut stdout);
+    assert_eq!(restored["result"]["isError"], false);
+    let restored_text = restored["result"]["content"][0]["text"]
+        .as_str()
+        .expect("restored text");
+    assert!(restored_text.contains(r#""status":"approved""#));
+    assert!(restored_text.contains("Use MCP write tools for reviewed project memory."));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_audit",
+                "arguments": {
+                    "id": "mem-mcp-1"
+                }
+            }
+        }),
+    );
+    let restored_audit = read_response(&mut stdout);
+    assert_eq!(restored_audit["result"]["isError"], false);
+    let restored_audit_text = restored_audit["result"]["content"][0]["text"]
+        .as_str()
+        .expect("restored audit text");
+    assert!(restored_audit_text.contains(r#""sequence":4"#));
+    assert!(restored_audit_text.contains(r#""action":"edited""#));
+    assert!(restored_audit_text.contains(r#""reason":"undo edit""#));
+    assert!(
+        restored_audit_text
+            .contains(r#""previous_content":"Use MCP edit tools for reviewed project memory.""#)
+    );
+    assert!(
+        restored_audit_text
+            .contains(r#""new_content":"Use MCP write tools for reviewed project memory.""#)
+    );
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_create_candidate",
                 "arguments": {
                     "id": "mem-mcp-reject",
@@ -685,7 +742,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 10,
+            "id": 12,
             "method": "tools/call",
             "params": {
                 "name": "memory_reject",
@@ -708,7 +765,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 11,
+            "id": 13,
             "method": "tools/call",
             "params": {
                 "name": "memory_archive",

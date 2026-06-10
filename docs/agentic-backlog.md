@@ -33,8 +33,8 @@ Build:
 
 - memory editing and revision history; started with CLI/MCP-backed content
   edits that preserve metadata and append CLI/MCP-visible `edited` audit
-  events with previous/new content metadata, plus CLI restore from edit audit
-  revisions;
+  events with previous/new content metadata, plus CLI/MCP restore from edit
+  audit revisions;
 - deterministic approved-memory retrieval; started with CLI/MCP search over
   approved project memory by text, kind, tag, and limit;
 - source evidence links; started with CLI detail text plus CLI

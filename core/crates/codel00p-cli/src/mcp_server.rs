@@ -270,6 +270,20 @@ fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_restore",
+            "description": "Restore one codel00p project memory record from an edit audit sequence.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "sequence", "actor"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "sequence": { "type": "integer", "minimum": 1 },
+                    "actor": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
             "name": "session_show",
             "description": "Replay one codel00p agent session by id.",
             "inputSchema": {
@@ -320,6 +334,7 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, St
         "memory_reject" => memory_review(config, &arguments, MemoryReviewAction::Reject)?,
         "memory_archive" => memory_review(config, &arguments, MemoryReviewAction::Archive)?,
         "memory_edit" => memory_edit(config, &arguments)?,
+        "memory_restore" => memory_restore(config, &arguments)?,
         "session_show" => (session_show(config, &arguments)?, Vec::new()),
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
@@ -539,6 +554,32 @@ fn memory_edit(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<Str
     Ok((text, vec![memory_resource_uri(id)]))
 }
 
+fn memory_restore(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<String>), String> {
+    let id = required_string(arguments, "id")?;
+    let sequence = required_u64(arguments, "sequence")?;
+    let actor = required_string(arguments, "actor")?;
+    let reason = optional_string(arguments, "reason")
+        .map(ToString::to_string)
+        .unwrap_or_else(|| format!("restore audit sequence {sequence}"));
+
+    let mut store = open_memory_store(config)?;
+    let audit = store.audit_log(id).map_err(|error| error.to_string())?;
+    let previous_content = audit
+        .iter()
+        .find(|event| event.sequence() == sequence)
+        .ok_or_else(|| format!("memory audit sequence not found: {sequence}"))?
+        .previous_content()
+        .ok_or_else(|| format!("memory audit sequence {sequence} has no previous content"))?
+        .to_string();
+
+    let mut edit = MemoryEdit::replace_content(actor, previous_content);
+    edit = edit.with_reason(reason);
+    let record = store.edit(id, edit).map_err(|error| error.to_string())?;
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((text, vec![memory_resource_uri(id)]))
+}
+
 fn memory_resource_uri(id: &str) -> String {
     format!("codel00p://memory/{id}")
 }
@@ -644,6 +685,13 @@ fn optional_usize(arguments: &Value, key: &str) -> Result<Option<usize>, String>
         .as_u64()
         .map(|value| Some(value as usize))
         .ok_or_else(|| format!("argument `{key}` must be a positive integer"))
+}
+
+fn required_u64(arguments: &Value, key: &str) -> Result<u64, String> {
+    arguments
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("missing required argument `{key}`"))
 }
 
 fn optional_string_array<'a>(arguments: &'a Value, key: &str) -> Result<Vec<&'a str>, String> {
