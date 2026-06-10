@@ -1,6 +1,6 @@
 use codel00p_providers::{
     ChatMessage, Credential, InferenceClient, InferenceRequest, InferenceResponse, MessageRole,
-    ProviderError, UsagePricing, default_registry,
+    ModelCatalogRequest, ProviderError, UsagePricing, default_registry,
 };
 
 #[tokio::test]
@@ -87,6 +87,20 @@ fn request_builder_preserves_usage_pricing() {
     assert_eq!(request.provider, "openai");
     assert_eq!(request.model, "gpt-5-mini");
     assert_eq!(request.pricing, Some(pricing));
+}
+
+#[test]
+fn model_catalog_request_preserves_overrides() {
+    let request = ModelCatalogRequest::builder("custom")
+        .base_url("http://127.0.0.1:11434/v1")
+        .build();
+
+    assert_eq!(request.provider, "custom");
+    assert_eq!(
+        request.base_url.as_deref(),
+        Some("http://127.0.0.1:11434/v1")
+    );
+    assert_eq!(request.models_url, None);
 }
 
 #[test]

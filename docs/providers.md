@@ -290,6 +290,8 @@ Implemented:
 - inspectable `ResolvedInferenceRoute` with safe audit metadata for provider,
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
+- model catalog listing through `ModelCatalogRequest`,
+  `InferenceClient::list_models`, and normalized `ProviderModel` descriptors;
 - opt-in fallback routing with ordered route-attempt metadata and conservative
   fallback only for classified retryable/provider-unavailable failures;
 - provider allowlist policy;
@@ -313,8 +315,8 @@ Implemented:
   and provider-specific credential environment variables.
 
 Next provider work should focus on enterprise variants: Azure deployment-aware
-configuration, GitHub Copilot/GitHub Models hardening, model catalogs,
-organization policy, and cloud-managed pricing injection.
+configuration, GitHub Copilot/GitHub Models hardening, richer provider-specific
+catalog metadata, organization policy, and cloud-managed pricing injection.
 
 ## Non-goals for the first pass
 

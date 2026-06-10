@@ -40,6 +40,8 @@ Implemented:
 - inspectable `resolve()` route API with safe audit metadata for provider,
   API mode, base URL source, credential presence, policy decision, model catalog
   URL, and provider capabilities;
+- `InferenceClient::list_models` with `ModelCatalogRequest` and normalized
+  `ProviderModel` descriptors for provider setup and future policy;
 - opt-in fallback routing across provider/model candidates for retryable
   provider failures, with ordered route-attempt metadata attached to successful
   responses;
@@ -69,6 +71,8 @@ base URL is supplied, and other compatible gateways.
 - Keep the public API small and ergonomic.
 - Keep provider quirks inside profiles and transports.
 - Keep route resolution inspectable and safe to log.
+- Keep model catalog listing provider-neutral while preserving provider-specific
+  fields in `provider_data`.
 - Never expose credential values in route/debug types.
 - Normalize every provider response into one codel00p response shape.
 - Keep cost estimates explicit: callers supply pricing, providers supply usage,

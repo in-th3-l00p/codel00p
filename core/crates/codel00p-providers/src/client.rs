@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
+use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
-    ProviderError, ProviderPolicy, ProviderPolicyDecision, ProviderRegistry,
-    ResolvedInferenceRoute, RouteValueSource, classify_provider_error, default_registry,
+    ModelCatalogRequest, ProviderError, ProviderModel, ProviderPolicy, ProviderPolicyDecision,
+    ProviderRegistry, ResolvedInferenceRoute, RouteValueSource, classify_provider_error,
+    default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport, bedrock_converse::BedrockConverseTransport,
         chat_completions::ChatCompletionsTransport, gemini::GeminiTransport,
@@ -107,6 +109,78 @@ impl InferenceClient {
         }
 
         Err(last_error)
+    }
+
+    pub async fn list_models(
+        &self,
+        request: ModelCatalogRequest,
+    ) -> Result<Vec<ProviderModel>, ProviderError> {
+        let profile = self.registry.resolve(&request.provider).ok_or_else(|| {
+            ProviderError::UnknownProvider {
+                provider: request.provider.clone(),
+            }
+        })?;
+        self.policy.check_provider(profile.id)?;
+
+        let models_url = request
+            .models_url
+            .clone()
+            .or_else(|| {
+                request
+                    .base_url
+                    .as_ref()
+                    .map(|base_url| format!("{}/models", base_url.trim_end_matches('/')))
+            })
+            .or_else(|| profile.models_url.map(str::to_string))
+            .ok_or_else(|| ProviderError::MissingBaseUrl {
+                provider: profile.id.to_string(),
+            })?;
+
+        let credential =
+            self.credentials
+                .get(profile.id)
+                .ok_or_else(|| ProviderError::MissingCredential {
+                    provider: profile.id.to_string(),
+                })?;
+        let mut request_builder = reqwest::Client::new().get(models_url);
+        match credential {
+            Credential::ApiKey(api_key) => {
+                request_builder = request_builder.bearer_auth(api_key);
+            }
+            Credential::None => {}
+            Credential::AwsSigV4 { .. } => {
+                return Err(ProviderError::InvalidResponse {
+                    provider: profile.id.to_string(),
+                    message: "model catalog listing does not support AWS SigV4 credentials yet"
+                        .to_string(),
+                });
+            }
+        }
+
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: profile.id.to_string(),
+                message: error.to_string(),
+            })?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Http {
+                provider: profile.id.to_string(),
+                message: format!("status {status}: {body}"),
+            });
+        }
+
+        let wire_response = response
+            .json::<ModelCatalogWireResponse>()
+            .await
+            .map_err(|error| ProviderError::InvalidResponse {
+                provider: profile.id.to_string(),
+                message: error.to_string(),
+            })?;
+        Ok(wire_response.into_models())
     }
 
     async fn complete_one(

@@ -120,14 +120,14 @@ Current foundation:
   inspection, allowlist policy, OpenAI-compatible Chat Completions transport,
   Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
   Converse transport, Gemini GenerateContent transport, tool calls, normalized
-  responses, fallback routing, request-priced cost estimates, and live
-  integration-test toggles.
+  responses, model catalog listing, fallback routing, request-priced cost
+  estimates, and live integration-test toggles.
 
 Next work:
 
 - Azure deployment-aware configuration;
 - GitHub Copilot and GitHub Models hardening;
-- model catalogs;
+- richer provider-specific catalog metadata;
 - organization-managed pricing injection;
 - organization provider policy and cloud proxy routing.
 

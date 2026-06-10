@@ -16,7 +16,7 @@
 - Modify: `core/crates/codel00p-providers/tests/client_interface.rs`
 - Create: `core/crates/codel00p-providers/tests/model_catalog.rs`
 
-- [ ] **Step 1: Test request shape**
+- [x] **Step 1: Test request shape**
 
 Add a test that builds:
 
@@ -28,7 +28,7 @@ ModelCatalogRequest::builder("custom")
 
 Assert provider, base URL override, and absent direct models URL are preserved.
 
-- [ ] **Step 2: Test OpenAI-compatible catalog fetch**
+- [x] **Step 2: Test OpenAI-compatible catalog fetch**
 
 Mock `GET /models` with bearer auth and response:
 
@@ -46,17 +46,17 @@ Assert `list_models(...)` returns two normalized `ProviderModel` values,
 preserves `owned_by`, maps `name` to `display_name`, and keeps
 `context_length` in `provider_data`.
 
-- [ ] **Step 3: Test missing catalog configuration**
+- [x] **Step 3: Test missing catalog configuration**
 
 Call `list_models` for `custom` without `base_url` or `models_url`. Assert it
 returns `ProviderError::MissingBaseUrl { provider: "custom" }`.
 
-- [ ] **Step 4: Test invalid catalog payload**
+- [x] **Step 4: Test invalid catalog payload**
 
 Mock a successful HTTP response without a `data` array and assert
 `ProviderError::InvalidResponse`.
 
-- [ ] **Step 5: Verify red state**
+- [x] **Step 5: Verify red state**
 
 Run:
 
@@ -74,7 +74,7 @@ not exist.
 - Create: `core/crates/codel00p-providers/src/model_catalog.rs`
 - Modify: `core/crates/codel00p-providers/src/lib.rs`
 
-- [ ] **Step 1: Add `ModelCatalogRequest`**
+- [x] **Step 1: Add `ModelCatalogRequest`**
 
 Add:
 
@@ -88,7 +88,7 @@ pub struct ModelCatalogRequest {
 
 with a builder supporting `.base_url(...)` and `.models_url(...)`.
 
-- [ ] **Step 2: Add `ProviderModel`**
+- [x] **Step 2: Add `ProviderModel`**
 
 Add:
 
@@ -107,7 +107,7 @@ pub struct ProviderModel {
 - Modify: `core/crates/codel00p-providers/src/client.rs`
 - Modify: `core/crates/codel00p-providers/src/model_catalog.rs`
 
-- [ ] **Step 1: Resolve catalog URL**
+- [x] **Step 1: Resolve catalog URL**
 
 Use this priority:
 
@@ -117,13 +117,13 @@ Use this priority:
 
 If no URL exists, return `ProviderError::MissingBaseUrl` for that provider.
 
-- [ ] **Step 2: Apply provider policy and credentials**
+- [x] **Step 2: Apply provider policy and credentials**
 
 Resolve aliases through the registry, enforce `ProviderPolicy`, and require an
 API-key credential for the canonical provider unless the configured credential
 is `Credential::None`.
 
-- [ ] **Step 3: Fetch and parse catalog**
+- [x] **Step 3: Fetch and parse catalog**
 
 Fetch the URL with `GET`, attach bearer auth for `Credential::ApiKey`, reject
 non-2xx HTTP with `ProviderError::Http`, and parse JSON into `Vec<ProviderModel>`.
@@ -138,12 +138,12 @@ non-2xx HTTP with `ProviderError::Http`, and parse JSON into `Vec<ProviderModel>
 - Modify: `docs/roadmap.md`
 - Modify: `docs/superpowers/plans/2026-06-10-provider-model-catalog.md`
 
-- [ ] **Step 1: Document model catalog support**
+- [x] **Step 1: Document model catalog support**
 
 Mention `ModelCatalogRequest`, `InferenceClient::list_models`, and the
 normalized `ProviderModel` shape.
 
-- [ ] **Step 2: Run targeted provider checks**
+- [x] **Step 2: Run targeted provider checks**
 
 Run:
 
@@ -151,7 +151,7 @@ Run:
 cd core && cargo fmt --all && cargo test -p codel00p-providers --test client_interface model_catalog_request_preserves_overrides && cargo test -p codel00p-providers --test model_catalog && cargo test -p codel00p-providers && cargo clippy -p codel00p-providers --all-targets -- -D warnings
 ```
 
-- [ ] **Step 3: Run repo verification**
+- [x] **Step 3: Run repo verification**
 
 Run:
 
@@ -159,7 +159,7 @@ Run:
 pnpm verify
 ```
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 
