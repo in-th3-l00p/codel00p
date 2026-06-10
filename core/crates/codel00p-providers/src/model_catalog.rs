@@ -50,6 +50,7 @@ impl ModelCatalogRequestBuilder {
 pub struct ProviderModel {
     pub id: String,
     pub display_name: Option<String>,
+    pub description: Option<String>,
     pub owned_by: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<String>,
@@ -115,6 +116,8 @@ pub(crate) struct ModelCatalogWireModel {
     id: String,
     name: Option<String>,
     display_name: Option<String>,
+    description: Option<String>,
+    summary: Option<String>,
     owned_by: Option<String>,
     publisher: Option<String>,
     #[serde(default)]
@@ -137,6 +140,15 @@ impl ModelCatalogWireModel {
         );
         if let Some(publisher) = self.publisher.as_ref() {
             provider_data.insert("publisher".to_string(), Value::String(publisher.clone()));
+        }
+        if let Some(description) = self.description.as_ref() {
+            provider_data.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
+        }
+        if let Some(summary) = self.summary.as_ref() {
+            provider_data.insert("summary".to_string(), Value::String(summary.clone()));
         }
         if !self.capabilities.is_empty() {
             provider_data.insert(
@@ -163,6 +175,7 @@ impl ModelCatalogWireModel {
         ProviderModel {
             id: self.id,
             display_name: self.display_name.or(self.name),
+            description: self.description.or(self.summary),
             owned_by: self.owned_by.or(self.publisher),
             capabilities: self.capabilities,
             input_modalities: self.supported_input_modalities,

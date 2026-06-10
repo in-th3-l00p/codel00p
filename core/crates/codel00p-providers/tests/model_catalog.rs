@@ -17,7 +17,12 @@ async fn list_models_fetches_and_normalizes_openai_compatible_catalog() {
             then.status(200).json_body(json!({
                 "object": "list",
                 "data": [
-                    {"id": "gpt-test", "object": "model", "owned_by": "openai"},
+                    {
+                        "id": "gpt-test",
+                        "object": "model",
+                        "owned_by": "openai",
+                        "description": "OpenAI-compatible test model"
+                    },
                     {"id": "claude-via-gateway", "name": "Claude via Gateway", "context_length": 200000}
                 ]
             }));
@@ -42,6 +47,14 @@ async fn list_models_fetches_and_normalizes_openai_compatible_catalog() {
     assert_eq!(models.len(), 2);
     assert_eq!(models[0].id, "gpt-test");
     assert_eq!(models[0].owned_by.as_deref(), Some("openai"));
+    assert_eq!(
+        models[0].description.as_deref(),
+        Some("OpenAI-compatible test model")
+    );
+    assert_eq!(
+        models[0].provider_data.get("description"),
+        Some(&json!("OpenAI-compatible test model"))
+    );
     assert_eq!(models[1].id, "claude-via-gateway");
     assert_eq!(
         models[1].display_name.as_deref(),
@@ -104,6 +117,10 @@ async fn list_models_normalizes_github_models_catalog() {
     );
     assert_eq!(models[0].owned_by.as_deref(), Some("OpenAI"));
     assert_eq!(models[0].capabilities, vec!["chat", "tool-calling"]);
+    assert_eq!(
+        models[0].description.as_deref(),
+        Some("Fast model for everyday tasks")
+    );
     assert_eq!(models[0].limits.max_input_tokens, Some(128000));
     assert_eq!(models[0].limits.max_output_tokens, Some(16384));
     assert_eq!(models[0].input_modalities, vec!["text", "image"]);

@@ -320,7 +320,7 @@ Implemented:
   metadata;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
-  with common capabilities, modalities, and token limits;
+  with descriptions, common capabilities, modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata and conservative
   fallback only for classified retryable/provider-unavailable failures;
 - provider and model allowlist policy, including catalog filtering for
@@ -330,8 +330,9 @@ Implemented:
   and top-level array model catalogs;
 - opt-in GitHub Models live smoke-test coverage using the official
   `github-models` profile and model override;
-- typed catalog metadata for provider capabilities, supported modalities, and
-  token limits while preserving raw provider fields in `provider_data`;
+- typed catalog metadata for descriptions, provider capabilities, supported
+  modalities, and token limits while preserving raw provider fields in
+  `provider_data`;
 - `ProviderPolicy::enterprise_direct()` for organizations that want direct
   first-wave providers while leaving broker/custom endpoints as explicit opt-ins;
 - client-level provider/model pricing injection with request-level pricing
@@ -363,8 +364,7 @@ Implemented:
   and provider-specific credential environment variables.
 
 Next provider work should focus on enterprise variants: richer provider-specific
-catalog metadata where common typed fields are not enough, plus expanded cache
-and reasoning metadata.
+catalog metadata where common typed fields are not enough.
 
 ## Non-goals for the first pass
 
