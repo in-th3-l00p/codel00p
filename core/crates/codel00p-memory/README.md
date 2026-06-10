@@ -26,6 +26,14 @@ Candidates keep the source session and turn that produced them. The CLI
 `memory show` command prints this source evidence so reviewers can trace a
 candidate back to the originating agent turn before approving it.
 
+## Edit audit contract
+
+`MemoryRepository::edit` replaces memory content while preserving the memory
+id, project, kind, status, source evidence, and tags. Empty replacement content
+is rejected, and successful edits append an `edited` audit event with the actor
+and optional reason. Rich revision storage is still a separate Memory 2.0
+follow-up.
+
 ## Review listing contract
 
 `MemoryListFilter` lists memory records for human review. Unlike inference

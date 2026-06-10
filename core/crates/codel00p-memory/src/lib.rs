@@ -257,6 +257,50 @@ impl ReviewDecision {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryEdit {
+    actor: String,
+    content: String,
+    reason: Option<String>,
+}
+
+impl MemoryEdit {
+    pub fn replace_content(actor: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            actor: actor.into(),
+            content: content.into(),
+            reason: None,
+        }
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = non_empty_filter(reason.into());
+        self
+    }
+
+    pub fn actor(&self) -> &str {
+        &self.actor
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        self.reason.as_deref()
+    }
+
+    fn validate(&self) -> Result<(), MemoryError> {
+        if self.content.trim().is_empty() {
+            return Err(MemoryError::InvalidEdit {
+                message: "memory content cannot be empty".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryAuditAction {
@@ -264,6 +308,7 @@ pub enum MemoryAuditAction {
     Approved,
     Rejected,
     Archived,
+    Edited,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -294,6 +339,16 @@ impl MemoryAuditEvent {
             action: decision.action(),
             actor: decision.actor().to_string(),
             reason: decision.reason().map(ToString::to_string),
+        }
+    }
+
+    fn edited(memory_id: impl Into<String>, edit: &MemoryEdit) -> Self {
+        Self {
+            memory_id: memory_id.into(),
+            sequence: 0,
+            action: MemoryAuditAction::Edited,
+            actor: edit.actor().to_string(),
+            reason: edit.reason().map(ToString::to_string),
         }
     }
 
@@ -427,6 +482,9 @@ pub enum MemoryError {
     #[error("invalid memory candidate: {message}")]
     InvalidCandidate { message: String },
 
+    #[error("invalid memory edit: {message}")]
+    InvalidEdit { message: String },
+
     #[error("memory already exists: {id}")]
     MemoryAlreadyExists { id: String },
 
@@ -453,6 +511,8 @@ pub trait MemoryRepository {
     ) -> Result<MemoryRecord, MemoryError>;
 
     fn review(&mut self, id: &str, decision: ReviewDecision) -> Result<MemoryRecord, MemoryError>;
+
+    fn edit(&mut self, id: &str, edit: MemoryEdit) -> Result<MemoryRecord, MemoryError>;
 
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError>;
 
@@ -532,6 +592,18 @@ where
 
         self.put_record(&record)?;
         self.append_audit(MemoryAuditEvent::reviewed(id, &decision))?;
+
+        Ok(record)
+    }
+
+    fn edit(&mut self, id: &str, edit: MemoryEdit) -> Result<MemoryRecord, MemoryError> {
+        edit.validate()?;
+        let current = self.get(id)?;
+        let entry = replace_content(current.entry(), edit.content().to_string());
+        let record = MemoryRecord::new(entry);
+
+        self.put_record(&record)?;
+        self.append_audit(MemoryAuditEvent::edited(id, &edit))?;
 
         Ok(record)
     }
@@ -717,6 +789,23 @@ fn ensure_transition(from: MemoryStatus, to: MemoryStatus) -> Result<(), MemoryE
 
 fn set_status(entry: MemoryEntry, status: MemoryStatus) -> MemoryEntry {
     entry.with_status(status)
+}
+
+fn replace_content(entry: &MemoryEntry, content: String) -> MemoryEntry {
+    let mut updated = MemoryEntry::new(
+        entry.id().to_string(),
+        entry.project().clone(),
+        entry.kind(),
+        content,
+    )
+    .with_status(entry.status());
+    if let Some(source) = entry.source() {
+        updated = updated.with_source(source.clone());
+    }
+    for tag in entry.tags() {
+        updated = updated.with_tag(tag.clone());
+    }
+    updated
 }
 
 fn entry_content(entry: &MemoryEntry) -> &str {

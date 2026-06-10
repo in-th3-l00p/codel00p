@@ -205,5 +205,6 @@ fn audit_action_label(action: codel00p_memory::MemoryAuditAction) -> &'static st
         codel00p_memory::MemoryAuditAction::Approved => "approved",
         codel00p_memory::MemoryAuditAction::Rejected => "rejected",
         codel00p_memory::MemoryAuditAction::Archived => "archived",
+        codel00p_memory::MemoryAuditAction::Edited => "edited",
     }
 }
