@@ -80,8 +80,12 @@ async fn list_models_normalizes_github_models_catalog() {
                     "id": "openai/gpt-4.1-mini",
                     "name": "OpenAI GPT-4.1 Mini",
                     "publisher": "OpenAI",
+                    "registry": "github",
+                    "html_url": "https://github.com/marketplace/models/openai/gpt-4.1-mini",
+                    "version": "2025-04-14",
                     "summary": "Fast model for everyday tasks",
                     "rate_limit_tier": "low",
+                    "tags": ["reasoning", "multimodal"],
                     "capabilities": ["chat", "tool-calling"],
                     "limits": {
                         "max_input_tokens": 128000,
@@ -121,6 +125,17 @@ async fn list_models_normalizes_github_models_catalog() {
         models[0].description.as_deref(),
         Some("Fast model for everyday tasks")
     );
+    assert_eq!(models[0].annotations.registry.as_deref(), Some("github"));
+    assert_eq!(
+        models[0].annotations.html_url.as_deref(),
+        Some("https://github.com/marketplace/models/openai/gpt-4.1-mini")
+    );
+    assert_eq!(models[0].annotations.version.as_deref(), Some("2025-04-14"));
+    assert_eq!(
+        models[0].annotations.rate_limit_tier.as_deref(),
+        Some("low")
+    );
+    assert_eq!(models[0].annotations.tags, vec!["reasoning", "multimodal"]);
     assert_eq!(models[0].limits.max_input_tokens, Some(128000));
     assert_eq!(models[0].limits.max_output_tokens, Some(16384));
     assert_eq!(models[0].input_modalities, vec!["text", "image"]);
@@ -134,8 +149,26 @@ async fn list_models_normalizes_github_models_catalog() {
         Some(&json!("Fast model for everyday tasks"))
     );
     assert_eq!(
+        models[0].provider_data.get("registry"),
+        Some(&json!("github"))
+    );
+    assert_eq!(
+        models[0].provider_data.get("html_url"),
+        Some(&json!(
+            "https://github.com/marketplace/models/openai/gpt-4.1-mini"
+        ))
+    );
+    assert_eq!(
+        models[0].provider_data.get("version"),
+        Some(&json!("2025-04-14"))
+    );
+    assert_eq!(
         models[0].provider_data.get("rate_limit_tier"),
         Some(&json!("low"))
+    );
+    assert_eq!(
+        models[0].provider_data.get("tags"),
+        Some(&json!(["reasoning", "multimodal"]))
     );
     assert_eq!(
         models[0].provider_data.get("capabilities"),

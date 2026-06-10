@@ -261,7 +261,9 @@ for Copilot. The `github-models` profile targets
 `/inference/chat/completions`, uses `max_tokens`, and lists catalog entries from
 `https://models.github.ai/catalog/models`. Catalog parsing accepts GitHub's
 top-level model array and normalizes `publisher` into `owned_by` while
-preserving GitHub-specific metadata in `provider_data`.
+normalizing known catalog annotations such as registry, model URL, version,
+rate-limit tier, and tags. Raw GitHub-specific metadata remains available in
+`provider_data`.
 
 ### OpenRouter
 
@@ -320,7 +322,8 @@ Implemented:
   metadata;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
-  with descriptions, common capabilities, modalities, and token limits;
+  with descriptions, provider-specific annotations, common capabilities,
+  modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata and conservative
   fallback only for classified retryable/provider-unavailable failures;
 - provider and model allowlist policy, including catalog filtering for
@@ -330,9 +333,9 @@ Implemented:
   and top-level array model catalogs;
 - opt-in GitHub Models live smoke-test coverage using the official
   `github-models` profile and model override;
-- typed catalog metadata for descriptions, provider capabilities, supported
-  modalities, and token limits while preserving raw provider fields in
-  `provider_data`;
+- typed catalog metadata for descriptions, provider-specific annotations,
+  provider capabilities, supported modalities, and token limits while
+  preserving raw provider fields in `provider_data`;
 - `ProviderPolicy::enterprise_direct()` for organizations that want direct
   first-wave providers while leaving broker/custom endpoints as explicit opt-ins;
 - client-level provider/model pricing injection with request-level pricing
@@ -363,8 +366,8 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: richer provider-specific
-catalog metadata where common typed fields are not enough.
+Next provider work should focus on enterprise variants: environment and cloud
+credential resolvers plus the policy/audit metadata needed to inspect them.
 
 ## Non-goals for the first pass
 

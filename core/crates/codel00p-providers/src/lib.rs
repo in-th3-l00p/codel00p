@@ -41,7 +41,8 @@ pub use credentials::Credential;
 pub use error::ProviderError;
 pub use error_classifier::{ClassifiedProviderError, classify_provider_error};
 pub use model_catalog::{
-    ModelCatalogRequest, ModelCatalogRequestBuilder, ProviderModel, ProviderModelLimits,
+    ModelCatalogRequest, ModelCatalogRequestBuilder, ProviderModel, ProviderModelAnnotations,
+    ProviderModelLimits,
 };
 pub use policy::ProviderPolicy;
 pub use pricing_catalog::{ProviderModelPricing, ProviderPricingCatalog};

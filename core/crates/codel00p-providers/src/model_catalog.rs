@@ -58,10 +58,37 @@ pub struct ProviderModel {
     pub input_modalities: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub output_modalities: Vec<String>,
+    #[serde(default, skip_serializing_if = "ProviderModelAnnotations::is_empty")]
+    pub annotations: ProviderModelAnnotations,
     #[serde(default, skip_serializing_if = "ProviderModelLimits::is_empty")]
     pub limits: ProviderModelLimits,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub provider_data: BTreeMap<String, Value>,
+}
+
+/// Normalized provider-specific model catalog annotations.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct ProviderModelAnnotations {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_limit_tier: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
+impl ProviderModelAnnotations {
+    pub fn is_empty(&self) -> bool {
+        self.registry.is_none()
+            && self.html_url.is_none()
+            && self.version.is_none()
+            && self.rate_limit_tier.is_none()
+            && self.tags.is_empty()
+    }
 }
 
 /// Normalized model catalog token limits.
@@ -120,6 +147,12 @@ pub(crate) struct ModelCatalogWireModel {
     summary: Option<String>,
     owned_by: Option<String>,
     publisher: Option<String>,
+    registry: Option<String>,
+    html_url: Option<String>,
+    version: Option<String>,
+    rate_limit_tier: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
     #[serde(default)]
     capabilities: Vec<String>,
     limits: Option<Value>,
@@ -149,6 +182,24 @@ impl ModelCatalogWireModel {
         }
         if let Some(summary) = self.summary.as_ref() {
             provider_data.insert("summary".to_string(), Value::String(summary.clone()));
+        }
+        if let Some(registry) = self.registry.as_ref() {
+            provider_data.insert("registry".to_string(), Value::String(registry.clone()));
+        }
+        if let Some(html_url) = self.html_url.as_ref() {
+            provider_data.insert("html_url".to_string(), Value::String(html_url.clone()));
+        }
+        if let Some(version) = self.version.as_ref() {
+            provider_data.insert("version".to_string(), Value::String(version.clone()));
+        }
+        if let Some(rate_limit_tier) = self.rate_limit_tier.as_ref() {
+            provider_data.insert(
+                "rate_limit_tier".to_string(),
+                Value::String(rate_limit_tier.clone()),
+            );
+        }
+        if !self.tags.is_empty() {
+            provider_data.insert("tags".to_string(), string_values(&self.tags));
         }
         if !self.capabilities.is_empty() {
             provider_data.insert(
@@ -180,6 +231,13 @@ impl ModelCatalogWireModel {
             capabilities: self.capabilities,
             input_modalities: self.supported_input_modalities,
             output_modalities: self.supported_output_modalities,
+            annotations: ProviderModelAnnotations {
+                registry: self.registry,
+                html_url: self.html_url,
+                version: self.version,
+                rate_limit_tier: self.rate_limit_tier,
+                tags: self.tags,
+            },
             limits,
             provider_data,
         }
