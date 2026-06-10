@@ -1288,7 +1288,9 @@ impl MemoryCandidateSink for CliMemoryCandidateSink {
             let id = candidate.id().to_string();
             match store.create_candidate(candidate) {
                 Ok(_) => created_ids.push(id),
-                Err(MemoryError::MemoryAlreadyExists { .. }) => duplicate_ids.push(id),
+                Err(
+                    MemoryError::MemoryAlreadyExists { .. } | MemoryError::DuplicateMemory { .. },
+                ) => duplicate_ids.push(id),
                 Err(error) => {
                     return Err(codel00p_harness::HarnessError::InferenceFailed {
                         message: error.to_string(),

@@ -488,6 +488,9 @@ pub enum MemoryError {
     #[error("memory already exists: {id}")]
     MemoryAlreadyExists { id: String },
 
+    #[error("duplicate memory: {id} duplicates {existing_id}")]
+    DuplicateMemory { id: String, existing_id: String },
+
     #[error("memory not found: {id}")]
     MemoryNotFound { id: String },
 
@@ -576,6 +579,13 @@ where
         }
 
         let entry = input.into_entry();
+        if let Some(existing_id) = self.active_duplicate_id(&entry)? {
+            return Err(MemoryError::DuplicateMemory {
+                id: entry.id().to_string(),
+                existing_id,
+            });
+        }
+
         let record = MemoryRecord::new(entry);
         self.put_record(&record)?;
         self.append_audit(MemoryAuditEvent::candidate_created(record.entry().id()))?;
@@ -770,6 +780,20 @@ where
         }
         Ok(records)
     }
+
+    fn active_duplicate_id(&self, entry: &MemoryEntry) -> Result<Option<String>, MemoryError> {
+        for record in self.records()? {
+            let existing = record.entry();
+            if is_active_memory_status(existing.status())
+                && existing.project().id() == entry.project().id()
+                && existing.kind() == entry.kind()
+                && existing.content().trim() == entry.content().trim()
+            {
+                return Ok(Some(existing.id().to_string()));
+            }
+        }
+        Ok(None)
+    }
 }
 
 fn ensure_transition(from: MemoryStatus, to: MemoryStatus) -> Result<(), MemoryError> {
@@ -785,6 +809,10 @@ fn ensure_transition(from: MemoryStatus, to: MemoryStatus) -> Result<(), MemoryE
     } else {
         Err(MemoryError::InvalidTransition { from, to })
     }
+}
+
+fn is_active_memory_status(status: MemoryStatus) -> bool {
+    matches!(status, MemoryStatus::Candidate | MemoryStatus::Approved)
 }
 
 fn set_status(entry: MemoryEntry, status: MemoryStatus) -> MemoryEntry {

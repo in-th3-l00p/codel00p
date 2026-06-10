@@ -446,7 +446,7 @@ async fn duplicate_extracted_candidates_are_skipped_without_auto_approval() {
         .workspace(workspace)
         .turn_memory_extractor(FixedCandidateExtractor {
             candidate: MemoryCandidateInput::new(
-                "mem-duplicate",
+                "mem-duplicate-new",
                 project.clone(),
                 MemoryKind::Workflow,
                 "Run pnpm verify before pushing main.",

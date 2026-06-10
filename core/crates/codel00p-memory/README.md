@@ -46,6 +46,15 @@ It also exposes `memory_audit` for machine-readable audit history.
 
 Rich revision storage is still a separate Memory 2.0 follow-up.
 
+## Duplicate detection contract
+
+Candidate creation rejects exact duplicates of active project memory. A new
+candidate is a duplicate when an existing candidate or approved memory in the
+same project has the same kind and same trimmed content. Rejected and archived
+memories do not block replacement candidates.
+
+Near-duplicate scoring is still a separate Memory 2.0 follow-up.
+
 ## Review listing contract
 
 `MemoryListFilter` lists memory records for human review. Unlike inference

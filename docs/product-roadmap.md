@@ -158,6 +158,7 @@ Current foundation:
   show/resource/list/search memory JSON;
 - CLI/MCP-backed content edits that preserve status/source/tags and append
   `edited` audit events;
+- exact active duplicate candidate rejection;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.
 
@@ -165,7 +166,7 @@ Next work:
 
 - richer memory revision history;
 - source evidence links beyond session/turn references;
-- duplicate and near-duplicate detection;
+- near-duplicate detection;
 - stale-memory detection;
 - visibility and sensitivity scopes;
 - merge/split workflows;

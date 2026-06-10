@@ -35,7 +35,8 @@ Build:
   edits that preserve metadata and append MCP-visible `edited` audit events;
 - source evidence links; started with CLI-visible source session/turn metadata
   and MCP show/resource/list/search JSON source metadata;
-- duplicate and near-duplicate detection;
+- duplicate and near-duplicate detection; started with exact active duplicate
+  candidate rejection;
 - stale-memory detection;
 - visibility and sensitivity scopes;
 - memory quality scoring.

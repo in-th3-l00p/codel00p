@@ -57,6 +57,41 @@ fn rejects_empty_candidate_content() {
 }
 
 #[test]
+fn rejects_exact_duplicate_active_memory_content() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-original",
+            project(),
+            MemoryKind::Workflow,
+            "Run pnpm verify before pushing main.",
+            source(),
+        ))
+        .expect("create original candidate");
+
+    let error = store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-duplicate",
+            project(),
+            MemoryKind::Workflow,
+            " Run pnpm verify before pushing main. ",
+            source(),
+        ))
+        .expect_err("duplicate content must fail");
+    let listed = store
+        .list(MemoryListFilter::new(project()))
+        .expect("list memory");
+
+    assert!(matches!(
+        &error,
+        MemoryError::DuplicateMemory { id, existing_id }
+            if id == "mem-duplicate" && existing_id == "mem-original"
+    ));
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].entry().id(), "mem-original");
+}
+
+#[test]
 fn rejects_empty_memory_edit_content() {
     let mut store = InMemoryMemoryStore::default();
     store

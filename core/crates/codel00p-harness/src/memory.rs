@@ -211,9 +211,10 @@ where
             let id = candidate.id().to_string();
             match repository.create_candidate(candidate) {
                 Ok(_) => outcome.created_ids.push(id),
-                Err(codel00p_memory::MemoryError::MemoryAlreadyExists { .. }) => {
-                    outcome.duplicate_ids.push(id);
-                }
+                Err(
+                    codel00p_memory::MemoryError::MemoryAlreadyExists { .. }
+                    | codel00p_memory::MemoryError::DuplicateMemory { .. },
+                ) => outcome.duplicate_ids.push(id),
                 Err(error) => {
                     return Err(HarnessError::InferenceFailed {
                         message: format!("memory candidate persistence failed: {error}"),
