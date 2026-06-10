@@ -33,8 +33,8 @@ Build:
 
 - memory editing and revision history; started with CLI/MCP-backed content
   edits that preserve metadata and append MCP-visible `edited` audit events;
-- source evidence links; started with CLI/MCP-visible source session/turn
-  metadata;
+- source evidence links; started with CLI-visible source session/turn metadata
+  and MCP show/resource/list/search JSON source metadata;
 - duplicate and near-duplicate detection;
 - stale-memory detection;
 - visibility and sensitivity scopes;

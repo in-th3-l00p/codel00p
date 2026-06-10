@@ -25,8 +25,9 @@ source turn, and extracted candidate order.
 Candidates keep the source session and turn that produced them. The CLI
 `memory show` command prints this source evidence so reviewers can trace a
 candidate back to the originating agent turn before approving it.
-MCP memory JSON includes the same values as `source.session_id` and
-`source.turn_id` when source evidence is available.
+MCP memory JSON, including show/resource/list/search responses, includes the
+same values as `source.session_id` and `source.turn_id` when source evidence is
+available.
 
 ## Edit audit contract
 

@@ -361,15 +361,7 @@ fn memory_search(config: &CliConfig, arguments: &Value) -> Result<String, String
     let records = store.retrieve(query).map_err(|error| error.to_string())?;
     let items = records
         .iter()
-        .map(|record| {
-            json!({
-                "id": record.entry().id(),
-                "kind": kind_label(record.entry().kind()),
-                "content": record.entry().content(),
-                "reason": record.reason(),
-                "tags": record.entry().tags(),
-            })
-        })
+        .map(retrieved_memory_json)
         .collect::<Vec<_>>();
     serde_json::to_string(&items).map_err(|error| error.to_string())
 }
@@ -391,18 +383,7 @@ fn memory_list(config: &CliConfig, arguments: &Value) -> Result<String, String> 
 
     let store = open_memory_store(config)?;
     let records = store.list(filter).map_err(|error| error.to_string())?;
-    let items = records
-        .iter()
-        .map(|record| {
-            json!({
-                "id": record.entry().id(),
-                "status": status_label(record.entry().status()),
-                "kind": kind_label(record.entry().kind()),
-                "content": record.entry().content(),
-                "tags": record.entry().tags(),
-            })
-        })
-        .collect::<Vec<_>>();
+    let items = records.iter().map(memory_record_json).collect::<Vec<_>>();
     serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 
@@ -560,14 +541,24 @@ fn session_records_json(records: &[codel00p_session::PersistedSessionRecord]) ->
 }
 
 fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
+    memory_entry_json(record.entry())
+}
+
+fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["reason"] = json!(memory.reason());
+    item
+}
+
+fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
     let mut item = json!({
-        "id": record.entry().id(),
-        "status": status_label(record.entry().status()),
-        "kind": kind_label(record.entry().kind()),
-        "content": record.entry().content(),
-        "tags": record.entry().tags(),
+        "id": entry.id(),
+        "status": status_label(entry.status()),
+        "kind": kind_label(entry.kind()),
+        "content": entry.content(),
+        "tags": entry.tags(),
     });
-    if let Some(source) = record.entry().source() {
+    if let Some(source) = entry.source() {
         item["source"] = json!({
             "session_id": source.session_id().as_str(),
             "turn_id": source.turn_id().as_str(),

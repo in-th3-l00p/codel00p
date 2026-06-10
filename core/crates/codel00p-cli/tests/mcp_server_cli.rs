@@ -598,12 +598,35 @@ fn mcp_serve_can_create_and_review_project_memory() {
         .expect("searched text");
     assert!(searched_text.contains(r#""id":"mem-mcp-1""#));
     assert!(searched_text.contains("reviewed project memory"));
+    assert!(
+        searched_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#)
+    );
 
     send(
         &mut child,
         json!({
             "jsonrpc": "2.0",
             "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_list",
+                "arguments": { "status": "approved", "limit": 1 }
+            }
+        }),
+    );
+    let listed = read_response(&mut stdout);
+    assert_eq!(listed["result"]["isError"], false);
+    let listed_text = listed["result"]["content"][0]["text"]
+        .as_str()
+        .expect("listed text");
+    assert!(listed_text.contains(r#""id":"mem-mcp-1""#));
+    assert!(listed_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#));
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 8,
             "method": "tools/call",
             "params": {
                 "name": "memory_create_candidate",
@@ -625,7 +648,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 8,
+            "id": 9,
             "method": "tools/call",
             "params": {
                 "name": "memory_reject",
@@ -648,7 +671,7 @@ fn mcp_serve_can_create_and_review_project_memory() {
         &mut child,
         json!({
             "jsonrpc": "2.0",
-            "id": 9,
+            "id": 10,
             "method": "tools/call",
             "params": {
                 "name": "memory_archive",
