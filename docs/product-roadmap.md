@@ -124,11 +124,11 @@ Current foundation:
   listing with typed capabilities, modalities, and token limits, GitHub Copilot
   and GitHub Models profile split, GitHub Models live smoke-test coverage,
   fallback routing, request-priced cost estimates, provider/model allowlist
-  policy, enterprise-direct policy template, and live integration-test toggles.
+  policy, enterprise-direct policy template, client-injected provider/model
+  pricing, and live integration-test toggles.
 
 Next work:
 
-- organization-managed pricing injection;
 - cloud proxy routing.
 
 Exit criteria:

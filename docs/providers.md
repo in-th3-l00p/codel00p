@@ -329,6 +329,8 @@ Implemented:
   token limits while preserving raw provider fields in `provider_data`;
 - `ProviderPolicy::enterprise_direct()` for organizations that want direct
   first-wave providers while leaving broker/custom endpoints as explicit opt-ins;
+- client-level provider/model pricing injection with request-level pricing
+  taking precedence for deterministic cost estimates;
 - Azure AI Foundry deployment Chat Completions transport with mocked HTTP
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
@@ -353,9 +355,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: cloud-managed pricing
-injection and richer provider-specific catalog metadata where common typed
-fields are not enough.
+Next provider work should focus on enterprise variants: cloud proxy routing and
+richer provider-specific catalog metadata where common typed fields are not
+enough.
 
 ## Non-goals for the first pass
 

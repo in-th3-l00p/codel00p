@@ -6,8 +6,8 @@ use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
     ModelCatalogRequest, ProviderError, ProviderModel, ProviderPolicy, ProviderPolicyDecision,
-    ProviderRegistry, ResolvedInferenceRoute, RouteValueSource, classify_provider_error,
-    default_registry,
+    ProviderRegistry, ResolvedInferenceRoute, RouteValueSource, UsagePricing,
+    classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -22,6 +22,7 @@ pub struct InferenceClient {
     registry: ProviderRegistry,
     credentials: BTreeMap<String, Credential>,
     policy: ProviderPolicy,
+    model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
 }
 
 impl InferenceClient {
@@ -30,6 +31,7 @@ impl InferenceClient {
             registry: default_registry(),
             credentials: BTreeMap::new(),
             policy: ProviderPolicy::allow_all(),
+            model_pricing: BTreeMap::new(),
         }
     }
 
@@ -42,7 +44,8 @@ impl InferenceClient {
         let mut last_error = match self.complete_one(request.clone()).await {
             Ok((route, response)) => {
                 attempts.push(successful_attempt(&route, &request.model));
-                let response = attach_cost_estimate(response, &request);
+                let response =
+                    self.attach_cost_estimate(response, &request, &route.provider, &request.model);
                 return Ok(attach_route_metadata(
                     response,
                     &route,
@@ -80,7 +83,12 @@ impl InferenceClient {
             match self.complete_one(fallback_request).await {
                 Ok((route, response)) => {
                     attempts.push(successful_attempt(&route, &fallback.model));
-                    let response = attach_cost_estimate(response, &request);
+                    let response = self.attach_cost_estimate(
+                        response,
+                        &request,
+                        &route.provider,
+                        &fallback.model,
+                    );
                     return Ok(attach_route_metadata(
                         response,
                         &route,
@@ -299,16 +307,23 @@ impl InferenceClient {
             output_token_parameter: profile.output_token_parameter,
         })
     }
-}
 
-fn attach_cost_estimate(
-    mut response: InferenceResponse,
-    request: &InferenceRequest,
-) -> InferenceResponse {
-    if let (Some(usage), Some(pricing)) = (&response.usage, &request.pricing) {
-        response.cost = Some(usage.estimate_cost(pricing));
+    fn attach_cost_estimate(
+        &self,
+        mut response: InferenceResponse,
+        request: &InferenceRequest,
+        provider: &str,
+        model: &str,
+    ) -> InferenceResponse {
+        let pricing = request
+            .pricing
+            .as_ref()
+            .or_else(|| self.model_pricing.get(provider)?.get(model));
+        if let (Some(usage), Some(pricing)) = (&response.usage, pricing) {
+            response.cost = Some(usage.estimate_cost(pricing));
+        }
+        response
     }
-    response
 }
 
 #[derive(Debug)]
@@ -384,6 +399,7 @@ pub struct InferenceClientBuilder {
     registry: ProviderRegistry,
     credentials: BTreeMap<String, Credential>,
     policy: ProviderPolicy,
+    model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
 }
 
 impl InferenceClientBuilder {
@@ -402,8 +418,33 @@ impl InferenceClientBuilder {
         self
     }
 
+    pub fn model_pricing(
+        mut self,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        pricing: UsagePricing,
+    ) -> Self {
+        self.model_pricing
+            .entry(provider.into())
+            .or_default()
+            .insert(model.into(), pricing);
+        self
+    }
+
     pub fn build(self) -> InferenceClient {
         let policy = self.policy.canonicalize(&self.registry);
+        let model_pricing = self
+            .model_pricing
+            .into_iter()
+            .map(|(provider, prices)| {
+                let canonical = self
+                    .registry
+                    .resolve(&provider)
+                    .map(|profile| profile.id.to_string())
+                    .unwrap_or(provider);
+                (canonical, prices)
+            })
+            .collect();
         let credentials = self
             .credentials
             .into_iter()
@@ -420,6 +461,7 @@ impl InferenceClientBuilder {
             registry: self.registry,
             credentials,
             policy,
+            model_pricing,
         }
     }
 }

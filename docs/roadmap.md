@@ -66,7 +66,7 @@ Build:
 
 - provider catalog metadata surfaced in policy templates;
 - richer provider-specific catalog metadata and model capability metadata;
-- cloud or organization-managed pricing injection;
+- cloud-managed pricing publication;
 - expanded cache and reasoning metadata;
 - cloud proxy routing.
 

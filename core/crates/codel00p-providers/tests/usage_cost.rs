@@ -96,3 +96,167 @@ async fn complete_attaches_usage_cost_when_pricing_is_supplied() {
     assert_eq!(cost.reasoning_nanos, 0);
     assert_eq!(cost.total_nanos, 2900);
 }
+
+#[tokio::test]
+async fn complete_attaches_usage_cost_from_client_model_pricing() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .header("authorization", "Bearer test-key");
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello"
+                    }
+                }],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 3,
+                    "total_tokens": 13
+                }
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .model_pricing(
+            "custom",
+            "test-model",
+            UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000),
+        )
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    let cost = response.cost.expect("cost should be estimated");
+    assert_eq!(cost.currency, "USD");
+    assert_eq!(cost.input_nanos, 1500);
+    assert_eq!(cost.output_nanos, 1800);
+    assert_eq!(cost.total_nanos, 3300);
+}
+
+#[tokio::test]
+async fn request_pricing_overrides_client_model_pricing() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .header("authorization", "Bearer test-key");
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello"
+                    }
+                }],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 3,
+                    "total_tokens": 13
+                }
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .model_pricing(
+            "custom",
+            "test-model",
+            UsagePricing::usd_nanos_per_million_tokens(1, 1),
+        )
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .pricing(UsagePricing::usd_nanos_per_million_tokens(
+                    200_000_000,
+                    700_000_000,
+                ))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    let cost = response.cost.expect("cost should be estimated");
+    assert_eq!(cost.input_nanos, 2000);
+    assert_eq!(cost.output_nanos, 2100);
+    assert_eq!(cost.total_nanos, 4100);
+}
+
+#[tokio::test]
+async fn client_model_pricing_canonicalizes_provider_aliases() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .header("authorization", "Bearer test-key");
+
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello"
+                    }
+                }],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 3,
+                    "total_tokens": 13
+                }
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .model_pricing(
+            "ollama",
+            "test-model",
+            UsagePricing::usd_nanos_per_million_tokens(150_000_000, 600_000_000),
+        )
+        .build();
+
+    let response = client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(
+        response.cost.expect("cost should be estimated").total_nanos,
+        3300
+    );
+}
