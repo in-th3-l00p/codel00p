@@ -1,5 +1,6 @@
 use codel00p_memory::{
-    MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, ReviewDecision,
+    MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
+    ReviewDecision,
 };
 use codel00p_protocol::{MemoryKind, MemoryStatus};
 use serde_json::{Value, json};
@@ -13,6 +14,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
 
     match command.as_str() {
         "search" => memory_search(config, rest),
+        "similar" => memory_similar(config, rest),
         "list" => memory_list(config, rest),
         "show" => memory_show(config, rest),
         "audit" => memory_audit(config, rest),
@@ -23,6 +25,82 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "restore" => memory_restore(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
+}
+
+fn memory_similar(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let mut content = None;
+    let mut kind = None;
+    let mut threshold = None;
+    let mut limit = None;
+    let mut json_output = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--content" => {
+                content = Some(required_value(args, index, "--content")?);
+                index += 2;
+            }
+            "--kind" => {
+                kind = Some(parse_kind(&required_value(args, index, "--kind")?)?);
+                index += 2;
+            }
+            "--threshold" => {
+                let score = required_value(args, index, "--threshold")?
+                    .parse::<u8>()
+                    .map_err(|_| "invalid --threshold".to_string())?;
+                if score > 100 {
+                    return Err("invalid --threshold".to_string());
+                }
+                threshold = Some(score);
+                index += 2;
+            }
+            "--limit" => {
+                limit = Some(
+                    required_value(args, index, "--limit")?
+                        .parse::<usize>()
+                        .map_err(|_| "invalid --limit".to_string())?,
+                );
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory similar option: {flag}")),
+        }
+    }
+
+    let content = content.ok_or_else(|| "missing required --content".to_string())?;
+    let kind = kind.ok_or_else(|| "missing required --kind".to_string())?;
+    let mut query = MemorySimilarityQuery::new(config.project.clone(), kind, content);
+    if let Some(threshold) = threshold {
+        query = query.with_min_score(threshold);
+    }
+    if let Some(limit) = limit {
+        query = query.with_limit(limit);
+    }
+
+    let store = open_memory_store(&config)?;
+    let records = store
+        .similar_active(query)
+        .map_err(|error| error.to_string())?;
+    if json_output {
+        let items = records.iter().map(similar_memory_json).collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
+    let mut output = String::new();
+    for memory in records {
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            memory.entry().id(),
+            status_label(memory.entry().status()),
+            kind_label(memory.entry().kind()),
+            memory.score(),
+            memory.entry().content()
+        ));
+    }
+    Ok(output)
 }
 
 fn memory_search(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -185,6 +263,12 @@ fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
 fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
     item["reason"] = json!(memory.reason());
+    item
+}
+
+fn similar_memory_json(memory: &codel00p_memory::SimilarMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["score"] = json!(memory.score());
     item
 }
 

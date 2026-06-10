@@ -42,6 +42,15 @@ fn approve_candidate(db_path: &Path, id: &str, actor: &str) {
         .expect("approve candidate");
 }
 
+fn archive_memory(db_path: &Path, id: &str, actor: &str, reason: &str) {
+    let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
+    let mut store =
+        StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);
+    store
+        .review(id, ReviewDecision::archive(actor, reason))
+        .expect("archive memory");
+}
+
 fn run_codel00p(db_path: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
         .arg("--memory-db")
@@ -200,6 +209,88 @@ fn memory_search_retrieves_approved_memory() {
     assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
     assert_eq!(records[0]["source"]["session_id"], "session-cli");
     assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
+}
+
+#[test]
+fn memory_similar_scores_active_near_duplicates() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-original",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+    );
+    seed_candidate(
+        &db_path,
+        "mem-unrelated",
+        MemoryKind::Workflow,
+        "The harness owns tool execution.",
+        "harness",
+    );
+    seed_candidate(
+        &db_path,
+        "mem-archived",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main branch.",
+        "verify",
+    );
+    approve_candidate(&db_path, "mem-original", "alice");
+    approve_candidate(&db_path, "mem-archived", "alice");
+    archive_memory(&db_path, "mem-archived", "alice", "superseded");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "similar",
+            "--kind",
+            "workflow",
+            "--content",
+            "Run pnpm verify before pushing to main branch.",
+            "--threshold",
+            "70",
+        ],
+    );
+    let output_json = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "similar",
+            "--kind",
+            "workflow",
+            "--content",
+            "Run pnpm verify before pushing to main branch.",
+            "--threshold",
+            "70",
+            "--json",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        output_json.status.success(),
+        "stderr: {}",
+        stderr(&output_json)
+    );
+    assert_eq!(
+        stdout(&output),
+        "mem-original\tapproved\tworkflow\t75\tRun pnpm verify before pushing main.\n"
+    );
+    let records: serde_json::Value =
+        serde_json::from_str(&stdout(&output_json)).expect("similar json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-original");
+    assert_eq!(records[0]["status"], "approved");
+    assert_eq!(records[0]["kind"], "workflow");
+    assert_eq!(records[0]["score"], 75);
+    assert_eq!(
+        records[0]["content"],
+        "Run pnpm verify before pushing main."
+    );
+    assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
 }
 
 #[test]

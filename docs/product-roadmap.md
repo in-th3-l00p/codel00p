@@ -160,7 +160,7 @@ Current foundation:
   CLI/MCP-visible `edited` audit events with previous/new content metadata;
 - CLI restore from edit audit revision metadata;
 - exact active duplicate candidate rejection;
-- repository-level active memory similarity scoring;
+- repository-level active memory similarity scoring with CLI review access;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.
 

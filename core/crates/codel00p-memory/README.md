@@ -66,7 +66,8 @@ memories do not block replacement candidates.
 `MemoryRepository::similar_active` scores proposed memory content against active
 candidate and approved memory in the same project and kind. It returns
 deterministic token-overlap scores for review workflows without changing exact
-duplicate rejection semantics.
+duplicate rejection semantics. The CLI exposes this as `memory similar` with
+stable TSV output and `memory similar --json` for scored record objects.
 
 ## Review listing contract
 

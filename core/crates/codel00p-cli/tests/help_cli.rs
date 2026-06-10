@@ -157,6 +157,12 @@ fn memory_help_documents_edit_command() {
     );
     assert!(
         stdout(&output)
+            .contains("similar  Score active near-duplicate memory; use --json for JSON output"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
+        stdout(&output)
             .contains("search   Search approved memory records; use --json for JSON output"),
         "stdout: {}",
         stdout(&output)
