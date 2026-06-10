@@ -65,8 +65,21 @@ async fn falls_back_when_primary_route_is_rate_limited() {
         .expect("route metadata should be attached");
     assert_eq!(route["selected"]["provider"], json!("custom"));
     assert_eq!(route["selected"]["model"], json!("local-model"));
+    assert_eq!(route["selected"]["capabilities"]["tools"], json!(true));
+    assert_eq!(
+        route["selected"]["output_token_parameter"],
+        json!("MaxTokens")
+    );
     assert_eq!(route["attempts"][0]["provider"], json!("openrouter"));
     assert_eq!(route["attempts"][0]["outcome"], json!("fallback"));
+    assert_eq!(
+        route["attempts"][0]["models_url"],
+        json!("https://openrouter.ai/api/v1/models")
+    );
+    assert_eq!(
+        route["attempts"][0]["capabilities"]["reasoning"],
+        json!(true)
+    );
     assert_eq!(
         route["attempts"][0]["error_kind"],
         json!(format!("{:?}", RuntimeErrorKind::ProviderRateLimit))

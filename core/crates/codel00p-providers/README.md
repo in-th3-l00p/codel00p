@@ -37,16 +37,17 @@ Implemented:
   Bedrock, Google Gemini, GitHub Copilot, GitHub Models, OpenRouter, and custom
   OpenAI-compatible endpoints;
 - high-level `InferenceClient` facade;
-- inspectable `resolve()` route API with safe audit metadata for provider,
-  API mode, base URL source, credential presence, policy decision, model catalog
-  URL, and provider capabilities;
+- inspectable `resolve()` route API and response route metadata with safe audit
+  fields for provider, API mode, base URL source, credential presence, policy
+  decision, model catalog URL, output-token parameter, and provider
+  capabilities;
 - `InferenceClient::list_models` with `ModelCatalogRequest` and normalized
   `ProviderModel` descriptors, including descriptions, provider-specific
   annotations, common capabilities, modalities, and token limits for provider
   setup and future policy;
 - opt-in fallback routing across provider/model candidates for retryable
-  provider failures, with ordered route-attempt metadata attached to successful
-  responses;
+  provider failures, with ordered route-attempt metadata, catalog URLs,
+  output-token parameters, and capabilities attached to successful responses;
 - credential injection by canonical provider or alias;
 - client-level provider cloud proxy routes with safe route metadata and
   request-level base URL override precedence;

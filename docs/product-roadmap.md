@@ -127,8 +127,9 @@ Current foundation:
   estimates, provider/model allowlist policy, enterprise-direct policy
   template, client-injected provider/model pricing, published provider pricing
   catalogs, client-level cloud proxy routing, shared environment credential
-  loading for provider clients and CLI agent runs, expanded cache/reasoning
-  usage metadata, and live integration-test toggles.
+  loading for provider clients and CLI agent runs, enriched route audit metadata
+  for catalog URLs, output-token parameters, and capabilities, expanded
+  cache/reasoning usage metadata, and live integration-test toggles.
 
 Next work:
 

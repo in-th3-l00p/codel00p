@@ -320,9 +320,10 @@ Implemented:
 - `ProviderProfile`, `ProviderRegistry`, `ApiMode`, and `AuthType`;
 - first-wave provider profiles and aliases, including separate `github`
   Copilot and `github-models` GitHub Models profiles;
-- inspectable `ResolvedInferenceRoute` with safe audit metadata for provider,
-  API mode, base URL source, credential presence, policy decision, model catalog
-  URL, and provider capabilities;
+- inspectable `ResolvedInferenceRoute` and response route metadata with safe
+  audit fields for provider, API mode, base URL source, credential presence,
+  policy decision, model catalog URL, output-token parameter, and provider
+  capabilities;
 - client-level provider cloud proxy routing, including proxy credential use,
   request-level base URL override precedence, and safe `CloudProxy` route
   metadata;
@@ -332,8 +333,9 @@ Implemented:
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
   with descriptions, provider-specific annotations, common capabilities,
   modalities, and token limits;
-- opt-in fallback routing with ordered route-attempt metadata and conservative
-  fallback only for classified retryable/provider-unavailable failures;
+- opt-in fallback routing with ordered route-attempt metadata, including catalog
+  URLs, output-token parameters, and capabilities, and conservative fallback
+  only for classified retryable/provider-unavailable failures;
 - provider and model allowlist policy, including catalog filtering for
   disallowed models and an enterprise-direct provider template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;

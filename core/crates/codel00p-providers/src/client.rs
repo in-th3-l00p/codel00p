@@ -396,6 +396,14 @@ fn route_metadata(route: &ResolvedInferenceRoute, model: &str) -> Value {
         "base_url_source": format!("{:?}", route.base_url_source),
         "credential_source": route.credential_source,
         "policy_decision": format!("{:?}", route.policy_decision),
+        "models_url": route.models_url,
+        "output_token_parameter": format!("{:?}", route.output_token_parameter),
+        "capabilities": {
+            "tools": route.capabilities.tools,
+            "streaming": route.capabilities.streaming,
+            "vision": route.capabilities.vision,
+            "reasoning": route.capabilities.reasoning,
+        },
     })
 }
 
