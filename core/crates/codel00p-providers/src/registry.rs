@@ -30,6 +30,10 @@ impl ProviderRegistry {
         let canonical = self.aliases.get(key).copied().unwrap_or(key);
         self.providers.get(canonical)
     }
+
+    pub fn profiles(&self) -> impl Iterator<Item = &ProviderProfile> {
+        self.providers.values()
+    }
 }
 
 /// Built-in provider registry for the first codel00p provider wave.
@@ -42,7 +46,7 @@ pub fn default_registry() -> ProviderRegistry {
             description: "OpenAI API",
             api_mode: ApiMode::Responses,
             auth_type: AuthType::ApiKey,
-            env_vars: &["OPENAI_API_KEY"],
+            env_vars: &["CODEL00P_PROVIDER_OPENAI_API_KEY", "OPENAI_API_KEY"],
             default_base_url: Some("https://api.openai.com/v1"),
             models_url: Some("https://api.openai.com/v1/models"),
             default_aux_model: None,
@@ -57,6 +61,7 @@ pub fn default_registry() -> ProviderRegistry {
             api_mode: ApiMode::AnthropicMessages,
             auth_type: AuthType::ApiKey,
             env_vars: &[
+                "CODEL00P_PROVIDER_ANTHROPIC_API_KEY",
                 "ANTHROPIC_API_KEY",
                 "ANTHROPIC_TOKEN",
                 "CLAUDE_CODE_OAUTH_TOKEN",
@@ -79,7 +84,10 @@ pub fn default_registry() -> ProviderRegistry {
             description: "Microsoft Azure AI Foundry deployment chat completions endpoint",
             api_mode: ApiMode::AzureChatCompletions,
             auth_type: AuthType::ApiKey,
-            env_vars: &["AZURE_FOUNDRY_API_KEY"],
+            env_vars: &[
+                "CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY",
+                "AZURE_FOUNDRY_API_KEY",
+            ],
             default_base_url: None,
             models_url: None,
             default_aux_model: None,
@@ -93,7 +101,17 @@ pub fn default_registry() -> ProviderRegistry {
             description: "AWS Bedrock Converse API",
             api_mode: ApiMode::BedrockConverse,
             auth_type: AuthType::AwsSdk,
-            env_vars: &[],
+            env_vars: &[
+                "CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID",
+                "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+                "CODEL00P_PROVIDER_AWS_SESSION_TOKEN",
+                "CODEL00P_PROVIDER_AWS_REGION",
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+                "AWS_REGION",
+                "AWS_DEFAULT_REGION",
+            ],
             default_base_url: Some("https://bedrock-runtime.us-east-1.amazonaws.com"),
             models_url: None,
             default_aux_model: None,
@@ -107,7 +125,11 @@ pub fn default_registry() -> ProviderRegistry {
             description: "Google Gemini native and OpenAI-compatible endpoints",
             api_mode: ApiMode::Gemini,
             auth_type: AuthType::ApiKey,
-            env_vars: &["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+            env_vars: &[
+                "CODEL00P_PROVIDER_GEMINI_API_KEY",
+                "GOOGLE_API_KEY",
+                "GEMINI_API_KEY",
+            ],
             default_base_url: Some("https://generativelanguage.googleapis.com/v1beta"),
             models_url: None,
             default_aux_model: None,
@@ -126,7 +148,12 @@ pub fn default_registry() -> ProviderRegistry {
             description: "GitHub Copilot Chat Completions-compatible endpoint",
             api_mode: ApiMode::ChatCompletions,
             auth_type: AuthType::GitHubCopilot,
-            env_vars: &["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
+            env_vars: &[
+                "CODEL00P_PROVIDER_GITHUB_TOKEN",
+                "COPILOT_GITHUB_TOKEN",
+                "GH_TOKEN",
+                "GITHUB_TOKEN",
+            ],
             default_base_url: Some("https://api.githubcopilot.com"),
             models_url: None,
             default_aux_model: None,
@@ -158,7 +185,7 @@ pub fn default_registry() -> ProviderRegistry {
             description: "OpenRouter model gateway",
             api_mode: ApiMode::ChatCompletions,
             auth_type: AuthType::ApiKey,
-            env_vars: &["OPENROUTER_API_KEY"],
+            env_vars: &["CODEL00P_PROVIDER_OPENROUTER_API_KEY", "OPENROUTER_API_KEY"],
             default_base_url: Some("https://openrouter.ai/api/v1"),
             models_url: Some("https://openrouter.ai/api/v1/models"),
             default_aux_model: None,
@@ -179,7 +206,7 @@ pub fn default_registry() -> ProviderRegistry {
             description: "Configured OpenAI-compatible endpoint",
             api_mode: ApiMode::ChatCompletions,
             auth_type: AuthType::Custom,
-            env_vars: &[],
+            env_vars: &["CODEL00P_PROVIDER_CUSTOM_API_KEY"],
             default_base_url: None,
             models_url: None,
             default_aux_model: None,

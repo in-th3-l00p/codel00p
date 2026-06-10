@@ -50,6 +50,8 @@ Implemented:
 - credential injection by canonical provider or alias;
 - client-level provider cloud proxy routes with safe route metadata and
   request-level base URL override precedence;
+- environment credential loading through `credentials_from_env()`, with safe
+  route metadata that records the source variable name instead of secret values;
 - provider and model allowlist policy, including an enterprise-direct template;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
@@ -64,7 +66,7 @@ Implemented:
 
 Not yet implemented:
 
-- environment/cloud credential resolvers;
+- managed cloud identity credential resolvers;
 - streaming.
 
 The current working transports are enough to use OpenAI Responses, Anthropic
@@ -106,6 +108,19 @@ let client = InferenceClient::builder()
     .registry(default_registry())
     .credential("openai", Credential::api_key("secret"))
     .pricing_catalog(pricing)
+    .build();
+# let _ = client;
+```
+
+Clients can also load supported provider credentials from environment variables.
+Explicit `credential(...)` calls take precedence over values loaded from the
+environment:
+
+```rust
+# use codel00p_providers::{InferenceClient, default_registry};
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .credentials_from_env()
     .build();
 # let _ = client;
 ```

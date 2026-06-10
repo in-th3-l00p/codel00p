@@ -4,10 +4,10 @@ use serde_json::{Value, json};
 
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
-    ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
+    ApiMode, AuthType, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
     ModelCatalogRequest, ProviderError, ProviderModel, ProviderPolicy, ProviderPolicyDecision,
-    ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute, RouteValueSource,
-    UsagePricing, classify_provider_error, default_registry,
+    ProviderPricingCatalog, ProviderProfile, ProviderRegistry, ResolvedInferenceRoute,
+    RouteValueSource, UsagePricing, classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct InferenceClient {
     registry: ProviderRegistry,
-    credentials: BTreeMap<String, Credential>,
+    credentials: BTreeMap<String, StoredCredential>,
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
@@ -154,7 +154,7 @@ impl InferenceClient {
                     provider: profile.id.to_string(),
                 })?;
         let mut request_builder = reqwest::Client::new().get(models_url);
-        match credential {
+        match &credential.credential {
             Credential::ApiKey(api_key) => {
                 request_builder = request_builder.bearer_auth(api_key);
             }
@@ -281,6 +281,7 @@ impl InferenceClient {
         self.credentials
             .get(&route.provider)
             .or_else(|| self.credentials.get(requested_provider))
+            .map(|credential| &credential.credential)
     }
 
     /// Resolve provider, API mode, base URL, and credential presence without sending a request.
@@ -314,7 +315,7 @@ impl InferenceClient {
             self.credentials
                 .get(profile.id)
                 .or_else(|| self.credentials.get(&request.provider))
-                .map(|_| "configured".to_string())
+                .map(|credential| credential.source.clone())
         };
 
         self.policy.check_provider(profile.id)?;
@@ -356,6 +357,28 @@ impl InferenceClient {
 struct FailedRouteAttempt {
     route: Option<ResolvedInferenceRoute>,
     error: ProviderError,
+}
+
+#[derive(Debug, Clone)]
+struct StoredCredential {
+    credential: Credential,
+    source: String,
+}
+
+impl StoredCredential {
+    fn configured(credential: Credential) -> Self {
+        Self {
+            credential,
+            source: "configured".to_string(),
+        }
+    }
+
+    fn environment(source_key: impl Into<String>, credential: Credential) -> Self {
+        Self {
+            credential,
+            source: format!("environment:{}", source_key.into()),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -429,7 +452,7 @@ fn failed_attempt(
 #[derive(Debug, Clone)]
 pub struct InferenceClientBuilder {
     registry: ProviderRegistry,
-    credentials: BTreeMap<String, Credential>,
+    credentials: BTreeMap<String, StoredCredential>,
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, UsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
@@ -442,7 +465,25 @@ impl InferenceClientBuilder {
     }
 
     pub fn credential(mut self, provider: impl Into<String>, credential: Credential) -> Self {
-        self.credentials.insert(provider.into(), credential);
+        self.credentials
+            .insert(provider.into(), StoredCredential::configured(credential));
+        self
+    }
+
+    pub fn credentials_from_env(mut self) -> Self {
+        let loaded_credentials: Vec<_> = self
+            .registry
+            .profiles()
+            .filter_map(|profile| {
+                env_credential_for_profile(profile)
+                    .map(|credential| (profile.id.to_string(), credential))
+            })
+            .collect();
+
+        for (provider, credential) in loaded_credentials {
+            self.credentials.entry(provider).or_insert(credential);
+        }
+
         self
     }
 
@@ -519,13 +560,13 @@ impl InferenceClientBuilder {
         let credentials = self
             .credentials
             .into_iter()
-            .map(|(provider, credential)| {
+            .map(|(provider, stored)| {
                 let canonical = self
                     .registry
                     .resolve(&provider)
                     .map(|profile| profile.id.to_string())
                     .unwrap_or(provider);
-                (canonical, credential)
+                (canonical, stored)
             })
             .collect();
         InferenceClient {
@@ -536,4 +577,55 @@ impl InferenceClientBuilder {
             provider_proxies,
         }
     }
+}
+
+fn env_credential_for_profile(profile: &ProviderProfile) -> Option<StoredCredential> {
+    match profile.auth_type {
+        AuthType::ApiKey | AuthType::GitHubCopilot | AuthType::Custom => {
+            let (source, secret) = read_first_env_secret(profile.env_vars)?;
+            Some(StoredCredential::environment(
+                source,
+                Credential::api_key(secret),
+            ))
+        }
+        AuthType::AwsSdk => aws_sigv4_env_credential(),
+        AuthType::OAuthExternal | AuthType::CloudProxy => None,
+    }
+}
+
+fn aws_sigv4_env_credential() -> Option<StoredCredential> {
+    let (source, access_key_id) =
+        read_first_env_secret(&["CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"])?;
+    let (_, secret_access_key) = read_first_env_secret(&[
+        "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
+        "AWS_SECRET_ACCESS_KEY",
+    ])?;
+    let session_token =
+        read_first_env_secret(&["CODEL00P_PROVIDER_AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"])
+            .map(|(_, value)| value);
+    let (_, region) = read_first_env_secret(&[
+        "CODEL00P_PROVIDER_AWS_REGION",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+    ])?;
+
+    Some(StoredCredential::environment(
+        source,
+        Credential::aws_sigv4(
+            access_key_id,
+            secret_access_key,
+            session_token.as_deref(),
+            region,
+        ),
+    ))
+}
+
+fn read_first_env_secret(keys: &[&str]) -> Option<(String, String)> {
+    keys.iter().find_map(|key| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| ((*key).to_string(), value))
+    })
 }

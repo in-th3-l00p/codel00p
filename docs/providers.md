@@ -60,6 +60,12 @@ URL". It needs typed provider profiles, protocol-specific transports,
 credential resolution, normalized usage, provider data replay, model catalogs,
 and policy hooks.
 
+Provider clients can load approved environment credentials with
+`InferenceClientBuilder::credentials_from_env()` and preserve safe source
+metadata such as `environment:CODEL00P_PROVIDER_OPENAI_API_KEY` in resolved
+routes. Explicitly injected credentials take precedence over environment-loaded
+credentials.
+
 ## Rust crate shape
 
 The provider layer should be implemented as a Rust workspace package:
@@ -320,6 +326,8 @@ Implemented:
 - client-level provider cloud proxy routing, including proxy credential use,
   request-level base URL override precedence, and safe `CloudProxy` route
   metadata;
+- environment credential loading for API-key providers and AWS SigV4 Bedrock
+  credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_models`, and normalized `ProviderModel` descriptors
   with descriptions, provider-specific annotations, common capabilities,
@@ -366,7 +374,7 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: environment and cloud
+Next provider work should focus on enterprise variants: managed cloud identity
 credential resolvers plus the policy/audit metadata needed to inspect them.
 
 ## Non-goals for the first pass
