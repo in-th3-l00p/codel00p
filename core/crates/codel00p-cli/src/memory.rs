@@ -1,4 +1,4 @@
-use codel00p_memory::{MemoryListFilter, MemoryRepository, ReviewDecision};
+use codel00p_memory::{MemoryEdit, MemoryListFilter, MemoryRepository, ReviewDecision};
 use codel00p_protocol::{MemoryKind, MemoryStatus};
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value, single_id};
@@ -15,6 +15,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "approve" => memory_review(config, rest, ReviewCommand::Approve),
         "reject" => memory_review(config, rest, ReviewCommand::Reject),
         "archive" => memory_review(config, rest, ReviewCommand::Archive),
+        "edit" => memory_edit(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
 }
@@ -149,6 +150,50 @@ fn memory_review(config: CliConfig, args: &[String], command: ReviewCommand) -> 
     let record = store
         .review(id, decision)
         .map_err(|error| error.to_string())?;
+
+    Ok(format!(
+        "{}\t{}\n",
+        record.entry().id(),
+        status_label(record.entry().status())
+    ))
+}
+
+fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some(id) = args.first() else {
+        return Err("missing memory id".to_string());
+    };
+    let mut actor = None;
+    let mut content = None;
+    let mut reason = None;
+    let mut index = 1;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--actor" => {
+                actor = Some(required_value(args, index, "--actor")?);
+                index += 2;
+            }
+            "--content" => {
+                content = Some(required_value(args, index, "--content")?);
+                index += 2;
+            }
+            "--reason" => {
+                reason = Some(required_value(args, index, "--reason")?);
+                index += 2;
+            }
+            flag => return Err(format!("unknown memory edit option: {flag}")),
+        }
+    }
+
+    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+    let content = content.ok_or_else(|| "missing required --content".to_string())?;
+    let mut edit = MemoryEdit::replace_content(actor, content);
+    if let Some(reason) = reason {
+        edit = edit.with_reason(reason);
+    }
+
+    let mut store = open_memory_store(&config)?;
+    let record = store.edit(id, edit).map_err(|error| error.to_string())?;
 
     Ok(format!(
         "{}\t{}\n",

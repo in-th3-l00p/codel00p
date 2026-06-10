@@ -4,7 +4,8 @@ use std::{
 };
 
 use codel00p_memory::{
-    MemoryCandidateInput, MemoryListFilter, MemoryRepository, StorageBackedMemoryStore,
+    MemoryCandidateInput, MemoryListFilter, MemoryRepository, ReviewDecision,
+    StorageBackedMemoryStore,
 };
 use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId};
 use codel00p_storage::{SqliteStorage, StorageScope};
@@ -30,6 +31,15 @@ fn seed_candidate(db_path: &Path, id: &str, kind: MemoryKind, content: &str, tag
             MemoryCandidateInput::new(id, project(), kind, content, source()).with_tag(tag),
         )
         .expect("create candidate");
+}
+
+fn approve_candidate(db_path: &Path, id: &str, actor: &str) {
+    let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
+    let mut store =
+        StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);
+    store
+        .review(id, ReviewDecision::approve(actor))
+        .expect("approve candidate");
 }
 
 fn run_codel00p(db_path: &Path, args: &[&str]) -> Output {
@@ -166,6 +176,50 @@ fn memory_review_commands_persist_state_across_invocations() {
 }
 
 #[test]
+fn memory_edit_updates_content_and_prints_audit_event() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-workflow",
+        MemoryKind::Workflow,
+        "Run tests before pushing.",
+        "verify",
+    );
+    approve_candidate(&db_path, "mem-workflow", "alice");
+
+    let edit = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "edit",
+            "mem-workflow",
+            "--actor",
+            "bob",
+            "--content",
+            "Run pnpm verify before pushing main.",
+            "--reason",
+            "clarified command",
+        ],
+    );
+    let show = run_codel00p(&db_path, &["memory", "show", "mem-workflow"]);
+    let audit = run_codel00p(&db_path, &["memory", "audit", "mem-workflow"]);
+
+    assert!(edit.status.success(), "stderr: {}", stderr(&edit));
+    assert!(show.status.success(), "stderr: {}", stderr(&show));
+    assert!(audit.status.success(), "stderr: {}", stderr(&audit));
+    assert_eq!(stdout(&edit), "mem-workflow\tapproved\n");
+    assert_eq!(
+        stdout(&show),
+        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\ncontent: Run pnpm verify before pushing main.\n"
+    );
+    assert_eq!(
+        stdout(&audit),
+        "1\tcandidate_created\tsystem\t\n2\tapproved\talice\t\n3\tedited\tbob\tclarified command\n"
+    );
+}
+
+#[test]
 fn memory_reject_requires_reason() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
@@ -184,4 +238,25 @@ fn memory_reject_requires_reason() {
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("missing required --reason"));
+}
+
+#[test]
+fn memory_edit_requires_content() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-workflow",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+    );
+
+    let output = run_codel00p(
+        &db_path,
+        &["memory", "edit", "mem-workflow", "--actor", "alice"],
+    );
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("missing required --content"));
 }

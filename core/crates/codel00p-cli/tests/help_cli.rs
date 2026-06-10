@@ -139,3 +139,15 @@ fn agent_help_documents_tool_set_opt_in() {
         );
     }
 }
+
+#[test]
+fn memory_help_documents_edit_command() {
+    let output = run_codel00p(&["memory", "--help"]);
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        stdout(&output).contains("edit     Edit memory content"),
+        "stdout: {}",
+        stdout(&output)
+    );
+}

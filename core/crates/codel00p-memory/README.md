@@ -31,8 +31,13 @@ candidate back to the originating agent turn before approving it.
 `MemoryRepository::edit` replaces memory content while preserving the memory
 id, project, kind, status, source evidence, and tags. Empty replacement content
 is rejected, and successful edits append an `edited` audit event with the actor
-and optional reason. Rich revision storage is still a separate Memory 2.0
-follow-up.
+and optional reason. The CLI exposes this as:
+
+```bash
+codel00p memory edit <id> --actor <actor> --content <content> [--reason <reason>]
+```
+
+Rich revision storage is still a separate Memory 2.0 follow-up.
 
 ## Review listing contract
 

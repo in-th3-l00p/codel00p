@@ -158,6 +158,7 @@ Commands:
   list     List memory records
   show     Show one memory record
   audit    Show memory audit history
+  edit     Edit memory content
   approve  Approve candidate memory
   reject   Reject candidate memory
   archive  Archive memory
