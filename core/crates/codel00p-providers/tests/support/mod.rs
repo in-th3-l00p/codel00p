@@ -1,10 +1,36 @@
 use codel00p_providers::Credential;
 
+const DEFAULT_AZURE_API_VERSION: &str = "2024-10-21";
+const AZURE_ENDPOINT_ENV_VARS: &[&str] = &[
+    "CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT",
+    "AZURE_FOUNDRY_ENDPOINT",
+    "AZURE_OPENAI_ENDPOINT",
+];
+const AZURE_DEPLOYMENT_ENV_VARS: &[&str] = &[
+    "CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT",
+    "AZURE_FOUNDRY_DEPLOYMENT",
+    "AZURE_OPENAI_DEPLOYMENT",
+];
+const AZURE_API_VERSION_ENV_VARS: &[&str] = &[
+    "CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION",
+    "AZURE_FOUNDRY_API_VERSION",
+    "AZURE_OPENAI_API_VERSION",
+];
+
 #[derive(Debug, Clone)]
 pub struct IntegrationConfig {
     enabled: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AzureFoundryLiveConfig {
+    pub credential: Credential,
+    pub endpoint: String,
+    pub deployment: String,
+    pub api_version: String,
+}
+
+#[allow(dead_code)]
 impl IntegrationConfig {
     pub fn from_env() -> Self {
         Self {
@@ -51,6 +77,59 @@ impl IntegrationConfig {
             return Some(format!(
                 "skipping live integration test because provider `{provider}` has no configured credential; set one of: {}",
                 provider_env_vars(provider).join(", ")
+            ));
+        }
+        None
+    }
+
+    pub fn azure_foundry(&self) -> Option<AzureFoundryLiveConfig> {
+        if !self.enabled {
+            return None;
+        }
+
+        Some(AzureFoundryLiveConfig {
+            credential: self.credential("azure")?,
+            endpoint: read_first_secret(AZURE_ENDPOINT_ENV_VARS)?,
+            deployment: read_first_secret(AZURE_DEPLOYMENT_ENV_VARS)?,
+            api_version: read_first_secret(AZURE_API_VERSION_ENV_VARS)
+                .unwrap_or_else(|| DEFAULT_AZURE_API_VERSION.to_string()),
+        })
+    }
+
+    pub fn require_azure_foundry(&self) -> AzureFoundryLiveConfig {
+        self.azure_foundry().unwrap_or_else(|| {
+            panic!(
+                "missing Azure Foundry live integration config; set CODEL00P_INTEGRATION_TESTS=1, one credential variable from: {}; one endpoint variable from: {}; and one deployment variable from: {}",
+                provider_env_vars("azure").join(", "),
+                AZURE_ENDPOINT_ENV_VARS.join(", "),
+                AZURE_DEPLOYMENT_ENV_VARS.join(", ")
+            )
+        })
+    }
+
+    pub fn skip_azure_foundry_message(&self) -> Option<String> {
+        if !self.enabled() {
+            return Some(
+                "skipping live integration test because CODEL00P_INTEGRATION_TESTS is not enabled"
+                    .to_string(),
+            );
+        }
+        if self.credential("azure").is_none() {
+            return Some(format!(
+                "skipping live Azure Foundry integration test because no credential is configured; set one of: {}",
+                provider_env_vars("azure").join(", ")
+            ));
+        }
+        if read_first_secret(AZURE_ENDPOINT_ENV_VARS).is_none() {
+            return Some(format!(
+                "skipping live Azure Foundry integration test because no endpoint is configured; set one of: {}",
+                AZURE_ENDPOINT_ENV_VARS.join(", ")
+            ));
+        }
+        if read_first_secret(AZURE_DEPLOYMENT_ENV_VARS).is_none() {
+            return Some(format!(
+                "skipping live Azure Foundry integration test because no deployment is configured; set one of: {}",
+                AZURE_DEPLOYMENT_ENV_VARS.join(", ")
             ));
         }
         None

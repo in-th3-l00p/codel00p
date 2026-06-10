@@ -311,6 +311,8 @@ Implemented:
   tests for deployment URLs, API version query parameters, `api-key` auth,
   omitted request model fields, default deployment behavior, and missing
   credentials;
+- opt-in Azure AI Foundry live smoke-test configuration for customer resource
+  endpoints, deployment names, API versions, and API key credentials;
 - Anthropic Messages transport with mocked HTTP tests, including native system
   prompts, tool schemas, `tool_use` responses, tool-result replay, stop
   reasons, and cache usage metadata;

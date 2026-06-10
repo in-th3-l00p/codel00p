@@ -126,6 +126,12 @@ CODEL00P_PROVIDER_OPENAI_MODEL=gpt-5-mini \
 cargo test -p codel00p-providers --test live_openai -- --ignored --nocapture
 
 CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY=... \
+CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT=https://example.openai.azure.com \
+CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT=team-chat \
+cargo test -p codel00p-providers --test live_azure_foundry -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
 CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID=... \
 CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY=... \
 CODEL00P_PROVIDER_AWS_REGION=us-east-1 \
@@ -150,6 +156,14 @@ Credential environment variables:
 | Azure AI Foundry | `CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY`, `AZURE_FOUNDRY_API_KEY` |
 | Gemini | `CODEL00P_PROVIDER_GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY` |
 | Custom endpoint | `CODEL00P_PROVIDER_CUSTOM_API_KEY` |
+
+Azure live tests also need:
+
+| Setting | Variables, in priority order |
+| --- | --- |
+| Endpoint | `CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_ENDPOINT`, `AZURE_OPENAI_ENDPOINT` |
+| Deployment | `CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT`, `AZURE_FOUNDRY_DEPLOYMENT`, `AZURE_OPENAI_DEPLOYMENT` |
+| API version | `CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION`, `AZURE_FOUNDRY_API_VERSION`, `AZURE_OPENAI_API_VERSION`; defaults to `2024-10-21` |
 
 The `CODEL00P_PROVIDER_*` variables are preferred so local integration tests do
 not accidentally consume unrelated shell credentials. The fallback variables

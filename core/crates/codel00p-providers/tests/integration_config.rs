@@ -18,6 +18,17 @@ fn with_env_lock(test: impl FnOnce()) {
         "CODEL00P_PROVIDER_ANTHROPIC_API_KEY",
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_TOKEN",
+        "CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY",
+        "AZURE_FOUNDRY_API_KEY",
+        "CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT",
+        "AZURE_FOUNDRY_ENDPOINT",
+        "AZURE_OPENAI_ENDPOINT",
+        "CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT",
+        "AZURE_FOUNDRY_DEPLOYMENT",
+        "AZURE_OPENAI_DEPLOYMENT",
+        "CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION",
+        "AZURE_FOUNDRY_API_VERSION",
+        "AZURE_OPENAI_API_VERSION",
         "CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID",
         "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
         "CODEL00P_PROVIDER_AWS_SESSION_TOKEN",
@@ -136,6 +147,89 @@ fn openai_credential_prefers_codel00p_specific_variable() {
             config.credential("openai"),
             Some(Credential::api_key("preferred"))
         );
+    });
+}
+
+#[test]
+fn azure_credential_prefers_codel00p_specific_variable() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY", "preferred");
+            std::env::set_var("AZURE_FOUNDRY_API_KEY", "fallback");
+        }
+
+        let config = IntegrationConfig::from_env();
+
+        assert_eq!(
+            config.credential("azure"),
+            Some(Credential::api_key("preferred"))
+        );
+    });
+}
+
+#[test]
+fn azure_foundry_config_reads_endpoint_deployment_and_api_version() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY", "azure-key");
+            std::env::set_var(
+                "CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT",
+                "https://team.openai.azure.com",
+            );
+            std::env::set_var("CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT", "team-chat");
+            std::env::set_var(
+                "CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION",
+                "2024-08-01-preview",
+            );
+        }
+
+        let azure = IntegrationConfig::from_env()
+            .azure_foundry()
+            .expect("complete Azure config should be present");
+
+        assert_eq!(azure.credential, Credential::api_key("azure-key"));
+        assert_eq!(azure.endpoint, "https://team.openai.azure.com");
+        assert_eq!(azure.deployment, "team-chat");
+        assert_eq!(azure.api_version, "2024-08-01-preview");
+    });
+}
+
+#[test]
+fn azure_foundry_config_defaults_api_version() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("AZURE_FOUNDRY_API_KEY", "azure-key");
+            std::env::set_var("AZURE_OPENAI_ENDPOINT", "https://team.openai.azure.com");
+            std::env::set_var("AZURE_OPENAI_DEPLOYMENT", "team-chat");
+        }
+
+        let azure = IntegrationConfig::from_env()
+            .azure_foundry()
+            .expect("complete Azure config should be present");
+
+        assert_eq!(azure.api_version, "2024-10-21");
+    });
+}
+
+#[test]
+fn azure_foundry_skip_message_reports_missing_endpoint_without_secrets() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AZURE_FOUNDRY_API_KEY", "secret-key");
+            std::env::set_var("CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT", "team-chat");
+        }
+
+        let message = IntegrationConfig::from_env()
+            .skip_azure_foundry_message()
+            .expect("missing endpoint should produce skip message");
+
+        assert!(message.contains("endpoint"));
+        assert!(message.contains("CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT"));
+        assert!(!message.contains("secret-key"));
     });
 }
 
