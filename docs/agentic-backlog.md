@@ -41,7 +41,7 @@ Build:
   source session/turn metadata and MCP show/resource/list/search JSON source
   metadata;
 - duplicate and near-duplicate detection; started with exact active duplicate
-  candidate rejection;
+  candidate rejection and repository-level active memory similarity scoring;
 - stale-memory detection;
 - visibility and sensitivity scopes;
 - memory quality scoring.

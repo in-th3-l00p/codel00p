@@ -31,13 +31,6 @@ MCP memory JSON, including show/resource/list/search responses, includes the
 same values as `source.session_id` and `source.turn_id` when source evidence is
 available.
 
-## Retrieval contract
-
-`MemoryRepository::retrieve` returns approved project memory only, filtered by
-optional text, kind, tag, and limit values. The CLI exposes this as
-`memory search` with stable TSV output and `memory search --json` for the same
-machine-readable records returned by the MCP `memory_search` tool.
-
 ## Edit audit contract
 
 `MemoryRepository::edit` replaces memory content while preserving the memory
@@ -70,7 +63,10 @@ candidate is a duplicate when an existing candidate or approved memory in the
 same project has the same kind and same trimmed content. Rejected and archived
 memories do not block replacement candidates.
 
-Near-duplicate scoring is still a separate Memory 2.0 follow-up.
+`MemoryRepository::similar_active` scores proposed memory content against active
+candidate and approved memory in the same project and kind. It returns
+deterministic token-overlap scores for review workflows without changing exact
+duplicate rejection semantics.
 
 ## Review listing contract
 
@@ -85,6 +81,9 @@ filters, with deterministic ordering by memory id.
 filters for memory kind, tag, and text. Empty optional filters are ignored.
 Results are sorted by memory id before `with_limit` is applied, which keeps
 prompt-context construction deterministic across storage backends.
+The CLI exposes this as `memory search` with stable TSV output and
+`memory search --json` for the same machine-readable records returned by the
+MCP `memory_search` tool.
 
 ## SQLite backend
 

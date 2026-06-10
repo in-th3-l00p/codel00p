@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use codel00p_protocol::{MemoryEntry, MemoryKind, MemorySource, MemoryStatus, ProjectRef};
 use codel00p_storage::{
     AppendLogEntry, AppendLogStore, DocumentStore, InMemoryStorage, StorageDocument, StorageError,
@@ -420,6 +422,15 @@ pub struct MemoryListFilter {
     limit: Option<usize>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemorySimilarityQuery {
+    project: ProjectRef,
+    kind: MemoryKind,
+    content: String,
+    min_score: u8,
+    limit: Option<usize>,
+}
+
 impl MemoryListFilter {
     pub fn new(project: ProjectRef) -> Self {
         Self {
@@ -443,6 +454,28 @@ impl MemoryListFilter {
 
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tag = non_empty_filter(tag.into());
+        self
+    }
+
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = if limit == 0 { None } else { Some(limit) };
+        self
+    }
+}
+
+impl MemorySimilarityQuery {
+    pub fn new(project: ProjectRef, kind: MemoryKind, content: impl Into<String>) -> Self {
+        Self {
+            project,
+            kind,
+            content: content.into(),
+            min_score: 70,
+            limit: None,
+        }
+    }
+
+    pub fn with_min_score(mut self, min_score: u8) -> Self {
+        self.min_score = min_score;
         self
     }
 
@@ -488,6 +521,22 @@ impl MemoryQuery {
 pub struct RetrievedMemory {
     record: MemoryRecord,
     reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SimilarMemory {
+    record: MemoryRecord,
+    score: u8,
+}
+
+impl SimilarMemory {
+    pub fn entry(&self) -> &MemoryEntry {
+        self.record.entry()
+    }
+
+    pub fn score(&self) -> u8 {
+        self.score
+    }
 }
 
 impl RetrievedMemory {
@@ -547,6 +596,11 @@ pub trait MemoryRepository {
     fn list(&self, filter: MemoryListFilter) -> Result<Vec<MemoryRecord>, MemoryError>;
 
     fn retrieve(&self, query: MemoryQuery) -> Result<Vec<RetrievedMemory>, MemoryError>;
+
+    fn similar_active(
+        &self,
+        query: MemorySimilarityQuery,
+    ) -> Result<Vec<SimilarMemory>, MemoryError>;
 }
 
 pub type InMemoryMemoryStore = StorageBackedMemoryStore<InMemoryStorage>;
@@ -758,6 +812,43 @@ where
         }
         Ok(retrieved)
     }
+
+    fn similar_active(
+        &self,
+        query: MemorySimilarityQuery,
+    ) -> Result<Vec<SimilarMemory>, MemoryError> {
+        let query_tokens = content_tokens(&query.content);
+        let mut similar = Vec::new();
+
+        for record in self.records()? {
+            let entry = record.entry();
+            if !is_active_memory_status(entry.status()) {
+                continue;
+            }
+
+            if entry.project().id() != query.project.id() || entry.kind() != query.kind {
+                continue;
+            }
+
+            let score = token_similarity_score(&query_tokens, &content_tokens(entry.content()));
+            if score < query.min_score {
+                continue;
+            }
+
+            similar.push(SimilarMemory { record, score });
+        }
+
+        similar.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.entry().id().cmp(right.entry().id()))
+        });
+        if let Some(limit) = query.limit {
+            similar.truncate(limit);
+        }
+        Ok(similar)
+    }
 }
 
 impl<S> StorageBackedMemoryStore<S>
@@ -843,6 +934,24 @@ fn ensure_transition(from: MemoryStatus, to: MemoryStatus) -> Result<(), MemoryE
 
 fn is_active_memory_status(status: MemoryStatus) -> bool {
     matches!(status, MemoryStatus::Candidate | MemoryStatus::Approved)
+}
+
+fn content_tokens(content: &str) -> BTreeSet<String> {
+    content
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+fn token_similarity_score(left: &BTreeSet<String>, right: &BTreeSet<String>) -> u8 {
+    if left.is_empty() || right.is_empty() {
+        return 0;
+    }
+
+    let intersection = left.intersection(right).count();
+    let union = left.union(right).count();
+    (((intersection * 100) + (union / 2)) / union) as u8
 }
 
 fn set_status(entry: MemoryEntry, status: MemoryStatus) -> MemoryEntry {
