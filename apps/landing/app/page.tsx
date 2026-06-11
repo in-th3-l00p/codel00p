@@ -1,11 +1,13 @@
+import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GlowBackground } from "@/components/site/glow-background";
 import { LoopMark } from "@/components/site/loop-mark";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
 
 const REPO_URL = "https://github.com/inth3loop/codel00p";
-const DOCS_URL = "https://github.com/inth3loop/codel00p/tree/main/docs";
 
 const pillars = [
   {
@@ -29,38 +31,7 @@ export default function Home() {
   return (
     <div className="relative flex min-h-dvh flex-col">
       <GlowBackground />
-
-      {/* Header */}
-      <header className="relative z-10">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
-          <a href="#" className="flex items-center gap-2.5">
-            <LoopMark className="size-6" />
-            <span className="font-mono text-sm tracking-tight text-foreground/90">
-              codel00p
-            </span>
-          </a>
-          <nav className="flex items-center gap-1">
-            <Button
-              asChild
-              variant="ghost"
-              className="h-8 px-3 text-muted-foreground hover:text-foreground"
-            >
-              <a href={DOCS_URL} target="_blank" rel="noreferrer">
-                Docs
-              </a>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              className="h-8 px-3 text-muted-foreground hover:text-foreground"
-            >
-              <a href={REPO_URL} target="_blank" rel="noreferrer">
-                GitHub
-              </a>
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="relative z-10 flex flex-1 flex-col">
         {/* Hero */}
@@ -105,10 +76,10 @@ export default function Home() {
             style={{ animationDelay: "300ms" }}
           >
             <Button asChild className="h-11 rounded-full px-6 text-sm">
-              <a href={DOCS_URL} target="_blank" rel="noreferrer">
+              <Link href="/docs">
                 Read the docs
                 <ArrowUpRight className="size-4" />
-              </a>
+              </Link>
             </Button>
             <Button
               asChild
@@ -125,7 +96,7 @@ export default function Home() {
             className="rise label mt-12 text-muted-foreground/70"
             style={{ animationDelay: "380ms" }}
           >
-            Rust core · MCP-native · provider-agnostic
+            Rust core · provider-agnostic · local-first
           </p>
         </section>
 
@@ -191,29 +162,16 @@ export default function Home() {
           </p>
           <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
             <Button asChild className="h-11 rounded-full px-6 text-sm">
-              <a href={REPO_URL} target="_blank" rel="noreferrer">
+              <Link href="/docs">
                 Get started
                 <ArrowUpRight className="size-4" />
-              </a>
+              </Link>
             </Button>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-border/60">
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
-          <div className="flex items-center gap-2.5">
-            <LoopMark className="size-5" />
-            <span className="font-mono text-xs text-muted-foreground">
-              codel00p
-            </span>
-          </div>
-          <p className="label text-muted-foreground/60">
-            MIT licensed · built in the open
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
