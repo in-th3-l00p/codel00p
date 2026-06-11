@@ -214,6 +214,7 @@ impl InferenceClient {
             models_url,
             models_url_source,
             credential_source: Some(credential.source.clone()),
+            credential_kind: Some(credential.credential.kind()),
             policy_decision: ProviderPolicyDecision::Allowed,
             policy: self.policy.catalog_policy(profile.id),
             catalog_model_count,
@@ -333,16 +334,26 @@ impl InferenceClient {
             });
         };
 
-        let credential_source = if base_url_source == RouteValueSource::CloudProxy {
-            self.provider_proxies
-                .contains_key(profile.id)
-                .then(|| "cloud_proxy".to_string())
-        } else {
-            self.credentials
-                .get(profile.id)
-                .or_else(|| self.credentials.get(&request.provider))
-                .map(|credential| credential.source.clone())
-        };
+        let (credential_source, credential_kind) =
+            if base_url_source == RouteValueSource::CloudProxy {
+                self.provider_proxies
+                    .get(profile.id)
+                    .map_or((None, None), |proxy| {
+                        (
+                            Some("cloud_proxy".to_string()),
+                            Some(proxy.credential.kind()),
+                        )
+                    })
+            } else {
+                let credential = self
+                    .credentials
+                    .get(profile.id)
+                    .or_else(|| self.credentials.get(&request.provider));
+                (
+                    credential.map(|credential| credential.source.clone()),
+                    credential.map(|credential| credential.credential.kind()),
+                )
+            };
 
         self.policy.check_provider(profile.id)?;
         self.policy.check_model(profile.id, &request.model)?;
@@ -354,6 +365,7 @@ impl InferenceClient {
             base_url,
             base_url_source,
             credential_source,
+            credential_kind,
             policy_decision: ProviderPolicyDecision::Allowed,
             capabilities: profile.capabilities,
             models_url: profile.models_url.map(str::to_string),
@@ -446,6 +458,7 @@ fn route_metadata(route: &ResolvedInferenceRoute, model: &str) -> Value {
         "api_mode": format!("{:?}", route.api_mode),
         "base_url_source": format!("{:?}", route.base_url_source),
         "credential_source": route.credential_source,
+        "credential_kind": route.credential_kind,
         "policy_decision": format!("{:?}", route.policy_decision),
         "models_url": route.models_url,
         "output_token_parameter": format!("{:?}", route.output_token_parameter),

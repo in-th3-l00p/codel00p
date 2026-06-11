@@ -1,7 +1,7 @@
 use codel00p_providers::{
-    ApiMode, AuthType, Credential, InferenceClient, ModelCatalogRequest, ModelCatalogUrlSource,
-    OutputTokenParameter, ProviderCapabilities, ProviderError, ProviderPolicy,
-    ProviderPolicyDecision, ProviderProfile, ProviderRegistry, default_registry,
+    ApiMode, AuthType, Credential, CredentialKind, InferenceClient, ModelCatalogRequest,
+    ModelCatalogUrlSource, OutputTokenParameter, ProviderCapabilities, ProviderError,
+    ProviderPolicy, ProviderPolicyDecision, ProviderProfile, ProviderRegistry, default_registry,
 };
 use httpmock::Method::GET;
 use httpmock::prelude::*;
@@ -448,8 +448,73 @@ async fn list_model_catalog_reports_credential_source() {
         result.credential_source.as_deref(),
         Some("organization:team-ai/local-catalog")
     );
+    assert_eq!(result.credential_kind, Some(CredentialKind::ApiKey));
     assert_eq!(result.models.len(), 1);
     assert_eq!(result.models[0].id, "local-model");
+}
+
+#[tokio::test]
+async fn list_model_catalog_reports_credential_kind_metadata() {
+    let server = MockServer::start_async().await;
+    let managed_catalog = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/managed-models")
+                .header("authorization", "Bearer managed-key");
+            then.status(200).json_body(json!({
+                "data": [
+                    {"id": "managed-model", "name": "Managed Model"}
+                ]
+            }));
+        })
+        .await;
+    let public_catalog = server
+        .mock_async(|when, then| {
+            when.method(GET).path("/public-models");
+            then.status(200).json_body(json!({
+                "data": [
+                    {"id": "public-model", "name": "Public Model"}
+                ]
+            }));
+        })
+        .await;
+
+    let managed_client = InferenceClient::builder()
+        .registry(default_registry())
+        .organization_credential(
+            "local",
+            Credential::api_key("managed-key"),
+            "team-ai/local-catalog",
+        )
+        .build();
+    let managed = managed_client
+        .list_model_catalog(
+            ModelCatalogRequest::builder("local")
+                .models_url(format!("{}/managed-models", server.base_url()))
+                .build(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(managed.credential_kind, Some(CredentialKind::ApiKey));
+    assert_eq!(managed.models[0].id, "managed-model");
+
+    let public_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::None)
+        .build();
+    let public = public_client
+        .list_model_catalog(
+            ModelCatalogRequest::builder("custom")
+                .models_url(format!("{}/public-models", server.base_url()))
+                .build(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(public.credential_kind, Some(CredentialKind::None));
+    assert_eq!(public.models[0].id, "public-model");
+
+    managed_catalog.assert_async().await;
+    public_catalog.assert_async().await;
 }
 
 #[tokio::test]
@@ -606,6 +671,7 @@ async fn list_model_catalog_reports_catalog_url_source() {
         provider_default.models_url_source,
         ModelCatalogUrlSource::ProviderDefault
     );
+    assert_eq!(provider_default.credential_kind, Some(CredentialKind::None));
     assert_eq!(provider_default.models[0].id, "default-model");
 
     explicit_catalog.assert_async().await;

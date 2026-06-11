@@ -11,6 +11,14 @@ pub enum Credential {
     None,
 }
 
+/// Safe credential kind metadata for audit surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CredentialKind {
+    ApiKey,
+    AwsSigV4,
+    None,
+}
+
 /// Provider credential loaded with safe source metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedProviderCredential {
@@ -34,6 +42,14 @@ impl Credential {
             secret_access_key: secret_access_key.into(),
             session_token: session_token.map(str::to_string),
             region: region.into(),
+        }
+    }
+
+    pub fn kind(&self) -> CredentialKind {
+        match self {
+            Self::ApiKey(_) => CredentialKind::ApiKey,
+            Self::AwsSigV4 { .. } => CredentialKind::AwsSigV4,
+            Self::None => CredentialKind::None,
         }
     }
 }

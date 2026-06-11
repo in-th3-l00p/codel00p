@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{ProviderCapabilities, ProviderPolicyDecision};
+use crate::{CredentialKind, ProviderCapabilities, ProviderPolicyDecision};
 
 /// Request for listing models from a provider catalog endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +63,7 @@ pub struct ProviderModelCatalog {
     pub models_url: String,
     pub models_url_source: ModelCatalogUrlSource,
     pub credential_source: Option<String>,
+    pub credential_kind: Option<CredentialKind>,
     pub policy_decision: ProviderPolicyDecision,
     pub policy: ProviderModelCatalogPolicy,
     pub catalog_model_count: usize,

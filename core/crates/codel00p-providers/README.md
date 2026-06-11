@@ -38,13 +38,13 @@ Implemented:
   OpenAI-compatible endpoints;
 - high-level `InferenceClient` facade;
 - inspectable `resolve()` route API and response route metadata with safe audit
-  fields for provider, API mode, base URL source, credential presence, policy
+  fields for provider, API mode, base URL source, credential source/kind, policy
   decision, model catalog URL, output-token parameter, and provider
   capabilities;
 - `InferenceClient::list_model_catalog` and `list_models` with
   `ModelCatalogRequest`, normalized `ProviderModel` descriptors, and safe
   catalog metadata for requested/canonical provider, catalog URL, credential
-  source, active model filters, and pre/post-filter model counts;
+  source/kind, active model filters, and pre/post-filter model counts;
 - opt-in fallback routing across provider/model candidates for retryable
   provider failures, with ordered route-attempt metadata, catalog URLs,
   output-token parameters, and capabilities attached to successful responses;
@@ -174,7 +174,7 @@ uses `max_tokens`, and lists models from
   use `list_model_catalog` when a caller needs auditable policy metadata and
   `list_models` when it only needs the filtered model descriptors.
 - Keep model catalog audit metadata safe: report catalog URL source, credential
-  source, policy metadata, and counts without exposing credential values.
+  source/kind, policy metadata, and counts without exposing credential values.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_direct_agentic` when catalog listings should also require
