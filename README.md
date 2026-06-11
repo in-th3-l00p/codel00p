@@ -73,6 +73,29 @@ asset is the project knowledge that codel00p captures and makes reusable.
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Install
+
+Prebuilt binaries are published on each tagged release. Install the CLI with one
+command:
+
+```bash
+# macOS and Linux
+curl -fsSL https://raw.githubusercontent.com/in-th3-l00p/codel00p/main/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/in-th3-l00p/codel00p/main/install.ps1 | iex
+```
+
+Prefer to build it yourself? With a recent Rust toolchain:
+
+```bash
+git clone https://github.com/in-th3-l00p/codel00p
+cd codel00p/core
+cargo build --release --bin codel00p
+```
+
 ## Repository layout
 
 ```text
