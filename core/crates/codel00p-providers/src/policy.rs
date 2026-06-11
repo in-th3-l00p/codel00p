@@ -54,6 +54,17 @@ impl ProviderPolicy {
         policy
     }
 
+    pub fn enterprise_managed_identity() -> Self {
+        let mut policy = Self::enterprise_direct();
+        for provider in ENTERPRISE_DIRECT_PROVIDERS {
+            policy.allowed_credential_source_kinds.insert(
+                (*provider).to_string(),
+                [CredentialSourceKind::ManagedIdentity].into(),
+            );
+        }
+        policy
+    }
+
     pub fn enterprise_direct_agentic() -> Self {
         let mut policy = Self::enterprise_direct();
         for provider in ENTERPRISE_DIRECT_PROVIDERS {

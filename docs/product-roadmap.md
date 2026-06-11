@@ -127,12 +127,12 @@ Current foundation:
   GitHub Models live smoke-test coverage, fallback routing, request-priced cost
   estimates, provider/model allowlist policy, catalog filtering by required
   model capabilities, auth/credential/source-kind policy, enterprise-direct
-  and enterprise cloud-proxy policy templates, client-injected provider/model
-  pricing, published provider pricing catalogs, client-level cloud proxy
-  routing, shared environment credential loading for provider clients and CLI
-  agent runs, enriched route audit metadata for catalog URLs, output-token
-  parameters, and capabilities, expanded cache/reasoning usage metadata, and
-  live integration-test toggles.
+  and enterprise cloud-proxy/managed-identity policy templates, client-injected
+  provider/model pricing, published provider pricing catalogs, client-level
+  cloud proxy routing, shared environment credential loading for provider
+  clients and CLI agent runs, enriched route audit metadata for catalog URLs,
+  output-token parameters, and capabilities, expanded cache/reasoning usage
+  metadata, and live integration-test toggles.
 
 Next work:
 
