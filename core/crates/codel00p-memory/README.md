@@ -73,6 +73,12 @@ duplicate rejection semantics. The CLI exposes this as `memory similar` with
 stable TSV output and `memory similar --json` for scored record objects. The
 MCP server exposes the same scored records through `memory_similar`.
 
+`MemoryRepository::stale_active` flags approved memory that may have been
+superseded by newer active candidate or approved memory in the same project and
+kind. It uses the same deterministic token-overlap score and ignores
+archived/rejected newer records. CLI and MCP exposure for stale review queues is
+a separate Memory 2.0 follow-up.
+
 ## Review listing contract
 
 `MemoryListFilter` lists memory records for human review. Unlike inference

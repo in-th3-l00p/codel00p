@@ -431,6 +431,14 @@ pub struct MemorySimilarityQuery {
     limit: Option<usize>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryStalenessQuery {
+    project: ProjectRef,
+    kind: Option<MemoryKind>,
+    min_score: u8,
+    limit: Option<usize>,
+}
+
 impl MemoryListFilter {
     pub fn new(project: ProjectRef) -> Self {
         Self {
@@ -454,6 +462,32 @@ impl MemoryListFilter {
 
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tag = non_empty_filter(tag.into());
+        self
+    }
+
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = if limit == 0 { None } else { Some(limit) };
+        self
+    }
+}
+
+impl MemoryStalenessQuery {
+    pub fn new(project: ProjectRef) -> Self {
+        Self {
+            project,
+            kind: None,
+            min_score: 70,
+            limit: None,
+        }
+    }
+
+    pub fn with_kind(mut self, kind: MemoryKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_min_score(mut self, min_score: u8) -> Self {
+        self.min_score = min_score;
         self
     }
 
@@ -529,9 +563,30 @@ pub struct SimilarMemory {
     score: u8,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StaleMemory {
+    record: MemoryRecord,
+    newer_record: MemoryRecord,
+    score: u8,
+}
+
 impl SimilarMemory {
     pub fn entry(&self) -> &MemoryEntry {
         self.record.entry()
+    }
+
+    pub fn score(&self) -> u8 {
+        self.score
+    }
+}
+
+impl StaleMemory {
+    pub fn entry(&self) -> &MemoryEntry {
+        self.record.entry()
+    }
+
+    pub fn newer_entry(&self) -> &MemoryEntry {
+        self.newer_record.entry()
     }
 
     pub fn score(&self) -> u8 {
@@ -601,6 +656,8 @@ pub trait MemoryRepository {
         &self,
         query: MemorySimilarityQuery,
     ) -> Result<Vec<SimilarMemory>, MemoryError>;
+
+    fn stale_active(&self, query: MemoryStalenessQuery) -> Result<Vec<StaleMemory>, MemoryError>;
 }
 
 pub type InMemoryMemoryStore = StorageBackedMemoryStore<InMemoryStorage>;
@@ -849,6 +906,83 @@ where
         }
         Ok(similar)
     }
+
+    fn stale_active(&self, query: MemoryStalenessQuery) -> Result<Vec<StaleMemory>, MemoryError> {
+        let records = self.indexed_records()?;
+        let mut stale = Vec::new();
+
+        for older in &records {
+            let older_entry = older.record.entry();
+            if older_entry.status() != MemoryStatus::Approved {
+                continue;
+            }
+
+            if older_entry.project().id() != query.project.id() {
+                continue;
+            }
+
+            if let Some(kind) = query.kind
+                && older_entry.kind() != kind
+            {
+                continue;
+            }
+
+            let older_tokens = content_tokens(older_entry.content());
+            let mut best_newer: Option<StaleMemory> = None;
+
+            for newer in records
+                .iter()
+                .filter(|newer| newer.sequence > older.sequence)
+            {
+                let newer_entry = newer.record.entry();
+                if !is_active_memory_status(newer_entry.status()) {
+                    continue;
+                }
+
+                if newer_entry.project().id() != older_entry.project().id()
+                    || newer_entry.kind() != older_entry.kind()
+                {
+                    continue;
+                }
+
+                let score =
+                    token_similarity_score(&older_tokens, &content_tokens(newer_entry.content()));
+                if score < query.min_score {
+                    continue;
+                }
+
+                let candidate = StaleMemory {
+                    record: older.record.clone(),
+                    newer_record: newer.record.clone(),
+                    score,
+                };
+                let replace_best = best_newer.as_ref().is_none_or(|best| {
+                    candidate.score > best.score
+                        || (candidate.score == best.score
+                            && candidate.newer_entry().id() < best.newer_entry().id())
+                });
+                if replace_best {
+                    best_newer = Some(candidate);
+                }
+            }
+
+            if let Some(best_newer) = best_newer {
+                stale.push(best_newer);
+            }
+        }
+
+        stale.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.entry().id().cmp(right.entry().id()))
+                .then_with(|| left.newer_entry().id().cmp(right.newer_entry().id()))
+        });
+        if let Some(limit) = query.limit {
+            stale.truncate(limit);
+        }
+        Ok(stale)
+    }
 }
 
 impl<S> StorageBackedMemoryStore<S>
@@ -884,6 +1018,14 @@ where
     }
 
     fn records(&self) -> Result<Vec<MemoryRecord>, MemoryError> {
+        Ok(self
+            .indexed_records()?
+            .into_iter()
+            .map(|record| record.record)
+            .collect())
+    }
+
+    fn indexed_records(&self) -> Result<Vec<IndexedMemoryRecord>, MemoryError> {
         // The first storage contract has point reads and append logs. Keep a
         // deterministic index as an append stream until queryable collections
         // are added to codel00p-storage.
@@ -896,7 +1038,10 @@ where
         {
             let audit = audit?;
             if audit.action() == MemoryAuditAction::CandidateCreated {
-                records.push(self.get(audit.memory_id())?);
+                records.push(IndexedMemoryRecord {
+                    sequence: audit.sequence(),
+                    record: self.get(audit.memory_id())?,
+                });
             }
         }
         Ok(records)
@@ -915,6 +1060,12 @@ where
         }
         Ok(None)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct IndexedMemoryRecord {
+    record: MemoryRecord,
+    sequence: u64,
 }
 
 fn ensure_transition(from: MemoryStatus, to: MemoryStatus) -> Result<(), MemoryError> {
