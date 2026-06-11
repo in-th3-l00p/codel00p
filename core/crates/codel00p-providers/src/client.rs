@@ -6,11 +6,12 @@ use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, AuthType, AwsManagedIdentityCredentialResolver,
     AzureManagedIdentityCredentialResolver, ClassifiedProviderError, Credential,
-    CredentialSourceKind, InferenceRequest, InferenceResponse, ManagedIdentityCredentialRequest,
-    ManagedIdentityCredentialResolver, ModelCatalogRequest, ModelCatalogUrlSource, ProviderError,
-    ProviderModel, ProviderModelCatalog, ProviderPolicy, ProviderPolicyDecision,
-    ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute, ResolvedProviderCredential,
-    RouteValueSource, UsagePricing, classify_provider_error, default_registry,
+    CredentialSourceKind, GcpManagedIdentityCredentialResolver, InferenceRequest,
+    InferenceResponse, ManagedIdentityCredentialRequest, ManagedIdentityCredentialResolver,
+    ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel, ProviderModelCatalog,
+    ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry,
+    ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, UsagePricing,
+    classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -626,6 +627,18 @@ impl InferenceClientBuilder {
         provider: impl Into<String>,
         identity_ref: impl Into<String>,
         resolver: &AwsManagedIdentityCredentialResolver,
+    ) -> Result<Self, ProviderError> {
+        let provider = provider.into();
+        let identity_ref = identity_ref.into();
+        let credential = resolver.resolve(&provider, &identity_ref).await?;
+        Ok(self.managed_identity_credential(provider, credential, identity_ref))
+    }
+
+    pub async fn gcp_managed_identity_credential_from_resolver(
+        self,
+        provider: impl Into<String>,
+        identity_ref: impl Into<String>,
+        resolver: &GcpManagedIdentityCredentialResolver,
     ) -> Result<Self, ProviderError> {
         let provider = provider.into();
         let identity_ref = identity_ref.into();

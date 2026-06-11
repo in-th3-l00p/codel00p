@@ -276,8 +276,39 @@ See AWS's IMDSv2 and instance profile credential documentation:
 and
 <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>.
 
-This keeps provider-specific GCP token acquisition outside the route resolver
-while preserving the same safe audit metadata.
+GCP metadata server token acquisition is available through
+`GcpManagedIdentityCredentialResolver`. It returns the service account OAuth
+access token as a bearer-compatible `Credential::ApiKey`, which is suitable for
+custom/OpenAI-compatible routes that send `Authorization: Bearer ...`:
+
+```rust
+# use codel00p_providers::{
+#     GcpManagedIdentityCredentialResolver, InferenceClient, ProviderError, default_registry,
+# };
+# async fn run() -> Result<(), ProviderError> {
+let resolver = GcpManagedIdentityCredentialResolver::default_service_account();
+
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .gcp_managed_identity_credential_from_resolver(
+        "custom",
+        "gcp/default-service-account",
+        &resolver,
+    )
+    .await?
+    .build();
+# let _ = client;
+# Ok(())
+# }
+```
+
+The native Gemini transport currently uses the Gemini API-key header, so use
+this resolver with bearer-compatible routes. See Google Cloud's metadata server
+documentation:
+<https://cloud.google.com/compute/docs/metadata/querying-metadata>.
+
+This keeps cloud-specific token acquisition outside the route resolver while
+preserving the same safe audit metadata.
 
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.

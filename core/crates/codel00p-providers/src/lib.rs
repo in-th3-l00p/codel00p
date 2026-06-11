@@ -28,6 +28,7 @@ mod client;
 mod credentials;
 mod error;
 mod error_classifier;
+mod gcp_managed_identity;
 mod model_catalog;
 mod policy;
 mod pricing_catalog;
@@ -52,6 +53,9 @@ pub use credentials::{
 };
 pub use error::ProviderError;
 pub use error_classifier::{ClassifiedProviderError, classify_provider_error};
+pub use gcp_managed_identity::{
+    GCP_MANAGED_IDENTITY_METADATA_ENDPOINT, GcpManagedIdentityCredentialResolver,
+};
 pub use model_catalog::{
     ModelCatalogRequest, ModelCatalogRequestBuilder, ModelCatalogUrlSource, ProviderModel,
     ProviderModelAnnotations, ProviderModelCatalog, ProviderModelCatalogPolicy,

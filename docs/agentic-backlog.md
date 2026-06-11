@@ -33,8 +33,8 @@ next bottleneck before cloud-managed providers and team usage controls.
 
 Started enterprise credential groundwork with typed credential source kind
 metadata, managed-identity credential injection, a resolver boundary for
-managed identity token providers, and offline-tested Azure IMDS and AWS IMDSv2
-token acquisition; GCP token acquisition remains a follow-up.
+managed identity token providers, and offline-tested Azure IMDS, AWS IMDSv2,
+and GCP metadata server token acquisition.
 
 ### 2. Memory 2.0
 

@@ -130,15 +130,17 @@ Current foundation:
   and enterprise cloud-proxy/managed-identity policy templates, managed
   identity credential injection plus a resolver boundary, Azure IMDS managed
   identity token acquisition, AWS IMDSv2 instance profile credential
-  acquisition, client-injected provider/model pricing, published provider
-  pricing catalogs, client-level cloud proxy routing, shared environment
-  credential loading for provider clients and CLI agent runs, enriched route
-  audit metadata for catalog URLs, output-token parameters, and capabilities,
-  expanded cache/reasoning usage metadata, and live integration-test toggles.
+  acquisition, GCP metadata server service account token acquisition,
+  client-injected provider/model pricing, published provider pricing catalogs,
+  client-level cloud proxy routing, shared environment credential loading for
+  provider clients and CLI agent runs, enriched route audit metadata for
+  catalog URLs, output-token parameters, and capabilities, expanded
+  cache/reasoning usage metadata, and live integration-test toggles.
 
 Next work:
 
-- concrete GCP managed identity credential resolver.
+- live smoke coverage and deployment guidance for cloud managed identity
+  resolvers on Azure, AWS, and GCP runtimes.
 
 Exit criteria:
 
