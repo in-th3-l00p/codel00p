@@ -96,6 +96,32 @@ fn memory_entries_capture_reviewed_project_knowledge() {
 }
 
 #[test]
+fn memory_sources_can_carry_explicit_source_uri() {
+    let source = MemorySource::turn(
+        SessionId::from_static("session-1"),
+        TurnId::from_static("turn-1"),
+    )
+    .with_uri("https://github.com/in-th3-l00p/codel00p/pull/1");
+
+    let encoded = serde_json::to_value(&source).expect("serialize source");
+
+    assert_eq!(source.session_id().as_str(), "session-1");
+    assert_eq!(source.turn_id().as_str(), "turn-1");
+    assert_eq!(
+        source.uri(),
+        Some("https://github.com/in-th3-l00p/codel00p/pull/1")
+    );
+    assert_eq!(
+        encoded,
+        json!({
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "uri": "https://github.com/in-th3-l00p/codel00p/pull/1"
+        })
+    );
+}
+
+#[test]
 fn memory_entries_can_mark_sensitive_project_knowledge() {
     let memory = MemoryEntry::new(
         "mem-sensitive",

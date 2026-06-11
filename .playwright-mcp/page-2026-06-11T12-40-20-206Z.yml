@@ -1,0 +1,144 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "codel00p" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e14]: codel00p
+        - navigation [ref=e15]:
+          - link "Docs" [ref=e16] [cursor=pointer]:
+            - /url: /docs
+          - link "GitHub" [ref=e17] [cursor=pointer]:
+            - /url: https://github.com/inth3loop/codel00p
+    - generic [ref=e19]:
+      - complementary [ref=e20]:
+        - navigation [ref=e22]:
+          - list [ref=e24]:
+            - listitem [ref=e25]:
+              - link "Introduction" [ref=e26] [cursor=pointer]:
+                - /url: /docs
+          - generic [ref=e27]:
+            - paragraph [ref=e28]: Getting started
+            - list [ref=e29]:
+              - listitem [ref=e30]:
+                - link "Installation" [ref=e31] [cursor=pointer]:
+                  - /url: /docs/installation
+              - listitem [ref=e32]:
+                - link "Quick start" [ref=e33] [cursor=pointer]:
+                  - /url: /docs/quick-start
+          - generic [ref=e34]:
+            - paragraph [ref=e35]: Architecture
+            - list [ref=e36]:
+              - listitem [ref=e37]:
+                - link "Overview" [ref=e38] [cursor=pointer]:
+                  - /url: /docs/architecture
+              - listitem [ref=e39]:
+                - link "The harness" [ref=e40] [cursor=pointer]:
+                  - /url: /docs/architecture/harness
+              - listitem [ref=e41]:
+                - link "Project memory" [ref=e42] [cursor=pointer]:
+                  - /url: /docs/architecture/memory
+              - listitem [ref=e43]:
+                - link "Providers & routing" [ref=e44] [cursor=pointer]:
+                  - /url: /docs/architecture/providers
+              - listitem [ref=e45]:
+                - link "Storage & sessions" [ref=e46] [cursor=pointer]:
+                  - /url: /docs/architecture/storage
+          - generic [ref=e47]:
+            - paragraph [ref=e48]: Guides
+            - list [ref=e49]:
+              - listitem [ref=e50]:
+                - link "Curating memory" [ref=e51] [cursor=pointer]:
+                  - /url: /docs/guides/memory
+              - listitem [ref=e52]:
+                - link "Connecting MCP tools" [ref=e53] [cursor=pointer]:
+                  - /url: /docs/guides/mcp
+          - generic [ref=e54]:
+            - paragraph [ref=e55]: Reference
+            - list [ref=e56]:
+              - listitem [ref=e57]:
+                - link "CLI commands" [ref=e58] [cursor=pointer]:
+                  - /url: /docs/reference/cli
+      - generic [ref=e59]:
+        - article [ref=e60]:
+          - generic [ref=e61]:
+            - paragraph [ref=e62]: Architecture
+            - heading "The harness" [level=1] [ref=e63]
+            - paragraph [ref=e64]: codel00p-harness is the runtime. It owns the turn loop, tool execution, the workspace boundary, permissions, and the event stream.
+          - heading "The turn loop" [level=2] [ref=e65]
+          - paragraph [ref=e66]: "A turn is a bounded loop, not an open-ended process:"
+          - list [ref=e67]:
+            - listitem [ref=e68]: accept a user turn;
+            - listitem [ref=e69]: build context from session state and workspace metadata;
+            - listitem [ref=e70]: call the provider through the model client;
+            - listitem [ref=e71]: execute the tools the model requested;
+            - listitem [ref=e72]: append tool results to the session;
+            - listitem [ref=e73]:
+              - text: continue until a final assistant answer or the iteration limit set by
+              - code [ref=e74]: "--max-iterations"
+              - text: ;
+            - listitem [ref=e75]: emit a typed event for every important step.
+          - paragraph [ref=e76]: The result is a structured outcome the CLI, and later the desktop and cloud surfaces, can render or replay.
+          - heading "Tools and the workspace boundary" [level=2] [ref=e77]
+          - paragraph [ref=e78]:
+            - text: Tools are grouped into sets you opt into with
+            - code [ref=e79]: "--tool-set"
+            - text: ":"
+            - code [ref=e80]: read
+            - text: for inspection,
+            - code [ref=e81]: edit
+            - text: for file changes,
+            - code [ref=e82]: command
+            - text: for running programs, and
+            - code [ref=e83]: git
+            - text: for repository state. Every tool is confined to the workspace root, so a run cannot read or write outside the project directory.
+          - paragraph [ref=e84]:
+            - text: Tools marked
+            - strong [ref=e85]: concurrency-safe
+            - text: can run together in one batch. Unsafe or unknown tools always run serially and split adjacent safe batches, and the harness preserves the model's original tool-call order when recording results and events.
+          - heading "Permissions" [level=2] [ref=e86]
+          - paragraph [ref=e87]:
+            - text: Tool execution runs under a permission mode set with
+            - code [ref=e88]: "--permission-mode"
+            - text: ":"
+          - list [ref=e89]:
+            - listitem [ref=e90]:
+              - code [ref=e91]: allow
+              - text: — run permitted tools without prompting;
+            - listitem [ref=e92]:
+              - code [ref=e93]: ask
+              - text: — confirm before sensitive actions, with the option to remember a decision;
+            - listitem [ref=e94]:
+              - code [ref=e95]: deny
+              - text: — block the tool surface entirely.
+          - paragraph [ref=e96]: The same checks cover external MCP tools, so connectors are governed the same way native tools are.
+          - heading "Events and lifecycle hooks" [level=2] [ref=e97]
+          - paragraph [ref=e98]:
+            - text: Every step emits a typed event. With
+            - code [ref=e99]: "--stream-events"
+            - text: you see them live; with
+            - code [ref=e100]: "--json-events"
+            - text: you get them as serialized records after the answer. The same events drive session replay.
+          - paragraph [ref=e101]: "The loop also exposes lifecycle hooks so memory, compaction, and approvals can extend a turn without forking it: queue recall before a turn, inject reviewed context before inference, observe tool evidence, extract facts before older transcript is compacted, and queue memory extraction once a turn completes."
+        - navigation [ref=e103]:
+          - link "Previous Overview" [ref=e104] [cursor=pointer]:
+            - /url: /docs/architecture
+            - generic [ref=e105]:
+              - img [ref=e106]
+              - text: Previous
+            - generic [ref=e108]: Overview
+          - link "Next Project memory" [ref=e109] [cursor=pointer]:
+            - /url: /docs/architecture/memory
+            - generic [ref=e110]:
+              - text: Next
+              - img [ref=e111]
+            - generic [ref=e113]: Project memory
+    - contentinfo [ref=e114]:
+      - generic [ref=e115]:
+        - generic [ref=e116]:
+          - img [ref=e118]
+          - generic [ref=e125]: codel00p
+        - paragraph [ref=e126]: MIT licensed · built in the open
+  - button "Open Next.js Dev Tools" [ref=e132] [cursor=pointer]:
+    - img [ref=e133]

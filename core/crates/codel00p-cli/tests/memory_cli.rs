@@ -48,6 +48,24 @@ fn seed_candidate_with_sensitivity(
         .expect("create candidate");
 }
 
+fn seed_candidate_with_source(
+    db_path: &Path,
+    id: &str,
+    kind: MemoryKind,
+    content: &str,
+    tag: &str,
+    source: MemorySource,
+) {
+    let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
+    let mut store =
+        StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(id, project(), kind, content, source).with_tag(tag),
+        )
+        .expect("create candidate");
+}
+
 fn approve_candidate(db_path: &Path, id: &str, actor: &str) {
     let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
     let mut store =
@@ -163,6 +181,35 @@ fn memory_list_prints_filtered_candidates() {
     assert_eq!(records[0]["source"]["session_id"], "session-cli");
     assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
     assert_eq!(records[0]["source_uri"], "codel00p://sessions/session-cli");
+}
+
+#[test]
+fn memory_list_json_prefers_explicit_source_uri() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate_with_source(
+        &db_path,
+        "mem-workflow-source",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+        source().with_uri("https://github.com/in-th3-l00p/codel00p/pull/1"),
+    );
+
+    let output = run_codel00p(&db_path, &["memory", "list", "--json"]);
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let records: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("list json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        records[0]["source"]["uri"],
+        "https://github.com/in-th3-l00p/codel00p/pull/1"
+    );
+    assert_eq!(
+        records[0]["source_uri"],
+        "https://github.com/in-th3-l00p/codel00p/pull/1"
+    );
 }
 
 #[test]

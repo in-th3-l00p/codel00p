@@ -458,10 +458,14 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         "tags": entry.tags(),
     });
     if let Some(source) = entry.source() {
-        item["source"] = json!({
+        let mut source_json = json!({
             "session_id": source.session_id().as_str(),
             "turn_id": source.turn_id().as_str(),
         });
+        if let Some(uri) = source.uri() {
+            source_json["uri"] = json!(uri);
+        }
+        item["source"] = source_json;
         item["source_uri"] = json!(source_uri(source));
     }
     item
@@ -475,6 +479,10 @@ fn memory_quality_json(quality: &codel00p_memory::MemoryQuality) -> Value {
 }
 
 fn source_uri(source: &MemorySource) -> String {
+    if let Some(uri) = source.uri() {
+        return uri.to_string();
+    }
+
     format!("codel00p://sessions/{}", source.session_id().as_str())
 }
 

@@ -638,6 +638,7 @@ fn mcp_serve_exposes_memory_and_session_resources() {
                     "content": "Expose memory as MCP resources.",
                     "session_id": "session-resource",
                     "turn_id": "turn-resource",
+                    "source_uri": "https://github.com/in-th3-l00p/codel00p/pull/1",
                     "tags": ["mcp"]
                 }
             }
@@ -669,13 +670,19 @@ fn mcp_serve_exposes_memory_and_session_resources() {
     let memory_text = memory["result"]["contents"][0]["text"]
         .as_str()
         .expect("memory text");
+    let memory_json: Value = serde_json::from_str(memory_text).expect("memory resource json");
     assert!(memory_text.contains(r#""id":"mem-resource-1""#));
     assert!(memory_text.contains(r#""kind":"architecture""#));
-    assert!(
-        memory_text
-            .contains(r#""source":{"session_id":"session-resource","turn_id":"turn-resource"}"#)
+    assert_eq!(memory_json["source"]["session_id"], "session-resource");
+    assert_eq!(memory_json["source"]["turn_id"], "turn-resource");
+    assert_eq!(
+        memory_json["source"]["uri"],
+        "https://github.com/in-th3-l00p/codel00p/pull/1"
     );
-    assert!(memory_text.contains(r#""source_uri":"codel00p://sessions/session-resource""#));
+    assert_eq!(
+        memory_json["source_uri"],
+        "https://github.com/in-th3-l00p/codel00p/pull/1"
+    );
 
     send(
         &mut child,

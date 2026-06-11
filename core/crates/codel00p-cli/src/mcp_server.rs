@@ -242,6 +242,7 @@ fn mcp_tools() -> Vec<Value> {
                     "content": { "type": "string" },
                     "session_id": { "type": "string" },
                     "turn_id": { "type": "string" },
+                    "source_uri": { "type": "string" },
                     "sensitivity": { "type": "string" },
                     "tags": { "type": "array", "items": { "type": "string" } }
                 }
@@ -572,10 +573,13 @@ fn memory_create_candidate(
     arguments: &Value,
 ) -> Result<(String, Vec<String>), String> {
     let id = required_string(arguments, "id")?;
-    let source = MemorySource::turn(
+    let mut source = MemorySource::turn(
         parse_session_id(required_string(arguments, "session_id")?)?,
         parse_turn_id(required_string(arguments, "turn_id")?)?,
     );
+    if let Some(source_uri) = optional_string(arguments, "source_uri") {
+        source = source.with_uri(source_uri);
+    }
     let mut input = MemoryCandidateInput::new(
         id,
         config.project.clone(),
@@ -771,10 +775,14 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         "tags": entry.tags(),
     });
     if let Some(source) = entry.source() {
-        item["source"] = json!({
+        let mut source_json = json!({
             "session_id": source.session_id().as_str(),
             "turn_id": source.turn_id().as_str(),
         });
+        if let Some(uri) = source.uri() {
+            source_json["uri"] = json!(uri);
+        }
+        item["source"] = source_json;
         item["source_uri"] = json!(source_uri(source));
     }
     item
@@ -788,6 +796,10 @@ fn memory_quality_json(quality: &codel00p_memory::MemoryQuality) -> Value {
 }
 
 fn source_uri(source: &MemorySource) -> String {
+    if let Some(uri) = source.uri() {
+        return uri.to_string();
+    }
+
     format!("codel00p://sessions/{}", source.session_id().as_str())
 }
 

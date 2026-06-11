@@ -770,6 +770,8 @@ impl MemorySensitivity {
 pub struct MemorySource {
     session_id: SessionId,
     turn_id: TurnId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uri: Option<String>,
 }
 
 impl MemorySource {
@@ -777,7 +779,18 @@ impl MemorySource {
         Self {
             session_id,
             turn_id,
+            uri: None,
         }
+    }
+
+    pub fn with_uri(mut self, uri: impl Into<String>) -> Self {
+        let uri = uri.into();
+        self.uri = if uri.trim().is_empty() {
+            None
+        } else {
+            Some(uri)
+        };
+        self
     }
 
     pub fn session_id(&self) -> &SessionId {
@@ -786,6 +799,10 @@ impl MemorySource {
 
     pub fn turn_id(&self) -> &TurnId {
         &self.turn_id
+    }
+
+    pub fn uri(&self) -> Option<&str> {
+        self.uri.as_deref()
     }
 }
 

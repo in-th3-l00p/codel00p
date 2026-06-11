@@ -1,0 +1,63 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "codel00p" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e14]: codel00p
+        - navigation [ref=e15]:
+          - link "Docs" [ref=e16] [cursor=pointer]:
+            - /url: /docs
+          - link "GitHub" [ref=e17] [cursor=pointer]:
+            - /url: https://github.com/inth3loop/codel00p
+    - main [ref=e18]:
+      - generic [ref=e19]:
+        - paragraph [ref=e20]: Open source · agentic coding platform
+        - heading "codel00p" [level=1] [ref=e21]
+        - paragraph [ref=e22]: The coding agent that remembers.
+        - paragraph [ref=e23]: Most agents start every session from zero. codel00p turns real work into reviewed, durable project memory — so your codebase gets easier to work in every single time.
+        - generic [ref=e24]:
+          - link "Read the docs" [ref=e25] [cursor=pointer]:
+            - /url: /docs
+            - text: Read the docs
+            - img
+          - link "View on GitHub" [ref=e26] [cursor=pointer]:
+            - /url: https://github.com/inth3loop/codel00p
+        - paragraph [ref=e27]: Rust core · provider-agnostic · local-first
+      - generic [ref=e28]:
+        - paragraph [ref=e29]: The thesis
+        - heading "Model quality is rented. Project knowledge is owned." [level=2] [ref=e30]:
+          - text: Model quality is rented.
+          - text: Project knowledge is owned.
+        - paragraph [ref=e31]: "The durable advantage isn't the model — it's the harness, the context, and the memory around it. codel00p makes that memory explicit: captured from real sessions, reviewed by your team, and reused automatically."
+      - generic [ref=e33]:
+        - article [ref=e34]:
+          - generic [ref=e35]: "01"
+          - heading "Durable memory" [level=3] [ref=e36]
+          - paragraph [ref=e37]: Completed work becomes reviewed, searchable knowledge. Only approved memory ever reaches the model — nothing leaks in unread.
+        - article [ref=e38]:
+          - generic [ref=e39]: "02"
+          - heading "Real execution" [level=3] [ref=e40]
+          - paragraph [ref=e41]: Read, edit, run, test, commit, resume. Workspace-safe tools with permissioned access and a deterministic audit trail.
+        - article [ref=e42]:
+          - generic [ref=e43]: "03"
+          - heading "Any provider" [level=3] [ref=e44]
+          - paragraph [ref=e45]: Anthropic, OpenAI, Bedrock, Gemini, or your own gateway. One Rust contract with consistent policy, routing, and cost visibility.
+      - generic [ref=e46]:
+        - img [ref=e48]
+        - heading "Build a memory that lasts." [level=2] [ref=e55]
+        - paragraph [ref=e56]: Free and open source. Run it locally today, bring it to your team tomorrow.
+        - link "Get started" [ref=e58] [cursor=pointer]:
+          - /url: /docs
+          - text: Get started
+          - img
+    - contentinfo [ref=e59]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - img [ref=e63]
+          - generic [ref=e70]: codel00p
+        - paragraph [ref=e71]: MIT licensed · built in the open
+  - button "Open Next.js Dev Tools" [ref=e77] [cursor=pointer]:
+    - img [ref=e78]
+  - alert [ref=e81]
