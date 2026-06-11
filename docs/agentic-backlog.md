@@ -26,7 +26,7 @@ Build:
   started with catalog filtering by required typed model capabilities and safe
   catalog policy metadata, provider-scoped auth type, credential
   kind/source-kind, and capability rules, plus enterprise cloud-proxy,
-  managed-identity, and direct agentic templates.
+  managed-identity, organization-credential, and direct agentic templates.
 
 Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.
@@ -35,7 +35,8 @@ Started enterprise credential groundwork with typed credential source kind
 metadata, managed-identity credential injection, a resolver boundary for
 managed identity token providers, and offline-tested Azure IMDS, AWS IMDSv2,
 and GCP metadata server token acquisition, plus default-off live smoke test
-scaffolding for cloud runtimes.
+scaffolding for cloud runtimes. Added an enterprise organization-credential
+policy template for team-managed provider credentials.
 
 ### 2. Memory 2.0
 

@@ -351,7 +351,8 @@ uses `max_tokens`, and lists models from
   `enterprise_cloud_proxy` when those direct providers must resolve through
   codel00p-managed proxy routes, `enterprise_managed_identity` when direct
   providers must use managed identity credential injection or resolver-backed
-  managed identity credentials, and
+  managed identity credentials, `enterprise_organization_credentials` when
+  direct providers must use organization-managed credential injection, and
   `enterprise_direct_agentic` when catalog listings should also require
   tool-use, streaming, and reasoning capability flags.
 - Never expose credential values in route/debug types.
