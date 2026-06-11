@@ -12,7 +12,9 @@ pub enum Credential {
 }
 
 /// Safe credential kind metadata for audit surfaces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum CredentialKind {
     ApiKey,
     AwsSigV4,

@@ -76,6 +76,8 @@ pub struct ProviderModelCatalog {
 pub struct ProviderModelCatalogPolicy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_models: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_credential_kinds: Option<Vec<CredentialKind>>,
     #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]
     pub required_capabilities: ProviderCapabilities,
 }

@@ -1,6 +1,6 @@
 use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ProviderPolicy,
-    default_registry,
+    ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest, ProviderError,
+    ProviderPolicy, default_registry,
 };
 
 #[test]
@@ -84,6 +84,49 @@ fn provider_policy_accepts_model_policy_provider_aliases() {
         .unwrap();
 
     assert_eq!(route.provider, "openrouter");
+}
+
+#[test]
+fn provider_policy_enforces_credential_kind_policy() {
+    let api_key_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("gpt", Credential::api_key("openai-key"))
+        .policy(
+            ProviderPolicy::allow_all()
+                .with_allowed_credential_kinds("gpt", [CredentialKind::ApiKey]),
+        )
+        .build();
+
+    let route = api_key_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(route.provider, "openai");
+
+    let unauthenticated_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::None)
+        .policy(
+            ProviderPolicy::allow_all()
+                .with_allowed_credential_kinds("custom", [CredentialKind::ApiKey]),
+        )
+        .build();
+
+    let error = unauthenticated_client
+        .resolve(
+            &InferenceRequest::builder("custom", "local-model")
+                .base_url("http://127.0.0.1:11434/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(error, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("credential kind is not allowed"))
+    );
 }
 
 #[test]

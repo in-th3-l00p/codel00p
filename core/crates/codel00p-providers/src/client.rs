@@ -165,6 +165,8 @@ impl InferenceClient {
                 .ok_or_else(|| ProviderError::MissingCredential {
                     provider: profile.id.to_string(),
                 })?;
+        self.policy
+            .check_credential_kind(profile.id, Some(credential.credential.kind()))?;
         let mut request_builder = reqwest::Client::new().get(models_url.clone());
         match &credential.credential {
             Credential::ApiKey(api_key) => {
@@ -357,6 +359,8 @@ impl InferenceClient {
 
         self.policy.check_provider(profile.id)?;
         self.policy.check_model(profile.id, &request.model)?;
+        self.policy
+            .check_credential_kind(profile.id, credential_kind)?;
 
         Ok(ResolvedInferenceRoute {
             requested_provider: request.provider.clone(),
