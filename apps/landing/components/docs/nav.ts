@@ -18,6 +18,14 @@ export const docsNav: DocSection[] = [
     ],
   },
   {
+    label: "Tutorial",
+    items: [
+      { title: "Your first chat", href: "/docs/tutorial" },
+      { title: "Letting the agent work", href: "/docs/tutorial/tools" },
+      { title: "Memory & sessions", href: "/docs/tutorial/sessions" },
+    ],
+  },
+  {
     label: "Architecture",
     items: [
       { title: "Overview", href: "/docs/architecture" },

@@ -49,8 +49,9 @@ codel00p \\
       <Code>{`codel00p ...scope memory list
 codel00p ...scope memory approve <memory-id>`}</Code>
       <P>
-        Only approved memory reaches the model on future runs. From here, read{" "}
-        <Ic>Architecture</Ic> to see how a turn actually executes.
+        Only approved memory reaches the model on future runs. Next, the{" "}
+        <Ic>Tutorial</Ic> walks through the interactive chat, the way you&apos;ll
+        actually work day to day.
       </P>
 
       <Note>
