@@ -1,6 +1,6 @@
 use codel00p_providers::{
-    ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest, ProviderError,
-    ProviderPolicy, default_registry,
+    ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
+    ProviderCapabilities, ProviderError, ProviderPolicy, default_registry,
 };
 
 #[test]
@@ -126,6 +126,58 @@ fn provider_policy_enforces_credential_kind_policy() {
 
     assert!(
         matches!(error, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("credential kind is not allowed"))
+    );
+}
+
+#[test]
+fn provider_policy_enforces_provider_capability_policy() {
+    let agentic_client = InferenceClient::builder()
+        .registry(default_registry())
+        .policy(
+            ProviderPolicy::allow_all().with_required_provider_capabilities(
+                "gpt",
+                ProviderCapabilities {
+                    tools: true,
+                    reasoning: true,
+                    ..ProviderCapabilities::default()
+                },
+            ),
+        )
+        .build();
+
+    let route = agentic_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(route.provider, "openai");
+
+    let vision_client = InferenceClient::builder()
+        .registry(default_registry())
+        .policy(
+            ProviderPolicy::allow_all().with_required_provider_capabilities(
+                "custom",
+                ProviderCapabilities {
+                    vision: true,
+                    ..ProviderCapabilities::default()
+                },
+            ),
+        )
+        .build();
+
+    let error = vision_client
+        .resolve(
+            &InferenceRequest::builder("custom", "local-model")
+                .base_url("http://127.0.0.1:11434/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(error, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("provider capabilities do not satisfy"))
     );
 }
 

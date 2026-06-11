@@ -140,6 +140,8 @@ impl InferenceClient {
             }
         })?;
         self.policy.check_provider(profile.id)?;
+        self.policy
+            .check_provider_capabilities(profile.id, &profile.capabilities)?;
 
         let (models_url, models_url_source) = if let Some(models_url) = request.models_url.clone() {
             (models_url, ModelCatalogUrlSource::RequestModelsUrl)
@@ -358,6 +360,8 @@ impl InferenceClient {
             };
 
         self.policy.check_provider(profile.id)?;
+        self.policy
+            .check_provider_capabilities(profile.id, &profile.capabilities)?;
         self.policy.check_model(profile.id, &request.model)?;
         self.policy
             .check_credential_kind(profile.id, credential_kind)?;
