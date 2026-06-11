@@ -10,3 +10,7 @@ packages/*/dist/
 .env
 .env.*
 !.env.example
+
+# Local agent/browser scratch artifacts (e.g. Playwright screenshots)
+.playwright-mcp/
+/*.png
