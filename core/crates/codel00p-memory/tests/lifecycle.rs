@@ -214,6 +214,45 @@ fn quality_review_can_filter_low_quality_memory_by_kind() {
 }
 
 #[test]
+fn quality_review_can_filter_low_quality_memory_by_sensitivity() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-vague-normal",
+            project(),
+            MemoryKind::Workflow,
+            "Run tests.",
+            source(),
+        ))
+        .expect("create low-quality normal candidate");
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(
+                "mem-vague-sensitive",
+                project(),
+                MemoryKind::Workflow,
+                "Use credential.",
+                source(),
+            )
+            .with_sensitivity(MemorySensitivity::Sensitive),
+        )
+        .expect("create low-quality sensitive candidate");
+
+    let low_quality = store
+        .quality_review(
+            MemoryQualityQuery::new(project()).with_sensitivity(MemorySensitivity::Sensitive),
+        )
+        .expect("list low-quality sensitive memory");
+
+    assert_eq!(low_quality.len(), 1);
+    assert_eq!(low_quality[0].entry().id(), "mem-vague-sensitive");
+    assert_eq!(
+        low_quality[0].entry().sensitivity(),
+        MemorySensitivity::Sensitive
+    );
+}
+
+#[test]
 fn finds_near_duplicate_active_memory() {
     let mut store = InMemoryMemoryStore::default();
     store

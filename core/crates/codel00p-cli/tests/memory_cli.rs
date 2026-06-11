@@ -580,6 +580,47 @@ fn memory_quality_filters_low_quality_memory_by_kind() {
 }
 
 #[test]
+fn memory_quality_filters_low_quality_memory_by_sensitivity() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-vague-normal",
+        MemoryKind::Workflow,
+        "Run tests.",
+        "verify",
+    );
+    seed_candidate_with_sensitivity(
+        &db_path,
+        "mem-vague-sensitive",
+        MemoryKind::Workflow,
+        "Use credential.",
+        "credential",
+        MemorySensitivity::Sensitive,
+    );
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "quality",
+            "--sensitivity",
+            "sensitive",
+            "--max-score",
+            "80",
+            "--json",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let records: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("quality json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-vague-sensitive");
+    assert_eq!(records[0]["sensitivity"], "sensitive");
+}
+
+#[test]
 fn memory_show_and_audit_print_stable_details() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

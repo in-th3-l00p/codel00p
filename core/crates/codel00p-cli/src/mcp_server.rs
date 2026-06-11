@@ -172,6 +172,7 @@ fn mcp_tools() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "kind": { "type": "string" },
+                    "sensitivity": { "type": "string" },
                     "max_score": { "type": "integer", "minimum": 0, "maximum": 100 },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -405,6 +406,9 @@ fn memory_quality(config: &CliConfig, arguments: &Value) -> Result<String, Strin
     let mut query = MemoryQualityQuery::new(config.project.clone());
     if let Some(kind) = optional_string(arguments, "kind") {
         query = query.with_kind(parse_kind(kind)?);
+    }
+    if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
+        query = query.with_sensitivity(parse_sensitivity(sensitivity)?);
     }
     if let Some(max_score) = optional_usize(arguments, "max_score")? {
         if max_score > 100 {

@@ -39,6 +39,14 @@ fn memory_quality(config: CliConfig, args: &[String]) -> CliResult<String> {
                 query = query.with_kind(parse_kind(&required_value(args, index, "--kind")?)?);
                 index += 2;
             }
+            "--sensitivity" => {
+                query = query.with_sensitivity(parse_sensitivity(&required_value(
+                    args,
+                    index,
+                    "--sensitivity",
+                )?)?);
+                index += 2;
+            }
             "--max-score" => {
                 let score = required_value(args, index, "--max-score")?
                     .parse::<u8>()

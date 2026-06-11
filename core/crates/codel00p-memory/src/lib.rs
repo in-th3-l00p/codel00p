@@ -486,6 +486,7 @@ pub struct MemoryStalenessQuery {
 pub struct MemoryQualityQuery {
     project: ProjectRef,
     kind: Option<MemoryKind>,
+    sensitivity: Option<MemorySensitivity>,
     max_score: u8,
     limit: Option<usize>,
 }
@@ -534,6 +535,7 @@ impl MemoryQualityQuery {
         Self {
             project,
             kind: None,
+            sensitivity: None,
             max_score: 80,
             limit: None,
         }
@@ -542,6 +544,12 @@ impl MemoryQualityQuery {
     /// Restricts the review queue to one memory kind.
     pub fn with_kind(mut self, kind: MemoryKind) -> Self {
         self.kind = Some(kind);
+        self
+    }
+
+    /// Restricts the review queue to one memory sensitivity class.
+    pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
+        self.sensitivity = Some(sensitivity);
         self
     }
 
@@ -1149,6 +1157,13 @@ where
             }
 
             if query.kind.is_some_and(|kind| entry.kind() != kind) {
+                continue;
+            }
+
+            if query
+                .sensitivity
+                .is_some_and(|sensitivity| entry.sensitivity() != sensitivity)
+            {
                 continue;
             }
 

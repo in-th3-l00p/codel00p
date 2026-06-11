@@ -74,7 +74,7 @@ Build:
   advisory scores and findings for short, long, or vague memory content, now
   exposed in CLI/MCP memory JSON records for review surfaces, plus a core
   low-quality active-memory review query surfaced through CLI and MCP with
-  kind-scoped review filters.
+  kind- and sensitivity-scoped review filters.
 
 Why next: memory is the product moat. Provider breadth matters, but durable
 reviewed knowledge is what makes codel00p distinct for teams.
