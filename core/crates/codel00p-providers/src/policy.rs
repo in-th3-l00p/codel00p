@@ -36,6 +36,16 @@ impl ProviderPolicy {
         Self::allow_only(ENTERPRISE_DIRECT_PROVIDERS.iter().copied())
     }
 
+    pub fn enterprise_direct_agentic() -> Self {
+        let mut policy = Self::enterprise_direct();
+        for provider in ENTERPRISE_DIRECT_PROVIDERS {
+            policy
+                .required_model_capabilities
+                .insert((*provider).to_string(), ProviderCapabilities::agentic());
+        }
+        policy
+    }
+
     pub fn allow_only<I, S>(providers: I) -> Self
     where
         I: IntoIterator<Item = S>,

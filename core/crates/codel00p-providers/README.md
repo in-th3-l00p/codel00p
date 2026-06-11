@@ -56,7 +56,7 @@ Implemented:
 - environment credential loading through `credentials_from_env()`, with safe
   route metadata that records the source variable name instead of secret values;
 - provider and model allowlist policy, catalog capability requirements, and an
-  enterprise-direct template;
+  enterprise-direct template plus an enterprise-direct agentic catalog template;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
@@ -174,7 +174,9 @@ uses `max_tokens`, and lists models from
   use `list_model_catalog` when a caller needs auditable policy metadata and
   `list_models` when it only needs the filtered model descriptors.
 - Keep policy templates conservative: direct corporate providers can be allowed
-  by default while broker and custom endpoints remain explicit choices.
+  by default while broker and custom endpoints remain explicit choices; use
+  `enterprise_direct_agentic` when catalog listings should also require
+  tool-use, streaming, and reasoning capability flags.
 - Never expose credential values in route/debug types.
 - Prefer explicit request base URL overrides over configured provider proxies,
   then provider defaults.

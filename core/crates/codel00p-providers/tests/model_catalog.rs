@@ -450,3 +450,58 @@ async fn list_model_catalog_reports_credential_source() {
     assert_eq!(result.models.len(), 1);
     assert_eq!(result.models[0].id, "local-model");
 }
+
+#[tokio::test]
+async fn list_model_catalog_applies_enterprise_agentic_template() {
+    let server = MockServer::start_async().await;
+    let catalog = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/catalog/models")
+                .header("authorization", "Bearer github-models-key");
+            then.status(200).json_body(json!([
+                {
+                    "id": "openai/agentic-model",
+                    "name": "Agentic Model",
+                    "capabilities": ["tool-calling", "streaming", "reasoning"]
+                },
+                {
+                    "id": "openai/tool-model",
+                    "name": "Tool Model",
+                    "capabilities": ["tool-calling"]
+                },
+                {
+                    "id": "openai/stream-model",
+                    "name": "Stream Model",
+                    "capabilities": ["streaming"]
+                }
+            ]));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("github-models", Credential::api_key("github-models-key"))
+        .policy(ProviderPolicy::enterprise_direct_agentic())
+        .build();
+
+    let result = client
+        .list_model_catalog(
+            ModelCatalogRequest::builder("github-models")
+                .models_url(format!("{}/catalog/models", server.base_url()))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    catalog.assert_async().await;
+    assert_eq!(result.provider, "github-models");
+    assert!(result.policy.required_capabilities.tools);
+    assert!(result.policy.required_capabilities.streaming);
+    assert!(!result.policy.required_capabilities.vision);
+    assert!(result.policy.required_capabilities.reasoning);
+    assert_eq!(result.catalog_model_count, 3);
+    assert_eq!(result.returned_model_count, 1);
+    assert_eq!(result.models.len(), 1);
+    assert_eq!(result.models[0].id, "openai/agentic-model");
+}

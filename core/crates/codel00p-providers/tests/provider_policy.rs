@@ -150,3 +150,33 @@ fn enterprise_direct_policy_template_blocks_brokers_and_custom_endpoints() {
         matches!(custom, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("not allowed"))
     );
 }
+
+#[test]
+fn enterprise_direct_agentic_template_keeps_direct_provider_boundary() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .policy(ProviderPolicy::enterprise_direct_agentic())
+        .build();
+
+    let direct = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(direct.provider, "openai");
+
+    let broker = client
+        .resolve(
+            &InferenceRequest::builder("openrouter", "openai/gpt-test")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(broker, ProviderError::PolicyDenied { provider, reason } if provider == "openrouter" && reason.contains("not allowed"))
+    );
+}

@@ -64,7 +64,8 @@ Goal: make inference routing broad, policy-aware, and enterprise-friendly.
 
 Build:
 
-- provider catalog metadata surfaced in policy templates;
+- provider catalog metadata surfaced in policy templates; started with an
+  enterprise direct agentic catalog template;
 - richer provider-specific catalog metadata and model capability metadata;
 - managed pricing catalog distribution and refresh;
 - richer provider reasoning and cache metadata;
