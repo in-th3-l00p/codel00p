@@ -27,7 +27,8 @@ Implemented:
 - `codel00p-providers` registry, profiles, policy, route inspection,
   credentials, OpenAI-compatible Chat Completions, Azure AI Foundry deployment
   Chat Completions, OpenAI Responses, Anthropic Messages, AWS Bedrock Converse,
-  Gemini GenerateContent, tool calls, fallback routing, model catalog listing,
+  Gemini GenerateContent, server-sent-event token streaming for Chat
+  Completions, tool calls, fallback routing, model catalog listing,
   request-priced cost estimates, provider/model allowlist policy, and live
   integration-test toggles;
 - `@codel00p/protocol-ts` and `@codel00p/sdk` provider policy preset metadata
@@ -35,14 +36,14 @@ Implemented:
 - `codel00p-harness` session loop, provider adapter, memory injection,
   lifecycle hooks, project instructions, context compaction primitives,
   read-only tools, editing tools, shell command tool, git tools, permissions,
-  streamable events, concurrency-safe tool batching, and explicit memory
-  extraction;
+  streamable events, token-streaming model-client boundary, concurrency-safe
+  tool batching, and explicit memory extraction;
 - `codel00p-cli` agent runs, session resume, interactive multi-turn chat
-  sessions with resumable history and in-session tools (sessions, history,
-  tools, model switching, memory), conversation listing, session inspection,
-  memory review, provider-backed execution, JSON/streamed events, permission
-  modes, tool-set opt-ins, MCP attachment, MCP diagnostics, and remembered MCP
-  connector decisions;
+  sessions with resumable history, in-session tools (sessions, history, tools,
+  model switching, memory), and live token streaming, conversation listing,
+  session inspection, memory review, provider-backed execution, JSON/streamed
+  events, permission modes, tool-set opt-ins, MCP attachment, MCP diagnostics,
+  and remembered MCP connector decisions;
 - `codel00p-mcp` stdio/HTTP client transports, codel00p MCP server mode,
   tools, resources, prompts, logging, roots, pagination, subscriptions,
   reconnects, diagnostics, and harness event routing.

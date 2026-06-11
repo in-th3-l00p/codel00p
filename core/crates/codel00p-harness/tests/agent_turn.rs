@@ -520,3 +520,36 @@ impl AgentEventSink for RecordingEventSink {
         self.events.lock().expect("events").push(event.clone());
     }
 }
+
+#[tokio::test]
+async fn run_turn_streams_assistant_text_to_the_token_sink() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github",
+        "gpt-4o",
+        "Streamed answer.",
+    )]);
+    let session_id = SessionId::from_static("session-stream");
+
+    let collected: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    let sink_collected = collected.clone();
+    let sink = move |token: &str| sink_collected.lock().unwrap().push_str(token);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        .token_sink(sink)
+        .build()
+        .expect("build harness")
+        .run_turn(session_id, UserMessage::new("Answer please."))
+        .await
+        .expect("run turn");
+
+    assert_eq!(
+        outcome.assistant_message.as_deref(),
+        Some("Streamed answer.")
+    );
+    assert_eq!(collected.lock().unwrap().as_str(), "Streamed answer.");
+}

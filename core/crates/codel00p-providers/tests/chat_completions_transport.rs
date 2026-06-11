@@ -312,3 +312,98 @@ async fn chat_completions_sends_tool_call_ids_for_tool_result_messages() {
     chat.assert_async().await;
     assert_eq!(response.content.as_deref(), Some("done"));
 }
+
+#[tokio::test]
+async fn chat_completions_streams_token_deltas_and_assembles_response() {
+    use std::sync::{Arc, Mutex};
+
+    let server = MockServer::start_async().await;
+    let sse = concat!(
+        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"Hel\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}\n\n",
+        "data: [DONE]\n\n",
+    );
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .header("authorization", "Bearer test-key")
+                .body_includes(r#""stream":true"#);
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .build();
+
+    let tokens: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let collector = tokens.clone();
+    let sink = move |token: &str| collector.lock().unwrap().push(token.to_string());
+
+    let response = client
+        .complete_streaming(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .build(),
+            &sink,
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(*tokens.lock().unwrap(), vec!["Hel", "lo"]);
+    assert_eq!(response.content.as_deref(), Some("Hello"));
+    assert_eq!(response.finish_reason.as_deref(), Some("stop"));
+    assert_eq!(response.usage.unwrap().output_tokens, 2);
+}
+
+#[tokio::test]
+async fn chat_completions_streams_and_assembles_tool_call_deltas() {
+    let server = MockServer::start_async().await;
+    let sse = concat!(
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"path\\\"\"}}]}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":\\\"a.txt\\\"}\"}}]}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+        "data: [DONE]\n\n",
+    );
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/chat/completions");
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .build();
+
+    let sink = |_: &str| {};
+    let response = client
+        .complete_streaming(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Read a.txt."))
+                .build(),
+            &sink,
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(response.tool_calls.len(), 1);
+    let call: &ToolCall = &response.tool_calls[0];
+    assert_eq!(call.id.as_deref(), Some("call_1"));
+    assert_eq!(call.name, "read_file");
+    assert_eq!(call.arguments, json!({ "path": "a.txt" }));
+    assert_eq!(response.finish_reason.as_deref(), Some("tool_calls"));
+}

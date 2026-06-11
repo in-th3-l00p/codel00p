@@ -17,7 +17,7 @@ use crate::{
     session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage},
     tool_registry::ToolRegistry,
     tool_result::ToolResult,
-    turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TurnOutcome},
+    turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TokenSink, TurnOutcome},
     workspace::Workspace,
 };
 use codel00p_protocol::{ContextWindowState, EventId, RuntimeErrorKind};
@@ -36,6 +36,7 @@ pub struct AgentHarness {
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     context_window: Option<ContextWindowState>,
+    token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,
 }
 
@@ -134,7 +135,14 @@ impl AgentHarness {
                 }
             }
 
-            let response = self.model_client.infer(request).await?;
+            let response = match &self.token_sink {
+                Some(sink) => {
+                    self.model_client
+                        .infer_streaming(request, sink.as_ref())
+                        .await?
+                }
+                None => self.model_client.infer(request).await?,
+            };
 
             self.record_event(
                 &mut events,
@@ -645,6 +653,7 @@ pub struct AgentHarnessBuilder {
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     context_window: Option<ContextWindowState>,
+    token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
 }
 
@@ -725,6 +734,16 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Streams assistant text to `token_sink` as it is generated. Without a sink
+    /// the harness uses the non-streaming inference path.
+    pub fn token_sink<T>(mut self, token_sink: T) -> Self
+    where
+        T: TokenSink + 'static,
+    {
+        self.token_sink = Some(Arc::new(token_sink));
+        self
+    }
+
     pub fn build(self) -> Result<AgentHarness, HarnessError> {
         Ok(AgentHarness {
             model_client: self
@@ -745,6 +764,7 @@ impl AgentHarnessBuilder {
             turn_memory_extractor: self.turn_memory_extractor,
             memory_candidate_sink: self.memory_candidate_sink,
             context_window: self.context_window,
+            token_sink: self.token_sink,
             max_iterations: self.max_iterations.unwrap_or(4),
         })
     }

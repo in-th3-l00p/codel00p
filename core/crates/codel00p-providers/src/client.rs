@@ -10,7 +10,7 @@ use crate::{
     InferenceResponse, ManagedIdentityCredentialRequest, ManagedIdentityCredentialResolver,
     ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel, ProviderModelCatalog,
     ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry,
-    ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, UsagePricing,
+    ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, TokenSink, UsagePricing,
     classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
@@ -124,6 +124,58 @@ impl InferenceClient {
         }
 
         Err(last_error)
+    }
+
+    /// Completes a request while streaming assistant text to `sink` as it
+    /// arrives. Real server-sent-event streaming is used for the OpenAI-style
+    /// Chat Completions transport; other transports fall back to a single
+    /// blocking completion whose whole message is emitted to `sink` at once.
+    /// Fallback routing is not applied to streaming requests.
+    pub async fn complete_streaming(
+        &self,
+        request: InferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let route = self.resolve(&request)?;
+        let Some(credential) = self.credential_for_route(&route, &request.provider) else {
+            return Err(ProviderError::MissingCredential {
+                provider: route.provider.clone(),
+            });
+        };
+
+        let response = match route.api_mode {
+            ApiMode::ChatCompletions => {
+                ChatCompletionsTransport::new()
+                    .complete_streaming(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        route.output_token_parameter,
+                        request.clone(),
+                        sink,
+                    )
+                    .await?
+            }
+            _ => {
+                let (_, response) = self
+                    .complete_one(request.clone())
+                    .await
+                    .map_err(|failed| failed.error)?;
+                if let Some(content) = &response.content {
+                    sink.on_token(content);
+                }
+                response
+            }
+        };
+
+        let response =
+            self.attach_cost_estimate(response, &request, &route.provider, &request.model);
+        Ok(attach_route_metadata(
+            response,
+            &route,
+            &request.model,
+            vec![successful_attempt(&route, &request.model)],
+        ))
     }
 
     pub async fn list_models(

@@ -8,7 +8,9 @@ use crate::{
     errors::HarnessError,
     memory::MemoryPromptAssembler,
     session::SessionMessage,
-    turn::{HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall},
+    turn::{
+        HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall, TokenSink,
+    },
 };
 use codel00p_protocol::SessionRole;
 
@@ -127,6 +129,32 @@ impl ModelClient for ProviderModelClient {
         let response = self
             .client
             .complete(provider_request)
+            .await
+            .map_err(|error| HarnessError::InferenceFailed {
+                message: error.to_string(),
+            })?;
+
+        Ok(Self::map_provider_response(
+            &self.provider,
+            &self.model,
+            response,
+        ))
+    }
+
+    async fn infer_streaming(
+        &self,
+        request: HarnessInferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<HarnessInferenceResponse, HarnessError> {
+        let provider_request = Self::build_provider_request_with_base_url(
+            &self.provider,
+            &self.model,
+            &request,
+            self.base_url.as_deref(),
+        );
+        let response = self
+            .client
+            .complete_streaming(provider_request, sink)
             .await
             .map_err(|error| HarnessError::InferenceFailed {
                 message: error.to_string(),

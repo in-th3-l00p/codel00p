@@ -37,6 +37,7 @@ mod registry;
 mod request;
 mod response;
 mod runtime;
+mod stream;
 mod transports;
 
 pub use aws_managed_identity::{
@@ -73,3 +74,4 @@ pub use response::{InferenceResponse, ToolCall, Usage, UsageCostEstimate, UsageP
 pub use runtime::{
     ProviderPolicyDecision, ProviderRoutePolicy, ResolvedInferenceRoute, RouteValueSource,
 };
+pub use stream::TokenSink;

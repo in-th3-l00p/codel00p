@@ -12,8 +12,8 @@ use codel00p_harness::{
     AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
     MemoryCandidateSink, MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode,
     PermissionPolicy, PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
-    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, ToolRegistry, UserMessage,
-    Workspace,
+    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, TokenSink, ToolRegistry,
+    UserMessage, Workspace,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
@@ -47,6 +47,7 @@ struct AgentRunOptions {
     max_iterations: Option<u32>,
     json_events: bool,
     stream_events: bool,
+    stream: bool,
     tool_sets: Vec<AgentToolSet>,
     permission_mode: CliPermissionMode,
     remember_permissions: bool,
@@ -213,8 +214,14 @@ fn run_agent_turn(
 
         let mut output = String::new();
         if let Some(message) = &outcome.assistant_message {
-            output.push_str(message);
-            output.push('\n');
+            if options.stream {
+                // The assistant text was already streamed to stdout token by
+                // token; just terminate the streamed line.
+                output.push('\n');
+            } else {
+                output.push_str(message);
+                output.push('\n');
+            }
         }
         if options.json_events {
             for event in &outcome.events {
@@ -270,6 +277,9 @@ async fn build_agent_harness(
         .memory_candidate_sink(memory_sink);
     if options.stream_events {
         builder = builder.event_sink(StdoutJsonEventSink);
+    }
+    if options.stream {
+        builder = builder.token_sink(StdoutTokenSink);
     }
     if let Some(max_iterations) = options.max_iterations {
         builder = builder.max_iterations(max_iterations);
@@ -394,7 +404,12 @@ fn run_agent_chat(config: CliConfig, mut options: AgentRunOptions) -> CliResult<
                 .map_err(|error| error.to_string())?;
 
             if let Some(message) = &outcome.assistant_message {
-                println!("{message}");
+                if options.stream {
+                    // Tokens already streamed to stdout; end the line.
+                    println!();
+                } else {
+                    println!("{message}");
+                }
             } else {
                 writeln!(stderr, "(no assistant response)").ok();
             }
@@ -640,6 +655,7 @@ fn parse_agent_flag_options(
     let mut max_iterations = None;
     let mut json_events = false;
     let mut stream_events = false;
+    let mut stream = false;
     let mut tool_sets = Vec::new();
     let mut permission_mode = CliPermissionMode::Allow;
     let mut remember_permissions = false;
@@ -688,6 +704,10 @@ fn parse_agent_flag_options(
                 stream_events = true;
                 index += 1;
             }
+            "--stream" => {
+                stream = true;
+                index += 1;
+            }
             "--tool-set" => {
                 let value = required_value(args, index, "--tool-set")?;
                 tool_sets.push(parse_agent_tool_set(&value)?);
@@ -722,6 +742,7 @@ fn parse_agent_flag_options(
         max_iterations,
         json_events,
         stream_events,
+        stream,
         tool_sets,
         permission_mode,
         remember_permissions,
@@ -1494,6 +1515,15 @@ fn prompt_for_permission(request: &PermissionRequest) -> io::Result<bool> {
         answer.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
+}
+
+struct StdoutTokenSink;
+
+impl TokenSink for StdoutTokenSink {
+    fn on_token(&self, token: &str) {
+        print!("{token}");
+        let _ = io::stdout().flush();
+    }
 }
 
 struct StdoutJsonEventSink;

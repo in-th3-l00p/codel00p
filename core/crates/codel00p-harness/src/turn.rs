@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use codel00p_protocol::ContextWindowState;
 pub use codel00p_protocol::ToolCall as ModelToolCall;
+pub use codel00p_providers::TokenSink;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -14,6 +15,23 @@ pub trait ModelClient: Send + Sync {
         &self,
         request: HarnessInferenceRequest,
     ) -> Result<HarnessInferenceResponse, HarnessError>;
+
+    /// Runs inference while streaming assistant text to `sink` as it arrives.
+    ///
+    /// The default implementation performs a normal [`ModelClient::infer`] call
+    /// and emits the whole assistant message to `sink` once, so clients that do
+    /// not implement real streaming still drive a token sink correctly.
+    async fn infer_streaming(
+        &self,
+        request: HarnessInferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<HarnessInferenceResponse, HarnessError> {
+        let response = self.infer(request).await?;
+        if let Some(message) = response.assistant_message() {
+            sink.on_token(message);
+        }
+        Ok(response)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -81,6 +81,7 @@ Options:
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
+  --stream                    Stream assistant text token by token to stdout
   --json-events               Print serialized harness events after assistant text
 ";
 
@@ -100,6 +101,7 @@ Options:
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
+  --stream                    Stream assistant text token by token to stdout
   --json-events               Print serialized harness events after assistant text
 ";
 
@@ -133,6 +135,7 @@ Options:
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during each turn
+  --stream                    Stream assistant text token by token to stdout
   --json-events               Print serialized harness events after each reply
 ";
 

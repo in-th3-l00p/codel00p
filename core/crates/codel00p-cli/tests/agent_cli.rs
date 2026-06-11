@@ -3125,3 +3125,89 @@ fn agent_chat_history_sessions_and_memory_commands() {
         "stderr: {err}"
     );
 }
+
+const STREAM_SSE_BODY: &str = concat!(
+    "data: {\"choices\":[{\"delta\":{\"content\":\"Streamed \"},\"finish_reason\":null}]}\n\n",
+    "data: {\"choices\":[{\"delta\":{\"content\":\"reply.\"},\"finish_reason\":\"stop\"}]}\n\n",
+    "data: [DONE]\n\n",
+);
+
+#[test]
+fn agent_run_streams_tokens_to_stdout() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""stream":true"#);
+        then.status(200)
+            .header("content-type", "text/event-stream")
+            .body(STREAM_SSE_BODY);
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Stream this.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--stream",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    provider.assert();
+    assert_eq!(stdout(&output), "Streamed reply.\n");
+}
+
+#[test]
+fn agent_chat_streams_tokens_to_stdout() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(r#""stream":true"#);
+        then.status(200)
+            .header("content-type", "text/event-stream")
+            .body(STREAM_SSE_BODY);
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--stream",
+        ],
+        "stream this\n/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(provider.calls(), 1);
+    assert_eq!(stdout(&output), "Streamed reply.\n");
+}
