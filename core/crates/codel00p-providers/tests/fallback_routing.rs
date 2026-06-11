@@ -1,6 +1,7 @@
 use codel00p_protocol::RuntimeErrorKind;
 use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, default_registry,
+    ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
+    ProviderCapabilities, ProviderPolicy, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
@@ -42,6 +43,27 @@ async fn falls_back_when_primary_route_is_rate_limited() {
         .registry(default_registry())
         .credential("openrouter", Credential::api_key("openrouter-key"))
         .credential("custom", Credential::api_key("custom-key"))
+        .policy(
+            ProviderPolicy::allow_all()
+                .with_allowed_models("openrouter", ["anthropic/claude-sonnet"])
+                .with_allowed_credential_kinds("openrouter", [CredentialKind::ApiKey])
+                .with_required_model_capabilities(
+                    "openrouter",
+                    ProviderCapabilities {
+                        reasoning: true,
+                        ..ProviderCapabilities::default()
+                    },
+                )
+                .with_allowed_models("custom", ["local-model"])
+                .with_allowed_credential_kinds("custom", [CredentialKind::ApiKey])
+                .with_required_provider_capabilities(
+                    "custom",
+                    ProviderCapabilities {
+                        tools: true,
+                        ..ProviderCapabilities::default()
+                    },
+                ),
+        )
         .build();
 
     let response = client
@@ -70,8 +92,28 @@ async fn falls_back_when_primary_route_is_rate_limited() {
         route["selected"]["output_token_parameter"],
         json!("MaxTokens")
     );
+    assert_eq!(
+        route["selected"]["policy"]["allowed_models"],
+        json!(["local-model"])
+    );
+    assert_eq!(
+        route["selected"]["policy"]["allowed_credential_kinds"],
+        json!(["ApiKey"])
+    );
+    assert_eq!(
+        route["selected"]["policy"]["required_provider_capabilities"]["tools"],
+        json!(true)
+    );
     assert_eq!(route["attempts"][0]["provider"], json!("openrouter"));
     assert_eq!(route["attempts"][0]["outcome"], json!("fallback"));
+    assert_eq!(
+        route["attempts"][0]["policy"]["allowed_models"],
+        json!(["anthropic/claude-sonnet"])
+    );
+    assert_eq!(
+        route["attempts"][0]["policy"]["required_model_capabilities"]["reasoning"],
+        json!(true)
+    );
     assert_eq!(
         route["attempts"][0]["models_url"],
         json!("https://openrouter.ai/api/v1/models")

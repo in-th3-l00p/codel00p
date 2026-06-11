@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     CredentialKind, ProviderCapabilities, ProviderError, ProviderModel, ProviderModelCatalogPolicy,
-    ProviderRegistry,
+    ProviderRegistry, ProviderRoutePolicy,
 };
 
 const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
@@ -249,6 +249,29 @@ impl ProviderPolicy {
                 .copied()
                 .unwrap_or_default(),
             required_capabilities: self
+                .required_model_capabilities
+                .get(provider)
+                .copied()
+                .unwrap_or_default(),
+        }
+    }
+
+    pub(crate) fn route_policy(&self, provider: &str) -> ProviderRoutePolicy {
+        ProviderRoutePolicy {
+            allowed_models: self
+                .allowed_models
+                .get(provider)
+                .map(|models| models.iter().cloned().collect()),
+            allowed_credential_kinds: self
+                .allowed_credential_kinds
+                .get(provider)
+                .map(|kinds| kinds.iter().copied().collect()),
+            required_provider_capabilities: self
+                .required_provider_capabilities
+                .get(provider)
+                .copied()
+                .unwrap_or_default(),
+            required_model_capabilities: self
                 .required_model_capabilities
                 .get(provider)
                 .copied()

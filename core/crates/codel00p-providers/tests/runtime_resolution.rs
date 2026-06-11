@@ -1,6 +1,7 @@
 use codel00p_providers::{
     ApiMode, ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
-    ProviderError, ProviderPolicyDecision, RouteValueSource, default_registry,
+    ProviderCapabilities, ProviderError, ProviderPolicy, ProviderPolicyDecision, RouteValueSource,
+    default_registry,
 };
 
 fn with_env_lock(test: impl FnOnce()) {
@@ -122,6 +123,57 @@ fn client_resolve_reports_credential_kind_metadata() {
             Some(CredentialKind::AwsSigV4)
         );
     });
+}
+
+#[test]
+fn client_resolve_reports_route_policy_metadata() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("gpt", Credential::api_key("openai-key"))
+        .policy(
+            ProviderPolicy::allow_all()
+                .with_allowed_models("gpt", ["gpt-5-mini"])
+                .with_allowed_credential_kinds("gpt", [CredentialKind::ApiKey])
+                .with_required_provider_capabilities(
+                    "gpt",
+                    ProviderCapabilities {
+                        tools: true,
+                        reasoning: true,
+                        ..ProviderCapabilities::default()
+                    },
+                )
+                .with_required_model_capabilities(
+                    "gpt",
+                    ProviderCapabilities {
+                        tools: true,
+                        streaming: true,
+                        ..ProviderCapabilities::default()
+                    },
+                ),
+        )
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "openai");
+    assert_eq!(
+        route.policy.allowed_models,
+        Some(vec!["gpt-5-mini".to_string()])
+    );
+    assert_eq!(
+        route.policy.allowed_credential_kinds,
+        Some(vec![CredentialKind::ApiKey])
+    );
+    assert!(route.policy.required_provider_capabilities.tools);
+    assert!(route.policy.required_provider_capabilities.reasoning);
+    assert!(route.policy.required_model_capabilities.tools);
+    assert!(route.policy.required_model_capabilities.streaming);
 }
 
 #[test]

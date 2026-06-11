@@ -54,4 +54,6 @@ pub use request::{
     ToolDefinition,
 };
 pub use response::{InferenceResponse, ToolCall, Usage, UsageCostEstimate, UsagePricing};
-pub use runtime::{ProviderPolicyDecision, ResolvedInferenceRoute, RouteValueSource};
+pub use runtime::{
+    ProviderPolicyDecision, ProviderRoutePolicy, ResolvedInferenceRoute, RouteValueSource,
+};

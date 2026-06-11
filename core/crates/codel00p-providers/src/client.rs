@@ -375,6 +375,7 @@ impl InferenceClient {
             credential_source,
             credential_kind,
             policy_decision: ProviderPolicyDecision::Allowed,
+            policy: self.policy.route_policy(profile.id),
             capabilities: profile.capabilities,
             models_url: profile.models_url.map(str::to_string),
             output_token_parameter: profile.output_token_parameter,
@@ -468,6 +469,7 @@ fn route_metadata(route: &ResolvedInferenceRoute, model: &str) -> Value {
         "credential_source": route.credential_source,
         "credential_kind": route.credential_kind,
         "policy_decision": format!("{:?}", route.policy_decision),
+        "policy": &route.policy,
         "models_url": route.models_url,
         "output_token_parameter": format!("{:?}", route.output_token_parameter),
         "capabilities": {

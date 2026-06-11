@@ -322,8 +322,8 @@ Implemented:
   Copilot and `github-models` GitHub Models profiles;
 - inspectable `ResolvedInferenceRoute` and response route metadata with safe
   audit fields for provider, API mode, base URL source, credential source/kind,
-  policy decision, model catalog URL, output-token parameter, and provider
-  capabilities;
+  policy decision, route policy metadata, model catalog URL, output-token
+  parameter, and provider capabilities;
 - client-level provider cloud proxy routing, including proxy credential use,
   request-level base URL override precedence, and safe `CloudProxy` route
   metadata;
@@ -340,10 +340,10 @@ Implemented:
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
-- provider, model, and credential-kind allowlist policy, including catalog
-  filtering and metadata for disallowed models, allowed credential kinds,
-  required provider/model capabilities, an enterprise-direct provider template,
-  and an enterprise-direct agentic catalog template;
+- provider, model, and credential-kind allowlist policy, including route policy
+  metadata, catalog filtering and metadata for disallowed models, allowed
+  credential kinds, required provider/model capabilities, an enterprise-direct
+  provider template, and an enterprise-direct agentic catalog template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
@@ -385,7 +385,7 @@ Implemented:
   and provider-specific credential environment variables.
 
 Next provider work should focus on enterprise variants: managed cloud identity
-credential resolvers plus the policy/audit metadata needed to inspect them.
+credential resolvers plus the policy and audit metadata needed to inspect them.
 
 ## Non-goals for the first pass
 

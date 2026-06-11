@@ -14,6 +14,19 @@ pub enum ProviderPolicyDecision {
     Allowed,
 }
 
+/// Safe provider policy metadata attached to a resolved route.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct ProviderRoutePolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_models: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_credential_kinds: Option<Vec<CredentialKind>>,
+    #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]
+    pub required_provider_capabilities: ProviderCapabilities,
+    #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]
+    pub required_model_capabilities: ProviderCapabilities,
+}
+
 /// Resolved runtime route for an inference request.
 ///
 /// This is intentionally safe to show in logs and UI. It records whether a
@@ -28,6 +41,7 @@ pub struct ResolvedInferenceRoute {
     pub credential_source: Option<String>,
     pub credential_kind: Option<CredentialKind>,
     pub policy_decision: ProviderPolicyDecision,
+    pub policy: ProviderRoutePolicy,
     pub capabilities: ProviderCapabilities,
     pub models_url: Option<String>,
     pub output_token_parameter: OutputTokenParameter,

@@ -15,7 +15,7 @@ Build:
   streaming, vision, and reasoning flags;
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
   base URL source, policy decision, model catalog URL, and provider
-  capabilities, plus credential source and kind labels;
+  capabilities, plus credential source/kind labels and route policy snapshots;
 - model catalog listing with normalized model descriptors and safe credential
   source/kind and catalog URL source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;
