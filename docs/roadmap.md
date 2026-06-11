@@ -36,10 +36,10 @@ Implemented:
   read-only tools, editing tools, shell command tool, git tools, permissions,
   streamable events, concurrency-safe tool batching, and explicit memory
   extraction;
-- `codel00p-cli` agent runs, session resume, session inspection, memory review,
-  provider-backed execution, JSON/streamed events, permission modes, tool-set
-  opt-ins, MCP attachment, MCP diagnostics, and remembered MCP connector
-  decisions;
+- `codel00p-cli` agent runs, session resume, interactive multi-turn chat
+  sessions, session inspection, memory review, provider-backed execution,
+  JSON/streamed events, permission modes, tool-set opt-ins, MCP attachment, MCP
+  diagnostics, and remembered MCP connector decisions;
 - `codel00p-mcp` stdio/HTTP client transports, codel00p MCP server mode,
   tools, resources, prompts, logging, roots, pagination, subscriptions,
   reconnects, diagnostics, and harness event routing.

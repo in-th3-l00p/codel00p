@@ -2802,3 +2802,158 @@ fn agent_run_applies_provider_policy_preset_before_inference() {
     let error = stderr(&output);
     assert!(error.contains("provider `custom` was denied by policy: provider is not allowed"));
 }
+
+#[test]
+fn agent_chat_runs_multiple_turns_and_prints_each_reply() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": { "role": "assistant", "content": "Chat reply." },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+        "first question\nsecond question\n/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(occurrences(&stdout(&output), "Chat reply."), 2);
+    assert_eq!(provider.calls(), 2);
+}
+
+#[test]
+fn agent_chat_threads_conversation_history_to_the_provider() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    // Registered first and matched only when the prior assistant reply is
+    // present in the request body, proving the second turn carried history.
+    let threaded = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Reply from turn one.");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": { "role": "assistant", "content": "Reply from turn two." },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+    let first = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": { "role": "assistant", "content": "Reply from turn one." },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+        "first question\nsecond question\n/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let out = stdout(&output);
+    assert!(out.contains("Reply from turn one."), "stdout: {out}");
+    assert!(out.contains("Reply from turn two."), "stdout: {out}");
+    assert_eq!(threaded.calls(), 1);
+    assert_eq!(first.calls(), 1);
+}
+
+#[test]
+fn agent_chat_exit_command_does_not_call_the_provider() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": { "role": "assistant", "content": "should not happen" },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+        "/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), "");
+    assert_eq!(provider.calls(), 0);
+}
+
+#[test]
+fn agent_chat_rejects_unknown_options() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let output = run_codel00p_with_stdin(&db_path, &["agent", "chat", "--not-a-flag"], "/exit\n");
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("unknown agent chat option: --not-a-flag"));
+}

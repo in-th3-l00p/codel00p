@@ -90,6 +90,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     match command.as_str() {
         "run" => agent_run(config, rest),
         "resume" => agent_resume(config, rest),
+        "chat" => agent_chat(config, rest),
         "mcp" => agent_mcp(config, rest),
         _ => Err(format!("unknown agent command: {command}")),
     }
@@ -103,6 +104,11 @@ fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
 fn agent_resume(config: CliConfig, args: &[String]) -> CliResult<String> {
     let options = parse_agent_resume_options(args)?;
     run_agent_turn(config, options, AgentSessionMode::Resume)
+}
+
+fn agent_chat(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let options = parse_agent_chat_options(args)?;
+    run_agent_chat(config, options)
 }
 
 fn agent_mcp(_config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -192,51 +198,15 @@ fn run_agent_turn(
         .map_err(|error| format!("failed to start async runtime: {error}"))?;
 
     runtime.block_on(async move {
-        let provider_client =
-            build_provider_client(&options.provider, options.provider_policy_preset.as_deref())?;
-        let model_client =
-            ProviderModelClient::new(provider_client, &options.provider, &options.model);
-        let model_client = if let Some(base_url) = &options.base_url {
-            model_client.with_base_url(base_url)
-        } else {
-            model_client
-        };
-
-        let workspace = Workspace::new(&options.workspace).map_err(|error| error.to_string())?;
-        let memory_provider = CliProjectMemoryProvider::new(config.clone()).with_limit(8);
-        let memory_sink = CliMemoryCandidateSink::new(config.clone());
-        let memory_extractor = ExplicitTurnMemoryExtractor::new(config.project.clone())
-            .with_tag("agent")
-            .with_tag("cli");
         let mut mcp_servers = load_mcp_servers_from_workspace(&options.workspace)?;
         mcp_servers.extend(options.mcp_servers.clone());
-
-        let mut builder = AgentHarness::builder()
-            .model_client(model_client)
-            .workspace(workspace)
-            .tools(build_tool_registry(&options.tool_sets, &mcp_servers).await?)
-            .permission_policy(CliPermissionPolicy::new(
-                config.clone(),
-                options.permission_mode,
-                options.remember_permissions,
-            ))
-            .project_memory_provider(memory_provider)
-            .turn_memory_extractor(memory_extractor)
-            .memory_candidate_sink(memory_sink);
-        if options.stream_events {
-            builder = builder.event_sink(StdoutJsonEventSink);
-        }
-        if let Some(max_iterations) = options.max_iterations {
-            builder = builder.max_iterations(max_iterations);
-        }
 
         let (session_state, previous_message_count) =
             prepare_session_state(&config, &options, session_mode)?;
 
-        let outcome = builder
-            .build()
-            .map_err(|error| error.to_string())?
-            .run_turn_with_state(session_state, UserMessage::new(options.prompt))
+        let harness = build_agent_harness(&config, &options, &mcp_servers).await?;
+        let outcome = harness
+            .run_turn_with_state(session_state, UserMessage::new(options.prompt.clone()))
             .await
             .map_err(|error| error.to_string())?;
 
@@ -260,6 +230,197 @@ fn run_agent_turn(
 
         Ok(output)
     })
+}
+
+/// Builds a fresh `AgentHarness` from the parsed run options. The harness is
+/// consumed by `run_turn_with_state`, so interactive chat rebuilds one per turn.
+async fn build_agent_harness(
+    config: &CliConfig,
+    options: &AgentRunOptions,
+    mcp_servers: &[McpServerSpec],
+) -> CliResult<AgentHarness> {
+    let provider_client =
+        build_provider_client(&options.provider, options.provider_policy_preset.as_deref())?;
+    let model_client = ProviderModelClient::new(provider_client, &options.provider, &options.model);
+    let model_client = if let Some(base_url) = &options.base_url {
+        model_client.with_base_url(base_url)
+    } else {
+        model_client
+    };
+
+    let workspace = Workspace::new(&options.workspace).map_err(|error| error.to_string())?;
+    let memory_provider = CliProjectMemoryProvider::new(config.clone()).with_limit(8);
+    let memory_sink = CliMemoryCandidateSink::new(config.clone());
+    let memory_extractor = ExplicitTurnMemoryExtractor::new(config.project.clone())
+        .with_tag("agent")
+        .with_tag("cli");
+
+    let mut builder = AgentHarness::builder()
+        .model_client(model_client)
+        .workspace(workspace)
+        .tools(build_tool_registry(&options.tool_sets, mcp_servers).await?)
+        .permission_policy(CliPermissionPolicy::new(
+            config.clone(),
+            options.permission_mode,
+            options.remember_permissions,
+        ))
+        .project_memory_provider(memory_provider)
+        .turn_memory_extractor(memory_extractor)
+        .memory_candidate_sink(memory_sink);
+    if options.stream_events {
+        builder = builder.event_sink(StdoutJsonEventSink);
+    }
+    if let Some(max_iterations) = options.max_iterations {
+        builder = builder.max_iterations(max_iterations);
+    }
+
+    builder.build().map_err(|error| error.to_string())
+}
+
+fn run_agent_chat(config: CliConfig, options: AgentRunOptions) -> CliResult<String> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| format!("failed to start async runtime: {error}"))?;
+
+    runtime.block_on(async move {
+        let mut mcp_servers = load_mcp_servers_from_workspace(&options.workspace)?;
+        mcp_servers.extend(options.mcp_servers.clone());
+
+        let session_id = options
+            .session_id
+            .as_deref()
+            .map(parse_session_id)
+            .transpose()?
+            .unwrap_or_default();
+        let mut session_state = codel00p_harness::SessionState::new(session_id);
+        let mut persisted_message_count = 0usize;
+
+        let mut stderr = io::stderr();
+        writeln!(
+            stderr,
+            "codel00p chat — provider {} model {} (session {})",
+            options.provider,
+            options.model,
+            session_state.session_id().as_str()
+        )
+        .ok();
+        writeln!(
+            stderr,
+            "Type a message and press Enter. Use /help for commands, /exit to quit."
+        )
+        .ok();
+
+        loop {
+            write!(stderr, "\nyou> ").ok();
+            stderr.flush().ok();
+
+            let mut line = String::new();
+            let bytes = io::stdin()
+                .read_line(&mut line)
+                .map_err(|error| error.to_string())?;
+            if bytes == 0 {
+                writeln!(stderr, "\nGoodbye.").ok();
+                break;
+            }
+
+            let prompt = line.trim();
+            if prompt.is_empty() {
+                continue;
+            }
+
+            if let Some(command) = prompt.strip_prefix('/') {
+                match handle_chat_command(
+                    command,
+                    &mut session_state,
+                    &mut persisted_message_count,
+                    &mut stderr,
+                ) {
+                    ChatControl::Continue => continue,
+                    ChatControl::Exit => break,
+                }
+            }
+
+            let harness = build_agent_harness(&config, &options, &mcp_servers).await?;
+            let outcome = harness
+                .run_turn_with_state(session_state, UserMessage::new(prompt.to_string()))
+                .await
+                .map_err(|error| error.to_string())?;
+
+            if let Some(message) = &outcome.assistant_message {
+                println!("{message}");
+            } else {
+                writeln!(stderr, "(no assistant response)").ok();
+            }
+            if options.json_events {
+                for event in &outcome.events {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&event).map_err(|error| error.to_string())?
+                    );
+                }
+            }
+
+            persist_turn_outcome(
+                &config,
+                &outcome.session_state,
+                &outcome.events,
+                persisted_message_count,
+            )?;
+            persisted_message_count = outcome.session_state.messages().len();
+            session_state = outcome.session_state;
+        }
+
+        Ok(String::new())
+    })
+}
+
+enum ChatControl {
+    Continue,
+    Exit,
+}
+
+fn handle_chat_command(
+    command: &str,
+    session_state: &mut codel00p_harness::SessionState,
+    persisted_message_count: &mut usize,
+    stderr: &mut io::Stderr,
+) -> ChatControl {
+    let name = command.trim();
+    match name {
+        "exit" | "quit" | "q" => {
+            writeln!(stderr, "Goodbye.").ok();
+            ChatControl::Exit
+        }
+        "help" | "?" => {
+            writeln!(
+                stderr,
+                "Commands:\n  /help            Show this help\n  /session         Show the current session id\n  /reset           Start a new conversation\n  /exit, /quit     Leave the chat"
+            )
+            .ok();
+            ChatControl::Continue
+        }
+        "session" => {
+            writeln!(stderr, "session {}", session_state.session_id().as_str()).ok();
+            ChatControl::Continue
+        }
+        "reset" | "clear" => {
+            *session_state =
+                codel00p_harness::SessionState::new(codel00p_harness::SessionId::default());
+            *persisted_message_count = 0;
+            writeln!(
+                stderr,
+                "Started a new conversation (session {}).",
+                session_state.session_id().as_str()
+            )
+            .ok();
+            ChatControl::Continue
+        }
+        other => {
+            writeln!(stderr, "Unknown command: /{other}. Try /help.").ok();
+            ChatControl::Continue
+        }
+    }
 }
 
 fn prepare_session_state(
@@ -295,6 +456,20 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         return Err("missing agent prompt".to_string());
     };
 
+    let mut options = parse_agent_flag_options(args, 1, "run")?;
+    options.prompt = prompt.to_string();
+    Ok(options)
+}
+
+fn parse_agent_chat_options(args: &[String]) -> CliResult<AgentRunOptions> {
+    parse_agent_flag_options(args, 0, "chat")
+}
+
+fn parse_agent_flag_options(
+    args: &[String],
+    start: usize,
+    context: &str,
+) -> CliResult<AgentRunOptions> {
     let mut workspace = env::current_dir().map_err(|error| error.to_string())?;
     let mut provider = None;
     let mut model = None;
@@ -308,7 +483,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut permission_mode = CliPermissionMode::Allow;
     let mut remember_permissions = false;
     let mut mcp_servers = Vec::new();
-    let mut index = 1;
+    let mut index = start;
 
     while index < args.len() {
         match args[index].as_str() {
@@ -371,12 +546,12 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
                 mcp_servers.push(parse_mcp_server(&value)?);
                 index += 2;
             }
-            flag => return Err(format!("unknown agent run option: {flag}")),
+            flag => return Err(format!("unknown agent {context} option: {flag}")),
         }
     }
 
     Ok(AgentRunOptions {
-        prompt: prompt.to_string(),
+        prompt: String::new(),
         workspace,
         provider: provider.ok_or_else(|| "missing required --provider".to_string())?,
         model: model.ok_or_else(|| "missing required --model".to_string())?,

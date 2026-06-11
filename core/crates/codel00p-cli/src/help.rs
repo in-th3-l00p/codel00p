@@ -13,6 +13,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             match (command.as_str(), subcommand.as_str()) {
                 ("agent", "run") => Some(AGENT_RUN_HELP),
                 ("agent", "resume") => Some(AGENT_RESUME_HELP),
+                ("agent", "chat") => Some(AGENT_CHAT_HELP),
                 ("agent", "mcp") => Some(AGENT_MCP_HELP),
                 ("mcp", "permissions") => Some(MCP_PERMISSIONS_HELP),
                 ("mcp", "serve") => Some(MCP_SERVE_HELP),
@@ -58,6 +59,7 @@ Usage: codel00p [global options] agent <command>
 Commands:
   run      Run one agent turn
   resume   Resume a persisted agent session
+  chat     Start an interactive multi-turn chat session
   mcp      Inspect MCP server tools
 ";
 
@@ -98,6 +100,33 @@ Options:
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
   --json-events               Print serialized harness events after assistant text
+";
+
+const AGENT_CHAT_HELP: &str = "\
+Usage: codel00p [global options] agent chat [options]
+
+Start an interactive multi-turn chat session. Conversation history is kept in
+memory across turns and persisted under the session id. In-session commands:
+  /help            Show available commands
+  /session         Show the current session id
+  /reset           Start a new conversation
+  /exit, /quit     Leave the chat
+
+Options:
+  --workspace <path>          Workspace root, defaults to current directory
+  --provider <id>             Provider id or alias
+  --model <id>                Provider model id
+  --provider-policy-preset <id>
+                              Built-in provider policy preset id
+  --base-url <url>            Override provider base URL
+  --session-id <id>           Persist under a stable session id
+  --max-iterations <n>        Maximum model/tool iterations per turn
+  --tool-set <name>           Enable a tool set: read, edit, command, git, all
+  --mcp-server <id=command>   Attach an MCP stdio server executable
+  --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --remember-permissions      Persist ask-mode MCP connector decisions
+  --stream-events             Stream serialized harness events during each turn
+  --json-events               Print serialized harness events after each reply
 ";
 
 const AGENT_MCP_HELP: &str = "\

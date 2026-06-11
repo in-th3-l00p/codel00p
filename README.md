@@ -108,9 +108,10 @@ The first Rust modules have started:
 - [codel00p-memory](core/crates/codel00p-memory): candidate creation, review
   lifecycle, audit history, and deterministic retrieval for approved project
   knowledge.
-- [codel00p-cli](core/crates/codel00p-cli): terminal agent runs, durable session
-  inspection, and memory review commands for listing, inspecting, approving,
-  rejecting, archiving, and auditing memory records.
+- [codel00p-cli](core/crates/codel00p-cli): terminal agent runs, interactive
+  multi-turn chat sessions, durable session inspection, and memory review
+  commands for listing, inspecting, approving, rejecting, archiving, and
+  auditing memory records.
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   Anthropic Messages transport, OpenAI Responses transport, AWS Bedrock
