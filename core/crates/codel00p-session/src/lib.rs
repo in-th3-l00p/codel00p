@@ -128,6 +128,8 @@ pub trait SessionStore {
 
     fn metadata(&self, session_id: &SessionId) -> Result<SessionMetadata, SessionStoreError>;
 
+    fn list_sessions(&self) -> Result<Vec<SessionMetadata>, SessionStoreError>;
+
     fn append_message(
         &mut self,
         session_id: &SessionId,
@@ -251,6 +253,14 @@ where
             })?;
 
         Ok(serde_json::from_value(document.payload().clone())?)
+    }
+
+    fn list_sessions(&self) -> Result<Vec<SessionMetadata>, SessionStoreError> {
+        self.storage
+            .list_documents(&self.scope, SESSION_METADATA_COLLECTION)?
+            .into_iter()
+            .map(|document| Ok(serde_json::from_value(document.payload().clone())?))
+            .collect()
     }
 
     fn append_message(

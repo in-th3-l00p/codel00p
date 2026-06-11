@@ -53,6 +53,60 @@ fn documents_are_stored_by_scope_collection_and_id() {
 }
 
 #[test]
+fn documents_can_be_listed_by_scope_and_collection() {
+    let mut storage = InMemoryStorage::default();
+    let scope = StorageScope::project("org-1", "project-1");
+    let other_scope = StorageScope::project("org-1", "project-2");
+
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "sessions",
+            "session-2",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "sessions",
+            "session-1",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "memory",
+            "entry-1",
+            json!({ "text": "ignore me" }),
+        ))
+        .expect("put document");
+    storage
+        .put_document(StorageDocument::new(
+            other_scope.clone(),
+            "sessions",
+            "session-9",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+
+    let sessions = storage
+        .list_documents(&scope, "sessions")
+        .expect("list documents");
+
+    let ids: Vec<&str> = sessions.iter().map(StorageDocument::id).collect();
+    assert_eq!(ids, ["session-1", "session-2"]);
+
+    assert!(
+        storage
+            .list_documents(&StorageScope::workspace("empty"), "sessions")
+            .expect("list documents")
+            .is_empty()
+    );
+}
+
+#[test]
 fn missing_documents_and_values_return_none() {
     let storage = InMemoryStorage::default();
     let scope = StorageScope::workspace("workspace-1");

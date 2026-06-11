@@ -5,9 +5,27 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use codel00p_protocol::{SessionId, SessionMessage};
+use codel00p_session::{SessionMetadata, SessionStore, StorageBackedSessionStore};
+use codel00p_storage::{SqliteStorage, StorageScope};
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 use tempfile::tempdir;
+
+fn seed_chat_session(db_path: &Path, id: &'static str, messages: &[SessionMessage]) {
+    let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
+    let mut store =
+        StorageBackedSessionStore::new(StorageScope::project("org-1", "project-1"), storage);
+    let session_id = SessionId::from_static(id);
+    store
+        .create_session(SessionMetadata::new(session_id.clone(), "chat"))
+        .expect("create session");
+    for message in messages {
+        store
+            .append_message(&session_id, message.clone())
+            .expect("append message");
+    }
+}
 
 fn run_codel00p(db_path: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
@@ -2956,4 +2974,154 @@ fn agent_chat_rejects_unknown_options() {
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("unknown agent chat option: --not-a-flag"));
+}
+
+#[test]
+fn agent_chat_resumes_persisted_conversation_history() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    seed_chat_session(
+        &db_path,
+        "chat-resume",
+        &[
+            SessionMessage::user("remember the codeword is orchid"),
+            SessionMessage::assistant("Understood, the codeword is orchid."),
+        ],
+    );
+
+    let server = MockServer::start();
+    // Only matches once the prior conversation is replayed into the request.
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("remember the codeword is orchid")
+            .body_includes("the codeword is orchid");
+        then.status(200).json_body(json!({
+            "choices": [
+                {
+                    "message": { "role": "assistant", "content": "It is orchid." },
+                    "finish_reason": "stop"
+                }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--session-id",
+            "chat-resume",
+        ],
+        "what was the codeword?\n/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        stderr(&output).contains("Resumed conversation with 2 prior message(s)."),
+        "stderr: {}",
+        stderr(&output)
+    );
+    assert_eq!(provider.calls(), 1);
+    assert!(stdout(&output).contains("It is orchid."));
+}
+
+#[test]
+fn agent_chat_tools_and_model_commands_report_state() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "unused" }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+        "/tools\n/model\n/model swapped-model\n/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let err = stderr(&output);
+    assert!(err.contains("read_file"), "stderr: {err}");
+    assert!(err.contains("model test-model"), "stderr: {err}");
+    assert!(err.contains("Model set to swapped-model."), "stderr: {err}");
+    assert_eq!(provider.calls(), 0);
+}
+
+#[test]
+fn agent_chat_history_sessions_and_memory_commands() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let server = MockServer::start();
+    server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "Hello there." }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    let output = run_codel00p_with_stdin(
+        &db_path,
+        &[
+            "agent",
+            "chat",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--session-id",
+            "chat-tools",
+        ],
+        "say hi\n/history\n/sessions\n/memory\n/exit\n",
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let err = stderr(&output);
+    assert!(err.contains("user: say hi"), "stderr: {err}");
+    assert!(err.contains("assistant: Hello there."), "stderr: {err}");
+    assert!(err.contains("chat-tools"), "stderr: {err}");
+    assert!(
+        err.contains("No approved project memory yet."),
+        "stderr: {err}"
+    );
 }

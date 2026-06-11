@@ -322,6 +322,50 @@ impl DocumentStore for SqliteStorage {
         })
         .transpose()
     }
+
+    fn list_documents(
+        &self,
+        scope: &StorageScope,
+        collection: &str,
+    ) -> Result<Vec<StorageDocument>, StorageError> {
+        let scope_key = scope_key(scope)?;
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, version, payload, metadata
+                FROM storage_documents
+                WHERE scope = ?1 AND collection = ?2
+                ORDER BY id ASC
+                ",
+            )
+            .map_err(sqlite_error)?;
+        let rows = statement
+            .query_map(params![scope_key, collection], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, u64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(sqlite_error)?;
+
+        let mut documents = Vec::new();
+        for row in rows {
+            let (id, version, payload, metadata) = row.map_err(sqlite_error)?;
+            documents.push(StorageDocument {
+                scope: scope.clone(),
+                collection: collection.to_string(),
+                id,
+                version,
+                payload: serde_json::from_str(&payload)?,
+                metadata: serde_json::from_str(&metadata)?,
+            });
+        }
+
+        Ok(documents)
+    }
 }
 
 impl AppendLogStore for SqliteStorage {

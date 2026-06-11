@@ -479,3 +479,53 @@ fn sqlite_reports_serialization_error_for_corrupt_json_payloads() {
 
     assert!(matches!(error, StorageError::Serialization { .. }));
 }
+
+#[test]
+fn sqlite_documents_can_be_listed_by_scope_and_collection() {
+    let path = temp_sqlite_path("list-documents");
+    let scope = StorageScope::project("org-1", "project-1");
+    let other_scope = StorageScope::project("org-1", "project-2");
+
+    let mut storage = SqliteStorage::open(&path).expect("open sqlite storage");
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "sessions",
+            "session-2",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "sessions",
+            "session-1",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "memory",
+            "entry-1",
+            json!({ "text": "ignore me" }),
+        ))
+        .expect("put document");
+    storage
+        .put_document(StorageDocument::new(
+            other_scope,
+            "sessions",
+            "session-9",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+
+    let sessions = storage
+        .list_documents(&scope, "sessions")
+        .expect("list documents");
+    let ids: Vec<&str> = sessions.iter().map(StorageDocument::id).collect();
+
+    let _ = std::fs::remove_file(path);
+
+    assert_eq!(ids, ["session-1", "session-2"]);
+}

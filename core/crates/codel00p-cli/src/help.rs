@@ -17,6 +17,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
                 ("agent", "mcp") => Some(AGENT_MCP_HELP),
                 ("mcp", "permissions") => Some(MCP_PERMISSIONS_HELP),
                 ("mcp", "serve") => Some(MCP_SERVE_HELP),
+                ("session", "list") => Some(SESSION_LIST_HELP),
                 _ => None,
             }
         }
@@ -106,9 +107,15 @@ const AGENT_CHAT_HELP: &str = "\
 Usage: codel00p [global options] agent chat [options]
 
 Start an interactive multi-turn chat session. Conversation history is kept in
-memory across turns and persisted under the session id. In-session commands:
+memory across turns and persisted under the session id; pass an existing
+--session-id to resume a saved conversation. In-session commands:
   /help            Show available commands
   /session         Show the current session id
+  /sessions        List all persisted conversations
+  /history         Show the current conversation
+  /tools           List the tools available this turn
+  /model [id]      Show or switch the model for later turns
+  /memory          Show approved project memory in context
   /reset           Start a new conversation
   /exit, /quit     Leave the chat
 
@@ -202,9 +209,17 @@ Commands:
   archive  Archive memory; use --json for JSON output
 ";
 
+const SESSION_LIST_HELP: &str = "\
+Usage: codel00p [global options] session list [--json]
+
+List every persisted conversation in the active project scope with its source,
+message count, and event count.
+";
+
 const SESSION_HELP: &str = "\
 Usage: codel00p [global options] session <command>
 
 Commands:
+  list     List persisted conversations; use --json for JSON output
   show     Show persisted session records
 ";

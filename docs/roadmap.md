@@ -19,8 +19,9 @@ Implemented:
 
 - `codel00p-memory` candidate creation, review lifecycle, audit history, and
   deterministic retrieval;
-- `codel00p-storage` in-memory and SQLite backends;
-- `codel00p-session` durable metadata and append-only replay;
+- `codel00p-storage` in-memory and SQLite backends with document, key-value,
+  and append-log primitives plus collection listing;
+- `codel00p-session` durable metadata, append-only replay, and session listing;
 - `codel00p-protocol` shared sessions, events, tool, provider, project, and
   memory contracts;
 - `codel00p-providers` registry, profiles, policy, route inspection,
@@ -37,9 +38,11 @@ Implemented:
   streamable events, concurrency-safe tool batching, and explicit memory
   extraction;
 - `codel00p-cli` agent runs, session resume, interactive multi-turn chat
-  sessions, session inspection, memory review, provider-backed execution,
-  JSON/streamed events, permission modes, tool-set opt-ins, MCP attachment, MCP
-  diagnostics, and remembered MCP connector decisions;
+  sessions with resumable history and in-session tools (sessions, history,
+  tools, model switching, memory), conversation listing, session inspection,
+  memory review, provider-backed execution, JSON/streamed events, permission
+  modes, tool-set opt-ins, MCP attachment, MCP diagnostics, and remembered MCP
+  connector decisions;
 - `codel00p-mcp` stdio/HTTP client transports, codel00p MCP server mode,
   tools, resources, prompts, logging, roots, pagination, subscriptions,
   reconnects, diagnostics, and harness event routing.

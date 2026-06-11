@@ -33,6 +33,7 @@ use crate::{
         load_decision, remember_decision,
     },
     providers::build_provider_client,
+    session::{session_message_summary, session_role_label},
 };
 
 struct AgentRunOptions {
@@ -277,7 +278,7 @@ async fn build_agent_harness(
     builder.build().map_err(|error| error.to_string())
 }
 
-fn run_agent_chat(config: CliConfig, options: AgentRunOptions) -> CliResult<String> {
+fn run_agent_chat(config: CliConfig, mut options: AgentRunOptions) -> CliResult<String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -293,8 +294,8 @@ fn run_agent_chat(config: CliConfig, options: AgentRunOptions) -> CliResult<Stri
             .map(parse_session_id)
             .transpose()?
             .unwrap_or_default();
-        let mut session_state = codel00p_harness::SessionState::new(session_id);
-        let mut persisted_message_count = 0usize;
+        let (mut session_state, mut persisted_message_count) =
+            load_chat_session_state(&config, session_id)?;
 
         let mut stderr = io::stderr();
         writeln!(
@@ -305,6 +306,13 @@ fn run_agent_chat(config: CliConfig, options: AgentRunOptions) -> CliResult<Stri
             session_state.session_id().as_str()
         )
         .ok();
+        if persisted_message_count > 0 {
+            writeln!(
+                stderr,
+                "Resumed conversation with {persisted_message_count} prior message(s)."
+            )
+            .ok();
+        }
         writeln!(
             stderr,
             "Type a message and press Enter. Use /help for commands, /exit to quit."
@@ -330,14 +338,52 @@ fn run_agent_chat(config: CliConfig, options: AgentRunOptions) -> CliResult<Stri
             }
 
             if let Some(command) = prompt.strip_prefix('/') {
-                match handle_chat_command(
-                    command,
-                    &mut session_state,
-                    &mut persisted_message_count,
-                    &mut stderr,
-                ) {
-                    ChatControl::Continue => continue,
-                    ChatControl::Exit => break,
+                let (name, argument) = split_chat_command(command);
+                match name {
+                    "sessions" => {
+                        write!(stderr, "{}", chat_sessions_listing(&config)?).ok();
+                        continue;
+                    }
+                    "history" => {
+                        write!(stderr, "{}", chat_history_listing(&session_state)).ok();
+                        continue;
+                    }
+                    "tools" => {
+                        let registry =
+                            build_tool_registry(&options.tool_sets, &mcp_servers).await?;
+                        write!(stderr, "{}", chat_tools_listing(&registry)).ok();
+                        continue;
+                    }
+                    "model" => {
+                        match argument {
+                            Some(model) => {
+                                options.model = model.to_string();
+                                writeln!(stderr, "Model set to {}.", options.model).ok();
+                            }
+                            None => {
+                                writeln!(
+                                    stderr,
+                                    "model {} (provider {})",
+                                    options.model, options.provider
+                                )
+                                .ok();
+                            }
+                        }
+                        continue;
+                    }
+                    "memory" => {
+                        write!(stderr, "{}", chat_memory_listing(&config)?).ok();
+                        continue;
+                    }
+                    _ => match handle_chat_command(
+                        name,
+                        &mut session_state,
+                        &mut persisted_message_count,
+                        &mut stderr,
+                    ) {
+                        ChatControl::Continue => continue,
+                        ChatControl::Exit => break,
+                    },
                 }
             }
 
@@ -395,7 +441,16 @@ fn handle_chat_command(
         "help" | "?" => {
             writeln!(
                 stderr,
-                "Commands:\n  /help            Show this help\n  /session         Show the current session id\n  /reset           Start a new conversation\n  /exit, /quit     Leave the chat"
+                "Commands:\n  \
+                 /help              Show this help\n  \
+                 /session           Show the current session id\n  \
+                 /sessions          List all persisted conversations\n  \
+                 /history           Show the current conversation\n  \
+                 /tools             List the tools available this turn\n  \
+                 /model [id]        Show or switch the model for later turns\n  \
+                 /memory            Show approved project memory in context\n  \
+                 /reset             Start a new conversation\n  \
+                 /exit, /quit       Leave the chat"
             )
             .ok();
             ChatControl::Continue
@@ -421,6 +476,112 @@ fn handle_chat_command(
             ChatControl::Continue
         }
     }
+}
+
+fn split_chat_command(command: &str) -> (&str, Option<&str>) {
+    let command = command.trim();
+    match command.split_once(char::is_whitespace) {
+        Some((name, rest)) => {
+            let rest = rest.trim();
+            (name, if rest.is_empty() { None } else { Some(rest) })
+        }
+        None => (command, None),
+    }
+}
+
+fn load_chat_session_state(
+    config: &CliConfig,
+    session_id: codel00p_harness::SessionId,
+) -> CliResult<(codel00p_harness::SessionState, usize)> {
+    let store = open_session_store(config)?;
+    match store.metadata(&session_id) {
+        Ok(_) => {
+            let session_state = replay_session_messages(config, session_id)?;
+            let count = session_state.messages().len();
+            Ok((session_state, count))
+        }
+        Err(SessionStoreError::SessionNotFound { .. }) => {
+            Ok((codel00p_harness::SessionState::new(session_id), 0))
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
+    let store = open_session_store(config)?;
+    let sessions = store.list_sessions().map_err(|error| error.to_string())?;
+    if sessions.is_empty() {
+        return Ok("No saved conversations yet.\n".to_string());
+    }
+
+    let mut output = String::new();
+    for metadata in sessions {
+        let messages = store
+            .replay(metadata.session_id())
+            .map_err(|error| error.to_string())?
+            .iter()
+            .filter(|record| matches!(record.record(), SessionRecord::Message(_)))
+            .count();
+        output.push_str(&format!(
+            "  {}\t{}\t{} message(s)\n",
+            metadata.session_id().as_str(),
+            metadata.source(),
+            messages
+        ));
+    }
+    Ok(output)
+}
+
+fn chat_history_listing(session_state: &codel00p_harness::SessionState) -> String {
+    let messages = session_state.messages();
+    if messages.is_empty() {
+        return "No messages in this conversation yet.\n".to_string();
+    }
+
+    let mut output = String::new();
+    for message in messages {
+        let role = session_role_label(message.role());
+        let summary = session_message_summary(message);
+        output.push_str(&format!("  {role}: {summary}\n"));
+    }
+    output
+}
+
+fn chat_tools_listing(registry: &ToolRegistry) -> String {
+    let names = registry.names();
+    if names.is_empty() {
+        return "No tools enabled. Use --tool-set to enable some.\n".to_string();
+    }
+
+    let mut names = names;
+    names.sort();
+    let mut output = String::new();
+    for name in names {
+        output.push_str(&format!("  {name}\n"));
+    }
+    output
+}
+
+fn chat_memory_listing(config: &CliConfig) -> CliResult<String> {
+    let store = open_memory_store(config)?;
+    let items = store
+        .retrieve(MemoryQuery::new(config.project.clone()).with_limit(10))
+        .map_err(|error| error.to_string())?;
+    if items.is_empty() {
+        return Ok("No approved project memory yet.\n".to_string());
+    }
+
+    let mut output = String::new();
+    for memory in items {
+        let entry = memory.entry();
+        output.push_str(&format!(
+            "  {}\t{:?}\t{}\n",
+            entry.id(),
+            entry.kind(),
+            entry.content()
+        ));
+    }
+    Ok(output)
 }
 
 fn prepare_session_state(

@@ -241,6 +241,12 @@ pub trait DocumentStore {
         collection: &str,
         id: &str,
     ) -> Result<Option<StorageDocument>, StorageError>;
+
+    fn list_documents(
+        &self,
+        scope: &StorageScope,
+        collection: &str,
+    ) -> Result<Vec<StorageDocument>, StorageError>;
 }
 
 pub trait KeyValueStore {
@@ -358,6 +364,23 @@ impl DocumentStore for InMemoryStorage {
             .documents
             .get(&DocumentKey::new(scope, collection, id))
             .cloned())
+    }
+
+    fn list_documents(
+        &self,
+        scope: &StorageScope,
+        collection: &str,
+    ) -> Result<Vec<StorageDocument>, StorageError> {
+        let mut documents = self
+            .documents
+            .iter()
+            .filter(|(key, _)| &key.scope == scope && key.collection == collection)
+            .map(|(_, document)| document.clone())
+            .collect::<Vec<_>>();
+
+        documents.sort_by(|left, right| left.id().cmp(right.id()));
+
+        Ok(documents)
     }
 }
 

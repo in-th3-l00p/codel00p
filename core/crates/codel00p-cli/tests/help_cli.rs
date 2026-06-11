@@ -87,6 +87,10 @@ fn command_help_prints_without_project_flags() {
             &["session", "--help"][..],
             "Usage: codel00p [global options] session <command>",
         ),
+        (
+            &["session", "list", "--help"][..],
+            "Usage: codel00p [global options] session list [--json]",
+        ),
     ] {
         let output = run_codel00p(args);
 

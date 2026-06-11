@@ -113,3 +113,43 @@ fn session_store_can_run_on_supplied_storage_backend_and_scope() {
     assert_eq!(replayed[0].session_id(), &session_id);
     assert!(matches!(replayed[0].record(), SessionRecord::Message(_)));
 }
+
+#[test]
+fn lists_all_sessions_in_scope() {
+    let mut store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "project-1"),
+        InMemoryStorage::default(),
+    );
+
+    store
+        .create_session(SessionMetadata::new(
+            SessionId::from_static("session-b"),
+            "cli",
+        ))
+        .expect("create session b");
+    store
+        .create_session(SessionMetadata::new(
+            SessionId::from_static("session-a"),
+            "chat",
+        ))
+        .expect("create session a");
+
+    let sessions = store.list_sessions().expect("list sessions");
+    let ids: Vec<&str> = sessions
+        .iter()
+        .map(|metadata| metadata.session_id().as_str())
+        .collect();
+
+    assert_eq!(ids, ["session-a", "session-b"]);
+    assert_eq!(sessions[1].source(), "cli");
+}
+
+#[test]
+fn lists_no_sessions_when_scope_is_empty() {
+    let store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "empty"),
+        InMemoryStorage::default(),
+    );
+
+    assert!(store.list_sessions().expect("list sessions").is_empty());
+}
