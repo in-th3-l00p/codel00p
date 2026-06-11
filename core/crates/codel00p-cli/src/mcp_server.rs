@@ -674,25 +674,36 @@ fn session_records_json(records: &[codel00p_session::PersistedSessionRecord]) ->
 }
 
 fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
-    memory_entry_json(record.entry())
+    let mut item = memory_entry_json(record.entry());
+    let quality = record.quality();
+    item["quality"] = memory_quality_json(&quality);
+    item
 }
 
 fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
+    let quality = memory.quality();
+    item["quality"] = memory_quality_json(&quality);
     item["reason"] = json!(memory.reason());
     item
 }
 
 fn similar_memory_json(memory: &codel00p_memory::SimilarMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
+    let quality = memory.quality();
+    item["quality"] = memory_quality_json(&quality);
     item["score"] = json!(memory.score());
     item
 }
 
 fn stale_memory_json(memory: &codel00p_memory::StaleMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
+    let quality = memory.quality();
+    let newer_quality = memory.newer_quality();
+    item["quality"] = memory_quality_json(&quality);
     item["score"] = json!(memory.score());
     item["newer"] = memory_entry_json(memory.newer_entry());
+    item["newer"]["quality"] = memory_quality_json(&newer_quality);
     item
 }
 
@@ -713,6 +724,13 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         item["source_uri"] = json!(source_uri(source));
     }
     item
+}
+
+fn memory_quality_json(quality: &codel00p_memory::MemoryQuality) -> Value {
+    json!({
+        "score": quality.score(),
+        "findings": quality.findings(),
+    })
 }
 
 fn source_uri(source: &MemorySource) -> String {

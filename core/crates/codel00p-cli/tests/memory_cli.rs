@@ -97,7 +97,7 @@ fn memory_list_prints_filtered_candidates() {
         &db_path,
         "mem-workflow",
         MemoryKind::Workflow,
-        "Run pnpm verify before pushing main.",
+        "Run pnpm verify before pushing main after editing provider policy.",
         "verify",
     );
     seed_candidate(
@@ -144,7 +144,7 @@ fn memory_list_prints_filtered_candidates() {
     );
     assert_eq!(
         stdout(&output),
-        "mem-workflow\tcandidate\tworkflow\tRun pnpm verify before pushing main.\n"
+        "mem-workflow\tcandidate\tworkflow\tRun pnpm verify before pushing main after editing provider policy.\n"
     );
     let records: serde_json::Value =
         serde_json::from_str(&stdout(&output_json)).expect("list json");
@@ -155,8 +155,10 @@ fn memory_list_prints_filtered_candidates() {
     assert_eq!(records[0]["kind"], "workflow");
     assert_eq!(
         records[0]["content"],
-        "Run pnpm verify before pushing main."
+        "Run pnpm verify before pushing main after editing provider policy."
     );
+    assert_eq!(records[0]["quality"]["score"], 100);
+    assert_eq!(records[0]["quality"]["findings"], serde_json::json!([]));
     assert_eq!(records[0]["tags"], serde_json::json!(["verify"]));
     assert_eq!(records[0]["source"]["session_id"], "session-cli");
     assert_eq!(records[0]["source"]["turn_id"], "turn-cli");

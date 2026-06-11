@@ -100,7 +100,9 @@ that is stale or wrong.
 Memory review surfaces should help reviewers find low-value entries before
 they pollute future context. The core memory engine now exposes a deterministic
 per-record quality score with findings for short, overly long, or vague memory
-content. This score is advisory, not an approval gate.
+content. CLI and MCP JSON memory records include this score as
+`quality.score` with `quality.findings`. This score is advisory, not an
+approval gate.
 
 ## Prompt assembly
 

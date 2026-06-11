@@ -131,3 +131,6 @@ approved-memory retrieval across a reopened SQLite file.
 memory that is too short to reuse, too long for frequent retrieval, or written
 with vague language. The score is advisory only: it does not block candidate
 creation, approval, retrieval, or sync.
+
+CLI and MCP memory JSON records include this signal as
+`quality: { score, findings }` on list, show/search, similar, and stale outputs.

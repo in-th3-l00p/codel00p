@@ -861,6 +861,9 @@ fn mcp_serve_can_create_and_review_project_memory() {
     assert!(listed_text.contains(r#""id":"mem-mcp-1""#));
     assert!(listed_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#));
     assert!(listed_text.contains(r#""source_uri":"codel00p://sessions/session-mcp""#));
+    let listed_items: Value = serde_json::from_str(listed_text).expect("listed json");
+    assert_eq!(listed_items[0]["quality"]["score"], 100);
+    assert_eq!(listed_items[0]["quality"]["findings"], json!([]));
 
     send(
         &mut child,

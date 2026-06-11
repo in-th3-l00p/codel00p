@@ -630,6 +630,10 @@ impl SimilarMemory {
         self.record.entry()
     }
 
+    pub fn quality(&self) -> MemoryQuality {
+        self.record.quality()
+    }
+
     pub fn score(&self) -> u8 {
         self.score
     }
@@ -644,6 +648,14 @@ impl StaleMemory {
         self.newer_record.entry()
     }
 
+    pub fn quality(&self) -> MemoryQuality {
+        self.record.quality()
+    }
+
+    pub fn newer_quality(&self) -> MemoryQuality {
+        self.newer_record.quality()
+    }
+
     pub fn score(&self) -> u8 {
         self.score
     }
@@ -652,6 +664,10 @@ impl StaleMemory {
 impl RetrievedMemory {
     pub fn entry(&self) -> &MemoryEntry {
         self.record.entry()
+    }
+
+    pub fn quality(&self) -> MemoryQuality {
+        self.record.quality()
     }
 
     pub fn reason(&self) -> &str {

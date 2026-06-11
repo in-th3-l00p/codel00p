@@ -268,26 +268,28 @@ Output is intentionally stable and scriptable:
 
 - `memory list` prints `id`, `status`, `kind`, and `content` as tab-separated
   fields; add `--sensitivity normal|sensitive` to filter records and `--json`
-  for MCP-compatible record objects.
+  for MCP-compatible record objects with advisory `quality.score` and
+  `quality.findings`.
 - `memory similar` prints active near-duplicate candidates as `id`, `status`,
-  `kind`, `score`, and `content`; add `--json` for record objects with scores.
-  The MCP `memory_similar` tool returns the same scored record objects.
+  `kind`, `score`, and `content`; add `--json` for record objects with scores
+  and quality. The MCP `memory_similar` tool returns the same scored record
+  objects.
 - `memory stale` prints approved memories likely superseded by newer active
   memory as `id`, `status`, `kind`, `score`, `newer_id`, and `content`; add
-  `--json` for record objects with scores and nested `newer` records.
+  `--json` for record objects with scores, quality, and nested `newer` records.
   The MCP `memory_stale` tool returns the same scored stale records.
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
   and `content`; default retrieval excludes sensitive memory, and
   `--sensitivity normal|sensitive` explicitly filters by sensitivity. Add
-  `--json` for MCP-compatible records with reasons.
+  `--json` for MCP-compatible records with reasons and quality.
 - `memory show` prints a single memory record with source evidence; add
   `--json` for the MCP-compatible record object. Memory detail text and JSON
-  records include `sensitivity` and `source_uri` when source evidence is
-  available.
+  records include `sensitivity`, `source_uri`, and quality when source evidence
+  is available.
 - review commands print `id` and the resulting status; add `--json` for the
-  MCP-compatible record object.
+  MCP-compatible record object with quality.
 - `memory edit` replaces content and prints `id` plus resulting status; add
-  `--json` for the MCP-compatible record object.
+  `--json` for the MCP-compatible record object with quality.
 - `memory audit` prints `sequence`, `action`, `actor`, and `reason`; add
   `--json` for machine-readable revision metadata including `memory_id`.
 - `memory restore` restores content from an edit audit event's
