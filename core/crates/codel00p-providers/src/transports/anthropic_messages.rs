@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    ToolCall, ToolDefinition, Usage,
+    TokenSink, ToolCall, ToolDefinition, Usage, transports::sse::stream_sse,
 };
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -69,6 +69,43 @@ impl AnthropicMessagesTransport {
 
         wire_response.normalize(provider)
     }
+
+    pub(crate) async fn complete_streaming(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        request: InferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::ApiKey(api_key) = credential else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let wire_request = AnthropicMessagesRequest::from_request(provider, request)?.streaming();
+        let response = self
+            .http
+            .post(messages_url(base_url))
+            .header("x-api-key", api_key)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .json(&wire_request)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        let mut accumulator = AnthropicStreamAccumulator::default();
+        stream_sse(provider, response, |event| {
+            accumulator.ingest(provider, event, sink)?;
+            Ok(false)
+        })
+        .await?;
+        Ok(accumulator.finish())
+    }
 }
 
 fn messages_url(base_url: &str) -> String {
@@ -91,9 +128,16 @@ struct AnthropicMessagesRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<AnthropicTool>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    stream: bool,
 }
 
 impl AnthropicMessagesRequest {
+    fn streaming(mut self) -> Self {
+        self.stream = true;
+        self
+    }
+
     fn from_request(provider: &str, request: InferenceRequest) -> Result<Self, ProviderError> {
         let mut system_messages = Vec::new();
         let mut messages = Vec::new();
@@ -118,6 +162,7 @@ impl AnthropicMessagesRequest {
             system: join_system_messages(system_messages),
             temperature: request.temperature,
             tools: request.tools.into_iter().map(AnthropicTool::from).collect(),
+            stream: false,
         })
     }
 }
@@ -332,6 +377,171 @@ impl AnthropicUsage {
             cache_read_tokens: self.cache_read_input_tokens.unwrap_or_default(),
             cache_write_tokens: self.cache_creation_input_tokens.unwrap_or_default(),
             reasoning_tokens: 0,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicStreamEvent {
+    #[serde(rename = "type")]
+    kind: String,
+    message: Option<AnthropicStreamMessage>,
+    index: Option<usize>,
+    content_block: Option<AnthropicStreamContentBlock>,
+    delta: Option<AnthropicStreamDelta>,
+    usage: Option<AnthropicUsage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicStreamMessage {
+    usage: Option<AnthropicUsage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicStreamContentBlock {
+    #[serde(rename = "type")]
+    kind: String,
+    id: Option<String>,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicStreamDelta {
+    text: Option<String>,
+    partial_json: Option<String>,
+    stop_reason: Option<String>,
+}
+
+#[derive(Default)]
+struct AnthropicStreamAccumulator {
+    content: String,
+    has_content: bool,
+    tool_calls: BTreeMap<usize, AnthropicStreamToolCall>,
+    finish_reason: Option<String>,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_tokens: u64,
+    cache_write_tokens: u64,
+    saw_usage: bool,
+}
+
+#[derive(Default)]
+struct AnthropicStreamToolCall {
+    id: Option<String>,
+    name: String,
+    arguments: String,
+}
+
+impl AnthropicStreamAccumulator {
+    fn ingest(
+        &mut self,
+        provider: &str,
+        payload: &str,
+        sink: &dyn TokenSink,
+    ) -> Result<(), ProviderError> {
+        let event: AnthropicStreamEvent =
+            serde_json::from_str(payload).map_err(|error| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        match event.kind.as_str() {
+            "message_start" => {
+                if let Some(usage) = event.message.and_then(|message| message.usage) {
+                    self.merge_usage(usage);
+                }
+            }
+            "content_block_start" => {
+                if let (Some(index), Some(block)) = (event.index, event.content_block)
+                    && block.kind == "tool_use"
+                {
+                    self.tool_calls.insert(
+                        index,
+                        AnthropicStreamToolCall {
+                            id: block.id,
+                            name: block.name.unwrap_or_default(),
+                            arguments: String::new(),
+                        },
+                    );
+                }
+            }
+            "content_block_delta" => {
+                if let Some(delta) = event.delta {
+                    if let Some(text) = delta.text
+                        && !text.is_empty()
+                    {
+                        self.has_content = true;
+                        self.content.push_str(&text);
+                        sink.on_token(&text);
+                    }
+                    if let (Some(index), Some(partial)) = (event.index, delta.partial_json)
+                        && let Some(slot) = self.tool_calls.get_mut(&index)
+                    {
+                        slot.arguments.push_str(&partial);
+                    }
+                }
+            }
+            "message_delta" => {
+                if let Some(stop_reason) = event.delta.and_then(|delta| delta.stop_reason) {
+                    self.finish_reason = Some(stop_reason);
+                }
+                if let Some(usage) = event.usage {
+                    self.merge_usage(usage);
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn merge_usage(&mut self, usage: AnthropicUsage) {
+        self.saw_usage = true;
+        if let Some(input) = usage.input_tokens {
+            self.input_tokens = input;
+        }
+        if let Some(output) = usage.output_tokens {
+            self.output_tokens = output;
+        }
+        if let Some(cache_read) = usage.cache_read_input_tokens {
+            self.cache_read_tokens = cache_read;
+        }
+        if let Some(cache_write) = usage.cache_creation_input_tokens {
+            self.cache_write_tokens = cache_write;
+        }
+    }
+
+    fn finish(self) -> InferenceResponse {
+        let tool_calls = self
+            .tool_calls
+            .into_values()
+            .filter(|call| !call.name.is_empty())
+            .map(|call| ToolCall {
+                id: call.id,
+                name: call.name,
+                arguments: if call.arguments.is_empty() {
+                    Value::Object(Default::default())
+                } else {
+                    serde_json::from_str(&call.arguments).unwrap_or(Value::String(call.arguments))
+                },
+                provider_data: Default::default(),
+            })
+            .collect();
+
+        InferenceResponse {
+            content: self.has_content.then_some(self.content),
+            tool_calls,
+            finish_reason: self.finish_reason,
+            reasoning: None,
+            usage: self.saw_usage.then_some(Usage {
+                input_tokens: self.input_tokens,
+                output_tokens: self.output_tokens,
+                cache_read_tokens: self.cache_read_tokens,
+                cache_write_tokens: self.cache_write_tokens,
+                reasoning_tokens: 0,
+            }),
+            cost: None,
+            provider_data: Default::default(),
         }
     }
 }

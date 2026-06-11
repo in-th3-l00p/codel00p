@@ -1,6 +1,9 @@
 use crate::{
     Credential, InferenceRequest, InferenceResponse, OutputTokenParameter, ProviderError,
-    transports::chat_completions::{ChatCompletionsRequest, ChatCompletionsResponse},
+    TokenSink,
+    transports::chat_completions::{
+        ChatCompletionsRequest, ChatCompletionsResponse, stream_chat_completions_response,
+    },
 };
 
 const DEFAULT_AZURE_API_VERSION: &str = "2024-10-21";
@@ -72,6 +75,49 @@ impl AzureChatCompletionsTransport {
             })?;
 
         wire_response.normalize(provider)
+    }
+
+    pub(crate) async fn complete_streaming(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        output_token_parameter: OutputTokenParameter,
+        request: InferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::ApiKey(api_key) = credential else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let deployment = request
+            .deployment
+            .clone()
+            .unwrap_or_else(|| request.model.clone());
+        let api_version = request
+            .api_version
+            .clone()
+            .unwrap_or_else(|| DEFAULT_AZURE_API_VERSION.to_string());
+        let wire_request = ChatCompletionsRequest::from_request(request, output_token_parameter)
+            .without_model()
+            .streaming();
+        let url = azure_chat_completions_url(base_url, &deployment, &api_version);
+
+        let response = self
+            .http
+            .post(url)
+            .header("api-key", api_key)
+            .json(&wire_request)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        stream_chat_completions_response(provider, response, sink).await
     }
 }
 

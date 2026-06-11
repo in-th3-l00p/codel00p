@@ -1,10 +1,10 @@
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole,
     OutputTokenParameter, ProviderError, TokenSink, ToolCall, ToolDefinition, Usage,
+    transports::sse::stream_sse,
 };
 
 pub(crate) struct ChatCompletionsTransport {
@@ -96,56 +96,25 @@ impl ChatCompletionsTransport {
                 message: error.to_string(),
             })?;
 
-        let status = response.status();
-        if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(ProviderError::Http {
-                provider: provider.to_string(),
-                message: format!("status {status}: {body}"),
-            });
-        }
-
-        let mut accumulator = StreamingAccumulator::default();
-        let mut buffer = String::new();
-        let mut body = response.bytes_stream();
-        while let Some(chunk) = body.next().await {
-            let chunk = chunk.map_err(|error| ProviderError::Http {
-                provider: provider.to_string(),
-                message: error.to_string(),
-            })?;
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-            while let Some(newline) = buffer.find('\n') {
-                let line: String = buffer.drain(..=newline).collect();
-                if let Some(event) = parse_sse_data_line(line.trim_end()) {
-                    if event == "[DONE]" {
-                        return accumulator.finish(provider);
-                    }
-                    accumulator.ingest(provider, event, sink)?;
-                }
-            }
-        }
-
-        // Flush any trailing line that arrived without a terminating newline.
-        if let Some(event) = parse_sse_data_line(buffer.trim_end())
-            && event != "[DONE]"
-        {
-            accumulator.ingest(provider, event, sink)?;
-        }
-
-        accumulator.finish(provider)
+        stream_chat_completions_response(provider, response, sink).await
     }
 }
 
-/// Returns the payload of an SSE `data:` line, or `None` for blank/comment lines.
-fn parse_sse_data_line(line: &str) -> Option<&str> {
-    let payload = line.strip_prefix("data:")?;
-    let payload = payload.trim();
-    if payload.is_empty() {
-        None
-    } else {
-        Some(payload)
-    }
+/// Decodes a streaming Chat Completions response: validates status, reads each
+/// SSE `data:` chunk, emits content deltas to `sink`, and assembles the final
+/// response. Shared by the OpenAI-compatible and Azure transports.
+pub(crate) async fn stream_chat_completions_response(
+    provider: &str,
+    response: reqwest::Response,
+    sink: &dyn TokenSink,
+) -> Result<InferenceResponse, ProviderError> {
+    let mut accumulator = StreamingAccumulator::default();
+    stream_sse(provider, response, |event| {
+        accumulator.ingest(provider, event, sink)?;
+        Ok(false)
+    })
+    .await?;
+    accumulator.finish(provider)
 }
 
 #[derive(Default)]

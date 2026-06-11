@@ -268,3 +268,51 @@ async fn gemini_requires_credentials_for_remote_requests() {
 
     assert!(matches!(error, ProviderError::MissingCredential { provider } if provider == "gemini"));
 }
+
+#[tokio::test]
+async fn gemini_streams_text_parts_and_usage() {
+    use std::sync::{Arc, Mutex};
+
+    let server = MockServer::start_async().await;
+    let sse = concat!(
+        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Hel\"}]}}]}\n\n",
+        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"lo\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":5,\"candidatesTokenCount\":2}}\n\n",
+    );
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1beta/models/gemini-2.5-flash:streamGenerateContent")
+                .query_param("alt", "sse")
+                .header("x-goog-api-key", "test-key");
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("gemini", Credential::api_key("test-key"))
+        .build();
+
+    let tokens: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let collector = tokens.clone();
+    let sink = move |t: &str| collector.lock().unwrap().push(t.to_string());
+
+    let response = client
+        .complete_streaming(
+            InferenceRequest::builder("gemini", "gemini-2.5-flash")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .build(),
+            &sink,
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(*tokens.lock().unwrap(), vec!["Hel", "lo"]);
+    assert_eq!(response.content.as_deref(), Some("Hello"));
+    assert_eq!(response.finish_reason.as_deref(), Some("STOP"));
+    assert_eq!(response.usage.unwrap().output_tokens, 2);
+}

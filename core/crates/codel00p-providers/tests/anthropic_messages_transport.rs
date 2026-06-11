@@ -252,3 +252,66 @@ async fn anthropic_messages_requires_credentials_for_remote_requests() {
         matches!(error, ProviderError::MissingCredential { provider } if provider == "anthropic")
     );
 }
+
+#[tokio::test]
+async fn anthropic_streams_text_and_tool_use_deltas() {
+    use std::sync::{Arc, Mutex};
+
+    let server = MockServer::start_async().await;
+    let sse = concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":5,\"output_tokens\":0}}}\n\n",
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hel\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"lo\"}}\n\n",
+        "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"read_file\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"a.txt\\\"}\"}}\n\n",
+        "data: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":7}}\n\n",
+        "data: {\"type\":\"message_stop\"}\n\n",
+    );
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/messages")
+                .header("x-api-key", "test-key")
+                .body_includes(r#""stream":true"#);
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("anthropic", Credential::api_key("test-key"))
+        .build();
+
+    let tokens: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let collector = tokens.clone();
+    let sink = move |t: &str| collector.lock().unwrap().push(t.to_string());
+
+    let response = client
+        .complete_streaming(
+            InferenceRequest::builder("anthropic", "claude-3-5-sonnet-latest")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Read a.txt."))
+                .build(),
+            &sink,
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(*tokens.lock().unwrap(), vec!["Hel", "lo"]);
+    assert_eq!(response.content.as_deref(), Some("Hello"));
+    assert_eq!(response.finish_reason.as_deref(), Some("tool_use"));
+    assert_eq!(response.tool_calls.len(), 1);
+    assert_eq!(response.tool_calls[0].name, "read_file");
+    assert_eq!(response.tool_calls[0].arguments, json!({ "path": "a.txt" }));
+    let usage = response.usage.unwrap();
+    assert_eq!(usage.input_tokens, 5);
+    assert_eq!(usage.output_tokens, 7);
+}

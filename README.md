@@ -137,10 +137,12 @@ The first Rust modules have started:
   review commands for listing, inspecting, approving, rejecting, archiving, and
   auditing memory records.
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
-  high-level inference client, OpenAI-compatible Chat Completions transport with
-  server-sent-event token streaming, Anthropic Messages transport, OpenAI
+  high-level inference client, OpenAI-compatible Chat Completions transport,
+  Azure Chat Completions transport, Anthropic Messages transport, OpenAI
   Responses transport, AWS Bedrock Converse transport, Gemini GenerateContent
-  transport, tool calls, route inspection, and provider policy enforcement.
+  transport, native token streaming for every transport (SSE plus the Bedrock
+  binary event stream), tool calls, route inspection, and provider policy
+  enforcement.
 - [codel00p-harness](core/crates/codel00p-harness): agent turn loop,
   workspace-safe read/edit/command/git tools, project instructions,
   permissions, compaction primitives, deterministic events, model-client

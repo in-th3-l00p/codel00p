@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    ToolCall, ToolDefinition, Usage,
+    TokenSink, ToolCall, ToolDefinition, Usage, transports::sse::stream_sse,
 };
 
 pub(crate) struct GeminiTransport {
@@ -64,6 +64,43 @@ impl GeminiTransport {
 
         wire_response.normalize(provider)
     }
+
+    pub(crate) async fn complete_streaming(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        request: InferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::ApiKey(api_key) = credential else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let model = request.model.clone();
+        let wire_request = GeminiRequest::from_request(provider, request)?;
+        let response = self
+            .http
+            .post(stream_generate_content_url(base_url, &model))
+            .header("x-goog-api-key", api_key)
+            .json(&wire_request)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        let mut accumulator = GeminiStreamAccumulator::default();
+        stream_sse(provider, response, |event| {
+            accumulator.ingest(provider, event, sink)?;
+            Ok(false)
+        })
+        .await?;
+        Ok(accumulator.finish())
+    }
 }
 
 fn generate_content_url(base_url: &str, model: &str) -> String {
@@ -73,6 +110,16 @@ fn generate_content_url(base_url: &str, model: &str) -> String {
         format!("{base_url}/models/{model}:generateContent")
     } else {
         format!("{base_url}/v1beta/models/{model}:generateContent")
+    }
+}
+
+fn stream_generate_content_url(base_url: &str, model: &str) -> String {
+    let model = model.strip_prefix("models/").unwrap_or(model);
+    let base_url = base_url.trim_end_matches('/');
+    if base_url.ends_with("/v1beta") {
+        format!("{base_url}/models/{model}:streamGenerateContent?alt=sse")
+    } else {
+        format!("{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse")
     }
 }
 
@@ -464,6 +511,69 @@ impl GeminiUsageMetadata {
             cache_read_tokens: cache_read,
             cache_write_tokens: 0,
             reasoning_tokens: self.thoughts_token_count.unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct GeminiStreamAccumulator {
+    content: String,
+    has_content: bool,
+    tool_calls: Vec<ToolCall>,
+    finish_reason: Option<String>,
+    usage: Option<Usage>,
+}
+
+impl GeminiStreamAccumulator {
+    fn ingest(
+        &mut self,
+        provider: &str,
+        payload: &str,
+        sink: &dyn TokenSink,
+    ) -> Result<(), ProviderError> {
+        let chunk: GeminiResponse =
+            serde_json::from_str(payload).map_err(|error| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        if let Some(usage) = chunk.usage_metadata {
+            self.usage = Some(usage.normalize());
+        }
+
+        if let Some(candidate) = chunk.candidates.into_iter().next() {
+            if let Some(finish_reason) = candidate.finish_reason {
+                self.finish_reason = Some(finish_reason);
+            }
+            for part in candidate.content.parts {
+                match part {
+                    GeminiResponsePart::Text { text } => {
+                        if !text.is_empty() {
+                            self.has_content = true;
+                            self.content.push_str(&text);
+                            sink.on_token(&text);
+                        }
+                    }
+                    GeminiResponsePart::FunctionCall { function_call } => {
+                        self.tool_calls.push(function_call.normalize());
+                    }
+                    GeminiResponsePart::Other {} => {}
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn finish(self) -> InferenceResponse {
+        InferenceResponse {
+            content: self.has_content.then_some(self.content),
+            tool_calls: self.tool_calls,
+            finish_reason: self.finish_reason,
+            reasoning: None,
+            usage: self.usage,
+            cost: None,
+            provider_data: Default::default(),
         }
     }
 }

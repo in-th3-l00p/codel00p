@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    ToolCall, ToolDefinition, Usage,
+    TokenSink, ToolCall, ToolDefinition, Usage, transports::sse::stream_sse,
 };
 
 pub(crate) struct ResponsesTransport {
@@ -64,6 +64,42 @@ impl ResponsesTransport {
 
         wire_response.normalize(provider)
     }
+
+    pub(crate) async fn complete_streaming(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        request: InferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::ApiKey(api_key) = credential else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let wire_request = ResponsesRequest::from_request(provider, request)?.streaming();
+        let response = self
+            .http
+            .post(responses_url(base_url))
+            .bearer_auth(api_key)
+            .json(&wire_request)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        let mut accumulator = ResponsesStreamAccumulator::default();
+        stream_sse(provider, response, |event| {
+            accumulator.ingest(provider, event, sink)?;
+            Ok(false)
+        })
+        .await?;
+        accumulator.finish(provider)
+    }
 }
 
 fn responses_url(base_url: &str) -> String {
@@ -86,9 +122,16 @@ struct ResponsesRequest {
     max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<ResponsesTool>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    stream: bool,
 }
 
 impl ResponsesRequest {
+    fn streaming(mut self) -> Self {
+        self.stream = true;
+        self
+    }
+
     fn from_request(provider: &str, request: InferenceRequest) -> Result<Self, ProviderError> {
         let mut input = Vec::new();
         for message in request.messages {
@@ -102,6 +145,7 @@ impl ResponsesRequest {
             temperature: request.temperature,
             max_output_tokens: request.max_output_tokens,
             tools: request.tools.into_iter().map(ResponsesTool::from).collect(),
+            stream: false,
         })
     }
 }
@@ -412,4 +456,72 @@ struct ResponsesInputTokenDetails {
 #[derive(Debug, Deserialize)]
 struct ResponsesOutputTokenDetails {
     reasoning_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ResponsesStreamEvent {
+    #[serde(rename = "type")]
+    kind: String,
+    delta: Option<String>,
+    response: Option<ResponsesResponse>,
+}
+
+#[derive(Default)]
+struct ResponsesStreamAccumulator {
+    text: String,
+    has_text: bool,
+    completed: Option<ResponsesResponse>,
+}
+
+impl ResponsesStreamAccumulator {
+    fn ingest(
+        &mut self,
+        provider: &str,
+        payload: &str,
+        sink: &dyn TokenSink,
+    ) -> Result<(), ProviderError> {
+        let event: ResponsesStreamEvent =
+            serde_json::from_str(payload).map_err(|error| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        match event.kind.as_str() {
+            "response.output_text.delta" => {
+                if let Some(delta) = event.delta
+                    && !delta.is_empty()
+                {
+                    self.has_text = true;
+                    self.text.push_str(&delta);
+                    sink.on_token(&delta);
+                }
+            }
+            "response.completed" | "response.incomplete" | "response.failed" => {
+                if let Some(response) = event.response {
+                    self.completed = Some(response);
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn finish(self, provider: &str) -> Result<InferenceResponse, ProviderError> {
+        // The terminal event carries the authoritative response (tool calls,
+        // usage, status); fall back to the streamed text if it never arrived.
+        if let Some(response) = self.completed {
+            return response.normalize(provider);
+        }
+
+        Ok(InferenceResponse {
+            content: self.has_text.then_some(self.text),
+            tool_calls: Vec::new(),
+            finish_reason: None,
+            reasoning: None,
+            usage: None,
+            cost: None,
+            provider_data: Default::default(),
+        })
+    }
 }

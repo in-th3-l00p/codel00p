@@ -156,6 +156,62 @@ impl InferenceClient {
                     )
                     .await?
             }
+            ApiMode::AzureChatCompletions => {
+                AzureChatCompletionsTransport::new()
+                    .complete_streaming(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        route.output_token_parameter,
+                        request.clone(),
+                        sink,
+                    )
+                    .await?
+            }
+            ApiMode::AnthropicMessages => {
+                AnthropicMessagesTransport::new()
+                    .complete_streaming(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        request.clone(),
+                        sink,
+                    )
+                    .await?
+            }
+            ApiMode::Responses => {
+                ResponsesTransport::new()
+                    .complete_streaming(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        request.clone(),
+                        sink,
+                    )
+                    .await?
+            }
+            ApiMode::Gemini => {
+                GeminiTransport::new()
+                    .complete_streaming(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        request.clone(),
+                        sink,
+                    )
+                    .await?
+            }
+            ApiMode::BedrockConverse => {
+                BedrockConverseTransport::new()
+                    .complete_streaming(
+                        &route.provider,
+                        &route.base_url,
+                        credential,
+                        request.clone(),
+                        sink,
+                    )
+                    .await?
+            }
             _ => {
                 let (_, response) = self
                     .complete_one(request.clone())

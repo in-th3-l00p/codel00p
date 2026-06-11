@@ -27,10 +27,10 @@ Implemented:
 - `codel00p-providers` registry, profiles, policy, route inspection,
   credentials, OpenAI-compatible Chat Completions, Azure AI Foundry deployment
   Chat Completions, OpenAI Responses, Anthropic Messages, AWS Bedrock Converse,
-  Gemini GenerateContent, server-sent-event token streaming for Chat
-  Completions, tool calls, fallback routing, model catalog listing,
-  request-priced cost estimates, provider/model allowlist policy, and live
-  integration-test toggles;
+  Gemini GenerateContent, native token streaming for every transport
+  (server-sent events plus the Bedrock binary event stream), tool calls,
+  fallback routing, model catalog listing, request-priced cost estimates,
+  provider/model allowlist policy, and live integration-test toggles;
 - `@codel00p/protocol-ts` and `@codel00p/sdk` provider policy preset metadata
   exports for cloud and desktop configuration surfaces;
 - `codel00p-harness` session loop, provider adapter, memory injection,

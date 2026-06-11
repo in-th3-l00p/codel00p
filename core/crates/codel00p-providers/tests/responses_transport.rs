@@ -281,3 +281,50 @@ async fn responses_requires_credentials_for_remote_requests() {
 
     assert!(matches!(error, ProviderError::MissingCredential { provider } if provider == "openai"));
 }
+
+#[tokio::test]
+async fn responses_streams_output_text_and_assembles_from_completed_event() {
+    use std::sync::{Arc, Mutex};
+
+    let server = MockServer::start_async().await;
+    let sse = concat!(
+        "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hel\"}\n\n",
+        "data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}\n\n",
+        "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\",\"model\":\"gpt-5-mini\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello\"}]}],\"usage\":{\"input_tokens\":5,\"output_tokens\":2}}}\n\n",
+    );
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/responses")
+                .body_includes(r#""stream":true"#);
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("openai", Credential::api_key("test-key"))
+        .build();
+
+    let tokens: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let collector = tokens.clone();
+    let sink = move |t: &str| collector.lock().unwrap().push(t.to_string());
+
+    let response = client
+        .complete_streaming(
+            InferenceRequest::builder("openai", "gpt-5-mini")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Say hello."))
+                .build(),
+            &sink,
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+    assert_eq!(*tokens.lock().unwrap(), vec!["Hel", "lo"]);
+    assert_eq!(response.content.as_deref(), Some("Hello"));
+    assert_eq!(response.usage.unwrap().output_tokens, 2);
+}

@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+
+use futures::StreamExt;
 use hmac::{Hmac, Mac};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HOST, HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -7,7 +10,7 @@ use time::OffsetDateTime;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    ToolCall, ToolDefinition, Usage,
+    TokenSink, ToolCall, ToolDefinition, Usage,
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -97,12 +100,101 @@ impl BedrockConverseTransport {
 
         wire_response.normalize(provider)
     }
+
+    pub(crate) async fn complete_streaming(
+        &self,
+        provider: &str,
+        base_url: &str,
+        credential: &Credential,
+        request: InferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<InferenceResponse, ProviderError> {
+        let Credential::AwsSigV4 {
+            access_key_id,
+            secret_access_key,
+            session_token,
+            region,
+        } = credential
+        else {
+            return Err(ProviderError::MissingCredential {
+                provider: provider.to_string(),
+            });
+        };
+
+        let model = request.model.clone();
+        let wire_request = BedrockConverseRequest::from_request(provider, request)?;
+        let body =
+            serde_json::to_vec(&wire_request).map_err(|error| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+        let url = converse_stream_url(base_url, region, &model);
+        let url = reqwest::Url::parse(&url).map_err(|error| ProviderError::Http {
+            provider: provider.to_string(),
+            message: error.to_string(),
+        })?;
+        let headers = sign_bedrock_request(
+            &url,
+            &body,
+            access_key_id,
+            secret_access_key,
+            session_token.as_deref(),
+            region,
+        )?;
+
+        let response = self
+            .http
+            .post(url)
+            .headers(headers)
+            .body(body)
+            .send()
+            .await
+            .map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Http {
+                provider: provider.to_string(),
+                message: format!("status {status}: {body}"),
+            });
+        }
+
+        let mut accumulator = BedrockStreamAccumulator::default();
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut body = response.bytes_stream();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk.map_err(|error| ProviderError::Http {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+            buffer.extend_from_slice(&chunk);
+
+            while let Some(frame) = decode_eventstream_frame(&buffer)? {
+                if let Some(event_type) = frame.event_type {
+                    accumulator.ingest(provider, &event_type, &frame.payload, sink)?;
+                }
+                buffer.drain(..frame.consumed);
+            }
+        }
+
+        Ok(accumulator.finish())
+    }
 }
 
 fn converse_url(base_url: &str, region: &str, model: &str) -> String {
     let model = urlencoding::encode(model);
     let base_url = bedrock_base_url(base_url, region);
     format!("{base_url}/model/{model}/converse")
+}
+
+fn converse_stream_url(base_url: &str, region: &str, model: &str) -> String {
+    let model = urlencoding::encode(model);
+    let base_url = bedrock_base_url(base_url, region);
+    format!("{base_url}/model/{model}/converse-stream")
 }
 
 fn bedrock_base_url(base_url: &str, region: &str) -> String {
@@ -588,4 +680,217 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
     let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts keys of any size");
     mac.update(data);
     mac.finalize().into_bytes().to_vec()
+}
+
+struct DecodedFrame {
+    event_type: Option<String>,
+    payload: Vec<u8>,
+    consumed: usize,
+}
+
+/// Decodes a single `vnd.amazon.eventstream` message from the front of
+/// `buffer`, returning `None` until a whole message is buffered. Prelude and
+/// message CRCs are not validated; the framing lengths are trusted.
+fn decode_eventstream_frame(buffer: &[u8]) -> Result<Option<DecodedFrame>, ProviderError> {
+    if buffer.len() < 12 {
+        return Ok(None);
+    }
+
+    let total_len = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+    let headers_len = u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]) as usize;
+    if total_len < 16 || headers_len > total_len - 16 {
+        return Err(ProviderError::InvalidResponse {
+            provider: BEDROCK_SERVICE.to_string(),
+            message: "invalid eventstream frame lengths".to_string(),
+        });
+    }
+    if buffer.len() < total_len {
+        return Ok(None);
+    }
+
+    let headers = &buffer[12..12 + headers_len];
+    let payload = &buffer[12 + headers_len..total_len - 4];
+    Ok(Some(DecodedFrame {
+        event_type: event_type_from_headers(headers),
+        payload: payload.to_vec(),
+        consumed: total_len,
+    }))
+}
+
+/// Extracts the `:event-type` string header from an eventstream header block,
+/// stepping over any other typed headers.
+fn event_type_from_headers(mut headers: &[u8]) -> Option<String> {
+    let mut event_type = None;
+    while !headers.is_empty() {
+        let name_len = headers[0] as usize;
+        if headers.len() < 1 + name_len + 1 {
+            break;
+        }
+        let name = &headers[1..1 + name_len];
+        let value_type = headers[1 + name_len];
+        let mut cursor = 1 + name_len + 1;
+        let value_len = match value_type {
+            0 | 1 => 0,
+            2 => 1,
+            3 => 2,
+            4 => 4,
+            5 => 8,
+            6 | 7 => {
+                if headers.len() < cursor + 2 {
+                    break;
+                }
+                let len = u16::from_be_bytes([headers[cursor], headers[cursor + 1]]) as usize;
+                cursor += 2;
+                len
+            }
+            8 => 8,
+            9 => 16,
+            _ => break,
+        };
+        if headers.len() < cursor + value_len {
+            break;
+        }
+        if name == b":event-type" && value_type == 7 {
+            event_type =
+                Some(String::from_utf8_lossy(&headers[cursor..cursor + value_len]).to_string());
+        }
+        headers = &headers[cursor + value_len..];
+    }
+    event_type
+}
+
+#[derive(Default)]
+struct BedrockStreamAccumulator {
+    content: String,
+    has_content: bool,
+    tool_calls: BTreeMap<usize, BedrockStreamToolCall>,
+    finish_reason: Option<String>,
+    usage: Option<Usage>,
+}
+
+#[derive(Default)]
+struct BedrockStreamToolCall {
+    id: Option<String>,
+    name: String,
+    input: String,
+}
+
+impl BedrockStreamAccumulator {
+    fn ingest(
+        &mut self,
+        provider: &str,
+        event_type: &str,
+        payload: &[u8],
+        sink: &dyn TokenSink,
+    ) -> Result<(), ProviderError> {
+        let value: Value =
+            serde_json::from_slice(payload).map_err(|error| ProviderError::InvalidResponse {
+                provider: provider.to_string(),
+                message: error.to_string(),
+            })?;
+
+        match event_type {
+            "contentBlockStart" => {
+                let index = content_block_index(&value);
+                if let Some(tool) = value.get("start").and_then(|start| start.get("toolUse")) {
+                    self.tool_calls.insert(
+                        index,
+                        BedrockStreamToolCall {
+                            id: tool
+                                .get("toolUseId")
+                                .and_then(Value::as_str)
+                                .map(str::to_string),
+                            name: tool
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                            input: String::new(),
+                        },
+                    );
+                }
+            }
+            "contentBlockDelta" => {
+                let index = content_block_index(&value);
+                if let Some(delta) = value.get("delta") {
+                    if let Some(text) = delta.get("text").and_then(Value::as_str)
+                        && !text.is_empty()
+                    {
+                        self.has_content = true;
+                        self.content.push_str(text);
+                        sink.on_token(text);
+                    }
+                    if let Some(input) = delta
+                        .get("toolUse")
+                        .and_then(|tool| tool.get("input"))
+                        .and_then(Value::as_str)
+                    {
+                        self.tool_calls
+                            .entry(index)
+                            .or_default()
+                            .input
+                            .push_str(input);
+                    }
+                }
+            }
+            "messageStop" => {
+                if let Some(reason) = value.get("stopReason").and_then(Value::as_str) {
+                    self.finish_reason = Some(reason.to_string());
+                }
+            }
+            "metadata" => {
+                if let Some(usage) = value.get("usage") {
+                    self.usage = Some(Usage {
+                        input_tokens: usage_field(usage, "inputTokens"),
+                        output_tokens: usage_field(usage, "outputTokens"),
+                        cache_read_tokens: usage_field(usage, "cacheReadInputTokens"),
+                        cache_write_tokens: usage_field(usage, "cacheWriteInputTokens"),
+                        reasoning_tokens: 0,
+                    });
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn finish(self) -> InferenceResponse {
+        let tool_calls = self
+            .tool_calls
+            .into_values()
+            .filter(|call| !call.name.is_empty())
+            .map(|call| ToolCall {
+                id: call.id,
+                name: call.name,
+                arguments: if call.input.is_empty() {
+                    Value::Object(Default::default())
+                } else {
+                    serde_json::from_str(&call.input).unwrap_or(Value::String(call.input))
+                },
+                provider_data: Default::default(),
+            })
+            .collect();
+
+        InferenceResponse {
+            content: self.has_content.then_some(self.content),
+            tool_calls,
+            finish_reason: self.finish_reason,
+            reasoning: None,
+            usage: self.usage,
+            cost: None,
+            provider_data: Default::default(),
+        }
+    }
+}
+
+fn content_block_index(value: &Value) -> usize {
+    value
+        .get("contentBlockIndex")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize
+}
+
+fn usage_field(usage: &Value, field: &str) -> u64 {
+    usage.get(field).and_then(Value::as_u64).unwrap_or_default()
 }
