@@ -173,6 +173,7 @@ fn mcp_tools() -> Vec<Value> {
                 "properties": {
                     "kind": { "type": "string" },
                     "sensitivity": { "type": "string" },
+                    "tag": { "type": "string" },
                     "max_score": { "type": "integer", "minimum": 0, "maximum": 100 },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -409,6 +410,9 @@ fn memory_quality(config: &CliConfig, arguments: &Value) -> Result<String, Strin
     }
     if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
         query = query.with_sensitivity(parse_sensitivity(sensitivity)?);
+    }
+    if let Some(tag) = optional_string(arguments, "tag") {
+        query = query.with_tag(tag);
     }
     if let Some(max_score) = optional_usize(arguments, "max_score")? {
         if max_score > 100 {

@@ -246,6 +246,7 @@ codel00p ... memory stale --kind workflow --threshold 70 --json
 codel00p ... memory quality --kind workflow --max-score 80
 codel00p ... memory quality --kind workflow --max-score 80 --json
 codel00p ... memory quality --sensitivity sensitive --max-score 80 --json
+codel00p ... memory quality --tag credential --max-score 80 --json
 
 codel00p ... memory search --text verify --kind workflow --tag verify
 codel00p ... memory search --text verify --kind workflow --tag verify --json
@@ -284,9 +285,9 @@ Output is intentionally stable and scriptable:
   The MCP `memory_stale` tool returns the same scored stale records.
 - `memory quality` prints active candidate or approved memories with low
   advisory quality scores as `id`, `status`, `kind`, `quality_score`, and
-  `content`; add `--kind <kind>` or `--sensitivity normal|sensitive` to focus
-  one review lane and `--json` for quality record objects. The MCP
-  `memory_quality` tool returns the same review queue.
+  `content`; add `--kind <kind>`, `--sensitivity normal|sensitive`, or
+  `--tag <tag>` to focus one review lane and `--json` for quality record
+  objects. The MCP `memory_quality` tool returns the same review queue.
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
   and `content`; default retrieval excludes sensitive memory, and
   `--sensitivity normal|sensitive` explicitly filters by sensitivity. Add

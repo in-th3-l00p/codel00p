@@ -487,6 +487,7 @@ pub struct MemoryQualityQuery {
     project: ProjectRef,
     kind: Option<MemoryKind>,
     sensitivity: Option<MemorySensitivity>,
+    tag: Option<String>,
     max_score: u8,
     limit: Option<usize>,
 }
@@ -536,6 +537,7 @@ impl MemoryQualityQuery {
             project,
             kind: None,
             sensitivity: None,
+            tag: None,
             max_score: 80,
             limit: None,
         }
@@ -550,6 +552,12 @@ impl MemoryQualityQuery {
     /// Restricts the review queue to one memory sensitivity class.
     pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
         self.sensitivity = Some(sensitivity);
+        self
+    }
+
+    /// Restricts the review queue to memory records that carry a tag.
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = non_empty_filter(tag.into());
         self
     }
 
@@ -1163,6 +1171,14 @@ where
             if query
                 .sensitivity
                 .is_some_and(|sensitivity| entry.sensitivity() != sensitivity)
+            {
+                continue;
+            }
+
+            if query
+                .tag
+                .as_ref()
+                .is_some_and(|tag| !entry.tags().iter().any(|entry_tag| entry_tag == tag))
             {
                 continue;
             }

@@ -47,6 +47,10 @@ fn memory_quality(config: CliConfig, args: &[String]) -> CliResult<String> {
                 )?)?);
                 index += 2;
             }
+            "--tag" => {
+                query = query.with_tag(required_value(args, index, "--tag")?);
+                index += 2;
+            }
             "--max-score" => {
                 let score = required_value(args, index, "--max-score")?
                     .parse::<u8>()

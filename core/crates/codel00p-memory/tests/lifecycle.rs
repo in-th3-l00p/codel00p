@@ -253,6 +253,43 @@ fn quality_review_can_filter_low_quality_memory_by_sensitivity() {
 }
 
 #[test]
+fn quality_review_can_filter_low_quality_memory_by_tag() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(
+                "mem-vague-credential",
+                project(),
+                MemoryKind::Workflow,
+                "Use credential.",
+                source(),
+            )
+            .with_tag("credential"),
+        )
+        .expect("create low-quality credential candidate");
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(
+                "mem-vague-verify",
+                project(),
+                MemoryKind::Workflow,
+                "Run tests.",
+                source(),
+            )
+            .with_tag("verify"),
+        )
+        .expect("create low-quality verify candidate");
+
+    let low_quality = store
+        .quality_review(MemoryQualityQuery::new(project()).with_tag("credential"))
+        .expect("list low-quality memory by tag");
+
+    assert_eq!(low_quality.len(), 1);
+    assert_eq!(low_quality[0].entry().id(), "mem-vague-credential");
+    assert_eq!(low_quality[0].entry().tags(), ["credential"]);
+}
+
+#[test]
 fn finds_near_duplicate_active_memory() {
     let mut store = InMemoryMemoryStore::default();
     store

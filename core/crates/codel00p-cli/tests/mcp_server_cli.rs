@@ -234,6 +234,7 @@ fn mcp_serve_exposes_quality_review_queue() {
                     "kind": "workflow",
                     "content": "Use credential.",
                     "sensitivity": "sensitive",
+                    "tags": ["credential"],
                     "session_id": "session-quality",
                     "turn_id": "turn-quality"
                 }
@@ -250,10 +251,34 @@ fn mcp_serve_exposes_quality_review_queue() {
             "id": 6,
             "method": "tools/call",
             "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-quality-sensitive-other",
+                    "kind": "workflow",
+                    "content": "Use secret.",
+                    "sensitivity": "sensitive",
+                    "tags": ["other"],
+                    "session_id": "session-quality",
+                    "turn_id": "turn-quality"
+                }
+            }
+        }),
+    );
+    let sensitive_other = read_response(&mut stdout);
+    assert_eq!(sensitive_other["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_quality",
                 "arguments": {
                     "kind": "workflow",
                     "sensitivity": "sensitive",
+                    "tag": "credential",
                     "max_score": 80,
                     "limit": 5
                 }
@@ -270,6 +295,7 @@ fn mcp_serve_exposes_quality_review_queue() {
     assert_eq!(quality_items[0]["id"], "mem-quality-sensitive");
     assert_eq!(quality_items[0]["kind"], "workflow");
     assert_eq!(quality_items[0]["sensitivity"], "sensitive");
+    assert_eq!(quality_items[0]["tags"], json!(["credential"]));
     assert_eq!(quality_items[0]["quality"]["score"], 75);
     assert_eq!(
         quality_items[0]["quality"]["findings"],
