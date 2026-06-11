@@ -1,7 +1,7 @@
 use codel00p_memory::{
     InMemoryMemoryStore, MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryError,
-    MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery,
-    ReviewDecision, StorageBackedMemoryStore,
+    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
+    MemoryStalenessQuery, ReviewDecision, StorageBackedMemoryStore,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId,
@@ -121,6 +121,56 @@ fn memory_quality_score_flags_low_value_content() {
     assert_eq!(vague.quality().score(), 65);
     assert_eq!(
         vague.quality().findings(),
+        [
+            "content is too short to be reusable",
+            "content uses vague language"
+        ]
+    );
+}
+
+#[test]
+fn quality_review_lists_low_quality_active_memory() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-vague",
+            project(),
+            MemoryKind::Decision,
+            "This is important.",
+            source(),
+        ))
+        .expect("create vague candidate");
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-strong",
+            project(),
+            MemoryKind::Workflow,
+            "Run pnpm verify before pushing main after editing provider policy.",
+            source(),
+        ))
+        .expect("create strong candidate");
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-rejected",
+            project(),
+            MemoryKind::Decision,
+            "That thing matters.",
+            source(),
+        ))
+        .expect("create rejected candidate");
+    store
+        .review("mem-rejected", ReviewDecision::reject("alice", "too vague"))
+        .expect("reject low-quality candidate");
+
+    let low_quality = store
+        .quality_review(MemoryQualityQuery::new(project()).with_max_score(80))
+        .expect("list low-quality memory");
+
+    assert_eq!(low_quality.len(), 1);
+    assert_eq!(low_quality[0].entry().id(), "mem-vague");
+    assert_eq!(low_quality[0].quality().score(), 65);
+    assert_eq!(
+        low_quality[0].quality().findings(),
         [
             "content is too short to be reusable",
             "content uses vague language"

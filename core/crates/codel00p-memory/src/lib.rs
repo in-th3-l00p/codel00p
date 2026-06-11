@@ -482,6 +482,13 @@ pub struct MemoryStalenessQuery {
     limit: Option<usize>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryQualityQuery {
+    project: ProjectRef,
+    max_score: u8,
+    limit: Option<usize>,
+}
+
 impl MemoryListFilter {
     pub fn new(project: ProjectRef) -> Self {
         Self {
@@ -514,6 +521,29 @@ impl MemoryListFilter {
         self
     }
 
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = if limit == 0 { None } else { Some(limit) };
+        self
+    }
+}
+
+impl MemoryQualityQuery {
+    /// Creates a review query for active memory with quality score 80 or lower.
+    pub fn new(project: ProjectRef) -> Self {
+        Self {
+            project,
+            max_score: 80,
+            limit: None,
+        }
+    }
+
+    /// Sets the inclusive maximum quality score returned by the review query.
+    pub fn with_max_score(mut self, max_score: u8) -> Self {
+        self.max_score = max_score;
+        self
+    }
+
+    /// Limits the number of low-quality records returned.
     pub fn with_limit(mut self, limit: usize) -> Self {
         self.limit = if limit == 0 { None } else { Some(limit) };
         self
@@ -625,6 +655,12 @@ pub struct StaleMemory {
     score: u8,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QualityMemory {
+    record: MemoryRecord,
+    quality: MemoryQuality,
+}
+
 impl SimilarMemory {
     pub fn entry(&self) -> &MemoryEntry {
         self.record.entry()
@@ -672,6 +708,18 @@ impl RetrievedMemory {
 
     pub fn reason(&self) -> &str {
         &self.reason
+    }
+}
+
+impl QualityMemory {
+    /// Returns the low-quality memory entry selected for review.
+    pub fn entry(&self) -> &MemoryEntry {
+        self.record.entry()
+    }
+
+    /// Returns the advisory score and findings that matched the query.
+    pub fn quality(&self) -> &MemoryQuality {
+        &self.quality
     }
 }
 
@@ -729,6 +777,9 @@ pub trait MemoryRepository {
     ) -> Result<Vec<SimilarMemory>, MemoryError>;
 
     fn stale_active(&self, query: MemoryStalenessQuery) -> Result<Vec<StaleMemory>, MemoryError>;
+
+    /// Lists active memory whose advisory quality score is low enough for review.
+    fn quality_review(&self, query: MemoryQualityQuery) -> Result<Vec<QualityMemory>, MemoryError>;
 }
 
 pub type InMemoryMemoryStore = StorageBackedMemoryStore<InMemoryStorage>;
@@ -1074,6 +1125,39 @@ where
             stale.truncate(limit);
         }
         Ok(stale)
+    }
+
+    fn quality_review(&self, query: MemoryQualityQuery) -> Result<Vec<QualityMemory>, MemoryError> {
+        let mut low_quality = Vec::new();
+
+        for record in self.records()? {
+            let entry = record.entry();
+            if !is_active_memory_status(entry.status()) {
+                continue;
+            }
+
+            if entry.project().id() != query.project.id() {
+                continue;
+            }
+
+            let quality = record.quality();
+            if quality.score() > query.max_score {
+                continue;
+            }
+
+            low_quality.push(QualityMemory { record, quality });
+        }
+
+        low_quality.sort_by(|left, right| {
+            left.quality
+                .score()
+                .cmp(&right.quality.score())
+                .then_with(|| left.entry().id().cmp(right.entry().id()))
+        });
+        if let Some(limit) = query.limit {
+            low_quality.truncate(limit);
+        }
+        Ok(low_quality)
     }
 }
 

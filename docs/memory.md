@@ -104,6 +104,10 @@ content. CLI and MCP JSON memory records include this score as
 `quality.score` with `quality.findings`. This score is advisory, not an
 approval gate.
 
+The core memory repository also exposes a low-quality review query for active
+candidate or approved memory. Rejected and archived records remain auditable,
+but they do not appear in this cleanup queue.
+
 ## Prompt assembly
 
 Approved memory enters inference through a provider-neutral system message

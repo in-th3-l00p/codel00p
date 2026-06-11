@@ -272,7 +272,9 @@ Add deterministic quality signals that help humans prioritize memory cleanup.
 
 Status: started. `MemoryRecord::quality()` returns a 0-100 advisory score with
 stable findings for memory that is too short to reuse, too long for frequent
-retrieval, or written with vague language.
+retrieval, or written with vague language. `MemoryRepository::quality_review`
+now exposes a deterministic low-quality active-memory queue ordered by score
+and memory id.
 
 Success criteria:
 

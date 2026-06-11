@@ -134,3 +134,8 @@ creation, approval, retrieval, or sync.
 
 CLI and MCP memory JSON records include this signal as
 `quality: { score, findings }` on list, show/search, similar, and stale outputs.
+
+`MemoryRepository::quality_review` returns active candidate or approved memory
+whose quality score is at or below `MemoryQualityQuery::max_score`. Rejected
+and archived records are excluded, and results are ordered by score and memory
+id so review queues remain deterministic.
