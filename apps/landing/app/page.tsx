@@ -35,7 +35,7 @@ export default function Home() {
 
       <main className="relative z-10 flex flex-1 flex-col">
         {/* Hero */}
-        <section className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 pb-28 pt-16 text-center sm:pt-24">
+        <section className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 pb-20 pt-10 text-center sm:pb-28 sm:pt-24">
           <p
             className="label rise text-muted-foreground"
             style={{ animationDelay: "0ms" }}
@@ -44,10 +44,10 @@ export default function Home() {
           </p>
 
           <h1
-            className="rise mt-4 px-4 pb-2 font-hand leading-[1.04] text-foreground"
+            className="rise mt-3 px-2 pb-2 font-hand leading-[1.04] text-foreground sm:mt-4 sm:px-4"
             style={{
               animationDelay: "80ms",
-              fontSize: "clamp(4.75rem, 18vw, 11.5rem)",
+              fontSize: "clamp(3.5rem, 17vw, 11.5rem)",
               textShadow:
                 "0 0 90px color-mix(in oklab, var(--brand) 50%, transparent)",
             }}
@@ -101,7 +101,7 @@ export default function Home() {
         </section>
 
         {/* Thesis */}
-        <section className="mx-auto w-full max-w-3xl px-6 py-24 text-center">
+        <section className="mx-auto w-full max-w-3xl px-6 py-16 text-center sm:py-24">
           <p className="label text-brand/80">The thesis</p>
           <h2 className="mt-6 text-balance text-3xl font-medium tracking-tight text-foreground sm:text-[2.6rem] sm:leading-[1.1]">
             Model quality is rented.
@@ -119,12 +119,12 @@ export default function Home() {
         </section>
 
         {/* Pillars */}
-        <section className="mx-auto w-full max-w-5xl px-6 py-16">
+        <section className="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
           <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border/60 sm:grid-cols-3">
             {pillars.map((pillar) => (
               <article
                 key={pillar.index}
-                className="group relative flex flex-col gap-4 bg-card/40 p-8 backdrop-blur-sm transition-colors hover:bg-card/70"
+                className="group relative flex flex-col gap-4 bg-card/40 p-6 backdrop-blur-sm transition-colors hover:bg-card/70 sm:p-8"
               >
                 <span className="font-mono text-xs text-brand/70">
                   {pillar.index}
@@ -141,7 +141,7 @@ export default function Home() {
         </section>
 
         {/* Closing */}
-        <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 py-28 text-center">
+        <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 py-20 text-center sm:py-28">
           <LoopMark className="size-12" />
           <h2 className="mt-8 text-balance text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
             Build a memory that{" "}

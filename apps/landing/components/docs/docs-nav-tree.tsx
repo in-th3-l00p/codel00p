@@ -6,7 +6,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { docsNav } from "@/components/docs/nav";
 
-export function DocsSidebar() {
+/**
+ * The chapter list, shared by the desktop sidebar and the mobile drawer.
+ * `onNavigate` lets the drawer close itself when a link is tapped.
+ */
+export function DocsNavTree({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
@@ -25,6 +29,8 @@ export function DocsSidebar() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
                     className={cn(
                       "-ml-px block border-l py-1.5 pl-4 text-sm transition-colors",
                       active

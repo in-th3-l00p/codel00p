@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Pinyon_Script, Space_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -24,6 +24,11 @@ const mono = Geist_Mono({
 const title = "codel00p — the coding agent that remembers";
 const description =
   "An open-source agentic coding platform built around durable, reviewed project memory. Your team's knowledge compounds as the work gets done.";
+
+export const viewport: Viewport = {
+  themeColor: "#0c0a10",
+  colorScheme: "dark",
+};
 
 export const metadata: Metadata = {
   title,
