@@ -1,0 +1,209 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-hand: var(--font-hand);
+
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+/*
+ * codel00p brand — a deep, cool near-black canvas. One restrained luminous
+ * accent (periwinkle/azure) used only for glow and hairline highlights, so the
+ * handwritten wordmark and industrial type carry the page.
+ */
+:root,
+.dark {
+  --background: oklch(0.145 0.012 305);
+  --foreground: oklch(0.965 0.004 305);
+
+  --brand: oklch(0.62 0.2 305);
+  --brand-soft: oklch(0.7 0.16 292);
+
+  --card: oklch(0.19 0.014 305);
+  --card-foreground: oklch(0.965 0.004 305);
+  --popover: oklch(0.19 0.014 305);
+  --popover-foreground: oklch(0.965 0.004 305);
+
+  --primary: oklch(0.97 0.004 305);
+  --primary-foreground: oklch(0.16 0.012 305);
+  --secondary: oklch(0.245 0.014 305);
+  --secondary-foreground: oklch(0.965 0.004 305);
+
+  --muted: oklch(0.225 0.012 305);
+  --muted-foreground: oklch(0.67 0.022 305);
+  --accent: oklch(0.245 0.018 305);
+  --accent-foreground: oklch(0.965 0.004 305);
+  --destructive: oklch(0.62 0.21 25);
+
+  --border: oklch(0.85 0.04 305 / 11%);
+  --input: oklch(0.85 0.04 305 / 14%);
+  --ring: oklch(0.62 0.2 305 / 60%);
+
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 35%, transparent);
+    color: var(--foreground);
+  }
+}
+
+@layer utilities {
+  .font-hand {
+    font-family: var(--font-hand), cursive;
+  }
+
+  /* Industrial micro-label: mono, uppercase, widely tracked. */
+  .label {
+    font-family: var(--font-mono), monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+    font-size: 0.7rem;
+    font-weight: 500;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Soft luminous wash used behind the wordmark. */
+  .brand-glow {
+    background:
+      radial-gradient(
+        60% 48% at 50% 30%,
+        color-mix(in oklab, var(--brand) 26%, transparent),
+        transparent 72%
+      ),
+      radial-gradient(
+        46% 38% at 50% 86%,
+        color-mix(in oklab, var(--brand-soft) 14%, transparent),
+        transparent 70%
+      );
+  }
+
+  /* Faint technical grid, faded toward the edges. */
+  .grid-veil {
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklab, var(--foreground) 6%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--foreground) 6%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(
+      72% 60% at 50% 38%,
+      black,
+      transparent 78%
+    );
+    mask-image: radial-gradient(72% 60% at 50% 38%, black, transparent 78%);
+  }
+
+  .hairline {
+    background: linear-gradient(
+      to right,
+      transparent,
+      color-mix(in oklab, var(--brand) 55%, transparent),
+      transparent
+    );
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate3d(0, -1.5%, 0) scale(1.04);
+  }
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-drift {
+  animation: drift 11s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 28s linear infinite;
+}
+
+.rise {
+  animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-drift,
+  .animate-spin-slow,
+  .rise {
+    animation: none;
+  }
+}
