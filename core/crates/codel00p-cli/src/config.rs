@@ -14,46 +14,69 @@ pub struct CliConfig {
     pub project: ProjectRef,
 }
 
-pub fn parse_global_args(args: Vec<String>) -> CliResult<(CliConfig, Vec<String>)> {
-    let mut memory_db = None;
-    let mut organization_id = None;
-    let mut project_id = None;
-    let mut project_name = None;
+/// Optional global flags that override file-based settings for one invocation.
+#[derive(Default)]
+pub struct GlobalOverrides {
+    pub memory_db: Option<PathBuf>,
+    pub organization_id: Option<String>,
+    pub project_id: Option<String>,
+    pub project_name: Option<String>,
+}
+
+/// Parse the leading global flags. All are optional now — anything not supplied
+/// here falls back to the layered configuration.
+pub fn parse_global_overrides(args: Vec<String>) -> CliResult<(GlobalOverrides, Vec<String>)> {
+    let mut overrides = GlobalOverrides::default();
     let mut index = 0;
 
     while index < args.len() {
         match args[index].as_str() {
             "--memory-db" => {
-                memory_db = Some(PathBuf::from(required_value(&args, index, "--memory-db")?));
+                overrides.memory_db =
+                    Some(PathBuf::from(required_value(&args, index, "--memory-db")?));
                 index += 2;
             }
             "--organization-id" => {
-                organization_id = Some(required_value(&args, index, "--organization-id")?);
+                overrides.organization_id =
+                    Some(required_value(&args, index, "--organization-id")?);
                 index += 2;
             }
             "--project-id" => {
-                project_id = Some(required_value(&args, index, "--project-id")?);
+                overrides.project_id = Some(required_value(&args, index, "--project-id")?);
                 index += 2;
             }
             "--project-name" => {
-                project_name = Some(required_value(&args, index, "--project-name")?);
+                overrides.project_name = Some(required_value(&args, index, "--project-name")?);
                 index += 2;
             }
             _ => break,
         }
     }
 
-    let config = CliConfig {
-        memory_db: memory_db.ok_or_else(|| "missing required --memory-db".to_string())?,
-        organization_id: organization_id
-            .ok_or_else(|| "missing required --organization-id".to_string())?,
-        project: ProjectRef::new(
-            project_id.ok_or_else(|| "missing required --project-id".to_string())?,
-            project_name.ok_or_else(|| "missing required --project-name".to_string())?,
-        ),
-    };
+    Ok((overrides, args[index..].to_vec()))
+}
 
-    Ok((config, args[index..].to_vec()))
+/// Resolve the effective `CliConfig` from layered settings plus flag overrides.
+pub fn resolve_cli_config(
+    resolved: &crate::settings::ResolvedSettings,
+    overrides: GlobalOverrides,
+) -> CliConfig {
+    let memory_db = overrides.memory_db.unwrap_or_else(|| resolved.memory_db());
+    let organization_id = overrides
+        .organization_id
+        .unwrap_or_else(|| resolved.organization_id());
+    let project_id = overrides
+        .project_id
+        .unwrap_or_else(|| resolved.project_id());
+    let project_name = overrides
+        .project_name
+        .unwrap_or_else(|| resolved.project_name());
+
+    CliConfig {
+        memory_db,
+        organization_id,
+        project: ProjectRef::new(project_id, project_name),
+    }
 }
 
 pub fn required_value(args: &[String], index: usize, name: &str) -> CliResult<String> {

@@ -34,6 +34,7 @@ use crate::{
     },
     providers::build_provider_client,
     session::{session_message_summary, session_role_label},
+    settings::AgentSettings,
 };
 
 struct AgentRunOptions {
@@ -84,32 +85,32 @@ struct McpServerSpec {
     tool_scopes: HashMap<String, PermissionScope>,
 }
 
-pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
+pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliResult<String> {
     let Some((command, rest)) = args.split_first() else {
         return Err("missing agent command".to_string());
     };
 
     match command.as_str() {
-        "run" => agent_run(config, rest),
-        "resume" => agent_resume(config, rest),
-        "chat" => agent_chat(config, rest),
+        "run" => agent_run(config, &defaults, rest),
+        "resume" => agent_resume(config, &defaults, rest),
+        "chat" => agent_chat(config, &defaults, rest),
         "mcp" => agent_mcp(config, rest),
         _ => Err(format!("unknown agent command: {command}")),
     }
 }
 
-fn agent_run(config: CliConfig, args: &[String]) -> CliResult<String> {
-    let options = parse_agent_run_options(args)?;
+fn agent_run(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
+    let options = parse_agent_run_options(defaults, args)?;
     run_agent_turn(config, options, AgentSessionMode::Fresh)
 }
 
-fn agent_resume(config: CliConfig, args: &[String]) -> CliResult<String> {
-    let options = parse_agent_resume_options(args)?;
+fn agent_resume(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
+    let options = parse_agent_resume_options(defaults, args)?;
     run_agent_turn(config, options, AgentSessionMode::Resume)
 }
 
-fn agent_chat(config: CliConfig, args: &[String]) -> CliResult<String> {
-    let options = parse_agent_chat_options(args)?;
+fn agent_chat(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
+    let options = parse_agent_chat_options(defaults, args)?;
     run_agent_chat(config, options)
 }
 
@@ -627,21 +628,28 @@ fn prepare_session_state(
     }
 }
 
-fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
+fn parse_agent_run_options(
+    defaults: &AgentSettings,
+    args: &[String],
+) -> CliResult<AgentRunOptions> {
     let Some(prompt) = args.first() else {
         return Err("missing agent prompt".to_string());
     };
 
-    let mut options = parse_agent_flag_options(args, 1, "run")?;
+    let mut options = parse_agent_flag_options(defaults, args, 1, "run")?;
     options.prompt = prompt.to_string();
     Ok(options)
 }
 
-fn parse_agent_chat_options(args: &[String]) -> CliResult<AgentRunOptions> {
-    parse_agent_flag_options(args, 0, "chat")
+fn parse_agent_chat_options(
+    defaults: &AgentSettings,
+    args: &[String],
+) -> CliResult<AgentRunOptions> {
+    parse_agent_flag_options(defaults, args, 0, "chat")
 }
 
 fn parse_agent_flag_options(
+    defaults: &AgentSettings,
     args: &[String],
     start: usize,
     context: &str,
@@ -655,10 +663,10 @@ fn parse_agent_flag_options(
     let mut max_iterations = None;
     let mut json_events = false;
     let mut stream_events = false;
-    let mut stream = false;
+    let mut stream = None;
     let mut tool_sets = Vec::new();
-    let mut permission_mode = CliPermissionMode::Allow;
-    let mut remember_permissions = false;
+    let mut permission_mode = None;
+    let mut remember_permissions = None;
     let mut mcp_servers = Vec::new();
     let mut index = start;
 
@@ -705,7 +713,7 @@ fn parse_agent_flag_options(
                 index += 1;
             }
             "--stream" => {
-                stream = true;
+                stream = Some(true);
                 index += 1;
             }
             "--tool-set" => {
@@ -715,11 +723,11 @@ fn parse_agent_flag_options(
             }
             "--permission-mode" => {
                 let value = required_value(args, index, "--permission-mode")?;
-                permission_mode = parse_permission_mode(&value)?;
+                permission_mode = Some(parse_permission_mode(&value)?);
                 index += 2;
             }
             "--remember-permissions" => {
-                remember_permissions = true;
+                remember_permissions = Some(true);
                 index += 1;
             }
             "--mcp-server" => {
@@ -731,11 +739,48 @@ fn parse_agent_flag_options(
         }
     }
 
+    let provider = provider
+        .or_else(|| defaults.provider.clone())
+        .ok_or_else(|| {
+            "no provider configured — run `codel00p providers use <id>` or pass --provider"
+                .to_string()
+        })?;
+    let model = model.or_else(|| defaults.model.clone()).ok_or_else(|| {
+        "no model configured — run `codel00p providers use <id> --model <model>` or pass --model"
+            .to_string()
+    })?;
+    let provider_policy_preset =
+        provider_policy_preset.or_else(|| defaults.provider_policy_preset.clone());
+    let base_url = base_url.or_else(|| defaults.base_url.clone());
+    let max_iterations = max_iterations.or(defaults.max_iterations);
+    let permission_mode = match permission_mode {
+        Some(mode) => mode,
+        None => match &defaults.permission_mode {
+            Some(value) => parse_permission_mode(value)?,
+            None => CliPermissionMode::Allow,
+        },
+    };
+    let tool_sets = if tool_sets.is_empty() {
+        match &defaults.tool_sets {
+            Some(values) => values
+                .iter()
+                .map(|value| parse_agent_tool_set(value))
+                .collect::<CliResult<Vec<_>>>()?,
+            None => Vec::new(),
+        }
+    } else {
+        tool_sets
+    };
+    let stream = stream.or(defaults.stream).unwrap_or(false);
+    let remember_permissions = remember_permissions
+        .or(defaults.remember_permissions)
+        .unwrap_or(false);
+
     Ok(AgentRunOptions {
         prompt: String::new(),
         workspace,
-        provider: provider.ok_or_else(|| "missing required --provider".to_string())?,
-        model: model.ok_or_else(|| "missing required --model".to_string())?,
+        provider,
+        model,
         provider_policy_preset,
         base_url,
         session_id,
@@ -750,13 +795,16 @@ fn parse_agent_flag_options(
     })
 }
 
-fn parse_agent_resume_options(args: &[String]) -> CliResult<AgentRunOptions> {
+fn parse_agent_resume_options(
+    defaults: &AgentSettings,
+    args: &[String],
+) -> CliResult<AgentRunOptions> {
     if args.len() < 2 {
         return Err("usage: agent resume <session-id> <prompt>".to_string());
     }
 
     let session_id = args[0].clone();
-    let mut options = parse_agent_run_options(&args[1..])?;
+    let mut options = parse_agent_run_options(defaults, &args[1..])?;
     options.session_id = Some(session_id);
     Ok(options)
 }

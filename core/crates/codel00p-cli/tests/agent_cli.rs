@@ -29,6 +29,7 @@ fn seed_chat_session(db_path: &Path, id: &'static str, messages: &[SessionMessag
 
 fn run_codel00p(db_path: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .env("CODEL00P_HOME", db_path.parent().unwrap_or(db_path))
         .arg("--memory-db")
         .arg(db_path)
         .arg("--organization-id")
@@ -45,6 +46,7 @@ fn run_codel00p(db_path: &Path, args: &[&str]) -> Output {
 
 fn run_codel00p_without_provider_env(db_path: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .env("CODEL00P_HOME", db_path.parent().unwrap_or(db_path))
         .arg("--memory-db")
         .arg(db_path)
         .arg("--organization-id")
@@ -64,6 +66,7 @@ fn run_codel00p_without_provider_env(db_path: &Path, args: &[&str]) -> Output {
 fn run_codel00p_with_env(db_path: &Path, env: &[(&str, &str)], args: &[&str]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_codel00p"));
     command
+        .env("CODEL00P_HOME", db_path.parent().unwrap_or(db_path))
         .arg("--memory-db")
         .arg(db_path)
         .arg("--organization-id")

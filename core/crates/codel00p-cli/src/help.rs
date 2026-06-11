@@ -4,6 +4,8 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
         [flag] if is_help(flag) => Some(TOP_LEVEL_HELP),
         [command, flag] if is_help(flag) => match command.as_str() {
             "agent" => Some(AGENT_HELP),
+            "config" => Some(CONFIG_HELP),
+            "providers" => Some(PROVIDERS_HELP),
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
@@ -41,17 +43,62 @@ fn is_help(value: &str) -> bool {
 const TOP_LEVEL_HELP: &str = "\
 Usage: codel00p [global options] <command>
 
-Global options:
+Configuration is read from ~/.codel00p/config.toml (and ./.codel00p/config.toml).
+Run `codel00p config setup` once, then most commands need no flags.
+
+Global options (override configuration for one invocation):
   --memory-db <path>          SQLite database for memory and sessions
   --organization-id <id>      Organization scope
   --project-id <id>           Project scope
   --project-name <name>       Project display name
 
 Commands:
-  agent    Run the coding agent
-  mcp      Expose codel00p as an MCP server
-  memory   Review project memory
-  session  Inspect persisted sessions
+  agent      Run the coding agent
+  config     View and edit configuration
+  providers  Configure inference providers and credentials
+  mcp        Expose codel00p as an MCP server
+  memory     Review project memory
+  session    Inspect persisted sessions
+";
+
+const CONFIG_HELP: &str = "\
+Usage: codel00p config <command>
+
+Configuration lives in ~/.codel00p/config.toml (user) and ./.codel00p/config.toml
+(project). Precedence: defaults < user < project < env vars < CLI flags.
+
+Commands:
+  show [--json|--raw]   Show the effective configuration (default)
+  setup                 Guided first-run setup (provider, key, model)
+  path [--project]      Print the config file path
+  edit [--project]      Open the config file in $EDITOR
+  init [--force]        Write a starter config file
+  reset                 Restore the user config to defaults
+  migrate               Upgrade the config to the current schema version
+
+Advanced (raw key access):
+  get <key>             Print one value, e.g. `config get agent.model`
+  set <key> <value>     Set one value, e.g. `config set agent.stream true`
+  unset <key>           Remove one value
+
+Keys: workspace.{organization_id,project_id,project_name,memory_db},
+      agent.{provider,model,base_url,provider_policy_preset,max_iterations,
+      permission_mode,tool_sets,stream,remember_permissions}
+";
+
+const PROVIDERS_HELP: &str = "\
+Usage: codel00p providers <command>
+
+Configure which provider/model codel00p uses and store API keys (in
+~/.codel00p/.env, never in config.toml).
+
+Commands:
+  list                          List providers and credential status (default)
+  use <id> [--model <model>]    Set the default provider/model
+              [--base-url <url>] [--preset <id>] [--project]
+  set-key <id> [<key>]          Store an API key (prompts if omitted)
+  remove-key <id>               Remove a stored API key
+  show <id>                     Show details for one provider
 ";
 
 const AGENT_HELP: &str = "\

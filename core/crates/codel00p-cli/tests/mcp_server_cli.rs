@@ -9,6 +9,7 @@ use tempfile::tempdir;
 
 fn spawn_codel00p_mcp_server(db_path: &Path) -> Child {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .env("CODEL00P_HOME", db_path.parent().unwrap_or(db_path))
         .arg("--memory-db")
         .arg(db_path)
         .arg("--organization-id")

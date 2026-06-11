@@ -57,6 +57,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 ## Documentation
 
 - [Project Description](docs/project.md)
+- [Configuration](docs/configuration.md)
 - [Product Roadmap](docs/product-roadmap.md)
 - [Subprojects](docs/subprojects.md)
 - [Repository Structure](docs/repository.md)
@@ -113,6 +114,15 @@ cd core
 cargo test --workspace
 ```
 
+## Configuring the CLI
+
+codel00p reads layered TOML configuration from `~/.codel00p/config.toml` (and an
+optional per-project `./.codel00p/config.toml`), so commands run without
+repeating flags. Run `codel00p config setup` once to choose a provider, store a
+key, and pick a model; then `codel00p agent chat` needs no arguments. Manage it
+with `codel00p config` and `codel00p providers` — see
+[Configuration](docs/configuration.md).
+
 Application development uses the root pnpm workspace:
 
 ```bash
@@ -131,11 +141,12 @@ The first Rust modules have started:
 - [codel00p-memory](core/crates/codel00p-memory): candidate creation, review
   lifecycle, audit history, and deterministic retrieval for approved project
   knowledge.
-- [codel00p-cli](core/crates/codel00p-cli): terminal agent runs, interactive
-  multi-turn chat sessions with resumable history, in-session tools, and live
-  token streaming, conversation listing, durable session inspection, and memory
-  review commands for listing, inspecting, approving, rejecting, archiving, and
-  auditing memory records.
+- [codel00p-cli](core/crates/codel00p-cli): layered TOML configuration
+  (`codel00p config` / `codel00p providers`) so commands run without flags,
+  terminal agent runs, interactive multi-turn chat sessions with resumable
+  history, in-session tools, and live token streaming, conversation listing,
+  durable session inspection, and memory review commands for listing,
+  inspecting, approving, rejecting, archiving, and auditing memory records.
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   Azure Chat Completions transport, Anthropic Messages transport, OpenAI
