@@ -342,9 +342,10 @@ Implemented:
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
-- provider, model, credential-kind, and credential-source-kind allowlist policy,
-  including route policy metadata, catalog filtering and metadata for disallowed
-  models, allowed credential/source kinds, required provider/model
+- provider, model, auth-type, credential-kind, and credential-source-kind
+  allowlist policy, including route policy metadata, catalog filtering and
+  metadata for disallowed models, allowed auth/credential/source kinds,
+  required provider/model
   capabilities, an enterprise-direct provider template, and an enterprise-direct
   agentic catalog template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;

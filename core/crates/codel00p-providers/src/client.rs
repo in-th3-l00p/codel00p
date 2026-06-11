@@ -142,6 +142,7 @@ impl InferenceClient {
         self.policy.check_provider(profile.id)?;
         self.policy
             .check_provider_capabilities(profile.id, &profile.capabilities)?;
+        self.policy.check_auth_type(profile.id, profile.auth_type)?;
 
         let (models_url, models_url_source) = if let Some(models_url) = request.models_url.clone() {
             (models_url, ModelCatalogUrlSource::RequestModelsUrl)
@@ -364,10 +365,16 @@ impl InferenceClient {
                     credential.map(|credential| credential.credential.kind()),
                 )
             };
+        let auth_type = if base_url_source == RouteValueSource::CloudProxy {
+            AuthType::CloudProxy
+        } else {
+            profile.auth_type
+        };
 
         self.policy.check_provider(profile.id)?;
         self.policy
             .check_provider_capabilities(profile.id, &profile.capabilities)?;
+        self.policy.check_auth_type(profile.id, auth_type)?;
         self.policy.check_model(profile.id, &request.model)?;
         self.policy
             .check_credential_kind(profile.id, credential_kind)?;
@@ -378,11 +385,7 @@ impl InferenceClient {
             requested_provider: request.provider.clone(),
             provider: profile.id.to_string(),
             api_mode: profile.api_mode,
-            auth_type: if base_url_source == RouteValueSource::CloudProxy {
-                AuthType::CloudProxy
-            } else {
-                profile.auth_type
-            },
+            auth_type,
             base_url,
             base_url_source,
             credential_source,

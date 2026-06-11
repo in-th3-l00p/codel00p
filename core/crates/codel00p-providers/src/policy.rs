@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    CredentialKind, CredentialSourceKind, ProviderCapabilities, ProviderError, ProviderModel,
-    ProviderModelCatalogPolicy, ProviderRegistry, ProviderRoutePolicy,
+    AuthType, CredentialKind, CredentialSourceKind, ProviderCapabilities, ProviderError,
+    ProviderModel, ProviderModelCatalogPolicy, ProviderRegistry, ProviderRoutePolicy,
 };
 
 const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
@@ -20,6 +20,7 @@ const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
 pub struct ProviderPolicy {
     allowed_providers: Option<BTreeSet<String>>,
     allowed_models: BTreeMap<String, BTreeSet<String>>,
+    allowed_auth_types: BTreeMap<String, BTreeSet<AuthType>>,
     allowed_credential_kinds: BTreeMap<String, BTreeSet<CredentialKind>>,
     allowed_credential_source_kinds: BTreeMap<String, BTreeSet<CredentialSourceKind>>,
     required_provider_capabilities: BTreeMap<String, ProviderCapabilities>,
@@ -31,6 +32,7 @@ impl ProviderPolicy {
         Self {
             allowed_providers: None,
             allowed_models: BTreeMap::new(),
+            allowed_auth_types: BTreeMap::new(),
             allowed_credential_kinds: BTreeMap::new(),
             allowed_credential_source_kinds: BTreeMap::new(),
             required_provider_capabilities: BTreeMap::new(),
@@ -60,6 +62,7 @@ impl ProviderPolicy {
         Self {
             allowed_providers: Some(providers.into_iter().map(Into::into).collect()),
             allowed_models: BTreeMap::new(),
+            allowed_auth_types: BTreeMap::new(),
             allowed_credential_kinds: BTreeMap::new(),
             allowed_credential_source_kinds: BTreeMap::new(),
             required_provider_capabilities: BTreeMap::new(),
@@ -85,6 +88,15 @@ impl ProviderPolicy {
     {
         self.allowed_credential_kinds
             .insert(provider.into(), kinds.into_iter().collect());
+        self
+    }
+
+    pub fn with_allowed_auth_types<I>(mut self, provider: impl Into<String>, auth_types: I) -> Self
+    where
+        I: IntoIterator<Item = AuthType>,
+    {
+        self.allowed_auth_types
+            .insert(provider.into(), auth_types.into_iter().collect());
         self
     }
 
@@ -133,6 +145,11 @@ impl ProviderPolicy {
             .into_iter()
             .map(|(provider, models)| (canonical_provider(registry, provider), models))
             .collect();
+        let allowed_auth_types = self
+            .allowed_auth_types
+            .into_iter()
+            .map(|(provider, auth_types)| (canonical_provider(registry, provider), auth_types))
+            .collect();
         let allowed_credential_kinds = self
             .allowed_credential_kinds
             .into_iter()
@@ -157,6 +174,7 @@ impl ProviderPolicy {
         Self {
             allowed_providers,
             allowed_models,
+            allowed_auth_types,
             allowed_credential_kinds,
             allowed_credential_source_kinds,
             required_provider_capabilities,
@@ -213,6 +231,23 @@ impl ProviderPolicy {
                     reason: format!("credential kind is not allowed: {credential_kind:?}"),
                 });
             }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn check_auth_type(
+        &self,
+        provider: &str,
+        auth_type: AuthType,
+    ) -> Result<(), ProviderError> {
+        if let Some(allowed) = self.allowed_auth_types.get(provider)
+            && !allowed.contains(&auth_type)
+        {
+            return Err(ProviderError::PolicyDenied {
+                provider: provider.to_string(),
+                reason: format!("auth type is not allowed: {auth_type:?}"),
+            });
         }
 
         Ok(())
@@ -287,6 +322,10 @@ impl ProviderPolicy {
                 .allowed_models
                 .get(provider)
                 .map(|models| models.iter().cloned().collect()),
+            allowed_auth_types: self
+                .allowed_auth_types
+                .get(provider)
+                .map(|auth_types| auth_types.iter().copied().collect()),
             allowed_credential_kinds: self
                 .allowed_credential_kinds
                 .get(provider)
@@ -314,6 +353,10 @@ impl ProviderPolicy {
                 .allowed_models
                 .get(provider)
                 .map(|models| models.iter().cloned().collect()),
+            allowed_auth_types: self
+                .allowed_auth_types
+                .get(provider)
+                .map(|auth_types| auth_types.iter().copied().collect()),
             allowed_credential_kinds: self
                 .allowed_credential_kinds
                 .get(provider)

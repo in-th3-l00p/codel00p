@@ -58,9 +58,9 @@ Implemented:
   request-level base URL override precedence;
 - environment credential loading through `credentials_from_env()`, with safe
   route metadata that records the source variable name instead of secret values;
-- provider, model, credential-kind, and credential-source-kind allowlist policy,
-  provider and catalog capability requirements, and an enterprise-direct
-  template plus an enterprise-direct agentic catalog template;
+- provider, model, auth-type, credential-kind, and credential-source-kind
+  allowlist policy, provider and catalog capability requirements, and an
+  enterprise-direct template plus an enterprise-direct agentic catalog template;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
@@ -197,6 +197,9 @@ uses `max_tokens`, and lists models from
 - Enforce policy before inference and reflect route/catalog policy metadata;
   use `list_model_catalog` when a caller needs auditable policy metadata and
   `list_models` when it only needs the filtered model descriptors.
+- Use provider-scoped auth type policy when an organization needs to require
+  cloud-proxy, API-key, AWS SDK, GitHub Copilot, custom, or other profile auth
+  modes for a provider.
 - Use provider-scoped credential kind policy when an organization needs to
   require API keys, AWS SigV4 credentials, or intentionally unauthenticated
   catalog access for a provider.

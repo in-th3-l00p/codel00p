@@ -81,6 +81,8 @@ pub struct ProviderModelCatalogPolicy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_models: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_auth_types: Option<Vec<AuthType>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_credential_kinds: Option<Vec<CredentialKind>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_credential_source_kinds: Option<Vec<CredentialSourceKind>>,

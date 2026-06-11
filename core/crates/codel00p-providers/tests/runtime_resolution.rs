@@ -354,6 +354,32 @@ fn client_resolve_reports_credential_source_kind_policy_metadata() {
 }
 
 #[test]
+fn client_resolve_reports_auth_type_policy_metadata() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "gpt",
+            "https://team-proxy.example/v1",
+            Credential::api_key("proxy-key"),
+        )
+        .policy(ProviderPolicy::allow_all().with_allowed_auth_types("gpt", [AuthType::CloudProxy]))
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        route.policy.allowed_auth_types,
+        Some(vec![AuthType::CloudProxy])
+    );
+}
+
+#[test]
 fn client_resolve_preserves_the_requested_alias() {
     let client = InferenceClient::builder()
         .registry(default_registry())
