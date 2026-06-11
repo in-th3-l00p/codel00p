@@ -15,6 +15,52 @@ const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
     "github-models",
 ];
 
+/// Metadata for a built-in provider policy preset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct ProviderPolicyPreset {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub description: &'static str,
+}
+
+const PROVIDER_POLICY_PRESETS: &[ProviderPolicyPreset] = &[
+    ProviderPolicyPreset {
+        id: "allow_all",
+        display_name: "Allow All",
+        description: "Allow any registered provider profile without additional policy constraints.",
+    },
+    ProviderPolicyPreset {
+        id: "enterprise_direct",
+        display_name: "Enterprise Direct",
+        description: "Allow direct first-wave corporate provider profiles.",
+    },
+    ProviderPolicyPreset {
+        id: "enterprise_cloud_proxy",
+        display_name: "Enterprise Cloud Proxy",
+        description: "Require direct provider routes to resolve through codel00p CloudProxy.",
+    },
+    ProviderPolicyPreset {
+        id: "enterprise_custom_gateway",
+        display_name: "Enterprise Custom Gateway",
+        description: "Allow only the configured OpenAI-compatible gateway profile.",
+    },
+    ProviderPolicyPreset {
+        id: "enterprise_managed_identity",
+        display_name: "Enterprise Managed Identity",
+        description: "Require direct provider credentials from managed identity sources.",
+    },
+    ProviderPolicyPreset {
+        id: "enterprise_organization_credentials",
+        display_name: "Enterprise Organization Credentials",
+        description: "Require direct provider credentials from organization-managed sources.",
+    },
+    ProviderPolicyPreset {
+        id: "enterprise_direct_agentic",
+        display_name: "Enterprise Direct Agentic",
+        description: "Allow direct providers and require agentic model capability flags in catalogs.",
+    },
+];
+
 /// Provider policy enforced during route resolution.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderPolicy {
@@ -35,6 +81,25 @@ pub struct ProviderPolicy {
 }
 
 impl ProviderPolicy {
+    pub fn presets() -> &'static [ProviderPolicyPreset] {
+        PROVIDER_POLICY_PRESETS
+    }
+
+    pub fn from_preset(id: &str) -> Option<Self> {
+        match id.trim() {
+            "allow_all" => Some(Self::allow_all()),
+            "enterprise_direct" => Some(Self::enterprise_direct()),
+            "enterprise_cloud_proxy" => Some(Self::enterprise_cloud_proxy()),
+            "enterprise_custom_gateway" => Some(Self::enterprise_custom_gateway()),
+            "enterprise_managed_identity" => Some(Self::enterprise_managed_identity()),
+            "enterprise_organization_credentials" => {
+                Some(Self::enterprise_organization_credentials())
+            }
+            "enterprise_direct_agentic" => Some(Self::enterprise_direct_agentic()),
+            _ => None,
+        }
+    }
+
     pub fn allow_all() -> Self {
         Self {
             allowed_providers: None,

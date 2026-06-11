@@ -66,6 +66,8 @@ Implemented:
   managed-identity, organization-credential, and direct-agentic templates;
 - serde-serializable provider policies with empty/default fields omitted for
   cloud and desktop control-plane defaults;
+- named provider policy preset metadata and ID-based resolution for UI/config
+  selection;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
@@ -350,6 +352,8 @@ uses `max_tokens`, and lists models from
   counts without exposing credential values.
 - Keep `ProviderPolicy` JSON safe and sparse: it contains only policy IDs,
   enums, and capability booleans, not credential values or endpoint secrets.
+- Keep preset IDs stable: cloud, desktop, and config surfaces should store the
+  preset `id` and resolve it through `ProviderPolicy::from_preset(...)`.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_cloud_proxy` when those direct providers must resolve through

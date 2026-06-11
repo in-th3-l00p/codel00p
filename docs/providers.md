@@ -351,6 +351,8 @@ Implemented:
   enterprise-direct agentic catalog template;
 - serde-serializable `ProviderPolicy` values with empty/default fields omitted
   so cloud and desktop control planes can persist safe provider defaults;
+- `ProviderPolicy::presets()` and `ProviderPolicy::from_preset(...)` for stable
+  built-in preset discovery and config/UI selection;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
@@ -376,6 +378,9 @@ Implemented:
 - `ProviderPolicy` JSON serialization for safe control-plane defaults; policy
   JSON records provider IDs, allowed enum values, and capability booleans, never
   credential values;
+- named provider policy preset metadata for `allow_all`, enterprise direct,
+  cloud proxy, custom gateway, managed identity, organization credentials, and
+  direct agentic defaults;
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
 - published `ProviderPricingCatalog` ingestion for cloud or organization-managed

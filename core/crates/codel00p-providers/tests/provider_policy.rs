@@ -707,3 +707,56 @@ fn provider_policy_serializes_control_plane_defaults() {
         matches!(configured, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("credential source kind is not allowed"))
     );
 }
+
+#[test]
+fn provider_policy_presets_list_metadata_and_resolve_policies() {
+    let preset_ids: Vec<_> = ProviderPolicy::presets()
+        .iter()
+        .map(|preset| preset.id)
+        .collect();
+    assert_eq!(
+        preset_ids,
+        vec![
+            "allow_all",
+            "enterprise_direct",
+            "enterprise_cloud_proxy",
+            "enterprise_custom_gateway",
+            "enterprise_managed_identity",
+            "enterprise_organization_credentials",
+            "enterprise_direct_agentic"
+        ]
+    );
+
+    let encoded = serde_json::to_value(ProviderPolicy::presets()).unwrap();
+    assert_eq!(
+        encoded[3],
+        json!({
+            "id": "enterprise_custom_gateway",
+            "display_name": "Enterprise Custom Gateway",
+            "description": "Allow only the configured OpenAI-compatible gateway profile."
+        })
+    );
+
+    let gateway_policy = ProviderPolicy::from_preset("enterprise_custom_gateway").unwrap();
+    let gateway_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("gateway-key"))
+        .policy(gateway_policy)
+        .build();
+
+    let route = gateway_client
+        .resolve(
+            &InferenceRequest::builder("custom", "team/gpt-5")
+                .base_url("https://ai-gateway.example/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "custom");
+    assert_eq!(
+        route.policy.allowed_auth_types,
+        Some(vec![AuthType::Custom])
+    );
+    assert!(ProviderPolicy::from_preset("unknown").is_none());
+}

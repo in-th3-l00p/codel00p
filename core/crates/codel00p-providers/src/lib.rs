@@ -61,7 +61,7 @@ pub use model_catalog::{
     ProviderModelAnnotations, ProviderModelCatalog, ProviderModelCatalogPolicy,
     ProviderModelLimits,
 };
-pub use policy::ProviderPolicy;
+pub use policy::{ProviderPolicy, ProviderPolicyPreset};
 pub use pricing_catalog::{ProviderModelPricing, ProviderPricingCatalog};
 pub use profile::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile};
 pub use registry::{ProviderRegistry, default_registry};

@@ -138,12 +138,13 @@ Current foundation:
   agent runs, enriched route audit metadata for catalog URLs, output-token
   parameters, and capabilities, expanded cache/reasoning usage metadata, and
   live integration-test toggles, plus sparse provider-policy JSON
-  serialization for cloud and desktop control-plane defaults.
+  serialization and named preset metadata for cloud and desktop control-plane
+  defaults.
 
 Next work:
 
-- named provider policy preset metadata for cloud and desktop UI/config
-  selection.
+- provider policy preset selection wiring in CLI and cloud configuration
+  surfaces.
 
 Exit criteria:
 
