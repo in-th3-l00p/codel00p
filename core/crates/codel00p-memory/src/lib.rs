@@ -211,6 +211,33 @@ impl MemoryRecord {
     pub fn entry(&self) -> &MemoryEntry {
         &self.entry
     }
+
+    /// Returns deterministic advisory quality signals for review workflows.
+    pub fn quality(&self) -> MemoryQuality {
+        score_memory_entry(&self.entry)
+    }
+}
+
+/// Advisory quality score for a memory record.
+///
+/// Quality findings help review surfaces prioritize cleanup, but they do not
+/// change lifecycle state, retrieval eligibility, or duplicate detection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryQuality {
+    score: u8,
+    findings: Vec<String>,
+}
+
+impl MemoryQuality {
+    /// A deterministic score from 0 to 100, where higher is more reusable.
+    pub fn score(&self) -> u8 {
+        self.score
+    }
+
+    /// Stable human-readable findings explaining score deductions.
+    pub fn findings(&self) -> &[String] {
+        &self.findings
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1152,6 +1179,38 @@ fn token_similarity_score(left: &BTreeSet<String>, right: &BTreeSet<String>) -> 
     let intersection = left.intersection(right).count();
     let union = left.union(right).count();
     (((intersection * 100) + (union / 2)) / union) as u8
+}
+
+fn score_memory_entry(entry: &MemoryEntry) -> MemoryQuality {
+    let mut score = 100_i16;
+    let mut findings = Vec::new();
+    let tokens = content_tokens(entry.content());
+
+    if tokens.len() < 8 {
+        score -= 25;
+        findings.push("content is too short to be reusable".to_string());
+    }
+
+    if entry.content().split_whitespace().count() > 80 {
+        score -= 15;
+        findings.push("content may be too long for frequent retrieval".to_string());
+    }
+
+    if contains_vague_language(&tokens) {
+        score -= 10;
+        findings.push("content uses vague language".to_string());
+    }
+
+    MemoryQuality {
+        score: score.clamp(0, 100) as u8,
+        findings,
+    }
+}
+
+fn contains_vague_language(tokens: &BTreeSet<String>) -> bool {
+    ["important", "stuff", "thing", "things", "this", "that"]
+        .iter()
+        .any(|token| tokens.contains(*token))
 }
 
 fn set_status(entry: MemoryEntry, status: MemoryStatus) -> MemoryEntry {

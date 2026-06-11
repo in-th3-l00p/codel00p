@@ -266,6 +266,21 @@ Success criteria:
 - payloads are stable JSON;
 - conflict inputs are represented without needing a final conflict resolver.
 
+### Phase 6: Quality review signals
+
+Add deterministic quality signals that help humans prioritize memory cleanup.
+
+Status: started. `MemoryRecord::quality()` returns a 0-100 advisory score with
+stable findings for memory that is too short to reuse, too long for frequent
+retrieval, or written with vague language.
+
+Success criteria:
+
+- quality scoring is deterministic for fixed content;
+- findings are stable enough for CLI, MCP, desktop, and cloud surfaces;
+- scoring never approves, rejects, archives, or hides memory by itself;
+- future semantic or model-assisted scoring can layer on top of the core signal.
+
 ## Quality gates
 
 Before any memory feature is considered complete:

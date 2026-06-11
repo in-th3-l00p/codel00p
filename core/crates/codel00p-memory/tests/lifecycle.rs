@@ -95,6 +95,40 @@ fn rejects_exact_duplicate_active_memory_content() {
 }
 
 #[test]
+fn memory_quality_score_flags_low_value_content() {
+    let mut store = InMemoryMemoryStore::default();
+    let strong = store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-strong",
+            project(),
+            MemoryKind::Workflow,
+            "Run pnpm verify before pushing main after editing provider policy.",
+            source(),
+        ))
+        .expect("create strong candidate");
+    let vague = store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-vague",
+            project(),
+            MemoryKind::Decision,
+            "This is important.",
+            source(),
+        ))
+        .expect("create vague candidate");
+
+    assert_eq!(strong.quality().score(), 100);
+    assert!(strong.quality().findings().is_empty());
+    assert_eq!(vague.quality().score(), 65);
+    assert_eq!(
+        vague.quality().findings(),
+        [
+            "content is too short to be reusable",
+            "content uses vague language"
+        ]
+    );
+}
+
+#[test]
 fn finds_near_duplicate_active_memory() {
     let mut store = InMemoryMemoryStore::default();
     store

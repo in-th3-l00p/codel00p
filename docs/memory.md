@@ -95,6 +95,13 @@ Memory retrieval should be:
 The user should be able to understand why memory was used and correct memory
 that is stale or wrong.
 
+## Quality scoring
+
+Memory review surfaces should help reviewers find low-value entries before
+they pollute future context. The core memory engine now exposes a deterministic
+per-record quality score with findings for short, overly long, or vague memory
+content. This score is advisory, not an approval gate.
+
 ## Prompt assembly
 
 Approved memory enters inference through a provider-neutral system message

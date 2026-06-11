@@ -123,3 +123,11 @@ cargo test -p codel00p-memory --features sqlite
 
 The feature test covers extracted candidates, review state, audit history, and
 approved-memory retrieval across a reopened SQLite file.
+
+## Quality scoring contract
+
+`MemoryRecord::quality()` returns a deterministic `MemoryQuality` score from
+0 to 100 plus stable findings for review surfaces. The first heuristic penalizes
+memory that is too short to reuse, too long for frequent retrieval, or written
+with vague language. The score is advisory only: it does not block candidate
+creation, approval, retrieval, or sync.
