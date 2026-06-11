@@ -112,18 +112,27 @@
     text-wrap: balance;
   }
 
-  /* Soft luminous wash used behind the wordmark. */
+  /*
+   * Full-viewport luminous wash. A strong glow crowns the top, with two
+   * offset ambient pools lower down so the canvas stays alive all the way to
+   * the footer instead of cutting to flat black.
+   */
   .brand-glow {
     background:
       radial-gradient(
-        60% 48% at 50% 30%,
-        color-mix(in oklab, var(--brand) 26%, transparent),
+        72% 46% at 50% -4%,
+        color-mix(in oklab, var(--brand) 32%, transparent),
+        transparent 68%
+      ),
+      radial-gradient(
+        58% 46% at 82% 38%,
+        color-mix(in oklab, var(--brand-soft) 13%, transparent),
         transparent 72%
       ),
       radial-gradient(
-        46% 38% at 50% 86%,
-        color-mix(in oklab, var(--brand-soft) 14%, transparent),
-        transparent 70%
+        60% 50% at 16% 82%,
+        color-mix(in oklab, var(--brand) 12%, transparent),
+        transparent 74%
       );
   }
 
@@ -142,11 +151,11 @@
       );
     background-size: 56px 56px;
     -webkit-mask-image: radial-gradient(
-      72% 60% at 50% 38%,
+      90% 70% at 50% 28%,
       black,
-      transparent 78%
+      transparent 82%
     );
-    mask-image: radial-gradient(72% 60% at 50% 38%, black, transparent 78%);
+    mask-image: radial-gradient(90% 70% at 50% 28%, black, transparent 82%);
   }
 
   .hairline {
@@ -156,6 +165,21 @@
       color-mix(in oklab, var(--brand) 55%, transparent),
       transparent
     );
+  }
+
+  /* Fine grain to kill banding across the gradients. */
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Seat the content: gently darken the edges and the bottom of the viewport. */
+  .vignette {
+    background:
+      radial-gradient(
+        130% 90% at 50% 0%,
+        transparent 52%,
+        color-mix(in oklab, var(--background) 88%, black) 100%
+      );
   }
 }
 
@@ -200,10 +224,32 @@
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/*
+ * Scroll-linked parallax. The glow lags behind the content as the page
+ * scrolls, adding depth on top of the fixed backdrop. Gated on support so
+ * browsers without scroll timelines simply keep the stationary background.
+ */
+@keyframes parallax {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -16%, 0);
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .parallax {
+    animation: parallax linear both;
+    animation-timeline: scroll(root);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-drift,
   .animate-spin-slow,
-  .rise {
+  .rise,
+  .parallax {
     animation: none;
   }
 }
