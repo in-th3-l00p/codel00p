@@ -38,13 +38,14 @@ Implemented:
   OpenAI-compatible endpoints;
 - high-level `InferenceClient` facade;
 - inspectable `resolve()` route API and response route metadata with safe audit
-  fields for provider, API mode, base URL source, credential source/kind, policy
-  decision, route policy metadata, model catalog URL, output-token parameter,
-  and provider capabilities;
+  fields for provider, API mode, auth type, base URL source, credential
+  source/kind, policy decision, route policy metadata, model catalog URL,
+  output-token parameter, and provider capabilities;
 - `InferenceClient::list_model_catalog` and `list_models` with
   `ModelCatalogRequest`, normalized `ProviderModel` descriptors, and safe
-  catalog metadata for requested/canonical provider, catalog URL, credential
-  source/kind, active model filters, and pre/post-filter model counts;
+  catalog metadata for requested/canonical provider, auth type, catalog URL,
+  credential source/kind, active model filters, and pre/post-filter model
+  counts;
 - opt-in fallback routing across provider/model candidates for retryable
   provider failures, with ordered route-attempt metadata, catalog URLs,
   output-token parameters, and capabilities attached to successful responses;
@@ -180,9 +181,9 @@ uses `max_tokens`, and lists models from
 - Use provider capability requirements when an organization needs to require
   tool, streaming, vision, or reasoning support before a route or catalog is
   considered allowed.
-- Keep route and model catalog audit metadata safe: report credential
-  source/kind, policy metadata, catalog URL source, and counts without exposing
-  credential values.
+- Keep route and model catalog audit metadata safe: report auth type,
+  credential source/kind, policy metadata, catalog URL source, and counts
+  without exposing credential values.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_direct_agentic` when catalog listings should also require

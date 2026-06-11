@@ -87,6 +87,7 @@ async fn falls_back_when_primary_route_is_rate_limited() {
         .expect("route metadata should be attached");
     assert_eq!(route["selected"]["provider"], json!("custom"));
     assert_eq!(route["selected"]["model"], json!("local-model"));
+    assert_eq!(route["selected"]["auth_type"], json!("Custom"));
     assert_eq!(route["selected"]["capabilities"]["tools"], json!(true));
     assert_eq!(
         route["selected"]["output_token_parameter"],
@@ -105,6 +106,7 @@ async fn falls_back_when_primary_route_is_rate_limited() {
         json!(true)
     );
     assert_eq!(route["attempts"][0]["provider"], json!("openrouter"));
+    assert_eq!(route["attempts"][0]["auth_type"], json!("ApiKey"));
     assert_eq!(route["attempts"][0]["outcome"], json!("fallback"));
     assert_eq!(
         route["attempts"][0]["policy"]["allowed_models"],

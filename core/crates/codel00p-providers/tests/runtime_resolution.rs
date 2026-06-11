@@ -1,5 +1,5 @@
 use codel00p_providers::{
-    ApiMode, ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
+    ApiMode, AuthType, ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
     ProviderCapabilities, ProviderError, ProviderPolicy, ProviderPolicyDecision, RouteValueSource,
     default_registry,
 };
@@ -123,6 +123,41 @@ fn client_resolve_reports_credential_kind_metadata() {
             Some(CredentialKind::AwsSigV4)
         );
     });
+}
+
+#[test]
+fn client_resolve_reports_auth_type_metadata() {
+    let direct_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("github", Credential::api_key("github-token"))
+        .build();
+
+    let github_route = direct_client
+        .resolve(
+            &InferenceRequest::builder("github", "gpt-4o-mini-2024-07-18")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(github_route.auth_type, AuthType::GitHubCopilot);
+
+    let proxy_client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "openai",
+            "https://proxy.codel00p.example/openai/v1",
+            Credential::api_key("proxy-key"),
+        )
+        .build();
+
+    let proxy_route = proxy_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(proxy_route.auth_type, AuthType::CloudProxy);
 }
 
 #[test]

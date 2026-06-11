@@ -11,7 +11,7 @@ pub enum ApiMode {
 }
 
 /// How credentials are resolved for a provider.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum AuthType {
     ApiKey,
     OAuthExternal,

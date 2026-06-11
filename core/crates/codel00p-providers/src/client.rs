@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
-    ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
+    ApiMode, AuthType, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
     ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel, ProviderModelCatalog,
     ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry,
     ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, UsagePricing,
@@ -215,6 +215,7 @@ impl InferenceClient {
         Ok(ProviderModelCatalog {
             requested_provider: request.provider,
             provider: profile.id.to_string(),
+            auth_type: profile.auth_type,
             models_url,
             models_url_source,
             credential_source: Some(credential.source.clone()),
@@ -370,6 +371,11 @@ impl InferenceClient {
             requested_provider: request.provider.clone(),
             provider: profile.id.to_string(),
             api_mode: profile.api_mode,
+            auth_type: if base_url_source == RouteValueSource::CloudProxy {
+                AuthType::CloudProxy
+            } else {
+                profile.auth_type
+            },
             base_url,
             base_url_source,
             credential_source,
@@ -465,6 +471,7 @@ fn route_metadata(route: &ResolvedInferenceRoute, model: &str) -> Value {
         "provider": route.provider,
         "model": model,
         "api_mode": format!("{:?}", route.api_mode),
+        "auth_type": format!("{:?}", route.auth_type),
         "base_url_source": format!("{:?}", route.base_url_source),
         "credential_source": route.credential_source,
         "credential_kind": route.credential_kind,

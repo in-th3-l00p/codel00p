@@ -518,6 +518,42 @@ async fn list_model_catalog_reports_credential_kind_metadata() {
 }
 
 #[tokio::test]
+async fn list_model_catalog_reports_auth_type_metadata() {
+    let server = MockServer::start_async().await;
+    let catalog = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/auth-type-models")
+                .header("authorization", "Bearer custom-key");
+            then.status(200).json_body(json!({
+                "data": [
+                    {"id": "custom-model", "name": "Custom Model"}
+                ]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("custom-key"))
+        .build();
+
+    let result = client
+        .list_model_catalog(
+            ModelCatalogRequest::builder("custom")
+                .models_url(format!("{}/auth-type-models", server.base_url()))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    catalog.assert_async().await;
+    assert_eq!(result.auth_type, AuthType::Custom);
+    assert_eq!(result.credential_kind, Some(CredentialKind::ApiKey));
+    assert_eq!(result.models[0].id, "custom-model");
+}
+
+#[tokio::test]
 async fn list_model_catalog_enforces_credential_kind_policy() {
     let client = InferenceClient::builder()
         .registry(default_registry())

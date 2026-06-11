@@ -321,9 +321,9 @@ Implemented:
 - first-wave provider profiles and aliases, including separate `github`
   Copilot and `github-models` GitHub Models profiles;
 - inspectable `ResolvedInferenceRoute` and response route metadata with safe
-  audit fields for provider, API mode, base URL source, credential source/kind,
-  policy decision, route policy metadata, model catalog URL, output-token
-  parameter, and provider capabilities;
+  audit fields for provider, API mode, auth type, base URL source, credential
+  source/kind, policy decision, route policy metadata, model catalog URL,
+  output-token parameter, and provider capabilities;
 - client-level provider cloud proxy routing, including proxy credential use,
   request-level base URL override precedence, and safe `CloudProxy` route
   metadata;
@@ -333,8 +333,8 @@ Implemented:
   credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_model_catalog`, `InferenceClient::list_models`, and
-  normalized `ProviderModel` descriptors with safe catalog URL source metadata,
-  catalog policy metadata, credential source/kind, descriptions,
+  normalized `ProviderModel` descriptors with safe auth type and catalog URL
+  source metadata, catalog policy metadata, credential source/kind, descriptions,
   provider-specific annotations, raw capability labels, typed capability flags,
   modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata, including catalog

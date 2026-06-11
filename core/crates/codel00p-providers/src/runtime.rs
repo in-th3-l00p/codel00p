@@ -1,4 +1,4 @@
-use crate::{ApiMode, CredentialKind, OutputTokenParameter, ProviderCapabilities};
+use crate::{ApiMode, AuthType, CredentialKind, OutputTokenParameter, ProviderCapabilities};
 
 /// Source used for a resolved route value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -36,6 +36,7 @@ pub struct ResolvedInferenceRoute {
     pub requested_provider: String,
     pub provider: String,
     pub api_mode: ApiMode,
+    pub auth_type: AuthType,
     pub base_url: String,
     pub base_url_source: RouteValueSource,
     pub credential_source: Option<String>,

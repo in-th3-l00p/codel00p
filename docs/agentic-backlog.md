@@ -14,10 +14,10 @@ Build:
 - model capability metadata; started with raw catalog labels plus typed tools,
   streaming, vision, and reasoning flags;
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
-  base URL source, policy decision, model catalog URL, and provider
+  auth type, base URL source, policy decision, model catalog URL, and provider
   capabilities, plus credential source/kind labels and route policy snapshots;
 - model catalog listing with normalized model descriptors and safe credential
-  source/kind and catalog URL source metadata;
+  source/kind, auth type, and catalog URL source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;
 - normalized usage and explicit request-priced cost metadata, including safe
   pricing source labels;
