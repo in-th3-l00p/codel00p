@@ -485,6 +485,7 @@ pub struct MemoryStalenessQuery {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryQualityQuery {
     project: ProjectRef,
+    status: Option<MemoryStatus>,
     kind: Option<MemoryKind>,
     sensitivity: Option<MemorySensitivity>,
     tag: Option<String>,
@@ -535,12 +536,19 @@ impl MemoryQualityQuery {
     pub fn new(project: ProjectRef) -> Self {
         Self {
             project,
+            status: None,
             kind: None,
             sensitivity: None,
             tag: None,
             max_score: 80,
             limit: None,
         }
+    }
+
+    /// Restricts the review queue to one active review status.
+    pub fn with_status(mut self, status: MemoryStatus) -> Self {
+        self.status = Some(status);
+        self
     }
 
     /// Restricts the review queue to one memory kind.
@@ -1161,6 +1169,10 @@ where
             }
 
             if entry.project().id() != query.project.id() {
+                continue;
+            }
+
+            if query.status.is_some_and(|status| entry.status() != status) {
                 continue;
             }
 

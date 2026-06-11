@@ -179,6 +179,40 @@ fn quality_review_lists_low_quality_active_memory() {
 }
 
 #[test]
+fn quality_review_can_filter_low_quality_memory_by_status() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-low-quality-candidate",
+            project(),
+            MemoryKind::Workflow,
+            "Run tests.",
+            source(),
+        ))
+        .expect("create low-quality candidate");
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-low-quality-approved",
+            project(),
+            MemoryKind::Workflow,
+            "Use credential.",
+            source(),
+        ))
+        .expect("create low-quality approved candidate");
+    store
+        .review("mem-low-quality-approved", ReviewDecision::approve("alice"))
+        .expect("approve low-quality memory");
+
+    let low_quality = store
+        .quality_review(MemoryQualityQuery::new(project()).with_status(MemoryStatus::Approved))
+        .expect("list low-quality approved memory");
+
+    assert_eq!(low_quality.len(), 1);
+    assert_eq!(low_quality[0].entry().id(), "mem-low-quality-approved");
+    assert_eq!(low_quality[0].entry().status(), MemoryStatus::Approved);
+}
+
+#[test]
 fn quality_review_can_filter_low_quality_memory_by_kind() {
     let mut store = InMemoryMemoryStore::default();
     store

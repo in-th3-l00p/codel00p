@@ -274,8 +274,50 @@ fn mcp_serve_exposes_quality_review_queue() {
             "id": 7,
             "method": "tools/call",
             "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-quality-sensitive-candidate",
+                    "kind": "workflow",
+                    "content": "Use token.",
+                    "sensitivity": "sensitive",
+                    "tags": ["credential"],
+                    "session_id": "session-quality",
+                    "turn_id": "turn-quality"
+                }
+            }
+        }),
+    );
+    let sensitive_candidate = read_response(&mut stdout);
+    assert_eq!(sensitive_candidate["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_approve",
+                "arguments": {
+                    "id": "mem-quality-sensitive",
+                    "actor": "alice"
+                }
+            }
+        }),
+    );
+    let approved = read_response(&mut stdout);
+    assert_eq!(approved["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_quality",
                 "arguments": {
+                    "status": "approved",
                     "kind": "workflow",
                     "sensitivity": "sensitive",
                     "tag": "credential",
@@ -293,6 +335,7 @@ fn mcp_serve_exposes_quality_review_queue() {
     let quality_items: Value = serde_json::from_str(quality_text).expect("quality json");
     assert_eq!(quality_items.as_array().expect("quality array").len(), 1);
     assert_eq!(quality_items[0]["id"], "mem-quality-sensitive");
+    assert_eq!(quality_items[0]["status"], "approved");
     assert_eq!(quality_items[0]["kind"], "workflow");
     assert_eq!(quality_items[0]["sensitivity"], "sensitive");
     assert_eq!(quality_items[0]["tags"], json!(["credential"]));

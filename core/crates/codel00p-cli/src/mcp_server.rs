@@ -171,6 +171,7 @@ fn mcp_tools() -> Vec<Value> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "status": { "type": "string" },
                     "kind": { "type": "string" },
                     "sensitivity": { "type": "string" },
                     "tag": { "type": "string" },
@@ -405,6 +406,9 @@ fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {
 
 fn memory_quality(config: &CliConfig, arguments: &Value) -> Result<String, String> {
     let mut query = MemoryQualityQuery::new(config.project.clone());
+    if let Some(status) = optional_string(arguments, "status") {
+        query = query.with_status(parse_status(status)?);
+    }
     if let Some(kind) = optional_string(arguments, "kind") {
         query = query.with_kind(parse_kind(kind)?);
     }

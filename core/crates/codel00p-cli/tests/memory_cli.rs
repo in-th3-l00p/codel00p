@@ -540,6 +540,47 @@ fn memory_quality_lists_low_quality_active_memory() {
 }
 
 #[test]
+fn memory_quality_filters_low_quality_memory_by_status() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-low-quality-candidate",
+        MemoryKind::Workflow,
+        "Run tests.",
+        "verify",
+    );
+    seed_candidate(
+        &db_path,
+        "mem-low-quality-approved",
+        MemoryKind::Workflow,
+        "Use credential.",
+        "credential",
+    );
+    approve_candidate(&db_path, "mem-low-quality-approved", "alice");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "quality",
+            "--status",
+            "approved",
+            "--max-score",
+            "80",
+            "--json",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let records: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("quality json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-low-quality-approved");
+    assert_eq!(records[0]["status"], "approved");
+}
+
+#[test]
 fn memory_quality_filters_low_quality_memory_by_kind() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

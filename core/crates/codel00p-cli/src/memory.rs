@@ -35,6 +35,10 @@ fn memory_quality(config: CliConfig, args: &[String]) -> CliResult<String> {
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
+            "--status" => {
+                query = query.with_status(parse_status(&required_value(args, index, "--status")?)?);
+                index += 2;
+            }
             "--kind" => {
                 query = query.with_kind(parse_kind(&required_value(args, index, "--kind")?)?);
                 index += 2;
