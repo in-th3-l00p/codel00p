@@ -128,12 +128,13 @@ Expose codel00p itself as a stdio MCP server for other agents/tools:
 codel00p ... mcp serve
 ```
 
-The server exposes `memory_similar`, `memory_search`, `memory_list`,
-`memory_show`, `memory_create_candidate`, `memory_approve`, `memory_reject`,
-`memory_archive`, `memory_edit`, `memory_restore`, and read-only `session_show`
-tools backed by the same project-scoped memory/session database. Memory writes
-keep the review lifecycle: external clients create candidates first, then
-explicitly approve, reject, or archive them.
+The server exposes `memory_similar`, `memory_stale`, `memory_search`,
+`memory_list`, `memory_show`, `memory_create_candidate`, `memory_approve`,
+`memory_reject`, `memory_archive`, `memory_edit`, `memory_restore`, and
+read-only `session_show` tools backed by the same project-scoped
+memory/session database. Memory writes keep the review lifecycle: external
+clients create candidates first, then explicitly approve, reject, or archive
+them.
 
 It also exposes JSON resources for clients that browse context directly:
 
@@ -262,6 +263,7 @@ Output is intentionally stable and scriptable:
 - `memory stale` prints approved memories likely superseded by newer active
   memory as `id`, `status`, `kind`, `score`, `newer_id`, and `content`; add
   `--json` for record objects with scores and nested `newer` records.
+  The MCP `memory_stale` tool returns the same scored stale records.
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
   and `content`; add `--json` for MCP-compatible records with reasons.
 - `memory show` prints a single memory record with source evidence; add

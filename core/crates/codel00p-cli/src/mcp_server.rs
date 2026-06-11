@@ -3,7 +3,7 @@ use std::io;
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
     MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQuery,
-    MemoryRepository, MemorySimilarityQuery, ReviewDecision,
+    MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
@@ -147,6 +147,18 @@ fn mcp_tools() -> Vec<Value> {
                 "required": ["content", "kind"],
                 "properties": {
                     "content": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "limit": { "type": "integer", "minimum": 1 }
+                }
+            }
+        }),
+        json!({
+            "name": "memory_stale",
+            "description": "Find approved codel00p project memory likely superseded by newer active memory.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
                     "kind": { "type": "string" },
                     "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
                     "limit": { "type": "integer", "minimum": 1 }
@@ -325,6 +337,7 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, St
         .unwrap_or_else(|| json!({}));
     let (text, updated_resource_uris) = match name {
         "memory_similar" => (memory_similar(config, &arguments)?, Vec::new()),
+        "memory_stale" => (memory_stale(config, &arguments)?, Vec::new()),
         "memory_search" => (memory_search(config, &arguments)?, Vec::new()),
         "memory_list" => (memory_list(config, &arguments)?, Vec::new()),
         "memory_show" => (memory_show(config, &arguments)?, Vec::new()),
@@ -391,6 +404,29 @@ fn memory_similar(config: &CliConfig, arguments: &Value) -> Result<String, Strin
         .similar_active(query)
         .map_err(|error| error.to_string())?;
     let items = records.iter().map(similar_memory_json).collect::<Vec<_>>();
+    serde_json::to_string(&items).map_err(|error| error.to_string())
+}
+
+fn memory_stale(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+    let mut query = MemoryStalenessQuery::new(config.project.clone());
+    if let Some(kind) = optional_string(arguments, "kind") {
+        query = query.with_kind(parse_kind(kind)?);
+    }
+    if let Some(threshold) = optional_usize(arguments, "threshold")? {
+        if threshold > 100 {
+            return Err("argument `threshold` must be between 0 and 100".to_string());
+        }
+        query = query.with_min_score(threshold as u8);
+    }
+    if let Some(limit) = optional_usize(arguments, "limit")? {
+        query = query.with_limit(limit);
+    }
+
+    let store = open_memory_store(config)?;
+    let records = store
+        .stale_active(query)
+        .map_err(|error| error.to_string())?;
+    let items = records.iter().map(stale_memory_json).collect::<Vec<_>>();
     serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 
@@ -638,6 +674,13 @@ fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
 fn similar_memory_json(memory: &codel00p_memory::SimilarMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
     item["score"] = json!(memory.score());
+    item
+}
+
+fn stale_memory_json(memory: &codel00p_memory::StaleMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["score"] = json!(memory.score());
+    item["newer"] = memory_entry_json(memory.newer_entry());
     item
 }
 

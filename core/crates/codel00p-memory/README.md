@@ -78,8 +78,8 @@ superseded by newer active candidate or approved memory in the same project and
 kind. It uses the same deterministic token-overlap score and ignores
 archived/rejected newer records. The CLI exposes this as `memory stale` with
 stable TSV output and `memory stale --json` for stale records with a nested
-newer memory object. MCP exposure for stale review queues is a separate Memory
-2.0 follow-up.
+newer memory object. The MCP server exposes the same stale review queue through
+`memory_stale`.
 
 ## Review listing contract
 
