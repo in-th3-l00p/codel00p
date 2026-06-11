@@ -6,7 +6,7 @@ use codel00p_memory::{
     MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{
-    MemoryKind, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
+    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
 };
 use codel00p_session::{SessionRecord, SessionStore, SessionStoreError};
 use serde_json::{Value, json};
@@ -173,6 +173,7 @@ fn mcp_tools() -> Vec<Value> {
                 "properties": {
                     "text": { "type": "string" },
                     "kind": { "type": "string" },
+                    "sensitivity": { "type": "string" },
                     "tag": { "type": "string" },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -186,6 +187,7 @@ fn mcp_tools() -> Vec<Value> {
                 "properties": {
                     "status": { "type": "string" },
                     "kind": { "type": "string" },
+                    "sensitivity": { "type": "string" },
                     "tag": { "type": "string" },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -225,6 +227,7 @@ fn mcp_tools() -> Vec<Value> {
                     "content": { "type": "string" },
                     "session_id": { "type": "string" },
                     "turn_id": { "type": "string" },
+                    "sensitivity": { "type": "string" },
                     "tags": { "type": "array", "items": { "type": "string" } }
                 }
             }
@@ -438,6 +441,9 @@ fn memory_search(config: &CliConfig, arguments: &Value) -> Result<String, String
     if let Some(kind) = optional_string(arguments, "kind") {
         query = query.with_kind(parse_kind(kind)?);
     }
+    if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
+        query = query.with_sensitivity(parse_sensitivity(sensitivity)?);
+    }
     if let Some(tag) = optional_string(arguments, "tag") {
         query = query.with_tag(tag);
     }
@@ -461,6 +467,9 @@ fn memory_list(config: &CliConfig, arguments: &Value) -> Result<String, String> 
     }
     if let Some(kind) = optional_string(arguments, "kind") {
         filter = filter.with_kind(parse_kind(kind)?);
+    }
+    if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
+        filter = filter.with_sensitivity(parse_sensitivity(sensitivity)?);
     }
     if let Some(tag) = optional_string(arguments, "tag") {
         filter = filter.with_tag(tag);
@@ -528,6 +537,9 @@ fn memory_create_candidate(
     );
     for tag in optional_string_array(arguments, "tags")? {
         input = input.with_tag(tag);
+    }
+    if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
+        input = input.with_sensitivity(parse_sensitivity(sensitivity)?);
     }
 
     let mut store = open_memory_store(config)?;
@@ -689,6 +701,7 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         "id": entry.id(),
         "status": status_label(entry.status()),
         "kind": kind_label(entry.kind()),
+        "sensitivity": sensitivity_label(entry.sensitivity()),
         "content": entry.content(),
         "tags": entry.tags(),
     });
@@ -783,12 +796,27 @@ fn parse_kind(value: &str) -> Result<MemoryKind, String> {
     }
 }
 
+fn parse_sensitivity(value: &str) -> Result<MemorySensitivity, String> {
+    match value {
+        "normal" => Ok(MemorySensitivity::Normal),
+        "sensitive" => Ok(MemorySensitivity::Sensitive),
+        _ => Err(format!("unknown memory sensitivity: {value}")),
+    }
+}
+
 fn status_label(status: MemoryStatus) -> &'static str {
     match status {
         MemoryStatus::Candidate => "candidate",
         MemoryStatus::Approved => "approved",
         MemoryStatus::Rejected => "rejected",
         MemoryStatus::Archived => "archived",
+    }
+}
+
+fn sensitivity_label(sensitivity: MemorySensitivity) -> &'static str {
+    match sensitivity {
+        MemorySensitivity::Normal => "normal",
+        MemorySensitivity::Sensitive => "sensitive",
     }
 }
 

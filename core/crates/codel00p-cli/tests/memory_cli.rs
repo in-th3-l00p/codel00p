@@ -7,7 +7,9 @@ use codel00p_memory::{
     MemoryCandidateInput, MemoryListFilter, MemoryRepository, ReviewDecision,
     StorageBackedMemoryStore,
 };
-use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId};
+use codel00p_protocol::{
+    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId,
+};
 use codel00p_storage::{SqliteStorage, StorageScope};
 use tempfile::tempdir;
 
@@ -23,12 +25,25 @@ fn source() -> MemorySource {
 }
 
 fn seed_candidate(db_path: &Path, id: &str, kind: MemoryKind, content: &str, tag: &str) {
+    seed_candidate_with_sensitivity(db_path, id, kind, content, tag, MemorySensitivity::Normal);
+}
+
+fn seed_candidate_with_sensitivity(
+    db_path: &Path,
+    id: &str,
+    kind: MemoryKind,
+    content: &str,
+    tag: &str,
+    sensitivity: MemorySensitivity,
+) {
     let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
     let mut store =
         StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);
     store
         .create_candidate(
-            MemoryCandidateInput::new(id, project(), kind, content, source()).with_tag(tag),
+            MemoryCandidateInput::new(id, project(), kind, content, source())
+                .with_tag(tag)
+                .with_sensitivity(sensitivity),
         )
         .expect("create candidate");
 }
@@ -211,6 +226,68 @@ fn memory_search_retrieves_approved_memory() {
     assert_eq!(records[0]["source"]["session_id"], "session-cli");
     assert_eq!(records[0]["source"]["turn_id"], "turn-cli");
     assert_eq!(records[0]["source_uri"], "codel00p://sessions/session-cli");
+}
+
+#[test]
+fn memory_search_filters_sensitive_records_explicitly() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-normal",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+    );
+    seed_candidate_with_sensitivity(
+        &db_path,
+        "mem-sensitive",
+        MemoryKind::Workflow,
+        "Use the private verify credential only from CI.",
+        "verify",
+        MemorySensitivity::Sensitive,
+    );
+    approve_candidate(&db_path, "mem-normal", "alice");
+    approve_candidate(&db_path, "mem-sensitive", "alice");
+
+    let default_output = run_codel00p(&db_path, &["memory", "search", "--text", "verify"]);
+    let sensitive_output = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "search",
+            "--text",
+            "verify",
+            "--sensitivity",
+            "sensitive",
+            "--json",
+        ],
+    );
+
+    assert!(
+        default_output.status.success(),
+        "stderr: {}",
+        stderr(&default_output)
+    );
+    assert!(
+        sensitive_output.status.success(),
+        "stderr: {}",
+        stderr(&sensitive_output)
+    );
+    assert_eq!(
+        stdout(&default_output),
+        "mem-normal\tapproved\tworkflow\tmatched text verify\tRun pnpm verify before pushing main.\n"
+    );
+    let records: serde_json::Value =
+        serde_json::from_str(&stdout(&sensitive_output)).expect("search json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-sensitive");
+    assert_eq!(records[0]["sensitivity"], "sensitive");
+    assert_eq!(
+        records[0]["reason"],
+        "matched text verify and sensitivity sensitive"
+    );
 }
 
 #[test]

@@ -166,6 +166,8 @@ Current foundation:
 - repository-level active memory similarity scoring with CLI/MCP review access;
 - repository-level stale-memory scoring for approved memories superseded by
   newer active memory, with CLI/MCP review output;
+- normal/sensitive memory labels, default normal-only approved-memory
+  retrieval, and explicit CLI/MCP sensitive-memory filters;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.
 
@@ -174,7 +176,7 @@ Next work:
 - richer memory revision history;
 - source evidence links beyond session replay references;
 - near-duplicate detection;
-- visibility and sensitivity scopes;
+- visibility scopes and richer sensitivity policy;
 - merge/split workflows;
 - semantic retrieval behind deterministic filters;
 - memory quality scoring;

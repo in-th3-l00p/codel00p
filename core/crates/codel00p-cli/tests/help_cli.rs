@@ -165,12 +165,12 @@ fn memory_help_documents_edit_command() {
     );
     assert!(
         stdout(&output)
-            .contains("search   Search approved memory records; use --json for JSON output"),
+            .contains("search   Search approved memory records; supports --sensitivity and --json"),
         "stdout: {}",
         stdout(&output)
     );
     assert!(
-        stdout(&output).contains("list     List memory records; use --json for JSON output"),
+        stdout(&output).contains("list     List memory records; supports --sensitivity and --json"),
         "stdout: {}",
         stdout(&output)
     );

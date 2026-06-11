@@ -32,13 +32,26 @@ MCP memory JSON, including show/resource/list/search/similar responses,
 includes the same values as `source.session_id`, `source.turn_id`, and
 `source_uri` when source evidence is available.
 
+## Sensitivity contract
+
+Memory records default to `normal` sensitivity. Review clients can opt a
+candidate into `sensitive` sensitivity before approval. Sensitive approved
+memory stays visible to review surfaces, but default `MemoryQuery` retrieval
+excludes it so ordinary inference context does not receive sensitive project
+knowledge accidentally.
+
+Explicit retrieval can request `MemorySensitivity::Sensitive`. CLI
+`memory search --sensitivity sensitive` and MCP `memory_search` with
+`sensitivity: "sensitive"` expose that path. CLI/MCP JSON record objects include
+the `sensitivity` label, and `memory list`/`memory_list` can filter by it.
+
 ## Edit audit contract
 
 `MemoryRepository::edit` replaces memory content while preserving the memory
-id, project, kind, status, source evidence, and tags. Empty replacement content
-is rejected, and successful edits append an `edited` audit event with the actor
-and optional reason. Edit audit events also preserve machine-readable
-`previous_content` and `new_content` revision fields.
+id, project, kind, status, source evidence, sensitivity, and tags. Empty
+replacement content is rejected, and successful edits append an `edited` audit
+event with the actor and optional reason. Edit audit events also preserve
+machine-readable `previous_content` and `new_content` revision fields.
 
 The CLI exposes edits as:
 
@@ -85,15 +98,16 @@ newer memory object. The MCP server exposes the same stale review queue through
 
 `MemoryListFilter` lists memory records for human review. Unlike inference
 retrieval, listing can return candidates, approved memories, rejected memories,
-and archived memories. It supports project, status, kind, tag, and limit
-filters, with deterministic ordering by memory id.
+archived memories, and sensitive memories. It supports project, status, kind,
+sensitivity, tag, and limit filters, with deterministic ordering by memory id.
 
 ## Retrieval contract
 
-`MemoryQuery` currently selects approved memory by project, with optional
-filters for memory kind, tag, and text. Empty optional filters are ignored.
-Results are sorted by memory id before `with_limit` is applied, which keeps
-prompt-context construction deterministic across storage backends.
+`MemoryQuery` currently selects approved normal-sensitivity memory by project,
+with optional filters for memory kind, sensitivity, tag, and text. Empty
+optional filters are ignored. Results are sorted by memory id before
+`with_limit` is applied, which keeps prompt-context construction deterministic
+across storage backends.
 The CLI exposes this as `memory search` with stable TSV output and
 `memory search --json` for the same machine-readable records returned by the
 MCP `memory_search` tool.

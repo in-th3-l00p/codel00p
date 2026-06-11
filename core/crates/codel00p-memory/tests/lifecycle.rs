@@ -3,7 +3,9 @@ use codel00p_memory::{
     MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery,
     ReviewDecision, StorageBackedMemoryStore,
 };
-use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId};
+use codel00p_protocol::{
+    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId,
+};
 use codel00p_storage::{InMemoryStorage, StorageScope};
 
 fn project() -> ProjectRef {
@@ -512,6 +514,54 @@ fn retrieval_can_filter_by_memory_kind() {
     assert_eq!(retrieved.len(), 1);
     assert_eq!(retrieved[0].entry().id(), "mem-workflow");
     assert_eq!(retrieved[0].reason(), "matched kind workflow");
+}
+
+#[test]
+fn retrieval_excludes_sensitive_memory_unless_explicitly_queried() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-normal",
+            project(),
+            MemoryKind::Workflow,
+            "Run pnpm verify before pushing main.",
+            source(),
+        ))
+        .expect("create normal candidate");
+    store
+        .review("mem-normal", ReviewDecision::approve("alice"))
+        .expect("approve normal memory");
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(
+                "mem-sensitive",
+                project(),
+                MemoryKind::Workflow,
+                "Use the private deployment credential only from CI.",
+                source(),
+            )
+            .with_sensitivity(MemorySensitivity::Sensitive),
+        )
+        .expect("create sensitive candidate");
+    store
+        .review("mem-sensitive", ReviewDecision::approve("alice"))
+        .expect("approve sensitive memory");
+
+    let default_retrieved = store
+        .retrieve(MemoryQuery::new(project()))
+        .expect("retrieve default memory");
+    let sensitive_retrieved = store
+        .retrieve(MemoryQuery::new(project()).with_sensitivity(MemorySensitivity::Sensitive))
+        .expect("retrieve sensitive memory");
+
+    assert_eq!(default_retrieved.len(), 1);
+    assert_eq!(default_retrieved[0].entry().id(), "mem-normal");
+    assert_eq!(sensitive_retrieved.len(), 1);
+    assert_eq!(sensitive_retrieved[0].entry().id(), "mem-sensitive");
+    assert_eq!(
+        sensitive_retrieved[0].reason(),
+        "matched sensitivity sensitive"
+    );
 }
 
 #[test]

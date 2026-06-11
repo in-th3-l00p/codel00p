@@ -752,6 +752,20 @@ pub enum MemoryStatus {
     Archived,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemorySensitivity {
+    #[default]
+    Normal,
+    Sensitive,
+}
+
+impl MemorySensitivity {
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemorySource {
     session_id: SessionId,
@@ -781,6 +795,8 @@ pub struct MemoryEntry {
     project: ProjectRef,
     kind: MemoryKind,
     status: MemoryStatus,
+    #[serde(default, skip_serializing_if = "MemorySensitivity::is_normal")]
+    sensitivity: MemorySensitivity,
     content: String,
     tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -799,6 +815,7 @@ impl MemoryEntry {
             project,
             kind,
             status: MemoryStatus::Candidate,
+            sensitivity: MemorySensitivity::Normal,
             content: content.into(),
             tags: Vec::new(),
             source: None,
@@ -812,6 +829,11 @@ impl MemoryEntry {
 
     pub fn with_source(mut self, source: MemorySource) -> Self {
         self.source = Some(source);
+        self
+    }
+
+    pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
+        self.sensitivity = sensitivity;
         self
     }
 
@@ -834,6 +856,10 @@ impl MemoryEntry {
 
     pub fn kind(&self) -> MemoryKind {
         self.kind
+    }
+
+    pub fn sensitivity(&self) -> MemorySensitivity {
+        self.sensitivity
     }
 
     pub fn content(&self) -> &str {

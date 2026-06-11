@@ -133,8 +133,8 @@ The server exposes `memory_similar`, `memory_stale`, `memory_search`,
 `memory_reject`, `memory_archive`, `memory_edit`, `memory_restore`, and
 read-only `session_show` tools backed by the same project-scoped
 memory/session database. Memory writes keep the review lifecycle: external
-clients create candidates first, then explicitly approve, reject, or archive
-them.
+clients create candidates first, can mark candidates with
+`sensitivity: "sensitive"`, then explicitly approve, reject, or archive them.
 
 It also exposes JSON resources for clients that browse context directly:
 
@@ -236,9 +236,11 @@ codel00p ... memory stale --kind workflow --threshold 70 --json
 
 codel00p ... memory search --text verify --kind workflow --tag verify
 codel00p ... memory search --text verify --kind workflow --tag verify --json
+codel00p ... memory search --text credential --sensitivity sensitive --json
 
 codel00p ... memory list --status candidate
 codel00p ... memory list --status candidate --json
+codel00p ... memory list --sensitivity sensitive --json
 
 codel00p ... memory show mem-1
 codel00p ... memory show mem-1 --json
@@ -256,7 +258,8 @@ codel00p ... memory restore mem-1 --sequence 3 --actor alice --reason "undo edit
 Output is intentionally stable and scriptable:
 
 - `memory list` prints `id`, `status`, `kind`, and `content` as tab-separated
-  fields; add `--json` for MCP-compatible record objects.
+  fields; add `--sensitivity normal|sensitive` to filter records and `--json`
+  for MCP-compatible record objects.
 - `memory similar` prints active near-duplicate candidates as `id`, `status`,
   `kind`, `score`, and `content`; add `--json` for record objects with scores.
   The MCP `memory_similar` tool returns the same scored record objects.
@@ -265,10 +268,13 @@ Output is intentionally stable and scriptable:
   `--json` for record objects with scores and nested `newer` records.
   The MCP `memory_stale` tool returns the same scored stale records.
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
-  and `content`; add `--json` for MCP-compatible records with reasons.
+  and `content`; default retrieval excludes sensitive memory, and
+  `--sensitivity normal|sensitive` explicitly filters by sensitivity. Add
+  `--json` for MCP-compatible records with reasons.
 - `memory show` prints a single memory record with source evidence; add
   `--json` for the MCP-compatible record object. Memory detail text and JSON
-  records include `source_uri` when source evidence is available.
+  records include `sensitivity` and `source_uri` when source evidence is
+  available.
 - review commands print `id` and the resulting status; add `--json` for the
   MCP-compatible record object.
 - `memory edit` replaces content and prints `id` plus resulting status; add

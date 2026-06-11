@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use codel00p_protocol::{MemoryEntry, MemoryKind, MemorySource, MemoryStatus, ProjectRef};
+use codel00p_protocol::{
+    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef,
+};
 use codel00p_storage::{
     AppendLogEntry, AppendLogStore, DocumentStore, InMemoryStorage, StorageDocument, StorageError,
     StorageScope,
@@ -15,6 +17,7 @@ pub struct MemoryCandidateInput {
     id: String,
     project: ProjectRef,
     kind: MemoryKind,
+    sensitivity: MemorySensitivity,
     content: String,
     source: MemorySource,
     tags: Vec<String>,
@@ -32,6 +35,7 @@ impl MemoryCandidateInput {
             id: id.into(),
             project,
             kind,
+            sensitivity: MemorySensitivity::Normal,
             content: content.into(),
             source,
             tags: Vec::new(),
@@ -45,6 +49,11 @@ impl MemoryCandidateInput {
         self
     }
 
+    pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
+        self.sensitivity = sensitivity;
+        self
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -55,6 +64,10 @@ impl MemoryCandidateInput {
 
     pub fn kind(&self) -> MemoryKind {
         self.kind
+    }
+
+    pub fn sensitivity(&self) -> MemorySensitivity {
+        self.sensitivity
     }
 
     pub fn content(&self) -> &str {
@@ -87,7 +100,8 @@ impl MemoryCandidateInput {
 
     fn into_entry(self) -> MemoryEntry {
         let mut entry = MemoryEntry::new(self.id, self.project, self.kind, self.content)
-            .with_source(self.source);
+            .with_source(self.source)
+            .with_sensitivity(self.sensitivity);
         for tag in self.tags {
             entry = entry.with_tag(tag);
         }
@@ -408,6 +422,7 @@ impl MemoryAuditEvent {
 pub struct MemoryQuery {
     project: ProjectRef,
     kind: Option<MemoryKind>,
+    sensitivity: Option<MemorySensitivity>,
     tag: Option<String>,
     text: Option<String>,
     limit: Option<usize>,
@@ -418,6 +433,7 @@ pub struct MemoryListFilter {
     project: ProjectRef,
     status: Option<MemoryStatus>,
     kind: Option<MemoryKind>,
+    sensitivity: Option<MemorySensitivity>,
     tag: Option<String>,
     limit: Option<usize>,
 }
@@ -445,6 +461,7 @@ impl MemoryListFilter {
             project,
             status: None,
             kind: None,
+            sensitivity: None,
             tag: None,
             limit: None,
         }
@@ -457,6 +474,11 @@ impl MemoryListFilter {
 
     pub fn with_kind(mut self, kind: MemoryKind) -> Self {
         self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
+        self.sensitivity = Some(sensitivity);
         self
     }
 
@@ -524,6 +546,7 @@ impl MemoryQuery {
         Self {
             project,
             kind: None,
+            sensitivity: None,
             tag: None,
             text: None,
             limit: None,
@@ -532,6 +555,11 @@ impl MemoryQuery {
 
     pub fn with_kind(mut self, kind: MemoryKind) -> Self {
         self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
+        self.sensitivity = Some(sensitivity);
         self
     }
 
@@ -793,6 +821,12 @@ where
                 continue;
             }
 
+            if let Some(sensitivity) = filter.sensitivity
+                && record.entry().sensitivity() != sensitivity
+            {
+                continue;
+            }
+
             if let Some(tag) = &filter.tag
                 && !record
                     .entry()
@@ -824,6 +858,14 @@ where
                 continue;
             }
 
+            if let Some(sensitivity) = query.sensitivity {
+                if record.entry().sensitivity() != sensitivity {
+                    continue;
+                }
+            } else if record.entry().sensitivity() == MemorySensitivity::Sensitive {
+                continue;
+            }
+
             let mut reasons = Vec::new();
             if let Some(kind) = query.kind {
                 if record.entry().kind() != kind {
@@ -852,6 +894,13 @@ where
                     continue;
                 }
                 reasons.push(format!("text {text}"));
+            }
+
+            if let Some(sensitivity) = query.sensitivity {
+                reasons.push(format!(
+                    "sensitivity {}",
+                    memory_sensitivity_label(sensitivity)
+                ));
             }
 
             let reason = if reasons.is_empty() {
@@ -1116,7 +1165,8 @@ fn replace_content(entry: &MemoryEntry, content: String) -> MemoryEntry {
         entry.kind(),
         content,
     )
-    .with_status(entry.status());
+    .with_status(entry.status())
+    .with_sensitivity(entry.sensitivity());
     if let Some(source) = entry.source() {
         updated = updated.with_source(source.clone());
     }
@@ -1203,6 +1253,13 @@ fn memory_kind_label(kind: MemoryKind) -> &'static str {
         MemoryKind::Decision => "decision",
         MemoryKind::Deployment => "deployment",
         MemoryKind::Troubleshooting => "troubleshooting",
+    }
+}
+
+fn memory_sensitivity_label(sensitivity: MemorySensitivity) -> &'static str {
+    match sensitivity {
+        MemorySensitivity::Normal => "normal",
+        MemorySensitivity::Sensitive => "sensitive",
     }
 }
 

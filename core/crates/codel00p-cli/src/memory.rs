@@ -2,7 +2,7 @@ use codel00p_memory::{
     MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
     MemoryStalenessQuery, ReviewDecision,
 };
-use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus};
+use codel00p_protocol::{MemoryKind, MemorySensitivity, MemorySource, MemoryStatus};
 use serde_json::{Value, json};
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
@@ -181,6 +181,14 @@ fn memory_search(config: CliConfig, args: &[String]) -> CliResult<String> {
                 query = query.with_tag(required_value(args, index, "--tag")?);
                 index += 2;
             }
+            "--sensitivity" => {
+                query = query.with_sensitivity(parse_sensitivity(&required_value(
+                    args,
+                    index,
+                    "--sensitivity",
+                )?)?);
+                index += 2;
+            }
             "--limit" => {
                 let limit = required_value(args, index, "--limit")?
                     .parse::<usize>()
@@ -233,6 +241,14 @@ fn memory_list(config: CliConfig, args: &[String]) -> CliResult<String> {
             }
             "--kind" => {
                 filter = filter.with_kind(parse_kind(&required_value(args, index, "--kind")?)?);
+                index += 2;
+            }
+            "--sensitivity" => {
+                filter = filter.with_sensitivity(parse_sensitivity(&required_value(
+                    args,
+                    index,
+                    "--sensitivity",
+                )?)?);
                 index += 2;
             }
             "--tag" => {
@@ -345,6 +361,7 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         "id": entry.id(),
         "status": status_label(entry.status()),
         "kind": kind_label(entry.kind()),
+        "sensitivity": sensitivity_label(entry.sensitivity()),
         "content": entry.content(),
         "tags": entry.tags(),
     });
@@ -619,12 +636,27 @@ fn parse_kind(value: &str) -> CliResult<MemoryKind> {
     }
 }
 
+fn parse_sensitivity(value: &str) -> CliResult<MemorySensitivity> {
+    match value {
+        "normal" => Ok(MemorySensitivity::Normal),
+        "sensitive" => Ok(MemorySensitivity::Sensitive),
+        _ => Err(format!("unknown memory sensitivity: {value}")),
+    }
+}
+
 fn status_label(status: MemoryStatus) -> &'static str {
     match status {
         MemoryStatus::Candidate => "candidate",
         MemoryStatus::Approved => "approved",
         MemoryStatus::Rejected => "rejected",
         MemoryStatus::Archived => "archived",
+    }
+}
+
+fn sensitivity_label(sensitivity: MemorySensitivity) -> &'static str {
+    match sensitivity {
+        MemorySensitivity::Normal => "normal",
+        MemorySensitivity::Sensitive => "sensitive",
     }
 }
 

@@ -1,9 +1,9 @@
 use codel00p_protocol::{
     AgentEvent, CompactionRecord, ContextWindowState, EventId, MemoryEntry, MemoryKind,
-    MemorySource, MemoryStatus, PermissionDecision, PermissionMode, PermissionRequest,
-    PermissionScope, ProjectRef, ProtocolVersion, ProviderRef, RuntimeErrorKind, SessionId,
-    SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall, ToolProgress, ToolResult,
-    TurnId,
+    MemorySensitivity, MemorySource, MemoryStatus, PermissionDecision, PermissionMode,
+    PermissionRequest, PermissionScope, ProjectRef, ProtocolVersion, ProviderRef, RuntimeErrorKind,
+    SessionId, SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall, ToolProgress,
+    ToolResult, TurnId,
 };
 use serde_json::json;
 
@@ -91,7 +91,21 @@ fn memory_entries_capture_reviewed_project_knowledge() {
     assert_eq!(memory.id(), "mem-1");
     assert_eq!(memory.project().name(), "codel00p");
     assert_eq!(memory.status(), MemoryStatus::Approved);
+    assert_eq!(memory.sensitivity(), MemorySensitivity::Normal);
     assert_eq!(memory.tags(), &["harness"]);
+}
+
+#[test]
+fn memory_entries_can_mark_sensitive_project_knowledge() {
+    let memory = MemoryEntry::new(
+        "mem-sensitive",
+        ProjectRef::new("project-1", "codel00p"),
+        MemoryKind::Workflow,
+        "Use the private deployment credential only from CI.",
+    )
+    .with_sensitivity(MemorySensitivity::Sensitive);
+
+    assert_eq!(memory.sensitivity(), MemorySensitivity::Sensitive);
 }
 
 #[test]

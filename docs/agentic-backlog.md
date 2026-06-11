@@ -56,7 +56,9 @@ Build:
   CLI/MCP review access to near-duplicate scores;
 - stale-memory detection; started with repository-level newer active-memory
   overlap scoring for approved memories and CLI/MCP stale review output;
-- visibility and sensitivity scopes;
+- visibility and sensitivity scopes; started with normal/sensitive memory
+  labels, default normal-only retrieval, and explicit CLI/MCP sensitive-memory
+  review/search filters;
 - memory quality scoring.
 
 Why next: memory is the product moat. Provider breadth matters, but durable
