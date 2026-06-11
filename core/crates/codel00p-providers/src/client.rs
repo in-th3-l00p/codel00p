@@ -4,7 +4,8 @@ use serde_json::{Value, json};
 
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
-    ApiMode, AuthType, AzureManagedIdentityCredentialResolver, ClassifiedProviderError, Credential,
+    ApiMode, AuthType, AwsManagedIdentityCredentialResolver,
+    AzureManagedIdentityCredentialResolver, ClassifiedProviderError, Credential,
     CredentialSourceKind, InferenceRequest, InferenceResponse, ManagedIdentityCredentialRequest,
     ManagedIdentityCredentialResolver, ModelCatalogRequest, ModelCatalogUrlSource, ProviderError,
     ProviderModel, ProviderModelCatalog, ProviderPolicy, ProviderPolicyDecision,
@@ -613,6 +614,18 @@ impl InferenceClientBuilder {
         provider: impl Into<String>,
         identity_ref: impl Into<String>,
         resolver: &AzureManagedIdentityCredentialResolver,
+    ) -> Result<Self, ProviderError> {
+        let provider = provider.into();
+        let identity_ref = identity_ref.into();
+        let credential = resolver.resolve(&provider, &identity_ref).await?;
+        Ok(self.managed_identity_credential(provider, credential, identity_ref))
+    }
+
+    pub async fn aws_managed_identity_credential_from_resolver(
+        self,
+        provider: impl Into<String>,
+        identity_ref: impl Into<String>,
+        resolver: &AwsManagedIdentityCredentialResolver,
     ) -> Result<Self, ProviderError> {
         let provider = provider.into();
         let identity_ref = identity_ref.into();

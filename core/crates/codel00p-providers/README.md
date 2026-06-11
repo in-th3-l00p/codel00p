@@ -244,8 +244,40 @@ The Azure resolver supports system-assigned identities and user-assigned
 IMDS managed identity documentation:
 <https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=linux#managed-identity>.
 
-This keeps provider-specific AWS or GCP token acquisition outside the route
-resolver while preserving the same safe audit metadata.
+AWS EC2 instance profile credential acquisition is available through
+`AwsManagedIdentityCredentialResolver`. It uses IMDSv2, resolves the instance
+profile role name when one is not configured, and returns `AwsSigV4`
+credentials for Bedrock-style providers:
+
+```rust
+# use codel00p_providers::{
+#     AwsManagedIdentityCredentialResolver, InferenceClient, ProviderError, default_registry,
+# };
+# async fn run() -> Result<(), ProviderError> {
+let resolver = AwsManagedIdentityCredentialResolver::instance_profile("us-east-1")
+    .with_role_name("bedrock-prod-role");
+
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .aws_managed_identity_credential_from_resolver(
+        "bedrock",
+        "aws/instance-profile-prod",
+        &resolver,
+    )
+    .await?
+    .build();
+# let _ = client;
+# Ok(())
+# }
+```
+
+See AWS's IMDSv2 and instance profile credential documentation:
+<https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html>
+and
+<https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>.
+
+This keeps provider-specific GCP token acquisition outside the route resolver
+while preserving the same safe audit metadata.
 
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.

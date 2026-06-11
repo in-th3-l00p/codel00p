@@ -22,6 +22,7 @@
 //! # }
 //! ```
 
+mod aws_managed_identity;
 mod azure_managed_identity;
 mod client;
 mod credentials;
@@ -37,6 +38,9 @@ mod response;
 mod runtime;
 mod transports;
 
+pub use aws_managed_identity::{
+    AWS_MANAGED_IDENTITY_IMDS_ENDPOINT, AwsManagedIdentityCredentialResolver,
+};
 pub use azure_managed_identity::{
     AZURE_MANAGED_IDENTITY_TOKEN_ENDPOINT, AzureManagedIdentityCredentialResolver,
     AzureManagedIdentitySelector,
