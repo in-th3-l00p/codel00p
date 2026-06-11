@@ -4,11 +4,11 @@ use serde_json::{Value, json};
 
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
-    ApiMode, AuthType, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
-    ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel, ProviderModelCatalog,
-    ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry,
-    ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, UsagePricing,
-    classify_provider_error, default_registry,
+    ApiMode, AuthType, ClassifiedProviderError, Credential, CredentialSourceKind, InferenceRequest,
+    InferenceResponse, ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel,
+    ProviderModelCatalog, ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog,
+    ProviderRegistry, ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource,
+    UsagePricing, classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -219,6 +219,7 @@ impl InferenceClient {
             models_url,
             models_url_source,
             credential_source: Some(credential.source.clone()),
+            credential_source_kind: Some(credential.source_kind),
             credential_kind: Some(credential.credential.kind()),
             policy_decision: ProviderPolicyDecision::Allowed,
             policy: self.policy.catalog_policy(profile.id),
@@ -339,13 +340,14 @@ impl InferenceClient {
             });
         };
 
-        let (credential_source, credential_kind) =
+        let (credential_source, credential_source_kind, credential_kind) =
             if base_url_source == RouteValueSource::CloudProxy {
                 self.provider_proxies
                     .get(profile.id)
-                    .map_or((None, None), |proxy| {
+                    .map_or((None, None, None), |proxy| {
                         (
                             Some("cloud_proxy".to_string()),
+                            Some(CredentialSourceKind::CloudProxy),
                             Some(proxy.credential.kind()),
                         )
                     })
@@ -356,6 +358,7 @@ impl InferenceClient {
                     .or_else(|| self.credentials.get(&request.provider));
                 (
                     credential.map(|credential| credential.source.clone()),
+                    credential.map(|credential| credential.source_kind),
                     credential.map(|credential| credential.credential.kind()),
                 )
             };
@@ -379,6 +382,7 @@ impl InferenceClient {
             base_url,
             base_url_source,
             credential_source,
+            credential_source_kind,
             credential_kind,
             policy_decision: ProviderPolicyDecision::Allowed,
             policy: self.policy.route_policy(profile.id),
@@ -474,6 +478,7 @@ fn route_metadata(route: &ResolvedInferenceRoute, model: &str) -> Value {
         "auth_type": format!("{:?}", route.auth_type),
         "base_url_source": format!("{:?}", route.base_url_source),
         "credential_source": route.credential_source,
+        "credential_source_kind": route.credential_source_kind,
         "credential_kind": route.credential_kind,
         "policy_decision": format!("{:?}", route.policy_decision),
         "policy": &route.policy,
@@ -537,6 +542,7 @@ impl InferenceClientBuilder {
             ResolvedProviderCredential {
                 credential,
                 source: "configured".to_string(),
+                source_kind: CredentialSourceKind::Configured,
             },
         );
         self
@@ -553,6 +559,24 @@ impl InferenceClientBuilder {
             ResolvedProviderCredential {
                 credential,
                 source: format!("organization:{}", organization_ref.into()),
+                source_kind: CredentialSourceKind::Organization,
+            },
+        );
+        self
+    }
+
+    pub fn managed_identity_credential(
+        mut self,
+        provider: impl Into<String>,
+        credential: Credential,
+        identity_ref: impl Into<String>,
+    ) -> Self {
+        self.credentials.insert(
+            provider.into(),
+            ResolvedProviderCredential {
+                credential,
+                source: format!("managed_identity:{}", identity_ref.into()),
+                source_kind: CredentialSourceKind::ManagedIdentity,
             },
         );
         self

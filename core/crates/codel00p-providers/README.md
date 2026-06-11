@@ -52,6 +52,8 @@ Implemented:
 - credential injection by canonical provider or alias;
 - organization-managed credential injection with safe `organization:<ref>`
   route source metadata;
+- managed-identity credential injection with safe `managed_identity:<ref>`
+  route source metadata;
 - client-level provider cloud proxy routes with safe route metadata and
   request-level base URL override precedence;
 - environment credential loading through `credentials_from_env()`, with safe
@@ -72,7 +74,7 @@ Implemented:
 
 Not yet implemented:
 
-- managed cloud identity credential resolvers;
+- live managed cloud identity token acquisition;
 - streaming.
 
 The current working transports are enough to use OpenAI Responses, Anthropic
@@ -155,6 +157,26 @@ let client = InferenceClient::builder()
 Resolved routes report `credential_source` as
 `organization:team-ai/openai-prod`, never the credential value.
 
+Managed identity resolvers can inject an already resolved credential with a
+typed source kind and safe identity reference:
+
+```rust
+# use codel00p_providers::{Credential, InferenceClient, default_registry};
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .managed_identity_credential(
+        "openai",
+        Credential::api_key("short-lived-token"),
+        "azure/workload-prod",
+    )
+    .build();
+# let _ = client;
+```
+
+Resolved routes and model catalogs report both `credential_source` and
+`credential_source_kind`, for example `managed_identity:azure/workload-prod`
+with `ManagedIdentity`, without exposing token values.
+
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.
 Use `github-models` for the official GitHub Models API at
@@ -182,8 +204,8 @@ uses `max_tokens`, and lists models from
   tool, streaming, vision, or reasoning support before a route or catalog is
   considered allowed.
 - Keep route and model catalog audit metadata safe: report auth type,
-  credential source/kind, policy metadata, catalog URL source, and counts
-  without exposing credential values.
+  credential source/kind/source kind, policy metadata, catalog URL source, and
+  counts without exposing credential values.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_direct_agentic` when catalog listings should also require

@@ -21,11 +21,22 @@ pub enum CredentialKind {
     None,
 }
 
+/// Safe credential source category metadata for audit surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CredentialSourceKind {
+    Configured,
+    Environment,
+    Organization,
+    CloudProxy,
+    ManagedIdentity,
+}
+
 /// Provider credential loaded with safe source metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedProviderCredential {
     pub credential: Credential,
     pub source: String,
+    pub source_kind: CredentialSourceKind,
 }
 
 impl Credential {

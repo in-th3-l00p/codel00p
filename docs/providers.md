@@ -329,14 +329,16 @@ Implemented:
   metadata;
 - organization-managed credential injection with safe
   `organization:<ref>` route source metadata;
+- managed-identity credential injection with safe `managed_identity:<ref>`
+  route source metadata;
 - environment credential loading for API-key providers and AWS SigV4 Bedrock
   credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_model_catalog`, `InferenceClient::list_models`, and
   normalized `ProviderModel` descriptors with safe auth type and catalog URL
-  source metadata, catalog policy metadata, credential source/kind, descriptions,
-  provider-specific annotations, raw capability labels, typed capability flags,
-  modalities, and token limits;
+  source metadata, catalog policy metadata, credential source/kind/source kind,
+  descriptions, provider-specific annotations, raw capability labels, typed
+  capability flags, modalities, and token limits;
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
@@ -384,8 +386,9 @@ Implemented:
 - opt-in live integration test configuration using `CODEL00P_INTEGRATION_TESTS`
   and provider-specific credential environment variables.
 
-Next provider work should focus on enterprise variants: managed cloud identity
-credential resolvers plus the policy and audit metadata needed to inspect them.
+Next provider work should focus on enterprise variants: live managed cloud
+identity token acquisition plus the policy and audit metadata needed to inspect
+them.
 
 ## Non-goals for the first pass
 

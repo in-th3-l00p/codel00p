@@ -15,9 +15,10 @@ Build:
   streaming, vision, and reasoning flags;
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
   auth type, base URL source, policy decision, model catalog URL, and provider
-  capabilities, plus credential source/kind labels and route policy snapshots;
+  capabilities, plus credential source/kind/source-kind labels and route policy
+  snapshots;
 - model catalog listing with normalized model descriptors and safe credential
-  source/kind, auth type, and catalog URL source metadata;
+  source/kind/source-kind, auth type, and catalog URL source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;
 - normalized usage and explicit request-priced cost metadata, including safe
   pricing source labels;
@@ -28,6 +29,10 @@ Build:
 
 Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.
+
+Started enterprise credential groundwork with typed credential source kind
+metadata and a managed-identity credential injection boundary; live cloud token
+acquisition remains a follow-up.
 
 ### 2. Memory 2.0
 

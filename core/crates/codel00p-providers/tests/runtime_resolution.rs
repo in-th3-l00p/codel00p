@@ -1,7 +1,7 @@
 use codel00p_providers::{
-    ApiMode, AuthType, ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
-    ProviderCapabilities, ProviderError, ProviderPolicy, ProviderPolicyDecision, RouteValueSource,
-    default_registry,
+    ApiMode, AuthType, ChatMessage, Credential, CredentialKind, CredentialSourceKind,
+    InferenceClient, InferenceRequest, ProviderCapabilities, ProviderError, ProviderPolicy,
+    ProviderPolicyDecision, RouteValueSource, default_registry,
 };
 
 fn with_env_lock(test: impl FnOnce()) {
@@ -121,6 +121,117 @@ fn client_resolve_reports_credential_kind_metadata() {
         assert_eq!(
             bedrock_route.credential_kind,
             Some(CredentialKind::AwsSigV4)
+        );
+    });
+}
+
+#[test]
+fn client_resolve_reports_credential_source_kind_metadata() {
+    let configured_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("openrouter", Credential::api_key("openrouter-key"))
+        .build();
+
+    let configured_route = configured_client
+        .resolve(
+            &InferenceRequest::builder("openrouter", "anthropic/claude-sonnet")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(
+        configured_route.credential_source_kind,
+        Some(CredentialSourceKind::Configured)
+    );
+
+    let proxy_client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "openai",
+            "https://proxy.codel00p.example/openai/v1",
+            Credential::api_key("proxy-key"),
+        )
+        .build();
+
+    let proxy_route = proxy_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(
+        proxy_route.credential_source_kind,
+        Some(CredentialSourceKind::CloudProxy)
+    );
+
+    let managed_client = InferenceClient::builder()
+        .registry(default_registry())
+        .managed_identity_credential(
+            "openai",
+            Credential::api_key("managed-token"),
+            "azure/workload-prod",
+        )
+        .build();
+
+    let managed_route = managed_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(
+        managed_route.credential_source_kind,
+        Some(CredentialSourceKind::ManagedIdentity)
+    );
+    assert_eq!(
+        managed_route.credential_source.as_deref(),
+        Some("managed_identity:azure/workload-prod")
+    );
+
+    let organization_client = InferenceClient::builder()
+        .registry(default_registry())
+        .organization_credential(
+            "openai",
+            Credential::api_key("organization-token"),
+            "team-ai/openai-prod",
+        )
+        .build();
+
+    let organization_route = organization_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(
+        organization_route.credential_source_kind,
+        Some(CredentialSourceKind::Organization)
+    );
+
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_PROVIDER_OPENAI_API_KEY", "env-openai-key");
+        }
+
+        let env_client = InferenceClient::builder()
+            .registry(default_registry())
+            .credentials_from_env()
+            .build();
+
+        let env_route = env_client
+            .resolve(
+                &InferenceRequest::builder("openai", "gpt-5-mini")
+                    .message(ChatMessage::user("hello"))
+                    .build(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            env_route.credential_source_kind,
+            Some(CredentialSourceKind::Environment)
         );
     });
 }

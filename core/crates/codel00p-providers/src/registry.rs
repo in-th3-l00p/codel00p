@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::profile::{
     ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities, ProviderProfile,
 };
-use crate::{Credential, ResolvedProviderCredential};
+use crate::{Credential, CredentialSourceKind, ResolvedProviderCredential};
 
 /// In-memory provider registry with canonical IDs and aliases.
 #[derive(Debug, Clone, Default)]
@@ -266,6 +266,7 @@ fn environment_credential(
     ResolvedProviderCredential {
         credential,
         source: format!("environment:{}", source_key.into()),
+        source_kind: CredentialSourceKind::Environment,
     }
 }
 

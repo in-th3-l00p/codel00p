@@ -1,7 +1,8 @@
 use codel00p_providers::{
-    ApiMode, AuthType, Credential, CredentialKind, InferenceClient, ModelCatalogRequest,
-    ModelCatalogUrlSource, OutputTokenParameter, ProviderCapabilities, ProviderError,
-    ProviderPolicy, ProviderPolicyDecision, ProviderProfile, ProviderRegistry, default_registry,
+    ApiMode, AuthType, Credential, CredentialKind, CredentialSourceKind, InferenceClient,
+    ModelCatalogRequest, ModelCatalogUrlSource, OutputTokenParameter, ProviderCapabilities,
+    ProviderError, ProviderPolicy, ProviderPolicyDecision, ProviderProfile, ProviderRegistry,
+    default_registry,
 };
 use httpmock::Method::GET;
 use httpmock::prelude::*;
@@ -551,6 +552,52 @@ async fn list_model_catalog_reports_auth_type_metadata() {
     assert_eq!(result.auth_type, AuthType::Custom);
     assert_eq!(result.credential_kind, Some(CredentialKind::ApiKey));
     assert_eq!(result.models[0].id, "custom-model");
+}
+
+#[tokio::test]
+async fn list_model_catalog_reports_credential_source_kind_metadata() {
+    let server = MockServer::start_async().await;
+    let catalog = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/managed-identity-models")
+                .header("authorization", "Bearer managed-token");
+            then.status(200).json_body(json!({
+                "data": [
+                    {"id": "managed-identity-model", "name": "Managed Identity Model"}
+                ]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .managed_identity_credential(
+            "custom",
+            Credential::api_key("managed-token"),
+            "azure/mi-prod",
+        )
+        .build();
+
+    let result = client
+        .list_model_catalog(
+            ModelCatalogRequest::builder("custom")
+                .models_url(format!("{}/managed-identity-models", server.base_url()))
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    catalog.assert_async().await;
+    assert_eq!(
+        result.credential_source_kind,
+        Some(CredentialSourceKind::ManagedIdentity)
+    );
+    assert_eq!(
+        result.credential_source.as_deref(),
+        Some("managed_identity:azure/mi-prod")
+    );
+    assert_eq!(result.models[0].id, "managed-identity-model");
 }
 
 #[tokio::test]
