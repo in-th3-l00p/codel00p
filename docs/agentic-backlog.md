@@ -55,7 +55,7 @@ Build:
   candidate rejection, repository-level active memory similarity scoring, and
   CLI/MCP review access to near-duplicate scores;
 - stale-memory detection; started with repository-level newer active-memory
-  overlap scoring for approved memories;
+  overlap scoring for approved memories and CLI stale review output;
 - visibility and sensitivity scopes;
 - memory quality scoring.
 

@@ -76,8 +76,10 @@ MCP server exposes the same scored records through `memory_similar`.
 `MemoryRepository::stale_active` flags approved memory that may have been
 superseded by newer active candidate or approved memory in the same project and
 kind. It uses the same deterministic token-overlap score and ignores
-archived/rejected newer records. CLI and MCP exposure for stale review queues is
-a separate Memory 2.0 follow-up.
+archived/rejected newer records. The CLI exposes this as `memory stale` with
+stable TSV output and `memory stale --json` for stale records with a nested
+newer memory object. MCP exposure for stale review queues is a separate Memory
+2.0 follow-up.
 
 ## Review listing contract
 

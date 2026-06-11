@@ -230,6 +230,9 @@ codel00p \
 codel00p ... memory similar --kind workflow --content "Run pnpm verify before pushing to main branch."
 codel00p ... memory similar --kind workflow --content "Run pnpm verify before pushing to main branch." --json
 
+codel00p ... memory stale --kind workflow --threshold 70
+codel00p ... memory stale --kind workflow --threshold 70 --json
+
 codel00p ... memory search --text verify --kind workflow --tag verify
 codel00p ... memory search --text verify --kind workflow --tag verify --json
 
@@ -256,6 +259,9 @@ Output is intentionally stable and scriptable:
 - `memory similar` prints active near-duplicate candidates as `id`, `status`,
   `kind`, `score`, and `content`; add `--json` for record objects with scores.
   The MCP `memory_similar` tool returns the same scored record objects.
+- `memory stale` prints approved memories likely superseded by newer active
+  memory as `id`, `status`, `kind`, `score`, `newer_id`, and `content`; add
+  `--json` for record objects with scores and nested `newer` records.
 - `memory search` prints approved memory as `id`, `status`, `kind`, `reason`,
   and `content`; add `--json` for MCP-compatible records with reasons.
 - `memory show` prints a single memory record with source evidence; add

@@ -165,7 +165,7 @@ Current foundation:
 - exact active duplicate candidate rejection;
 - repository-level active memory similarity scoring with CLI/MCP review access;
 - repository-level stale-memory scoring for approved memories superseded by
-  newer active memory;
+  newer active memory, with CLI review output;
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.
 
@@ -174,7 +174,7 @@ Next work:
 - richer memory revision history;
 - source evidence links beyond session replay references;
 - near-duplicate detection;
-- CLI/MCP stale-memory review queues;
+- MCP stale-memory review queues;
 - visibility and sensitivity scopes;
 - merge/split workflows;
 - semantic retrieval behind deterministic filters;

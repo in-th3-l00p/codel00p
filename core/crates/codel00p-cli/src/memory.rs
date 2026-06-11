@@ -1,6 +1,6 @@
 use codel00p_memory::{
     MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
-    ReviewDecision,
+    MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus};
 use serde_json::{Value, json};
@@ -15,6 +15,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     match command.as_str() {
         "search" => memory_search(config, rest),
         "similar" => memory_similar(config, rest),
+        "stale" => memory_stale(config, rest),
         "list" => memory_list(config, rest),
         "show" => memory_show(config, rest),
         "audit" => memory_audit(config, rest),
@@ -25,6 +26,65 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "restore" => memory_restore(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
+}
+
+fn memory_stale(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let mut query = MemoryStalenessQuery::new(config.project.clone());
+    let mut json_output = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--kind" => {
+                query = query.with_kind(parse_kind(&required_value(args, index, "--kind")?)?);
+                index += 2;
+            }
+            "--threshold" => {
+                let score = required_value(args, index, "--threshold")?
+                    .parse::<u8>()
+                    .map_err(|_| "invalid --threshold".to_string())?;
+                if score > 100 {
+                    return Err("invalid --threshold".to_string());
+                }
+                query = query.with_min_score(score);
+                index += 2;
+            }
+            "--limit" => {
+                let limit = required_value(args, index, "--limit")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid --limit".to_string())?;
+                query = query.with_limit(limit);
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory stale option: {flag}")),
+        }
+    }
+
+    let store = open_memory_store(&config)?;
+    let records = store
+        .stale_active(query)
+        .map_err(|error| error.to_string())?;
+    if json_output {
+        let items = records.iter().map(stale_memory_json).collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
+    let mut output = String::new();
+    for memory in records {
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\n",
+            memory.entry().id(),
+            status_label(memory.entry().status()),
+            kind_label(memory.entry().kind()),
+            memory.score(),
+            memory.newer_entry().id(),
+            memory.entry().content()
+        ));
+    }
+    Ok(output)
 }
 
 fn memory_similar(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -270,6 +330,13 @@ fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -> Value {
 fn similar_memory_json(memory: &codel00p_memory::SimilarMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
     item["score"] = json!(memory.score());
+    item
+}
+
+fn stale_memory_json(memory: &codel00p_memory::StaleMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["score"] = json!(memory.score());
+    item["newer"] = memory_entry_json(memory.newer_entry());
     item
 }
 
