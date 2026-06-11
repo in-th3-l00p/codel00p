@@ -68,6 +68,8 @@ Options:
   --workspace <path>          Workspace root, defaults to current directory
   --provider <id>             Provider id or alias
   --model <id>                Provider model id
+  --provider-policy-preset <id>
+                              Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
@@ -86,6 +88,8 @@ Options:
   --workspace <path>          Workspace root, defaults to current directory
   --provider <id>             Provider id or alias
   --model <id>                Provider model id
+  --provider-policy-preset <id>
+                              Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
   --tool-set <name>           Enable a tool set: read, edit, command, git, all

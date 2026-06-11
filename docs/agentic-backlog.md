@@ -28,7 +28,8 @@ Build:
   kind/source-kind, and capability rules, plus enterprise cloud-proxy,
   custom-gateway, managed-identity, organization-credential, and direct agentic
   templates, sparse policy JSON serialization for control-plane defaults, and
-  named built-in preset metadata for UI/config selection.
+  named built-in preset metadata plus CLI preset selection for UI/config
+  selection.
 
 Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.
@@ -40,7 +41,8 @@ and GCP metadata server token acquisition, plus default-off live smoke test
 scaffolding for cloud runtimes. Added enterprise organization-credential and
 custom-gateway policy templates for team-managed provider credentials and
 configured gateway rollouts, then made `ProviderPolicy` safely serializable for
-cloud and desktop defaults and exposed stable built-in preset metadata.
+cloud and desktop defaults, exposed stable built-in preset metadata, and wired
+CLI agent runs to select presets by ID.
 
 ### 2. Memory 2.0
 

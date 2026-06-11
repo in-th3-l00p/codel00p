@@ -40,6 +40,7 @@ struct AgentRunOptions {
     workspace: PathBuf,
     provider: String,
     model: String,
+    provider_policy_preset: Option<String>,
     base_url: Option<String>,
     session_id: Option<String>,
     max_iterations: Option<u32>,
@@ -191,7 +192,8 @@ fn run_agent_turn(
         .map_err(|error| format!("failed to start async runtime: {error}"))?;
 
     runtime.block_on(async move {
-        let provider_client = build_provider_client(&options.provider)?;
+        let provider_client =
+            build_provider_client(&options.provider, options.provider_policy_preset.as_deref())?;
         let model_client =
             ProviderModelClient::new(provider_client, &options.provider, &options.model);
         let model_client = if let Some(base_url) = &options.base_url {
@@ -296,6 +298,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
     let mut workspace = env::current_dir().map_err(|error| error.to_string())?;
     let mut provider = None;
     let mut model = None;
+    let mut provider_policy_preset = None;
     let mut base_url = None;
     let mut session_id = None;
     let mut max_iterations = None;
@@ -319,6 +322,11 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
             }
             "--model" => {
                 model = Some(required_value(args, index, "--model")?);
+                index += 2;
+            }
+            "--provider-policy-preset" => {
+                provider_policy_preset =
+                    Some(required_value(args, index, "--provider-policy-preset")?);
                 index += 2;
             }
             "--base-url" => {
@@ -372,6 +380,7 @@ fn parse_agent_run_options(args: &[String]) -> CliResult<AgentRunOptions> {
         workspace,
         provider: provider.ok_or_else(|| "missing required --provider".to_string())?,
         model: model.ok_or_else(|| "missing required --model".to_string())?,
+        provider_policy_preset,
         base_url,
         session_id,
         max_iterations,

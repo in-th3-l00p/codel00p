@@ -139,12 +139,11 @@ Current foundation:
   parameters, and capabilities, expanded cache/reasoning usage metadata, and
   live integration-test toggles, plus sparse provider-policy JSON
   serialization and named preset metadata for cloud and desktop control-plane
-  defaults.
+  defaults, with CLI agent runs able to select built-in presets by ID.
 
 Next work:
 
-- provider policy preset selection wiring in CLI and cloud configuration
-  surfaces.
+- provider policy preset selection wiring in cloud configuration surfaces.
 
 Exit criteria:
 

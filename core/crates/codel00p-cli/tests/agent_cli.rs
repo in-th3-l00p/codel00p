@@ -2739,3 +2739,66 @@ fn agent_run_rejects_unknown_providers_before_credential_lookup() {
     let error = stderr(&output);
     assert!(error.contains("unknown provider: not-a-provider"));
 }
+
+#[test]
+fn agent_run_rejects_unknown_provider_policy_presets() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            "http://127.0.0.1:9",
+            "--provider-policy-preset",
+            "not-a-preset",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let error = stderr(&output);
+    assert!(error.contains("unknown provider policy preset: not-a-preset"));
+    assert!(error.contains("enterprise_custom_gateway"));
+}
+
+#[test]
+fn agent_run_applies_provider_policy_preset_before_inference() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Inspect.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            "http://127.0.0.1:9",
+            "--provider-policy-preset",
+            "enterprise_direct",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let error = stderr(&output);
+    assert!(error.contains("provider `custom` was denied by policy: provider is not allowed"));
+}

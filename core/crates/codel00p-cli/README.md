@@ -64,6 +64,12 @@ Supported tool-set names:
 - `git`: guarded status, diff, log, and commit tools.
 - `all`: enable edit, command, and git tool sets.
 
+Use `--provider-policy-preset <id>` to apply one of the built-in provider
+policy defaults before inference. Preset IDs are the same IDs exposed by the
+provider crate: `allow_all`, `enterprise_direct`, `enterprise_cloud_proxy`,
+`enterprise_custom_gateway`, `enterprise_managed_identity`,
+`enterprise_organization_credentials`, and `enterprise_direct_agentic`.
+
 Attach external MCP stdio tools with `--mcp-server <id=command>`. The command
 is parsed into an executable, argv, and optional leading environment
 assignments; it is spawned directly, not through a shell. The CLI starts the
@@ -199,6 +205,9 @@ Provider credentials are read from environment variables:
 The CLI uses the shared provider registry resolver for these credentials. Route
 metadata records safe source labels such as
 `environment:CODEL00P_PROVIDER_OPENAI_API_KEY`, never the secret value.
+Provider policy presets are selected by stable ID with
+`--provider-policy-preset` and resolved through the provider crate before the
+agent turn starts.
 
 `openai`, `anthropic`, `bedrock`, and native `gemini` registry entries exist in
 the provider layer. `agent run` currently rejects non-Chat-Completions modes

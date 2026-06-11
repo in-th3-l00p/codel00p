@@ -1,12 +1,20 @@
-use codel00p_providers::{InferenceClient, default_registry};
+use codel00p_providers::{InferenceClient, ProviderPolicy, default_registry};
 
 use crate::config::CliResult;
 
-pub fn build_provider_client(provider: &str) -> CliResult<InferenceClient> {
+pub fn build_provider_client(
+    provider: &str,
+    policy_preset: Option<&str>,
+) -> CliResult<InferenceClient> {
     let registry = default_registry();
     if registry.resolve(provider).is_none() {
         return Err(format!("unknown provider: {provider}"));
     }
+
+    let policy = policy_preset
+        .map(resolve_policy_preset)
+        .transpose()?
+        .unwrap_or_else(ProviderPolicy::allow_all);
 
     if registry.credential_from_env(provider).is_none() {
         let env_vars = provider_env_vars(provider);
@@ -22,8 +30,20 @@ pub fn build_provider_client(provider: &str) -> CliResult<InferenceClient> {
 
     Ok(InferenceClient::builder()
         .registry(registry)
+        .policy(policy)
         .credentials_from_env()
         .build())
+}
+
+fn resolve_policy_preset(id: &str) -> CliResult<ProviderPolicy> {
+    ProviderPolicy::from_preset(id).ok_or_else(|| {
+        let available = ProviderPolicy::presets()
+            .iter()
+            .map(|preset| preset.id)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("unknown provider policy preset: {id}; available presets: {available}")
+    })
 }
 
 pub fn provider_env_vars(provider: &str) -> Vec<&'static str> {
@@ -92,7 +112,7 @@ mod tests {
                 std::env::set_var("CODEL00P_PROVIDER_OPENAI_API_KEY", "env-openai-key");
             }
 
-            let client = build_provider_client("openai").unwrap();
+            let client = build_provider_client("openai", None).unwrap();
             let route = client
                 .resolve(
                     &InferenceRequest::builder("openai", "gpt-5-mini")
