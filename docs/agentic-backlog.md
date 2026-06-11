@@ -17,7 +17,7 @@ Build:
   base URL source, policy decision, model catalog URL, and provider
   capabilities, plus organization credential source labels;
 - model catalog listing with normalized model descriptors and safe credential
-  source metadata;
+  source and catalog URL source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;
 - normalized usage and explicit request-priced cost metadata, including safe
   pricing source labels;

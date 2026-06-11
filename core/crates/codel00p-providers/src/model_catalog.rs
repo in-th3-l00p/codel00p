@@ -47,12 +47,21 @@ impl ModelCatalogRequestBuilder {
     }
 }
 
+/// Source used for a model catalog URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ModelCatalogUrlSource {
+    RequestModelsUrl,
+    RequestBaseUrl,
+    ProviderDefault,
+}
+
 /// Normalized provider model catalog with safe policy/audit metadata.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderModelCatalog {
     pub requested_provider: String,
     pub provider: String,
     pub models_url: String,
+    pub models_url_source: ModelCatalogUrlSource,
     pub credential_source: Option<String>,
     pub policy_decision: ProviderPolicyDecision,
     pub policy: ProviderModelCatalogPolicy,

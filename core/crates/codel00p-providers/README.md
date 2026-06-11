@@ -173,6 +173,8 @@ uses `max_tokens`, and lists models from
 - Enforce policy before inference and reflect model policy in catalog listings;
   use `list_model_catalog` when a caller needs auditable policy metadata and
   `list_models` when it only needs the filtered model descriptors.
+- Keep model catalog audit metadata safe: report catalog URL source, credential
+  source, policy metadata, and counts without exposing credential values.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_direct_agentic` when catalog listings should also require

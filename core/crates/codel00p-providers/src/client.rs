@@ -5,10 +5,10 @@ use serde_json::{Value, json};
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, ClassifiedProviderError, Credential, InferenceRequest, InferenceResponse,
-    ModelCatalogRequest, ProviderError, ProviderModel, ProviderModelCatalog, ProviderPolicy,
-    ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry, ResolvedInferenceRoute,
-    ResolvedProviderCredential, RouteValueSource, UsagePricing, classify_provider_error,
-    default_registry,
+    ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel, ProviderModelCatalog,
+    ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry,
+    ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, UsagePricing,
+    classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -141,19 +141,23 @@ impl InferenceClient {
         })?;
         self.policy.check_provider(profile.id)?;
 
-        let models_url = request
-            .models_url
-            .clone()
-            .or_else(|| {
-                request
-                    .base_url
-                    .as_ref()
-                    .map(|base_url| format!("{}/models", base_url.trim_end_matches('/')))
-            })
-            .or_else(|| profile.models_url.map(str::to_string))
-            .ok_or_else(|| ProviderError::MissingBaseUrl {
+        let (models_url, models_url_source) = if let Some(models_url) = request.models_url.clone() {
+            (models_url, ModelCatalogUrlSource::RequestModelsUrl)
+        } else if let Some(base_url) = request.base_url.as_ref() {
+            (
+                format!("{}/models", base_url.trim_end_matches('/')),
+                ModelCatalogUrlSource::RequestBaseUrl,
+            )
+        } else if let Some(models_url) = profile.models_url {
+            (
+                models_url.to_string(),
+                ModelCatalogUrlSource::ProviderDefault,
+            )
+        } else {
+            return Err(ProviderError::MissingBaseUrl {
                 provider: profile.id.to_string(),
-            })?;
+            });
+        };
 
         let credential =
             self.credentials
@@ -208,6 +212,7 @@ impl InferenceClient {
             requested_provider: request.provider,
             provider: profile.id.to_string(),
             models_url,
+            models_url_source,
             credential_source: Some(credential.source.clone()),
             policy_decision: ProviderPolicyDecision::Allowed,
             policy: self.policy.catalog_policy(profile.id),

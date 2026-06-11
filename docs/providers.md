@@ -333,9 +333,10 @@ Implemented:
   credentials, with route metadata that records only source variable names;
 - model catalog listing through `ModelCatalogRequest`,
   `InferenceClient::list_model_catalog`, `InferenceClient::list_models`, and
-  normalized `ProviderModel` descriptors with safe catalog policy metadata,
-  credential source, descriptions, provider-specific annotations, raw
-  capability labels, typed capability flags, modalities, and token limits;
+  normalized `ProviderModel` descriptors with safe catalog URL source metadata,
+  catalog policy metadata, credential source, descriptions, provider-specific
+  annotations, raw capability labels, typed capability flags, modalities, and
+  token limits;
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
