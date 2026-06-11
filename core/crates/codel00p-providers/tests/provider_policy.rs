@@ -1,6 +1,6 @@
 use codel00p_providers::{
-    ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
-    ProviderCapabilities, ProviderError, ProviderPolicy, default_registry,
+    ChatMessage, Credential, CredentialKind, CredentialSourceKind, InferenceClient,
+    InferenceRequest, ProviderCapabilities, ProviderError, ProviderPolicy, default_registry,
 };
 
 #[test]
@@ -126,6 +126,56 @@ fn provider_policy_enforces_credential_kind_policy() {
 
     assert!(
         matches!(error, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("credential kind is not allowed"))
+    );
+}
+
+#[test]
+fn provider_policy_enforces_credential_source_kind_policy() {
+    let managed_client = InferenceClient::builder()
+        .registry(default_registry())
+        .managed_identity_credential(
+            "openai",
+            Credential::api_key("managed-token"),
+            "azure/workload-prod",
+        )
+        .policy(
+            ProviderPolicy::allow_all().with_allowed_credential_source_kinds(
+                "gpt",
+                [CredentialSourceKind::ManagedIdentity],
+            ),
+        )
+        .build();
+
+    let route = managed_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(route.provider, "openai");
+
+    let configured_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("openai", Credential::api_key("configured-key"))
+        .policy(
+            ProviderPolicy::allow_all().with_allowed_credential_source_kinds(
+                "gpt",
+                [CredentialSourceKind::ManagedIdentity],
+            ),
+        )
+        .build();
+
+    let error = configured_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(error, ProviderError::PolicyDenied { provider, reason } if provider == "openai" && reason.contains("credential source kind is not allowed"))
     );
 }
 

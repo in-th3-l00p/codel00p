@@ -323,6 +323,37 @@ fn client_resolve_reports_route_policy_metadata() {
 }
 
 #[test]
+fn client_resolve_reports_credential_source_kind_policy_metadata() {
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .managed_identity_credential(
+            "openai",
+            Credential::api_key("managed-token"),
+            "azure/workload-prod",
+        )
+        .policy(
+            ProviderPolicy::allow_all().with_allowed_credential_source_kinds(
+                "gpt",
+                [CredentialSourceKind::ManagedIdentity],
+            ),
+        )
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        route.policy.allowed_credential_source_kinds,
+        Some(vec![CredentialSourceKind::ManagedIdentity])
+    );
+}
+
+#[test]
 fn client_resolve_preserves_the_requested_alias() {
     let client = InferenceClient::builder()
         .registry(default_registry())

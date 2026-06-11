@@ -24,6 +24,8 @@ pub struct ProviderRoutePolicy {
     pub allowed_models: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_credential_kinds: Option<Vec<CredentialKind>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_credential_source_kinds: Option<Vec<CredentialSourceKind>>,
     #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]
     pub required_provider_capabilities: ProviderCapabilities,
     #[serde(default, skip_serializing_if = "ProviderCapabilities::is_empty")]

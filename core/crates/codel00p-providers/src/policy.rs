@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    CredentialKind, ProviderCapabilities, ProviderError, ProviderModel, ProviderModelCatalogPolicy,
-    ProviderRegistry, ProviderRoutePolicy,
+    CredentialKind, CredentialSourceKind, ProviderCapabilities, ProviderError, ProviderModel,
+    ProviderModelCatalogPolicy, ProviderRegistry, ProviderRoutePolicy,
 };
 
 const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
@@ -21,6 +21,7 @@ pub struct ProviderPolicy {
     allowed_providers: Option<BTreeSet<String>>,
     allowed_models: BTreeMap<String, BTreeSet<String>>,
     allowed_credential_kinds: BTreeMap<String, BTreeSet<CredentialKind>>,
+    allowed_credential_source_kinds: BTreeMap<String, BTreeSet<CredentialSourceKind>>,
     required_provider_capabilities: BTreeMap<String, ProviderCapabilities>,
     required_model_capabilities: BTreeMap<String, ProviderCapabilities>,
 }
@@ -31,6 +32,7 @@ impl ProviderPolicy {
             allowed_providers: None,
             allowed_models: BTreeMap::new(),
             allowed_credential_kinds: BTreeMap::new(),
+            allowed_credential_source_kinds: BTreeMap::new(),
             required_provider_capabilities: BTreeMap::new(),
             required_model_capabilities: BTreeMap::new(),
         }
@@ -59,6 +61,7 @@ impl ProviderPolicy {
             allowed_providers: Some(providers.into_iter().map(Into::into).collect()),
             allowed_models: BTreeMap::new(),
             allowed_credential_kinds: BTreeMap::new(),
+            allowed_credential_source_kinds: BTreeMap::new(),
             required_provider_capabilities: BTreeMap::new(),
             required_model_capabilities: BTreeMap::new(),
         }
@@ -81,6 +84,19 @@ impl ProviderPolicy {
         I: IntoIterator<Item = CredentialKind>,
     {
         self.allowed_credential_kinds
+            .insert(provider.into(), kinds.into_iter().collect());
+        self
+    }
+
+    pub fn with_allowed_credential_source_kinds<I>(
+        mut self,
+        provider: impl Into<String>,
+        kinds: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = CredentialSourceKind>,
+    {
+        self.allowed_credential_source_kinds
             .insert(provider.into(), kinds.into_iter().collect());
         self
     }
@@ -122,6 +138,11 @@ impl ProviderPolicy {
             .into_iter()
             .map(|(provider, kinds)| (canonical_provider(registry, provider), kinds))
             .collect();
+        let allowed_credential_source_kinds = self
+            .allowed_credential_source_kinds
+            .into_iter()
+            .map(|(provider, kinds)| (canonical_provider(registry, provider), kinds))
+            .collect();
         let required_provider_capabilities = self
             .required_provider_capabilities
             .into_iter()
@@ -137,6 +158,7 @@ impl ProviderPolicy {
             allowed_providers,
             allowed_models,
             allowed_credential_kinds,
+            allowed_credential_source_kinds,
             required_provider_capabilities,
             required_model_capabilities,
         }
@@ -196,6 +218,32 @@ impl ProviderPolicy {
         Ok(())
     }
 
+    pub(crate) fn check_credential_source_kind(
+        &self,
+        provider: &str,
+        credential_source_kind: Option<CredentialSourceKind>,
+    ) -> Result<(), ProviderError> {
+        if let Some(allowed) = self.allowed_credential_source_kinds.get(provider) {
+            let Some(credential_source_kind) = credential_source_kind else {
+                return Err(ProviderError::PolicyDenied {
+                    provider: provider.to_string(),
+                    reason: "credential source kind is not allowed: missing".to_string(),
+                });
+            };
+
+            if !allowed.contains(&credential_source_kind) {
+                return Err(ProviderError::PolicyDenied {
+                    provider: provider.to_string(),
+                    reason: format!(
+                        "credential source kind is not allowed: {credential_source_kind:?}"
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn check_model(&self, provider: &str, model: &str) -> Result<(), ProviderError> {
         if let Some(allowed) = self.allowed_models.get(provider)
             && !allowed.contains(model)
@@ -243,6 +291,10 @@ impl ProviderPolicy {
                 .allowed_credential_kinds
                 .get(provider)
                 .map(|kinds| kinds.iter().copied().collect()),
+            allowed_credential_source_kinds: self
+                .allowed_credential_source_kinds
+                .get(provider)
+                .map(|kinds| kinds.iter().copied().collect()),
             required_provider_capabilities: self
                 .required_provider_capabilities
                 .get(provider)
@@ -264,6 +316,10 @@ impl ProviderPolicy {
                 .map(|models| models.iter().cloned().collect()),
             allowed_credential_kinds: self
                 .allowed_credential_kinds
+                .get(provider)
+                .map(|kinds| kinds.iter().copied().collect()),
+            allowed_credential_source_kinds: self
+                .allowed_credential_source_kinds
                 .get(provider)
                 .map(|kinds| kinds.iter().copied().collect()),
             required_provider_capabilities: self

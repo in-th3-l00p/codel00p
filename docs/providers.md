@@ -342,10 +342,11 @@ Implemented:
 - opt-in fallback routing with ordered route-attempt metadata, including catalog
   URLs, output-token parameters, and capabilities, and conservative fallback
   only for classified retryable/provider-unavailable failures;
-- provider, model, and credential-kind allowlist policy, including route policy
-  metadata, catalog filtering and metadata for disallowed models, allowed
-  credential kinds, required provider/model capabilities, an enterprise-direct
-  provider template, and an enterprise-direct agentic catalog template;
+- provider, model, credential-kind, and credential-source-kind allowlist policy,
+  including route policy metadata, catalog filtering and metadata for disallowed
+  models, allowed credential/source kinds, required provider/model
+  capabilities, an enterprise-direct provider template, and an enterprise-direct
+  agentic catalog template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;

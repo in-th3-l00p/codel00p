@@ -169,6 +169,8 @@ impl InferenceClient {
                 })?;
         self.policy
             .check_credential_kind(profile.id, Some(credential.credential.kind()))?;
+        self.policy
+            .check_credential_source_kind(profile.id, Some(credential.source_kind))?;
         let mut request_builder = reqwest::Client::new().get(models_url.clone());
         match &credential.credential {
             Credential::ApiKey(api_key) => {
@@ -369,6 +371,8 @@ impl InferenceClient {
         self.policy.check_model(profile.id, &request.model)?;
         self.policy
             .check_credential_kind(profile.id, credential_kind)?;
+        self.policy
+            .check_credential_source_kind(profile.id, credential_source_kind)?;
 
         Ok(ResolvedInferenceRoute {
             requested_provider: request.provider.clone(),

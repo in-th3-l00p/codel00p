@@ -24,8 +24,8 @@ Build:
   pricing source labels;
 - provider and model allowlist policy hooks for project and organization rules;
   started with catalog filtering by required typed model capabilities and safe
-  catalog policy metadata, provider-scoped credential kind and capability rules,
-  plus an enterprise direct agentic catalog template.
+  catalog policy metadata, provider-scoped credential kind/source-kind and
+  capability rules, plus an enterprise direct agentic catalog template.
 
 Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.
