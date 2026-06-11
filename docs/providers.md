@@ -346,8 +346,8 @@ Implemented:
   allowlist policy, including route policy metadata, catalog filtering and
   metadata for disallowed models, allowed auth/credential/source kinds,
   required provider/model
-  capabilities, an enterprise-direct provider template, and an enterprise-direct
-  agentic catalog template;
+  capabilities, an enterprise-direct provider template, an enterprise
+  cloud-proxy route template, and an enterprise-direct agentic catalog template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
@@ -358,6 +358,9 @@ Implemented:
   preserving raw provider fields in `provider_data`;
 - `ProviderPolicy::enterprise_direct()` for organizations that want direct
   first-wave providers while leaving broker/custom endpoints as explicit opt-ins;
+- `ProviderPolicy::enterprise_cloud_proxy()` for organizations that want the
+  same direct-provider boundary while requiring codel00p-managed CloudProxy
+  route resolution;
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
 - published `ProviderPricingCatalog` ingestion for cloud or organization-managed

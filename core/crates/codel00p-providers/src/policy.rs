@@ -44,6 +44,16 @@ impl ProviderPolicy {
         Self::allow_only(ENTERPRISE_DIRECT_PROVIDERS.iter().copied())
     }
 
+    pub fn enterprise_cloud_proxy() -> Self {
+        let mut policy = Self::enterprise_direct();
+        for provider in ENTERPRISE_DIRECT_PROVIDERS {
+            policy
+                .allowed_auth_types
+                .insert((*provider).to_string(), [AuthType::CloudProxy].into());
+        }
+        policy
+    }
+
     pub fn enterprise_direct_agentic() -> Self {
         let mut policy = Self::enterprise_direct();
         for provider in ENTERPRISE_DIRECT_PROVIDERS {

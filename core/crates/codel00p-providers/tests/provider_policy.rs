@@ -1,6 +1,7 @@
 use codel00p_providers::{
     AuthType, ChatMessage, Credential, CredentialKind, CredentialSourceKind, InferenceClient,
-    InferenceRequest, ProviderCapabilities, ProviderError, ProviderPolicy, default_registry,
+    InferenceRequest, ProviderCapabilities, ProviderError, ProviderPolicy, RouteValueSource,
+    default_registry,
 };
 
 #[test]
@@ -355,6 +356,75 @@ fn enterprise_direct_agentic_template_keeps_direct_provider_boundary() {
     assert_eq!(direct.provider, "openai");
 
     let broker = client
+        .resolve(
+            &InferenceRequest::builder("openrouter", "openai/gpt-test")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(broker, ProviderError::PolicyDenied { provider, reason } if provider == "openrouter" && reason.contains("not allowed"))
+    );
+}
+
+#[test]
+fn enterprise_cloud_proxy_policy_template_requires_proxied_direct_routes() {
+    let proxied_client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "gpt",
+            "https://team-proxy.example/v1",
+            Credential::api_key("proxy-key"),
+        )
+        .policy(ProviderPolicy::enterprise_cloud_proxy())
+        .build();
+
+    let route = proxied_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "openai");
+    assert_eq!(route.auth_type, AuthType::CloudProxy);
+    assert_eq!(route.base_url_source, RouteValueSource::CloudProxy);
+    assert_eq!(
+        route.policy.allowed_auth_types,
+        Some(vec![AuthType::CloudProxy])
+    );
+
+    let direct_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("openai", Credential::api_key("configured-key"))
+        .policy(ProviderPolicy::enterprise_cloud_proxy())
+        .build();
+
+    let direct = direct_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(direct, ProviderError::PolicyDenied { provider, reason } if provider == "openai" && reason.contains("auth type is not allowed"))
+    );
+
+    let broker_client = InferenceClient::builder()
+        .registry(default_registry())
+        .provider_proxy(
+            "openrouter",
+            "https://team-proxy.example/openrouter",
+            Credential::api_key("proxy-key"),
+        )
+        .policy(ProviderPolicy::enterprise_cloud_proxy())
+        .build();
+
+    let broker = broker_client
         .resolve(
             &InferenceRequest::builder("openrouter", "openai/gpt-test")
                 .message(ChatMessage::user("hello"))
