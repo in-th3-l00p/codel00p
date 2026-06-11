@@ -96,7 +96,7 @@ export default function Home() {
             className="rise label mt-12 text-muted-foreground/70"
             style={{ animationDelay: "380ms" }}
           >
-            Rust core · provider-agnostic · local-first
+            Inspired by Hermes Agent · provider-agnostic · local-first
           </p>
         </section>
 
