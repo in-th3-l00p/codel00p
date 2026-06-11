@@ -5,10 +5,11 @@ use serde_json::{Value, json};
 use crate::model_catalog::ModelCatalogWireResponse;
 use crate::{
     ApiMode, AuthType, ClassifiedProviderError, Credential, CredentialSourceKind, InferenceRequest,
-    InferenceResponse, ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel,
-    ProviderModelCatalog, ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog,
-    ProviderRegistry, ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource,
-    UsagePricing, classify_provider_error, default_registry,
+    InferenceResponse, ManagedIdentityCredentialRequest, ManagedIdentityCredentialResolver,
+    ModelCatalogRequest, ModelCatalogUrlSource, ProviderError, ProviderModel, ProviderModelCatalog,
+    ProviderPolicy, ProviderPolicyDecision, ProviderPricingCatalog, ProviderRegistry,
+    ResolvedInferenceRoute, ResolvedProviderCredential, RouteValueSource, UsagePricing,
+    classify_provider_error, default_registry,
     transports::{
         anthropic_messages::AnthropicMessagesTransport,
         azure_chat_completions::AzureChatCompletionsTransport,
@@ -587,6 +588,24 @@ impl InferenceClientBuilder {
             },
         );
         self
+    }
+
+    pub fn managed_identity_credential_from_resolver<R>(
+        self,
+        provider: impl Into<String>,
+        identity_ref: impl Into<String>,
+        resolver: &R,
+    ) -> Result<Self, ProviderError>
+    where
+        R: ManagedIdentityCredentialResolver,
+    {
+        let provider = provider.into();
+        let identity_ref = identity_ref.into();
+        let credential = resolver.resolve(ManagedIdentityCredentialRequest::new(
+            &provider,
+            &identity_ref,
+        ))?;
+        Ok(self.managed_identity_credential(provider, credential, identity_ref))
     }
 
     pub fn credentials_from_env(mut self) -> Self {

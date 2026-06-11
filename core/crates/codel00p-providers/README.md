@@ -178,6 +178,41 @@ Resolved routes and model catalogs report both `credential_source` and
 `credential_source_kind`, for example `managed_identity:azure/workload-prod`
 with `ManagedIdentity`, without exposing token values.
 
+Resolver integrations can also supply the short-lived credential through the
+`ManagedIdentityCredentialResolver` boundary:
+
+```rust
+# use codel00p_providers::{
+#     Credential, InferenceClient, ManagedIdentityCredentialRequest,
+#     ManagedIdentityCredentialResolver, ProviderError, default_registry,
+# };
+struct StaticResolver;
+
+impl ManagedIdentityCredentialResolver for StaticResolver {
+    fn resolve(
+        &self,
+        request: ManagedIdentityCredentialRequest<'_>,
+    ) -> Result<Credential, ProviderError> {
+        assert_eq!(request.provider(), "openai");
+        assert_eq!(request.identity_ref(), "azure/workload-prod");
+        Ok(Credential::api_key("short-lived-token"))
+    }
+}
+
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .managed_identity_credential_from_resolver(
+        "openai",
+        "azure/workload-prod",
+        &StaticResolver,
+    )?
+    .build();
+# Ok::<(), ProviderError>(())
+```
+
+This keeps provider-specific Azure, AWS, or GCP token acquisition outside the
+route resolver while preserving the same safe audit metadata.
+
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.
 Use `github-models` for the official GitHub Models API at
@@ -217,7 +252,8 @@ uses `max_tokens`, and lists models from
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_cloud_proxy` when those direct providers must resolve through
   codel00p-managed proxy routes, `enterprise_managed_identity` when direct
-  providers must use managed identity credential injection, and
+  providers must use managed identity credential injection or resolver-backed
+  managed identity credentials, and
   `enterprise_direct_agentic` when catalog listings should also require
   tool-use, streaming, and reasoning capability flags.
 - Never expose credential values in route/debug types.

@@ -1,3 +1,5 @@
+use crate::ProviderError;
+
 /// Resolved provider credential.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Credential {
@@ -39,6 +41,38 @@ pub struct ResolvedProviderCredential {
     pub credential: Credential,
     pub source: String,
     pub source_kind: CredentialSourceKind,
+}
+
+/// Request passed to managed identity credential resolvers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManagedIdentityCredentialRequest<'a> {
+    provider: &'a str,
+    identity_ref: &'a str,
+}
+
+impl<'a> ManagedIdentityCredentialRequest<'a> {
+    pub fn new(provider: &'a str, identity_ref: &'a str) -> Self {
+        Self {
+            provider,
+            identity_ref,
+        }
+    }
+
+    pub fn provider(&self) -> &'a str {
+        self.provider
+    }
+
+    pub fn identity_ref(&self) -> &'a str {
+        self.identity_ref
+    }
+}
+
+/// Resolves a provider credential from a managed identity reference.
+pub trait ManagedIdentityCredentialResolver {
+    fn resolve(
+        &self,
+        request: ManagedIdentityCredentialRequest<'_>,
+    ) -> Result<Credential, ProviderError>;
 }
 
 impl Credential {

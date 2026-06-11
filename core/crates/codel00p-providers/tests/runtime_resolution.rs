@@ -1,6 +1,7 @@
 use codel00p_providers::{
     ApiMode, AuthType, ChatMessage, Credential, CredentialKind, CredentialSourceKind,
-    InferenceClient, InferenceRequest, ProviderCapabilities, ProviderError, ProviderPolicy,
+    InferenceClient, InferenceRequest, ManagedIdentityCredentialRequest,
+    ManagedIdentityCredentialResolver, ProviderCapabilities, ProviderError, ProviderPolicy,
     ProviderPolicyDecision, RouteValueSource, default_registry,
 };
 
@@ -234,6 +235,55 @@ fn client_resolve_reports_credential_source_kind_metadata() {
             Some(CredentialSourceKind::Environment)
         );
     });
+}
+
+#[test]
+fn client_builder_can_resolve_managed_identity_credentials() {
+    struct StaticManagedIdentityResolver;
+
+    impl ManagedIdentityCredentialResolver for StaticManagedIdentityResolver {
+        fn resolve(
+            &self,
+            request: ManagedIdentityCredentialRequest<'_>,
+        ) -> Result<Credential, ProviderError> {
+            assert_eq!(request.provider(), "openai");
+            assert_eq!(request.identity_ref(), "azure/workload-prod");
+            Ok(Credential::api_key("managed-token"))
+        }
+    }
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .managed_identity_credential_from_resolver(
+            "openai",
+            "azure/workload-prod",
+            &StaticManagedIdentityResolver,
+        )
+        .expect("resolve managed identity credential")
+        .policy(ProviderPolicy::enterprise_managed_identity())
+        .build();
+
+    let route = client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        route.credential_source_kind,
+        Some(CredentialSourceKind::ManagedIdentity)
+    );
+    assert_eq!(
+        route.credential_source.as_deref(),
+        Some("managed_identity:azure/workload-prod")
+    );
+    assert_eq!(route.credential_kind, Some(CredentialKind::ApiKey));
+    assert_eq!(
+        route.policy.allowed_credential_source_kinds,
+        Some(vec![CredentialSourceKind::ManagedIdentity])
+    );
 }
 
 #[test]

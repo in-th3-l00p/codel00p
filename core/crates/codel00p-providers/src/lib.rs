@@ -38,7 +38,8 @@ mod transports;
 
 pub use client::{InferenceClient, InferenceClientBuilder};
 pub use credentials::{
-    Credential, CredentialKind, CredentialSourceKind, ResolvedProviderCredential,
+    Credential, CredentialKind, CredentialSourceKind, ManagedIdentityCredentialRequest,
+    ManagedIdentityCredentialResolver, ResolvedProviderCredential,
 };
 pub use error::ProviderError;
 pub use error_classifier::{ClassifiedProviderError, classify_provider_error};

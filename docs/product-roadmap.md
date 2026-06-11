@@ -127,7 +127,8 @@ Current foundation:
   GitHub Models live smoke-test coverage, fallback routing, request-priced cost
   estimates, provider/model allowlist policy, catalog filtering by required
   model capabilities, auth/credential/source-kind policy, enterprise-direct
-  and enterprise cloud-proxy/managed-identity policy templates, client-injected
+  and enterprise cloud-proxy/managed-identity policy templates, managed
+  identity credential injection plus a resolver boundary, client-injected
   provider/model pricing, published provider pricing catalogs, client-level
   cloud proxy routing, shared environment credential loading for provider
   clients and CLI agent runs, enriched route audit metadata for catalog URLs,
@@ -136,7 +137,7 @@ Current foundation:
 
 Next work:
 
-- managed cloud identity credential resolvers.
+- concrete Azure, AWS, and GCP managed identity credential resolvers.
 
 Exit criteria:
 
