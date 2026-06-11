@@ -54,6 +54,14 @@ impl ProviderPolicy {
         policy
     }
 
+    pub fn enterprise_custom_gateway() -> Self {
+        let mut policy = Self::allow_only(["custom"]);
+        policy
+            .allowed_auth_types
+            .insert("custom".to_string(), [AuthType::Custom].into());
+        policy
+    }
+
     pub fn enterprise_managed_identity() -> Self {
         let mut policy = Self::enterprise_direct();
         for provider in ENTERPRISE_DIRECT_PROVIDERS {

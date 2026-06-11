@@ -127,20 +127,22 @@ Current foundation:
   GitHub Models live smoke-test coverage, fallback routing, request-priced cost
   estimates, provider/model allowlist policy, catalog filtering by required
   model capabilities, auth/credential/source-kind policy, enterprise-direct
-  and enterprise cloud-proxy/managed-identity/organization-credential policy
-  templates, managed identity credential injection plus a resolver boundary,
-  Azure IMDS managed identity token acquisition, AWS IMDSv2 instance profile
-  credential acquisition, GCP metadata server service account token
-  acquisition, default-off live smoke tests for cloud managed identity runtime
-  coverage, client-injected provider/model pricing, published provider pricing
-  catalogs, client-level cloud proxy routing, shared environment credential
-  loading for provider clients and CLI agent runs, enriched route audit
-  metadata for catalog URLs, output-token parameters, and capabilities,
-  expanded cache/reasoning usage metadata, and live integration-test toggles.
+  and enterprise cloud-proxy, custom-gateway, managed-identity, and
+  organization-credential policy templates, managed identity credential
+  injection plus a resolver boundary, Azure IMDS managed identity token
+  acquisition, AWS IMDSv2 instance profile credential acquisition, GCP metadata
+  server service account token acquisition, default-off live smoke tests for
+  cloud managed identity runtime coverage, client-injected provider/model
+  pricing, published provider pricing catalogs, client-level cloud proxy
+  routing, shared environment credential loading for provider clients and CLI
+  agent runs, enriched route audit metadata for catalog URLs, output-token
+  parameters, and capabilities, expanded cache/reasoning usage metadata, and
+  live integration-test toggles.
 
 Next work:
 
-- provider routing policy presets for cloud gateway rollout patterns.
+- provider route policy serialization for cloud and desktop control-plane
+  defaults.
 
 Exit criteria:
 

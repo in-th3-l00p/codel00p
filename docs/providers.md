@@ -345,10 +345,10 @@ Implemented:
 - provider, model, auth-type, credential-kind, and credential-source-kind
   allowlist policy, including route policy metadata, catalog filtering and
   metadata for disallowed models, allowed auth/credential/source kinds,
-  required provider/model
-  capabilities, an enterprise-direct provider template, an enterprise
-  cloud-proxy route template, an enterprise managed-identity credential
-  template, and an enterprise-direct agentic catalog template;
+  required provider/model capabilities, an enterprise-direct provider template,
+  enterprise cloud-proxy and custom-gateway route templates, enterprise
+  managed-identity and organization-credential templates, and an
+  enterprise-direct agentic catalog template;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
@@ -362,9 +362,15 @@ Implemented:
 - `ProviderPolicy::enterprise_cloud_proxy()` for organizations that want the
   same direct-provider boundary while requiring codel00p-managed CloudProxy
   route resolution;
+- `ProviderPolicy::enterprise_custom_gateway()` for organizations that want an
+  explicit OpenAI-compatible gateway profile policy instead of direct provider
+  IDs or broker routes;
 - `ProviderPolicy::enterprise_managed_identity()` for organizations that want
   the same direct-provider boundary while requiring managed identity credential
   injection;
+- `ProviderPolicy::enterprise_organization_credentials()` for organizations
+  that want the same direct-provider boundary while requiring team-managed
+  credential injection;
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
 - published `ProviderPricingCatalog` ingestion for cloud or organization-managed

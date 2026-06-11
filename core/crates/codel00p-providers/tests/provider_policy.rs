@@ -578,3 +578,65 @@ fn enterprise_organization_credentials_policy_template_requires_organization_cre
         matches!(broker, ProviderError::PolicyDenied { provider, reason } if provider == "openrouter" && reason.contains("not allowed"))
     );
 }
+
+#[test]
+fn enterprise_custom_gateway_policy_template_requires_configured_gateway_provider() {
+    let gateway_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("gateway-key"))
+        .policy(ProviderPolicy::enterprise_custom_gateway())
+        .build();
+
+    let route = gateway_client
+        .resolve(
+            &InferenceRequest::builder("custom", "team/gpt-5")
+                .base_url("https://ai-gateway.example/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "custom");
+    assert_eq!(route.auth_type, AuthType::Custom);
+    assert_eq!(route.base_url_source, RouteValueSource::RequestOverride);
+    assert_eq!(
+        route.policy.allowed_auth_types,
+        Some(vec![AuthType::Custom])
+    );
+
+    let direct_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("openai", Credential::api_key("configured-key"))
+        .policy(ProviderPolicy::enterprise_custom_gateway())
+        .build();
+
+    let direct = direct_client
+        .resolve(
+            &InferenceRequest::builder("openai", "gpt-5-mini")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(direct, ProviderError::PolicyDenied { provider, reason } if provider == "openai" && reason.contains("not allowed"))
+    );
+
+    let broker_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("openrouter", Credential::api_key("broker-key"))
+        .policy(ProviderPolicy::enterprise_custom_gateway())
+        .build();
+
+    let broker = broker_client
+        .resolve(
+            &InferenceRequest::builder("openrouter", "openai/gpt-test")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(broker, ProviderError::PolicyDenied { provider, reason } if provider == "openrouter" && reason.contains("not allowed"))
+    );
+}

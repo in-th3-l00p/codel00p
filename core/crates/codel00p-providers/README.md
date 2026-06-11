@@ -62,8 +62,8 @@ Implemented:
   route metadata that records the source variable name instead of secret values;
 - provider, model, auth-type, credential-kind, and credential-source-kind
   allowlist policy, provider and catalog capability requirements, and an
-  enterprise-direct template plus enterprise cloud-proxy, managed-identity, and
-  direct-agentic templates;
+  enterprise-direct template plus enterprise cloud-proxy, custom-gateway,
+  managed-identity, organization-credential, and direct-agentic templates;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
@@ -349,12 +349,14 @@ uses `max_tokens`, and lists models from
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_cloud_proxy` when those direct providers must resolve through
-  codel00p-managed proxy routes, `enterprise_managed_identity` when direct
-  providers must use managed identity credential injection or resolver-backed
-  managed identity credentials, `enterprise_organization_credentials` when
-  direct providers must use organization-managed credential injection, and
-  `enterprise_direct_agentic` when catalog listings should also require
-  tool-use, streaming, and reasoning capability flags.
+  codel00p-managed proxy routes, `enterprise_custom_gateway` when inference
+  must use the configured OpenAI-compatible gateway profile,
+  `enterprise_managed_identity` when direct providers must use managed identity
+  credential injection or resolver-backed managed identity credentials,
+  `enterprise_organization_credentials` when direct providers must use
+  organization-managed credential injection, and `enterprise_direct_agentic`
+  when catalog listings should also require tool-use, streaming, and reasoning
+  capability flags.
 - Never expose credential values in route/debug types.
 - Prefer explicit request base URL overrides over configured provider proxies,
   then provider defaults.
