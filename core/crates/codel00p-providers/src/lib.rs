@@ -22,6 +22,7 @@
 //! # }
 //! ```
 
+mod azure_managed_identity;
 mod client;
 mod credentials;
 mod error;
@@ -36,6 +37,10 @@ mod response;
 mod runtime;
 mod transports;
 
+pub use azure_managed_identity::{
+    AZURE_MANAGED_IDENTITY_TOKEN_ENDPOINT, AzureManagedIdentityCredentialResolver,
+    AzureManagedIdentitySelector,
+};
 pub use client::{InferenceClient, InferenceClientBuilder};
 pub use credentials::{
     Credential, CredentialKind, CredentialSourceKind, ManagedIdentityCredentialRequest,

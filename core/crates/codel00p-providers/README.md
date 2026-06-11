@@ -210,8 +210,42 @@ let client = InferenceClient::builder()
 # Ok::<(), ProviderError>(())
 ```
 
-This keeps provider-specific Azure, AWS, or GCP token acquisition outside the
-route resolver while preserving the same safe audit metadata.
+Azure IMDS token acquisition is available through
+`AzureManagedIdentityCredentialResolver`. It follows Microsoft's managed
+identity endpoint contract and uses a proxy-free client for the default
+`http://169.254.169.254/metadata/identity/oauth2/token` endpoint:
+
+```rust
+# use codel00p_providers::{
+#     AzureManagedIdentityCredentialResolver, InferenceClient, ProviderError, default_registry,
+# };
+# async fn run() -> Result<(), ProviderError> {
+let resolver = AzureManagedIdentityCredentialResolver::user_assigned_client_id(
+    "https://cognitiveservices.azure.com/",
+    "azure-client-id",
+);
+
+let client = InferenceClient::builder()
+    .registry(default_registry())
+    .azure_managed_identity_credential_from_resolver(
+        "azure-foundry",
+        "azure/workload-prod",
+        &resolver,
+    )
+    .await?
+    .build();
+# let _ = client;
+# Ok(())
+# }
+```
+
+The Azure resolver supports system-assigned identities and user-assigned
+`client_id`, `object_id`, and `msi_res_id` selectors. See Microsoft's Azure
+IMDS managed identity documentation:
+<https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=linux#managed-identity>.
+
+This keeps provider-specific AWS or GCP token acquisition outside the route
+resolver while preserving the same safe audit metadata.
 
 GitHub has two distinct profiles. Use `github` for the Copilot-compatible
 endpoint at `https://api.githubcopilot.com`; it uses `max_completion_tokens`.

@@ -32,9 +32,9 @@ Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.
 
 Started enterprise credential groundwork with typed credential source kind
-metadata, managed-identity credential injection, and a resolver boundary for
-managed identity token providers; live cloud-specific token acquisition remains
-a follow-up.
+metadata, managed-identity credential injection, a resolver boundary for
+managed identity token providers, and offline-tested Azure IMDS token
+acquisition; AWS and GCP token acquisition remain follow-ups.
 
 ### 2. Memory 2.0
 
