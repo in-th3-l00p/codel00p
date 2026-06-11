@@ -54,6 +54,8 @@ Implemented:
   route source metadata;
 - managed-identity credential injection with safe `managed_identity:<ref>`
   route source metadata;
+- Azure, AWS, and GCP managed identity credential resolvers with mocked
+  metadata-server tests and default-off live smoke tests;
 - client-level provider cloud proxy routes with safe route metadata and
   request-level base URL override precedence;
 - environment credential loading through `credentials_from_env()`, with safe
@@ -75,7 +77,6 @@ Implemented:
 
 Not yet implemented:
 
-- live managed cloud identity token acquisition;
 - streaming.
 
 The current working transports are enough to use OpenAI Responses, Anthropic
@@ -417,6 +418,20 @@ CODEL00P_INTEGRATION_TESTS=1 \
 CODEL00P_PROVIDER_GEMINI_API_KEY=... \
 CODEL00P_PROVIDER_GEMINI_MODEL=gemini-2.5-flash \
 cargo test -p codel00p-providers --test live_gemini -- --ignored --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_TESTS=1 \
+CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_RESOURCE=https://cognitiveservices.azure.com/ \
+cargo test -p codel00p-providers --test live_managed_identity -- --ignored live_azure_managed_identity_resolver_smoke_test --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_TESTS=1 \
+CODEL00P_PROVIDER_AWS_REGION=us-east-1 \
+cargo test -p codel00p-providers --test live_managed_identity -- --ignored live_aws_managed_identity_resolver_smoke_test --nocapture
+
+CODEL00P_INTEGRATION_TESTS=1 \
+CODEL00P_PROVIDER_GCP_MANAGED_IDENTITY_TESTS=1 \
+cargo test -p codel00p-providers --test live_managed_identity -- --ignored live_gcp_managed_identity_resolver_smoke_test --nocapture
 ```
 
 Credential environment variables:
@@ -440,6 +455,15 @@ Azure live tests also need:
 | Endpoint | `CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_ENDPOINT`, `AZURE_OPENAI_ENDPOINT` |
 | Deployment | `CODEL00P_PROVIDER_AZURE_FOUNDRY_DEPLOYMENT`, `AZURE_FOUNDRY_DEPLOYMENT`, `AZURE_OPENAI_DEPLOYMENT` |
 | API version | `CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION`, `AZURE_FOUNDRY_API_VERSION`, `AZURE_OPENAI_API_VERSION`; defaults to `2024-10-21` |
+
+Managed identity live smoke tests must run inside the matching cloud runtime
+with metadata-server access:
+
+| Cloud | Required opt-in | Optional settings |
+| --- | --- | --- |
+| Azure | `CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_TESTS=1` | `CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_RESOURCE` defaults to `https://cognitiveservices.azure.com/`; use one of `CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_CLIENT_ID`, `CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_OBJECT_ID`, or `CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_RESOURCE_ID` for user-assigned identities |
+| AWS | `CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_TESTS=1` plus one region variable | `CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_ROLE` can pin the instance profile role name; region uses `CODEL00P_PROVIDER_AWS_REGION`, `AWS_REGION`, then `AWS_DEFAULT_REGION` |
+| GCP | `CODEL00P_PROVIDER_GCP_MANAGED_IDENTITY_TESTS=1` | `CODEL00P_PROVIDER_GCP_MANAGED_IDENTITY_SERVICE_ACCOUNT` defaults to `default` |
 
 GitHub Models live tests can set `CODEL00P_PROVIDER_GITHUB_MODELS_MODEL`; it
 defaults to `openai/gpt-4o-mini`.

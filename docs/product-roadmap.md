@@ -131,6 +131,7 @@ Current foundation:
   identity credential injection plus a resolver boundary, Azure IMDS managed
   identity token acquisition, AWS IMDSv2 instance profile credential
   acquisition, GCP metadata server service account token acquisition,
+  default-off live smoke tests for cloud managed identity runtime coverage,
   client-injected provider/model pricing, published provider pricing catalogs,
   client-level cloud proxy routing, shared environment credential loading for
   provider clients and CLI agent runs, enriched route audit metadata for
@@ -139,8 +140,8 @@ Current foundation:
 
 Next work:
 
-- live smoke coverage and deployment guidance for cloud managed identity
-  resolvers on Azure, AWS, and GCP runtimes.
+- provider routing policy presets for organization-managed credentials and
+  cloud gateway rollout patterns.
 
 Exit criteria:
 

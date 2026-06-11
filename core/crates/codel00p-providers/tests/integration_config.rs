@@ -1,6 +1,6 @@
 mod support;
 
-use codel00p_providers::Credential;
+use codel00p_providers::{AzureManagedIdentitySelector, Credential};
 use support::IntegrationConfig;
 
 fn with_env_lock(test: impl FnOnce()) {
@@ -31,6 +31,15 @@ fn with_env_lock(test: impl FnOnce()) {
         "CODEL00P_PROVIDER_AZURE_FOUNDRY_API_VERSION",
         "AZURE_FOUNDRY_API_VERSION",
         "AZURE_OPENAI_API_VERSION",
+        "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_TESTS",
+        "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_RESOURCE",
+        "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_CLIENT_ID",
+        "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_OBJECT_ID",
+        "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_RESOURCE_ID",
+        "CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_TESTS",
+        "CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_ROLE",
+        "CODEL00P_PROVIDER_GCP_MANAGED_IDENTITY_TESTS",
+        "CODEL00P_PROVIDER_GCP_MANAGED_IDENTITY_SERVICE_ACCOUNT",
         "CODEL00P_PROVIDER_AWS_ACCESS_KEY_ID",
         "CODEL00P_PROVIDER_AWS_SECRET_ACCESS_KEY",
         "CODEL00P_PROVIDER_AWS_SESSION_TOKEN",
@@ -293,6 +302,90 @@ fn azure_foundry_skip_message_reports_missing_endpoint_without_secrets() {
         assert!(message.contains("endpoint"));
         assert!(message.contains("CODEL00P_PROVIDER_AZURE_FOUNDRY_ENDPOINT"));
         assert!(!message.contains("secret-key"));
+    });
+}
+
+#[test]
+fn managed_identity_live_tests_require_cloud_opt_in() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+        }
+
+        let message = IntegrationConfig::from_env()
+            .skip_azure_managed_identity_message()
+            .expect("missing Azure managed identity opt-in should produce skip message");
+
+        assert!(message.contains("CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_TESTS"));
+    });
+}
+
+#[test]
+fn azure_managed_identity_config_reads_resource_and_client_id_selector() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_TESTS", "true");
+            std::env::set_var(
+                "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_RESOURCE",
+                "https://cognitiveservices.azure.com/",
+            );
+            std::env::set_var(
+                "CODEL00P_PROVIDER_AZURE_MANAGED_IDENTITY_CLIENT_ID",
+                "client-123",
+            );
+        }
+
+        let azure = IntegrationConfig::from_env()
+            .azure_managed_identity()
+            .expect("Azure managed identity config should be present");
+
+        assert_eq!(azure.resource, "https://cognitiveservices.azure.com/");
+        assert_eq!(azure.identity_ref, "azure/managed-identity");
+        assert!(
+            matches!(azure.selector, AzureManagedIdentitySelector::ClientId(ref client_id)
+                if client_id == "client-123")
+        );
+    });
+}
+
+#[test]
+fn aws_managed_identity_config_reads_region_and_role_name() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_AWS_REGION", "eu-central-1");
+            std::env::set_var(
+                "CODEL00P_PROVIDER_AWS_MANAGED_IDENTITY_ROLE",
+                "bedrock-role",
+            );
+        }
+
+        let aws = IntegrationConfig::from_env()
+            .aws_managed_identity()
+            .expect("AWS managed identity config should be present");
+
+        assert_eq!(aws.region, "eu-central-1");
+        assert_eq!(aws.identity_ref, "aws/instance-profile");
+        assert_eq!(aws.role_name.as_deref(), Some("bedrock-role"));
+    });
+}
+
+#[test]
+fn gcp_managed_identity_config_defaults_service_account() {
+    with_env_lock(|| {
+        unsafe {
+            std::env::set_var("CODEL00P_INTEGRATION_TESTS", "true");
+            std::env::set_var("CODEL00P_PROVIDER_GCP_MANAGED_IDENTITY_TESTS", "true");
+        }
+
+        let gcp = IntegrationConfig::from_env()
+            .gcp_managed_identity()
+            .expect("GCP managed identity config should be present");
+
+        assert_eq!(gcp.service_account, "default");
+        assert_eq!(gcp.identity_ref, "gcp/default-service-account");
     });
 }
 
