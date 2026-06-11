@@ -97,6 +97,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
         .collect::<Vec<_>>();
     assert!(tool_names.contains(&"memory_similar"));
     assert!(tool_names.contains(&"memory_stale"));
+    assert!(tool_names.contains(&"memory_quality"));
     assert!(tool_names.contains(&"memory_search"));
     assert!(tool_names.contains(&"memory_list"));
     assert!(tool_names.contains(&"memory_show"));
@@ -125,6 +126,111 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert_eq!(call["result"]["isError"], false);
     assert_eq!(call["result"]["content"][0]["type"], "text");
     assert_eq!(call["result"]["content"][0]["text"], "[]");
+
+    child.kill().expect("kill server");
+    let _ = child.wait();
+}
+
+#[test]
+fn mcp_serve_exposes_quality_review_queue() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let mut child = spawn_codel00p_mcp_server(&db_path);
+    let stdout = child.stdout.take().expect("stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }),
+    );
+    let _ = read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }),
+    );
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-quality-vague",
+                    "kind": "decision",
+                    "content": "This is important.",
+                    "session_id": "session-quality",
+                    "turn_id": "turn-quality"
+                }
+            }
+        }),
+    );
+    let vague = read_response(&mut stdout);
+    assert_eq!(vague["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-quality-strong",
+                    "kind": "workflow",
+                    "content": "Run pnpm verify before pushing main after editing provider policy.",
+                    "session_id": "session-quality",
+                    "turn_id": "turn-quality"
+                }
+            }
+        }),
+    );
+    let strong = read_response(&mut stdout);
+    assert_eq!(strong["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_quality",
+                "arguments": {
+                    "max_score": 80,
+                    "limit": 5
+                }
+            }
+        }),
+    );
+    let quality = read_response(&mut stdout);
+    assert_eq!(quality["result"]["isError"], false);
+    let quality_text = quality["result"]["content"][0]["text"]
+        .as_str()
+        .expect("quality text");
+    let quality_items: Value = serde_json::from_str(quality_text).expect("quality json");
+    assert_eq!(quality_items.as_array().expect("quality array").len(), 1);
+    assert_eq!(quality_items[0]["id"], "mem-quality-vague");
+    assert_eq!(quality_items[0]["quality"]["score"], 65);
+    assert_eq!(
+        quality_items[0]["quality"]["findings"],
+        json!([
+            "content is too short to be reusable",
+            "content uses vague language"
+        ])
+    );
 
     child.kill().expect("kill server");
     let _ = child.wait();

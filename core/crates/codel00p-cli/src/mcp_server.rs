@@ -2,8 +2,8 @@ use std::io;
 
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
-    MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQuery,
-    MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision,
+    MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQualityQuery,
+    MemoryQuery, MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
@@ -161,6 +161,17 @@ fn mcp_tools() -> Vec<Value> {
                 "properties": {
                     "kind": { "type": "string" },
                     "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "limit": { "type": "integer", "minimum": 1 }
+                }
+            }
+        }),
+        json!({
+            "name": "memory_quality",
+            "description": "List active codel00p project memory with low advisory quality scores.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "max_score": { "type": "integer", "minimum": 0, "maximum": 100 },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
             }
@@ -341,6 +352,7 @@ fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerResponse, St
     let (text, updated_resource_uris) = match name {
         "memory_similar" => (memory_similar(config, &arguments)?, Vec::new()),
         "memory_stale" => (memory_stale(config, &arguments)?, Vec::new()),
+        "memory_quality" => (memory_quality(config, &arguments)?, Vec::new()),
         "memory_search" => (memory_search(config, &arguments)?, Vec::new()),
         "memory_list" => (memory_list(config, &arguments)?, Vec::new()),
         "memory_show" => (memory_show(config, &arguments)?, Vec::new()),
@@ -386,6 +398,26 @@ fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {
             }
         ]
     }))
+}
+
+fn memory_quality(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+    let mut query = MemoryQualityQuery::new(config.project.clone());
+    if let Some(max_score) = optional_usize(arguments, "max_score")? {
+        if max_score > 100 {
+            return Err("argument `max_score` must be between 0 and 100".to_string());
+        }
+        query = query.with_max_score(max_score as u8);
+    }
+    if let Some(limit) = optional_usize(arguments, "limit")? {
+        query = query.with_limit(limit);
+    }
+
+    let store = open_memory_store(config)?;
+    let records = store
+        .quality_review(query)
+        .map_err(|error| error.to_string())?;
+    let items = records.iter().map(quality_memory_json).collect::<Vec<_>>();
+    serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 
 fn memory_similar(config: &CliConfig, arguments: &Value) -> Result<String, String> {
@@ -704,6 +736,12 @@ fn stale_memory_json(memory: &codel00p_memory::StaleMemory) -> Value {
     item["score"] = json!(memory.score());
     item["newer"] = memory_entry_json(memory.newer_entry());
     item["newer"]["quality"] = memory_quality_json(&newer_quality);
+    item
+}
+
+fn quality_memory_json(memory: &codel00p_memory::QualityMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["quality"] = memory_quality_json(memory.quality());
     item
 }
 

@@ -161,6 +161,7 @@ Usage: codel00p [global options] memory <command>
 Commands:
   similar  Score active near-duplicate memory; use --json for JSON output
   stale    List approved memory likely superseded by newer active memory
+  quality  List active memory with low advisory quality scores
   search   Search approved memory records; supports --sensitivity and --json
   list     List memory records; supports --sensitivity and --json
   show     Show one memory record; use --json for JSON output

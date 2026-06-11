@@ -459,6 +459,87 @@ fn memory_stale_lists_superseded_approved_memory() {
 }
 
 #[test]
+fn memory_quality_lists_low_quality_active_memory() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-vague",
+        MemoryKind::Decision,
+        "This is important.",
+        "review",
+    );
+    seed_candidate(
+        &db_path,
+        "mem-strong",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main after editing provider policy.",
+        "verify",
+    );
+    seed_candidate(
+        &db_path,
+        "mem-rejected",
+        MemoryKind::Decision,
+        "That thing matters.",
+        "review",
+    );
+    let reject = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "reject",
+            "mem-rejected",
+            "--actor",
+            "alice",
+            "--reason",
+            "too vague",
+        ],
+    );
+    assert!(reject.status.success(), "stderr: {}", stderr(&reject));
+
+    let output = run_codel00p(
+        &db_path,
+        &["memory", "quality", "--max-score", "80", "--limit", "5"],
+    );
+    let output_json = run_codel00p(
+        &db_path,
+        &[
+            "memory",
+            "quality",
+            "--max-score",
+            "80",
+            "--limit",
+            "5",
+            "--json",
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        output_json.status.success(),
+        "stderr: {}",
+        stderr(&output_json)
+    );
+    assert_eq!(
+        stdout(&output),
+        "mem-vague\tcandidate\tdecision\t65\tThis is important.\n"
+    );
+    let records: serde_json::Value =
+        serde_json::from_str(&stdout(&output_json)).expect("quality json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mem-vague");
+    assert_eq!(records[0]["quality"]["score"], 65);
+    assert_eq!(
+        records[0]["quality"]["findings"],
+        serde_json::json!([
+            "content is too short to be reusable",
+            "content uses vague language"
+        ])
+    );
+}
+
+#[test]
 fn memory_show_and_audit_print_stable_details() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

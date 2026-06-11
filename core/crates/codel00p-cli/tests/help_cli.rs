@@ -164,6 +164,11 @@ fn memory_help_documents_edit_command() {
         stdout(&output)
     );
     assert!(
+        stdout(&output).contains("quality  List active memory with low advisory quality scores"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
         stdout(&output)
             .contains("search   Search approved memory records; supports --sensitivity and --json"),
         "stdout: {}",

@@ -139,3 +139,6 @@ CLI and MCP memory JSON records include this signal as
 whose quality score is at or below `MemoryQualityQuery::max_score`. Rejected
 and archived records are excluded, and results are ordered by score and memory
 id so review queues remain deterministic.
+
+The CLI exposes this as `memory quality`, and the MCP server exposes the same
+review queue through `memory_quality`.

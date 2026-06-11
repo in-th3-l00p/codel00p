@@ -106,7 +106,8 @@ approval gate.
 
 The core memory repository also exposes a low-quality review query for active
 candidate or approved memory. Rejected and archived records remain auditable,
-but they do not appear in this cleanup queue.
+but they do not appear in this cleanup queue. The CLI command is
+`memory quality`; MCP exposes the same data through `memory_quality`.
 
 ## Prompt assembly
 

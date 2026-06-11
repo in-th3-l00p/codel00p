@@ -1,6 +1,6 @@
 use codel00p_memory::{
-    MemoryEdit, MemoryListFilter, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
-    MemoryStalenessQuery, ReviewDecision,
+    MemoryEdit, MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRepository,
+    MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{MemoryKind, MemorySensitivity, MemorySource, MemoryStatus};
 use serde_json::{Value, json};
@@ -16,6 +16,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "search" => memory_search(config, rest),
         "similar" => memory_similar(config, rest),
         "stale" => memory_stale(config, rest),
+        "quality" => memory_quality(config, rest),
         "list" => memory_list(config, rest),
         "show" => memory_show(config, rest),
         "audit" => memory_audit(config, rest),
@@ -26,6 +27,60 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "restore" => memory_restore(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
+}
+
+fn memory_quality(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let mut query = MemoryQualityQuery::new(config.project.clone());
+    let mut json_output = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--max-score" => {
+                let score = required_value(args, index, "--max-score")?
+                    .parse::<u8>()
+                    .map_err(|_| "invalid --max-score".to_string())?;
+                if score > 100 {
+                    return Err("invalid --max-score".to_string());
+                }
+                query = query.with_max_score(score);
+                index += 2;
+            }
+            "--limit" => {
+                let limit = required_value(args, index, "--limit")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid --limit".to_string())?;
+                query = query.with_limit(limit);
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory quality option: {flag}")),
+        }
+    }
+
+    let store = open_memory_store(&config)?;
+    let records = store
+        .quality_review(query)
+        .map_err(|error| error.to_string())?;
+    if json_output {
+        let items = records.iter().map(quality_memory_json).collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
+    let mut output = String::new();
+    for memory in records {
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            memory.entry().id(),
+            status_label(memory.entry().status()),
+            kind_label(memory.entry().kind()),
+            memory.quality().score(),
+            memory.entry().content()
+        ));
+    }
+    Ok(output)
 }
 
 fn memory_stale(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -364,6 +419,12 @@ fn stale_memory_json(memory: &codel00p_memory::StaleMemory) -> Value {
     item["score"] = json!(memory.score());
     item["newer"] = memory_entry_json(memory.newer_entry());
     item["newer"]["quality"] = memory_quality_json(&newer_quality);
+    item
+}
+
+fn quality_memory_json(memory: &codel00p_memory::QualityMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    item["quality"] = memory_quality_json(memory.quality());
     item
 }
 
