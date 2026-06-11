@@ -7,7 +7,7 @@ import { LoopMark } from "@/components/site/loop-mark";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 
-const REPO_URL = "https://github.com/inth3loop/codel00p";
+const REPO_URL = "https://github.com/in-th3-l00p/codel00p";
 
 const pillars = [
   {

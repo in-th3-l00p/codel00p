@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LoopMark } from "@/components/site/loop-mark";
 
-const REPO_URL = "https://github.com/inth3loop/codel00p";
+const REPO_URL = "https://github.com/in-th3-l00p/codel00p";
 
 export function SiteHeader() {
   return (
