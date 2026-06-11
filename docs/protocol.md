@@ -17,6 +17,8 @@ The first protocol crate includes:
 - `AgentEvent`;
 - `ProjectRef`;
 - `ProviderRef`;
+- built-in provider policy preset metadata for cloud, desktop, and SDK
+  configuration surfaces;
 - `MemoryEntry`, `MemoryKind`, `MemoryStatus`, and `MemorySource`.
 
 ## Boundaries
@@ -27,6 +29,7 @@ It should not own:
 
 - provider credentials;
 - provider transports;
+- provider policy enforcement;
 - agent loop execution;
 - tool implementation;
 - memory storage;
@@ -40,3 +43,7 @@ types are the stable exchange format between them.
 session messages, agent events, and model tool calls. This keeps the first
 runtime aligned with the exchange format that future CLI, memory, desktop, and
 cloud modules should consume.
+
+The TypeScript protocol package also publishes the provider policy preset
+catalog for app configuration surfaces. The metadata is descriptive only; the
+Rust provider layer still owns policy construction and enforcement.

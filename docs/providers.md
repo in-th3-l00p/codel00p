@@ -380,7 +380,8 @@ Implemented:
   credential values;
 - named provider policy preset metadata for `allow_all`, enterprise direct,
   cloud proxy, custom gateway, managed identity, organization credentials, and
-  direct agentic defaults;
+  direct agentic defaults, mirrored through `@codel00p/protocol-ts` and
+  `@codel00p/sdk` for app configuration surfaces;
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
 - published `ProviderPricingCatalog` ingestion for cloud or organization-managed

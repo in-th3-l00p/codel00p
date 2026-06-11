@@ -29,6 +29,8 @@ Implemented:
   Gemini GenerateContent, tool calls, fallback routing, model catalog listing,
   request-priced cost estimates, provider/model allowlist policy, and live
   integration-test toggles;
+- `@codel00p/protocol-ts` and `@codel00p/sdk` provider policy preset metadata
+  exports for cloud and desktop configuration surfaces;
 - `codel00p-harness` session loop, provider adapter, memory injection,
   lifecycle hooks, project instructions, context compaction primitives,
   read-only tools, editing tools, shell command tool, git tools, permissions,
@@ -70,7 +72,9 @@ Build:
 - richer provider-specific catalog metadata and model capability metadata;
 - managed pricing catalog distribution and refresh;
 - richer provider reasoning and cache metadata;
-- cloud proxy management.
+- cloud proxy management;
+- cloud and desktop provider policy preset selection backed by the shared
+  TypeScript preset catalog.
 
 Exit criteria:
 

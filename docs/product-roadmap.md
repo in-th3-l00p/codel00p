@@ -139,11 +139,14 @@ Current foundation:
   parameters, and capabilities, expanded cache/reasoning usage metadata, and
   live integration-test toggles, plus sparse provider-policy JSON
   serialization and named preset metadata for cloud and desktop control-plane
-  defaults, with CLI agent runs able to select built-in presets by ID.
+  defaults, with CLI agent runs able to select built-in presets by ID and
+  TypeScript protocol/SDK packages exposing the same preset catalog for app
+  configuration surfaces.
 
 Next work:
 
-- provider policy preset selection wiring in cloud configuration surfaces.
+- provider policy preset selection wiring in cloud configuration surfaces once
+  product/design context exists for the cloud UI.
 
 Exit criteria:
 
