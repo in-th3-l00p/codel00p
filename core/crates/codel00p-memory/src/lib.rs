@@ -485,6 +485,7 @@ pub struct MemoryStalenessQuery {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryQualityQuery {
     project: ProjectRef,
+    kind: Option<MemoryKind>,
     max_score: u8,
     limit: Option<usize>,
 }
@@ -532,9 +533,16 @@ impl MemoryQualityQuery {
     pub fn new(project: ProjectRef) -> Self {
         Self {
             project,
+            kind: None,
             max_score: 80,
             limit: None,
         }
+    }
+
+    /// Restricts the review queue to one memory kind.
+    pub fn with_kind(mut self, kind: MemoryKind) -> Self {
+        self.kind = Some(kind);
+        self
     }
 
     /// Sets the inclusive maximum quality score returned by the review query.
@@ -1137,6 +1145,10 @@ where
             }
 
             if entry.project().id() != query.project.id() {
+                continue;
+            }
+
+            if query.kind.is_some_and(|kind| entry.kind() != kind) {
                 continue;
             }
 

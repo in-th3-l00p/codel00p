@@ -171,6 +171,7 @@ fn mcp_tools() -> Vec<Value> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "kind": { "type": "string" },
                     "max_score": { "type": "integer", "minimum": 0, "maximum": 100 },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -402,6 +403,9 @@ fn read_resource(config: &CliConfig, params: &Value) -> Result<Value, String> {
 
 fn memory_quality(config: &CliConfig, arguments: &Value) -> Result<String, String> {
     let mut query = MemoryQualityQuery::new(config.project.clone());
+    if let Some(kind) = optional_string(arguments, "kind") {
+        query = query.with_kind(parse_kind(kind)?);
+    }
     if let Some(max_score) = optional_usize(arguments, "max_score")? {
         if max_score > 100 {
             return Err("argument `max_score` must be between 0 and 100".to_string());

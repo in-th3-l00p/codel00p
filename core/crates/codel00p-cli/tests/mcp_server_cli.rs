@@ -207,8 +207,30 @@ fn mcp_serve_exposes_quality_review_queue() {
             "id": 4,
             "method": "tools/call",
             "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mem-quality-workflow",
+                    "kind": "workflow",
+                    "content": "Run tests.",
+                    "session_id": "session-quality",
+                    "turn_id": "turn-quality"
+                }
+            }
+        }),
+    );
+    let workflow = read_response(&mut stdout);
+    assert_eq!(workflow["result"]["isError"], false);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
                 "name": "memory_quality",
                 "arguments": {
+                    "kind": "workflow",
                     "max_score": 80,
                     "limit": 5
                 }
@@ -222,14 +244,12 @@ fn mcp_serve_exposes_quality_review_queue() {
         .expect("quality text");
     let quality_items: Value = serde_json::from_str(quality_text).expect("quality json");
     assert_eq!(quality_items.as_array().expect("quality array").len(), 1);
-    assert_eq!(quality_items[0]["id"], "mem-quality-vague");
-    assert_eq!(quality_items[0]["quality"]["score"], 65);
+    assert_eq!(quality_items[0]["id"], "mem-quality-workflow");
+    assert_eq!(quality_items[0]["kind"], "workflow");
+    assert_eq!(quality_items[0]["quality"]["score"], 75);
     assert_eq!(
         quality_items[0]["quality"]["findings"],
-        json!([
-            "content is too short to be reusable",
-            "content uses vague language"
-        ])
+        json!(["content is too short to be reusable"])
     );
 
     child.kill().expect("kill server");

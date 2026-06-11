@@ -35,6 +35,10 @@ fn memory_quality(config: CliConfig, args: &[String]) -> CliResult<String> {
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
+            "--kind" => {
+                query = query.with_kind(parse_kind(&required_value(args, index, "--kind")?)?);
+                index += 2;
+            }
             "--max-score" => {
                 let score = required_value(args, index, "--max-score")?
                     .parse::<u8>()

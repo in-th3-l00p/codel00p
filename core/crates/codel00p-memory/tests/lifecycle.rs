@@ -179,6 +179,41 @@ fn quality_review_lists_low_quality_active_memory() {
 }
 
 #[test]
+fn quality_review_can_filter_low_quality_memory_by_kind() {
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-vague-decision",
+            project(),
+            MemoryKind::Decision,
+            "This is important.",
+            source(),
+        ))
+        .expect("create vague decision candidate");
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-short-workflow",
+            project(),
+            MemoryKind::Workflow,
+            "Run tests.",
+            source(),
+        ))
+        .expect("create short workflow candidate");
+
+    let low_quality = store
+        .quality_review(
+            MemoryQualityQuery::new(project())
+                .with_kind(MemoryKind::Workflow)
+                .with_max_score(80),
+        )
+        .expect("list low-quality workflow memory");
+
+    assert_eq!(low_quality.len(), 1);
+    assert_eq!(low_quality[0].entry().id(), "mem-short-workflow");
+    assert_eq!(low_quality[0].entry().kind(), MemoryKind::Workflow);
+}
+
+#[test]
 fn finds_near_duplicate_active_memory() {
     let mut store = InMemoryMemoryStore::default();
     store
