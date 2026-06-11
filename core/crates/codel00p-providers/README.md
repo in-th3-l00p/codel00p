@@ -64,6 +64,8 @@ Implemented:
   allowlist policy, provider and catalog capability requirements, and an
   enterprise-direct template plus enterprise cloud-proxy, custom-gateway,
   managed-identity, organization-credential, and direct-agentic templates;
+- serde-serializable provider policies with empty/default fields omitted for
+  cloud and desktop control-plane defaults;
 - OpenAI-compatible Chat Completions transport;
 - Azure AI Foundry deployment Chat Completions transport;
 - Anthropic Messages transport;
@@ -346,6 +348,8 @@ uses `max_tokens`, and lists models from
 - Keep route and model catalog audit metadata safe: report auth type,
   credential source/kind/source kind, policy metadata, catalog URL source, and
   counts without exposing credential values.
+- Keep `ProviderPolicy` JSON safe and sparse: it contains only policy IDs,
+  enums, and capability booleans, not credential values or endpoint secrets.
 - Keep policy templates conservative: direct corporate providers can be allowed
   by default while broker and custom endpoints remain explicit choices; use
   `enterprise_cloud_proxy` when those direct providers must resolve through

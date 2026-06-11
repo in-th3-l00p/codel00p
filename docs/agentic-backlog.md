@@ -27,7 +27,7 @@ Build:
   catalog policy metadata, provider-scoped auth type, credential
   kind/source-kind, and capability rules, plus enterprise cloud-proxy,
   custom-gateway, managed-identity, organization-credential, and direct agentic
-  templates.
+  templates and sparse policy JSON serialization for control-plane defaults.
 
 Why now: native provider execution is implemented, so routing quality is the
 next bottleneck before cloud-managed providers and team usage controls.
@@ -38,7 +38,8 @@ managed identity token providers, and offline-tested Azure IMDS, AWS IMDSv2,
 and GCP metadata server token acquisition, plus default-off live smoke test
 scaffolding for cloud runtimes. Added enterprise organization-credential and
 custom-gateway policy templates for team-managed provider credentials and
-configured gateway rollouts.
+configured gateway rollouts, then made `ProviderPolicy` safely serializable for
+cloud and desktop defaults.
 
 ### 2. Memory 2.0
 

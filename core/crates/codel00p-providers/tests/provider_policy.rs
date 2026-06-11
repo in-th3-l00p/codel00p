@@ -3,6 +3,7 @@ use codel00p_providers::{
     InferenceRequest, ProviderCapabilities, ProviderError, ProviderPolicy, RouteValueSource,
     default_registry,
 };
+use serde_json::json;
 
 #[test]
 fn provider_policy_blocks_disallowed_provider_before_inference() {
@@ -638,5 +639,71 @@ fn enterprise_custom_gateway_policy_template_requires_configured_gateway_provide
 
     assert!(
         matches!(broker, ProviderError::PolicyDenied { provider, reason } if provider == "openrouter" && reason.contains("not allowed"))
+    );
+}
+
+#[test]
+fn provider_policy_serializes_control_plane_defaults() {
+    let policy = ProviderPolicy::enterprise_custom_gateway()
+        .with_allowed_credential_source_kinds("custom", [CredentialSourceKind::Organization]);
+
+    let encoded = serde_json::to_value(&policy).unwrap();
+    assert_eq!(
+        encoded,
+        json!({
+            "allowed_providers": ["custom"],
+            "allowed_auth_types": {
+                "custom": ["Custom"]
+            },
+            "allowed_credential_source_kinds": {
+                "custom": ["Organization"]
+            }
+        })
+    );
+
+    let decoded: ProviderPolicy = serde_json::from_value(encoded).unwrap();
+    let gateway_client = InferenceClient::builder()
+        .registry(default_registry())
+        .organization_credential(
+            "custom",
+            Credential::api_key("gateway-key"),
+            "team-ai/custom-gateway",
+        )
+        .policy(decoded.clone())
+        .build();
+
+    let route = gateway_client
+        .resolve(
+            &InferenceRequest::builder("custom", "team/gpt-5")
+                .base_url("https://ai-gateway.example/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(route.provider, "custom");
+    assert_eq!(route.auth_type, AuthType::Custom);
+    assert_eq!(
+        route.policy.allowed_credential_source_kinds,
+        Some(vec![CredentialSourceKind::Organization])
+    );
+
+    let configured_client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("configured-key"))
+        .policy(decoded)
+        .build();
+
+    let configured = configured_client
+        .resolve(
+            &InferenceRequest::builder("custom", "team/gpt-5")
+                .base_url("https://ai-gateway.example/v1")
+                .message(ChatMessage::user("hello"))
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(configured, ProviderError::PolicyDenied { provider, reason } if provider == "custom" && reason.contains("credential source kind is not allowed"))
     );
 }

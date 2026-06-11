@@ -349,6 +349,8 @@ Implemented:
   enterprise cloud-proxy and custom-gateway route templates, enterprise
   managed-identity and organization-credential templates, and an
   enterprise-direct agentic catalog template;
+- serde-serializable `ProviderPolicy` values with empty/default fields omitted
+  so cloud and desktop control planes can persist safe provider defaults;
 - OpenAI-compatible Chat Completions transport with mocked HTTP tests;
 - GitHub Models profile coverage for `models.github.ai/inference`, `max_tokens`,
   and top-level array model catalogs;
@@ -371,6 +373,9 @@ Implemented:
 - `ProviderPolicy::enterprise_organization_credentials()` for organizations
   that want the same direct-provider boundary while requiring team-managed
   credential injection;
+- `ProviderPolicy` JSON serialization for safe control-plane defaults; policy
+  JSON records provider IDs, allowed enum values, and capability booleans, never
+  credential values;
 - client-level provider/model pricing injection with request-level pricing
   taking precedence for deterministic cost estimates;
 - published `ProviderPricingCatalog` ingestion for cloud or organization-managed

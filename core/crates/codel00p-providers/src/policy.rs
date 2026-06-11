@@ -16,14 +16,21 @@ const ENTERPRISE_DIRECT_PROVIDERS: &[&str] = &[
 ];
 
 /// Provider policy enforced during route resolution.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     allowed_providers: Option<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     allowed_models: BTreeMap<String, BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     allowed_auth_types: BTreeMap<String, BTreeSet<AuthType>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     allowed_credential_kinds: BTreeMap<String, BTreeSet<CredentialKind>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     allowed_credential_source_kinds: BTreeMap<String, BTreeSet<CredentialSourceKind>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     required_provider_capabilities: BTreeMap<String, ProviderCapabilities>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     required_model_capabilities: BTreeMap<String, ProviderCapabilities>,
 }
 

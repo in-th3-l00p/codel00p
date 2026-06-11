@@ -137,12 +137,13 @@ Current foundation:
   routing, shared environment credential loading for provider clients and CLI
   agent runs, enriched route audit metadata for catalog URLs, output-token
   parameters, and capabilities, expanded cache/reasoning usage metadata, and
-  live integration-test toggles.
+  live integration-test toggles, plus sparse provider-policy JSON
+  serialization for cloud and desktop control-plane defaults.
 
 Next work:
 
-- provider route policy serialization for cloud and desktop control-plane
-  defaults.
+- named provider policy preset metadata for cloud and desktop UI/config
+  selection.
 
 Exit criteria:
 
