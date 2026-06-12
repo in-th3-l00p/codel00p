@@ -3,6 +3,13 @@
 This backlog is the working queue for the agentic loop. It is ordered by current
 leverage, not by final product importance.
 
+For the larger Hermes-parity capabilities not yet on this queue (plugins and
+hooks, skills, self-improvement loop, sub-agents, scheduling, messaging gateway,
+execution backends, programmatic tool calling, TUI), see the
+[Initiatives](initiatives/README.md) epics. As each initiative starts, break its
+next phase into dated slice plans under `superpowers/plans/` and add the active
+slice here.
+
 ## Active Priority
 
 ### 1. Provider Route Intelligence

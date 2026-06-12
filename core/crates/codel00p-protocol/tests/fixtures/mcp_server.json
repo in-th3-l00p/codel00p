@@ -1,0 +1,10 @@
+{
+  "id": "mcp_1",
+  "org_id": "org_123",
+  "project_id": "proj_1",
+  "name": "GitHub",
+  "transport": "http",
+  "url": "https://mcp.github.example/sse",
+  "enabled": true,
+  "created_by": "user_admin"
+}

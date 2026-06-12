@@ -355,7 +355,7 @@ mod tests {
             store.get("cron-1").unwrap().prompt,
             "Run the nightly checks"
         );
-        assert!(store.set_enabled("cron-1", false).unwrap().enabled == false);
+        assert!(!store.set_enabled("cron-1", false).unwrap().enabled);
         assert!(!store.get("cron-1").unwrap().enabled);
 
         assert!(store.remove("cron-1").unwrap());

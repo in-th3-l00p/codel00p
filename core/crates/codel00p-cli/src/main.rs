@@ -1,6 +1,8 @@
 use std::{env, process::ExitCode};
 
 mod agent;
+mod cloud;
+mod cloud_client;
 mod config;
 mod config_cmd;
 mod connector_permissions;
@@ -63,6 +65,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "cron" => cron::run(config, agent_defaults, rest),
         "mcp" => mcp_server::run(config, rest),
         "memory" => memory::run(config, rest),
+        "cloud" => cloud::run(config, rest),
         "session" => session::run(config, rest),
         _ => Err(format!("unknown command: {command}")),
     }

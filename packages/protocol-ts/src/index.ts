@@ -42,6 +42,135 @@ export type MemoryEntry = {
   };
 };
 
+// --- Cloud / team control-plane contracts ---
+//
+// Clerk owns identity and membership; these shapes key codel00p product data by
+// Clerk organization and user identifiers.
+
+export type OrgRole = "admin" | "member";
+
+export type OrgRef = {
+  id: string;
+  name: string;
+  slug?: string;
+};
+
+/** The authenticated caller, as returned by `GET /me`. */
+export type Viewer = {
+  user_id: string;
+  email?: string;
+  org?: OrgRef;
+  org_role?: OrgRole;
+};
+
+/** A project owned by an organization. */
+export type Project = {
+  id: string;
+  org_id: string;
+  name: string;
+  slug: string;
+  repository_url?: string;
+};
+
+/** Request body for creating a project; the owning org comes from the session. */
+export type NewProject = {
+  name: string;
+  repository_url?: string;
+};
+
+export type MemorySensitivity = "normal" | "sensitive";
+
+/** Request to push a memory candidate into a project's review queue. */
+export type NewMemoryCandidate = {
+  kind: MemoryKind;
+  content: string;
+  tags?: string[];
+  sensitivity?: MemorySensitivity;
+  source_uri?: string;
+};
+
+export type MemoryReviewAction =
+  | "created"
+  | "approved"
+  | "rejected"
+  | "archived";
+
+/** One entry in a memory review audit trail. */
+export type MemoryAuditEntry = {
+  memory_id: string;
+  action: MemoryReviewAction;
+  actor: string;
+};
+
+/** Partial update to a project. */
+export type ProjectUpdate = {
+  name?: string;
+  repository_url?: string;
+};
+
+export type McpTransport = "stdio" | "http";
+
+/** A team MCP server configuration (org-shared pool of external tools). */
+export type McpServer = {
+  id: string;
+  org_id: string;
+  project_id: string;
+  name: string;
+  transport: McpTransport;
+  command?: string;
+  url?: string;
+  enabled: boolean;
+  created_by: string;
+};
+
+export type NewMcpServer = {
+  name: string;
+  transport: McpTransport;
+  command?: string;
+  url?: string;
+  enabled?: boolean;
+};
+
+export type McpServerUpdate = {
+  name?: string;
+  transport?: McpTransport;
+  command?: string;
+  url?: string;
+  enabled?: boolean;
+};
+
+/** A stored agent definition (org-shared pool of agents a team can run). */
+export type Agent = {
+  id: string;
+  org_id: string;
+  project_id: string;
+  name: string;
+  description?: string;
+  instructions?: string;
+  provider: string;
+  model: string;
+  mcp_server_ids?: string[];
+  created_by: string;
+};
+
+export type NewAgent = {
+  name: string;
+  description?: string;
+  instructions?: string;
+  provider: string;
+  model: string;
+  mcp_server_ids?: string[];
+};
+
+export type AgentUpdate = {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  provider?: string;
+  model?: string;
+  mcp_server_ids?: string[];
+};
+
 export const providerPolicyPresets = [
   {
     id: "allow_all",

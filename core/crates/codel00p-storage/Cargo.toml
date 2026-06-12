@@ -7,9 +7,15 @@ repository.workspace = true
 
 [dependencies]
 rusqlite = { version = "0.32.1", features = ["bundled"], optional = true }
+postgres = { version = "0.19.10", features = [
+    "with-serde_json-1",
+], optional = true }
+postgres-native-tls = { version = "0.5.1", optional = true }
+native-tls = { version = "0.2.14", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 thiserror = "2.0.12"
 
 [features]
 sqlite = ["dep:rusqlite"]
+postgres = ["dep:postgres", "dep:postgres-native-tls", "dep:native-tls"]

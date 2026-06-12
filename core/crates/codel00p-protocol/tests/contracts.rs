@@ -1,9 +1,11 @@
 use codel00p_protocol::{
-    AgentEvent, CompactionRecord, ContextWindowState, EventId, MemoryEntry, MemoryKind,
-    MemorySensitivity, MemorySource, MemoryStatus, PermissionDecision, PermissionMode,
-    PermissionRequest, PermissionScope, ProjectRef, ProtocolVersion, ProviderRef, RuntimeErrorKind,
-    SessionId, SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall, ToolProgress,
-    ToolResult, TurnId,
+    Agent, AgentEvent, AgentUpdate, CompactionRecord, ContextWindowState, EventId, McpServer,
+    McpServerUpdate, McpTransport, MemoryAuditEntry, MemoryEntry, MemoryKind, MemoryReviewAction,
+    MemorySensitivity, MemorySource, MemoryStatus, NewAgent, NewMcpServer, NewMemoryCandidate,
+    NewProject, OrgRef, OrgRole, PermissionDecision, PermissionMode, PermissionRequest,
+    PermissionScope, Project, ProjectRef, ProjectUpdate, ProtocolVersion, ProviderRef,
+    RuntimeErrorKind, SessionId, SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall,
+    ToolProgress, ToolResult, TurnId, Viewer,
 };
 use serde_json::json;
 
@@ -252,4 +254,221 @@ fn tool_progress_and_session_persistence_are_protocol_events() {
     assert_eq!(progress.phase(), "started");
     assert_eq!(persisted.record_id(), "record-1");
     assert_eq!(persisted.sequence(), 3);
+}
+
+#[test]
+fn org_roles_normalize_from_clerk_claims() {
+    assert_eq!(OrgRole::from_clerk_claim("org:admin"), Some(OrgRole::Admin));
+    assert_eq!(OrgRole::from_clerk_claim("admin"), Some(OrgRole::Admin));
+    assert_eq!(
+        OrgRole::from_clerk_claim("org:member"),
+        Some(OrgRole::Member)
+    );
+    assert_eq!(OrgRole::from_clerk_claim("guest"), None);
+    assert!(OrgRole::Admin.is_admin());
+    assert!(!OrgRole::Member.is_admin());
+
+    let encoded = serde_json::to_value([OrgRole::Admin, OrgRole::Member]).expect("serialize roles");
+    assert_eq!(encoded, json!(["admin", "member"]));
+}
+
+#[test]
+fn viewer_carries_clerk_identity_and_org_context() {
+    let viewer = Viewer::new("user_123").with_email("dev@team.dev").with_org(
+        OrgRef::new("org_123", "Acme Engineering").with_slug("acme"),
+        OrgRole::Admin,
+    );
+
+    let encoded = serde_json::to_value(&viewer).expect("serialize viewer");
+    let decoded: Viewer = serde_json::from_value(encoded.clone()).expect("deserialize viewer");
+
+    assert_eq!(decoded, viewer);
+    assert_eq!(viewer.user_id(), "user_123");
+    assert_eq!(viewer.email(), Some("dev@team.dev"));
+    assert_eq!(viewer.org().map(|org| org.id()), Some("org_123"));
+    assert_eq!(viewer.org().and_then(|org| org.slug()), Some("acme"));
+    assert_eq!(viewer.org_role(), Some(OrgRole::Admin));
+    assert_eq!(encoded["org_role"], "admin");
+}
+
+#[test]
+fn viewer_without_org_omits_optional_fields() {
+    let viewer = Viewer::new("user_solo");
+    let encoded = serde_json::to_value(&viewer).expect("serialize viewer");
+
+    assert_eq!(encoded, json!({ "user_id": "user_solo" }));
+}
+
+#[test]
+fn projects_are_org_owned_product_data() {
+    let project = Project::new("project-1", "org_123", "codel00p", "codel00p")
+        .with_repository_url("https://github.com/in-th3-l00p/codel00p");
+
+    let encoded = serde_json::to_value(&project).expect("serialize project");
+    let decoded: Project = serde_json::from_value(encoded.clone()).expect("deserialize project");
+
+    assert_eq!(decoded, project);
+    assert_eq!(project.org_id(), "org_123");
+    assert_eq!(project.slug(), "codel00p");
+    assert_eq!(
+        project.repository_url(),
+        Some("https://github.com/in-th3-l00p/codel00p")
+    );
+    assert_eq!(encoded["org_id"], "org_123");
+}
+
+#[test]
+fn new_memory_candidate_defaults_and_round_trips() {
+    let request: NewMemoryCandidate = serde_json::from_value(json!({
+        "kind": "convention",
+        "content": "Run cargo from core/."
+    }))
+    .expect("deserialize candidate");
+
+    assert_eq!(request.kind, MemoryKind::Convention);
+    assert_eq!(request.tags, Vec::<String>::new());
+    assert_eq!(request.sensitivity, MemorySensitivity::Normal);
+    assert_eq!(request.source_uri, None);
+
+    let full = NewMemoryCandidate {
+        tags: vec!["testing".into()],
+        sensitivity: MemorySensitivity::Sensitive,
+        source_uri: Some("https://example.com/pr/1".into()),
+        ..NewMemoryCandidate::new(MemoryKind::Workflow, "Use the deploy script.")
+    };
+    let encoded = serde_json::to_value(&full).expect("serialize candidate");
+    assert_eq!(encoded["kind"], "workflow");
+    assert_eq!(encoded["sensitivity"], "sensitive");
+    assert_eq!(encoded["source_uri"], "https://example.com/pr/1");
+}
+
+#[test]
+fn memory_review_actions_map_to_statuses() {
+    assert_eq!(
+        MemoryReviewAction::Approved.resulting_status(),
+        Some(MemoryStatus::Approved)
+    );
+    assert_eq!(
+        MemoryReviewAction::Rejected.resulting_status(),
+        Some(MemoryStatus::Rejected)
+    );
+
+    let entry = MemoryAuditEntry::new("mem-1", MemoryReviewAction::Approved, "user_admin");
+    let encoded = serde_json::to_value(&entry).expect("serialize audit entry");
+    assert_eq!(
+        encoded,
+        json!({ "memory_id": "mem-1", "action": "approved", "actor": "user_admin" })
+    );
+    let decoded: MemoryAuditEntry = serde_json::from_value(encoded).expect("deserialize");
+    assert_eq!(decoded, entry);
+}
+
+#[test]
+fn new_project_request_omits_owning_org() {
+    let request: NewProject =
+        serde_json::from_value(json!({ "name": "codel00p" })).expect("deserialize new project");
+
+    assert_eq!(request.name, "codel00p");
+    assert_eq!(request.repository_url, None);
+
+    let with_repo = NewProject {
+        name: "codel00p".to_string(),
+        repository_url: Some("https://example.com/repo".to_string()),
+    };
+    let encoded = serde_json::to_value(&with_repo).expect("serialize new project");
+    assert_eq!(
+        encoded,
+        json!({ "name": "codel00p", "repository_url": "https://example.com/repo" })
+    );
+}
+
+#[test]
+fn project_update_omits_absent_fields() {
+    let update: ProjectUpdate =
+        serde_json::from_value(json!({ "name": "renamed" })).expect("deserialize");
+    assert_eq!(update.name.as_deref(), Some("renamed"));
+    assert_eq!(update.repository_url, None);
+    assert_eq!(
+        serde_json::to_value(ProjectUpdate::default()).expect("serialize"),
+        json!({})
+    );
+}
+
+#[test]
+fn agents_reference_mcp_servers_and_round_trip() {
+    let agent = Agent::new(
+        "agent_1",
+        "org_123",
+        "proj_1",
+        "Release reviewer",
+        "anthropic",
+        "claude-opus-4-8",
+        "user_admin",
+    )
+    .with_description("Reviews release branches.")
+    .with_instructions("Be terse. Flag risky changes.")
+    .with_mcp_server_ids(vec!["mcp_1".to_string()]);
+
+    let encoded = serde_json::to_value(&agent).expect("serialize agent");
+    let decoded: Agent = serde_json::from_value(encoded.clone()).expect("deserialize agent");
+
+    assert_eq!(decoded, agent);
+    assert_eq!(agent.provider(), "anthropic");
+    assert_eq!(agent.mcp_server_ids(), &["mcp_1"]);
+    assert_eq!(encoded["created_by"], "user_admin");
+
+    // New-agent defaults to no MCP servers; update is sparse.
+    let new: NewAgent = serde_json::from_value(
+        json!({ "name": "Doc agent", "provider": "openai", "model": "gpt-5" }),
+    )
+    .expect("deserialize new agent");
+    assert_eq!(new.mcp_server_ids, Vec::<String>::new());
+    assert_eq!(
+        serde_json::to_value(AgentUpdate {
+            model: Some("claude-opus-4-8".into()),
+            ..AgentUpdate::default()
+        })
+        .expect("serialize update"),
+        json!({ "model": "claude-opus-4-8" })
+    );
+}
+
+#[test]
+fn mcp_servers_capture_transport_and_round_trip() {
+    let server = McpServer::new(
+        "mcp_1",
+        "org_123",
+        "proj_1",
+        "GitHub",
+        McpTransport::Http,
+        "user_admin",
+    )
+    .with_url("https://mcp.github.example/sse");
+
+    let encoded = serde_json::to_value(&server).expect("serialize mcp");
+    let decoded: McpServer = serde_json::from_value(encoded.clone()).expect("deserialize mcp");
+
+    assert_eq!(decoded, server);
+    assert_eq!(server.transport(), McpTransport::Http);
+    assert_eq!(server.url(), Some("https://mcp.github.example/sse"));
+    assert!(server.enabled());
+    assert_eq!(encoded["transport"], "http");
+
+    // New-mcp defaults enabled to true; transport round-trips both variants.
+    let new: NewMcpServer = serde_json::from_value(json!({
+        "name": "Local fs",
+        "transport": "stdio",
+        "command": "codel00p-mcp-fs"
+    }))
+    .expect("deserialize new mcp");
+    assert_eq!(new.transport, McpTransport::Stdio);
+    assert!(new.enabled);
+    assert_eq!(
+        serde_json::to_value(McpServerUpdate {
+            enabled: Some(false),
+            ..McpServerUpdate::default()
+        })
+        .expect("serialize update"),
+        json!({ "enabled": false })
+    );
 }

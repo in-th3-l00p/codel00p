@@ -11,13 +11,14 @@
     "check:boundaries": "node tools/scripts/check-package-boundaries.mjs",
     "check:protocol": "node tools/scripts/check-protocol-fixtures.mjs",
     "dev:landing": "pnpm --filter @codel00p/landing dev",
-    "dev:cloud": "pnpm --filter @codel00p/cloud dev",
     "dev:desktop": "pnpm --filter @codel00p/desktop dev",
     "core:fmt": "cd core && cargo fmt --all -- --check",
     "core:test": "cd core && cargo test --workspace",
     "core:test:cli": "cd core && cargo test -p codel00p-cli",
     "core:test:sqlite": "cd core && cargo test -p codel00p-storage --features sqlite",
     "core:test:memory:sqlite": "cd core && cargo test -p codel00p-memory --features sqlite",
+    "core:test:postgres": "cd core && cargo test -p codel00p-storage --features postgres --test postgres_storage",
+    "core:test:cloud:postgres": "cd core && cargo test -p codel00p-cloud --features postgres --test http_postgres",
     "core:coverage:storage": "cd core && cargo llvm-cov -p codel00p-storage --features sqlite --summary-only",
     "core:clippy": "cd core && cargo clippy --workspace --all-targets -- -D warnings",
     "core:clippy:sqlite": "cd core && cargo clippy -p codel00p-storage --features sqlite --all-targets -- -D warnings",
@@ -28,5 +29,11 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "typescript": "6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   }
 }

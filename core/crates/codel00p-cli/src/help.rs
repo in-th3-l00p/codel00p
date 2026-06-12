@@ -12,6 +12,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
+            "cloud" => Some(CLOUD_HELP),
             _ => None,
         },
         [command, subcommand, flag] if is_help(flag) => {
@@ -65,6 +66,29 @@ Commands:
   mcp        Expose codel00p as an MCP server
   memory     Review project memory
   session    Inspect persisted sessions
+  cloud      Sync project memory with the team cloud
+";
+
+const CLOUD_HELP: &str = "\
+Usage: codel00p cloud <command> [options]
+
+Sync project memory with the codel00p cloud service. The org comes from the
+session token; the cloud project is selected with --project.
+
+Connection options (or env CODEL00P_API_URL / CODEL00P_TOKEN / CODEL00P_CLOUD_PROJECT):
+  --api-url <url>    Base URL of the codel00p-cloud service
+  --token <jwt>      Clerk session token for authentication
+  --project <id>     Cloud project id
+
+Commands:
+  status   Show the authenticated viewer and active organization
+  push     Push local memory (default: approved) to the project review queue
+  pull     Import approved cloud memory into the local store
+  run      Resolve and run a stored cloud agent (config + MCP + RAG context)
+
+Push options:  --status <status>  --limit <n>  --dry-run  --json
+Pull options:  --actor <name>  --json
+Run usage:     codel00p cloud run <agent-id> --task \"...\" [--plan] [--limit n] [--json]
 ";
 
 const CRON_HELP: &str = "\

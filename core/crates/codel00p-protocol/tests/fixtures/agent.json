@@ -1,0 +1,12 @@
+{
+  "id": "agent_1",
+  "org_id": "org_123",
+  "project_id": "proj_1",
+  "name": "Release reviewer",
+  "description": "Reviews release branches.",
+  "instructions": "Be terse. Flag risky changes.",
+  "provider": "anthropic",
+  "model": "claude-opus-4-8",
+  "mcp_server_ids": ["mcp_1"],
+  "created_by": "user_admin"
+}

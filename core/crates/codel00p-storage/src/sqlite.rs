@@ -366,16 +366,32 @@ impl DocumentStore for SqliteStorage {
 
         Ok(documents)
     }
+
+    fn delete_document(
+        &mut self,
+        scope: &StorageScope,
+        collection: &str,
+        id: &str,
+    ) -> Result<bool, StorageError> {
+        let scope_key = scope_key(scope)?;
+        let deleted = self
+            .connection
+            .execute(
+                "DELETE FROM storage_documents WHERE scope = ?1 AND collection = ?2 AND id = ?3",
+                params![scope_key, collection, id],
+            )
+            .map_err(sqlite_error)?;
+        Ok(deleted > 0)
+    }
 }
 
 impl AppendLogStore for SqliteStorage {
-    fn append_log(
+    fn append_log_entry(
         &mut self,
         scope: StorageScope,
-        stream: impl Into<String>,
+        stream: String,
         payload: Value,
     ) -> Result<AppendLogEntry, StorageError> {
-        let stream = stream.into();
         let scope_key = scope_key(&scope)?;
         let transaction = self
             .connection

@@ -10,6 +10,9 @@
     "troubleshooting"
   ],
   "memoryStatuses": ["candidate", "approved", "rejected", "archived"],
+  "memoryReviewActions": ["created", "approved", "rejected", "archived"],
+  "mcpTransports": ["stdio", "http"],
+  "orgRoles": ["admin", "member"],
   "providerPolicyPresets": [
     {
       "id": "allow_all",

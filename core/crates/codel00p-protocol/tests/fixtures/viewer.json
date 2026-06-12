@@ -1,0 +1,10 @@
+{
+  "user_id": "user_123",
+  "email": "dev@team.dev",
+  "org": {
+    "id": "org_123",
+    "name": "Acme Engineering",
+    "slug": "acme"
+  },
+  "org_role": "admin"
+}

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Pinyon_Script, Space_Grotesk, Geist_Mono } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { dark } from "@clerk/themes";
 import "./globals.css";
 
 const sans = Space_Grotesk({
@@ -52,13 +54,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`dark ${sans.variable} ${hand.variable} ${mono.variable} h-full antialiased`}
+    <ClerkProvider
+      signInUrl="/sign-in"
+      appearance={{
+        baseTheme: dark,
+        variables: {
+          colorPrimary: "#8b7cf6",
+          colorBackground: "#1f1b27",
+          borderRadius: "0.6rem"
+        }
+      }}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
-      </body>
-    </html>
+      <html
+        lang="en"
+        className={`dark ${sans.variable} ${hand.variable} ${mono.variable} h-full antialiased`}
+      >
+        <body className="min-h-full flex flex-col bg-background text-foreground">
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

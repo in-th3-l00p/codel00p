@@ -10,6 +10,12 @@ codel00p is building toward three combined capabilities:
 - a team control plane for project memory, provider policy, permissions, usage,
   and audit history.
 
+The [Initiatives](initiatives/README.md) directory plans the Hermes-distinctive
+capabilities codel00p does not yet have (skills, self-improvement, plugins and
+hooks, scheduling, messaging gateway, sandboxed execution backends, programmatic
+tool calling, TUI) and maps each to the milestones below. Start with the
+[Hermes Gap Analysis](initiatives/hermes-gap-analysis.md).
+
 ## Milestone 1: Local Agent Foundation
 
 Goal: prove that a local CLI agent can work in a repository and grow reviewed

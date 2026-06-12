@@ -145,8 +145,11 @@ The first Rust modules have started:
   (`codel00p config` / `codel00p providers`) so commands run without flags,
   terminal agent runs, interactive multi-turn chat sessions with resumable
   history, in-session tools, and live token streaming, conversation listing,
-  durable session inspection, and memory review commands for listing,
-  inspecting, approving, rejecting, archiving, and auditing memory records.
+  durable session inspection, memory review commands for listing, inspecting,
+  approving, rejecting, archiving, and auditing memory records, and
+  `codel00p cloud` commands to push local memory to a team review queue, pull
+  approved team memory back into the local store, and run a stored cloud agent
+  (resolving its config, MCP servers, and RAG context, then executing a turn).
 - [codel00p-providers](core/crates/codel00p-providers): provider registry,
   high-level inference client, OpenAI-compatible Chat Completions transport,
   Azure Chat Completions transport, Anthropic Messages transport, OpenAI
@@ -161,7 +164,14 @@ The first Rust modules have started:
 - [codel00p-protocol](core/crates/codel00p-protocol): shared data contracts for
   sessions, turns, events, tool calls, providers, projects, and memory entries.
 - [codel00p-storage](core/crates/codel00p-storage): backend-neutral storage
-  primitives for scoped key-value state, documents, and append logs.
+  primitives for scoped key-value state, documents, and append logs, with
+  in-memory, SQLite, and Postgres backends behind one `StorageBackend` trait.
+- [codel00p-cloud](core/crates/codel00p-cloud): the team control-plane HTTP
+  service (axum) — Clerk-authenticated organizations as shared pools of projects,
+  agents, MCP servers, and a RAG knowledge base. Full CRUD for projects/agents/
+  MCP servers, the shared memory review queue (push, list, approve/reject, audit),
+  and RAG retrieval over approved memory; org-admin write access; persisting
+  through `codel00p-storage`.
 - [codel00p-session](core/crates/codel00p-session): durable session metadata and
   replay built on top of `codel00p-storage`.
 - [codel00p-mcp](core/crates/codel00p-mcp): MCP client/server runtime,

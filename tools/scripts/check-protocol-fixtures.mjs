@@ -40,6 +40,62 @@ if (typeof memoryEntry.project?.id !== "string" || typeof memoryEntry.project?.n
   errors.push("memory_entry project must contain string id and name");
 }
 
+const viewer = readFixture("viewer.json");
+if (typeof viewer.user_id !== "string") {
+  errors.push("viewer user_id must be a string");
+}
+if (viewer.org_role !== undefined && !contract.orgRoles.includes(viewer.org_role)) {
+  errors.push(`viewer org_role ${viewer.org_role} is not in protocol-ts contract`);
+}
+if (viewer.org !== undefined) {
+  if (typeof viewer.org.id !== "string" || typeof viewer.org.name !== "string") {
+    errors.push("viewer org must contain string id and name");
+  }
+}
+
+const project = readFixture("project.json");
+for (const field of ["id", "org_id", "name", "slug"]) {
+  if (typeof project[field] !== "string") {
+    errors.push(`project ${field} must be a string`);
+  }
+}
+if (project.repository_url !== undefined && typeof project.repository_url !== "string") {
+  errors.push("project repository_url must be a string when present");
+}
+
+const agent = readFixture("agent.json");
+for (const field of ["id", "org_id", "project_id", "name", "provider", "model", "created_by"]) {
+  if (typeof agent[field] !== "string") {
+    errors.push(`agent ${field} must be a string`);
+  }
+}
+if (agent.mcp_server_ids !== undefined && !Array.isArray(agent.mcp_server_ids)) {
+  errors.push("agent mcp_server_ids must be an array when present");
+}
+
+const mcpServer = readFixture("mcp_server.json");
+if (!contract.mcpTransports.includes(mcpServer.transport)) {
+  errors.push(`mcp_server transport ${mcpServer.transport} is not in protocol-ts contract`);
+}
+for (const field of ["id", "org_id", "project_id", "name", "created_by"]) {
+  if (typeof mcpServer[field] !== "string") {
+    errors.push(`mcp_server ${field} must be a string`);
+  }
+}
+if (typeof mcpServer.enabled !== "boolean") {
+  errors.push("mcp_server enabled must be a boolean");
+}
+
+const memoryAudit = readFixture("memory_audit_entry.json");
+if (!contract.memoryReviewActions.includes(memoryAudit.action)) {
+  errors.push(`memory_audit_entry action ${memoryAudit.action} is not in protocol-ts contract`);
+}
+for (const field of ["memory_id", "actor"]) {
+  if (typeof memoryAudit[field] !== "string") {
+    errors.push(`memory_audit_entry ${field} must be a string`);
+  }
+}
+
 const expectedProviderPolicyPresets = [
   {
     id: "allow_all",

@@ -8,6 +8,11 @@ mod sqlite;
 #[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStorage;
 
+#[cfg(feature = "postgres")]
+mod postgres;
+#[cfg(feature = "postgres")]
+pub use postgres::PostgresStorage;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct StorageScope {
     organization_id: Option<String>,
@@ -19,6 +24,15 @@ pub struct StorageScope {
 impl StorageScope {
     pub fn global() -> Self {
         Self::default()
+    }
+
+    pub fn organization(organization_id: impl Into<String>) -> Self {
+        Self {
+            organization_id: Some(organization_id.into()),
+            project_id: None,
+            workspace_id: None,
+            user_id: None,
+        }
     }
 
     pub fn project(organization_id: impl Into<String>, project_id: impl Into<String>) -> Self {
@@ -247,6 +261,14 @@ pub trait DocumentStore {
         scope: &StorageScope,
         collection: &str,
     ) -> Result<Vec<StorageDocument>, StorageError>;
+
+    /// Removes a document, returning whether one existed.
+    fn delete_document(
+        &mut self,
+        scope: &StorageScope,
+        collection: &str,
+        id: &str,
+    ) -> Result<bool, StorageError>;
 }
 
 pub trait KeyValueStore {
@@ -268,12 +290,29 @@ pub trait KeyValueStore {
 }
 
 pub trait AppendLogStore {
+    /// Object-safe append. Implementors provide this; most callers prefer the
+    /// `append_log` convenience below.
+    fn append_log_entry(
+        &mut self,
+        scope: StorageScope,
+        stream: String,
+        payload: Value,
+    ) -> Result<AppendLogEntry, StorageError>;
+
+    /// Ergonomic append accepting anything string-like. Marked `Self: Sized` so
+    /// it stays out of the vtable, keeping the trait object-safe (a `dyn`
+    /// backend appends via [`AppendLogStore::append_log_entry`]).
     fn append_log(
         &mut self,
         scope: StorageScope,
         stream: impl Into<String>,
         payload: Value,
-    ) -> Result<AppendLogEntry, StorageError>;
+    ) -> Result<AppendLogEntry, StorageError>
+    where
+        Self: Sized,
+    {
+        self.append_log_entry(scope, stream.into(), payload)
+    }
 
     fn replay_log(
         &self,
@@ -281,6 +320,15 @@ pub trait AppendLogStore {
         stream: &str,
     ) -> Result<Vec<AppendLogEntry>, StorageError>;
 }
+
+/// A complete storage backend: documents, key-value state, and append logs. The
+/// blanket implementation means every type that provides all three primitives is
+/// usable wherever a full backend is required (e.g. behind a trait object in a
+/// service), so backends can be swapped — in-memory, SQLite, Postgres — without
+/// changing call sites.
+pub trait StorageBackend: DocumentStore + KeyValueStore + AppendLogStore + Send {}
+
+impl<T> StorageBackend for T where T: DocumentStore + KeyValueStore + AppendLogStore + Send {}
 
 #[derive(Default)]
 pub struct InMemoryStorage {
@@ -382,16 +430,27 @@ impl DocumentStore for InMemoryStorage {
 
         Ok(documents)
     }
+
+    fn delete_document(
+        &mut self,
+        scope: &StorageScope,
+        collection: &str,
+        id: &str,
+    ) -> Result<bool, StorageError> {
+        Ok(self
+            .documents
+            .remove(&DocumentKey::new(scope, collection, id))
+            .is_some())
+    }
 }
 
 impl AppendLogStore for InMemoryStorage {
-    fn append_log(
+    fn append_log_entry(
         &mut self,
         scope: StorageScope,
-        stream: impl Into<String>,
+        stream: String,
         payload: Value,
     ) -> Result<AppendLogEntry, StorageError> {
-        let stream = stream.into();
         let entries = self.logs.entry(LogKey::new(&scope, &stream)).or_default();
         let sequence = entries.len() as u64 + 1;
         let entry = AppendLogEntry {
@@ -470,4 +529,84 @@ impl LogKey {
 
 pub fn crate_name() -> &'static str {
     "codel00p-storage"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn organization_scope_groups_documents_for_listing() {
+        let mut storage = InMemoryStorage::default();
+        let acme = StorageScope::organization("org_acme");
+        let other = StorageScope::organization("org_other");
+
+        assert_eq!(acme.organization_id(), Some("org_acme"));
+        assert_eq!(acme.project_id(), None);
+
+        storage
+            .put_document(StorageDocument::new(
+                acme.clone(),
+                "projects",
+                "proj_1",
+                json!({ "name": "alpha" }),
+            ))
+            .expect("put alpha");
+        storage
+            .put_document(StorageDocument::new(
+                acme.clone(),
+                "projects",
+                "proj_2",
+                json!({ "name": "beta" }),
+            ))
+            .expect("put beta");
+        storage
+            .put_document(StorageDocument::new(
+                other,
+                "projects",
+                "proj_3",
+                json!({ "name": "gamma" }),
+            ))
+            .expect("put gamma");
+
+        let listed = storage
+            .list_documents(&acme, "projects")
+            .expect("list org projects");
+
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].id(), "proj_1");
+        assert_eq!(listed[1].id(), "proj_2");
+    }
+
+    #[test]
+    fn documents_can_be_deleted() {
+        let mut storage = InMemoryStorage::default();
+        let scope = StorageScope::project("org_acme", "proj_1");
+        storage
+            .put_document(StorageDocument::new(
+                scope.clone(),
+                "agents",
+                "agent_1",
+                json!({ "name": "reviewer" }),
+            ))
+            .expect("put");
+
+        assert!(
+            storage
+                .delete_document(&scope, "agents", "agent_1")
+                .expect("delete")
+        );
+        assert!(
+            !storage
+                .delete_document(&scope, "agents", "agent_1")
+                .expect("delete missing")
+        );
+        assert!(
+            storage
+                .get_document(&scope, "agents", "agent_1")
+                .expect("get")
+                .is_none()
+        );
+    }
 }

@@ -1,8 +1,9 @@
 use codel00p_protocol::{
-    AgentEvent, CompactionRecord, ContextWindowState, EventId, MemoryEntry, MemoryKind,
-    MemorySource, MemoryStatus, PermissionDecision, PermissionMode, PermissionRequest,
-    PermissionScope, ProjectRef, RuntimeErrorKind, SessionId, SessionMessage,
-    SessionPersistenceEvent, ToolCall, ToolProgress, ToolResult, TurnId,
+    Agent, AgentEvent, CompactionRecord, ContextWindowState, EventId, McpServer, McpTransport,
+    MemoryAuditEntry, MemoryEntry, MemoryKind, MemoryReviewAction, MemorySource, MemoryStatus,
+    OrgRef, OrgRole, PermissionDecision, PermissionMode, PermissionRequest, PermissionScope,
+    Project, ProjectRef, RuntimeErrorKind, SessionId, SessionMessage, SessionPersistenceEvent,
+    ToolCall, ToolProgress, ToolResult, TurnId, Viewer,
 };
 use serde_json::json;
 
@@ -107,6 +108,79 @@ fn runtime_contracts_match_golden_json() {
     .expect("serialize runtime contracts");
 
     assert_eq!(value, fixture("runtime_contracts"));
+}
+
+#[test]
+fn viewer_matches_golden_json() {
+    let value = serde_json::to_value(Viewer::new("user_123").with_email("dev@team.dev").with_org(
+        OrgRef::new("org_123", "Acme Engineering").with_slug("acme"),
+        OrgRole::Admin,
+    ))
+    .expect("serialize viewer");
+
+    assert_eq!(value, fixture("viewer"));
+}
+
+#[test]
+fn project_matches_golden_json() {
+    let value = serde_json::to_value(
+        Project::new("project-1", "org_123", "codel00p", "codel00p")
+            .with_repository_url("https://github.com/in-th3-l00p/codel00p"),
+    )
+    .expect("serialize project");
+
+    assert_eq!(value, fixture("project"));
+}
+
+#[test]
+fn memory_audit_entry_matches_golden_json() {
+    let value = serde_json::to_value(MemoryAuditEntry::new(
+        "mem-1",
+        MemoryReviewAction::Approved,
+        "user_admin",
+    ))
+    .expect("serialize audit entry");
+
+    assert_eq!(value, fixture("memory_audit_entry"));
+}
+
+#[test]
+fn agent_matches_golden_json() {
+    let value = serde_json::to_value(
+        Agent::new(
+            "agent_1",
+            "org_123",
+            "proj_1",
+            "Release reviewer",
+            "anthropic",
+            "claude-opus-4-8",
+            "user_admin",
+        )
+        .with_description("Reviews release branches.")
+        .with_instructions("Be terse. Flag risky changes.")
+        .with_mcp_server_ids(vec!["mcp_1".to_string()]),
+    )
+    .expect("serialize agent");
+
+    assert_eq!(value, fixture("agent"));
+}
+
+#[test]
+fn mcp_server_matches_golden_json() {
+    let value = serde_json::to_value(
+        McpServer::new(
+            "mcp_1",
+            "org_123",
+            "proj_1",
+            "GitHub",
+            McpTransport::Http,
+            "user_admin",
+        )
+        .with_url("https://mcp.github.example/sse"),
+    )
+    .expect("serialize mcp server");
+
+    assert_eq!(value, fixture("mcp_server"));
 }
 
 fn fixture(name: &str) -> serde_json::Value {

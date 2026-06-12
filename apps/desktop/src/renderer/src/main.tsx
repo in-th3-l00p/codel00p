@@ -1,12 +1,22 @@
 import { createRoot } from "react-dom/client";
-import { ProductShell } from "@codel00p/ui";
+import { ClerkProvider } from "@clerk/clerk-react";
 
+import { App } from "./App";
+import { MissingKeyNotice } from "./components/auth/missing-key-notice";
 import "./styles.css";
 
-createRoot(document.getElementById("root")!).render(
-  <ProductShell
-    eyebrow="Desktop"
-    title="Session control"
-    description="Supervise agents, review memory, and inspect project knowledge from the desktop workspace."
-  />
-);
+const publishableKey = import.meta.env.RENDERER_VITE_CLERK_PUBLISHABLE_KEY as
+  | string
+  | undefined;
+
+const root = createRoot(document.getElementById("root")!);
+
+if (!publishableKey) {
+  root.render(<MissingKeyNotice />);
+} else {
+  root.render(
+    <ClerkProvider publishableKey={publishableKey} afterSignOutUrl="/">
+      <App />
+    </ClerkProvider>
+  );
+}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
 import { LoopMark } from "@/components/site/loop-mark";
@@ -32,6 +33,20 @@ export function SiteHeader() {
               GitHub
             </a>
           </Button>
+
+          <span className="mx-1.5 h-4 w-px bg-border" aria-hidden />
+
+          <SignedOut>
+            <Button asChild className="h-8 rounded-full px-4">
+              <Link href="/sign-in">Cloud</Link>
+            </Button>
+          </SignedOut>
+          <SignedIn>
+            <Button asChild variant="outline" className="h-8 rounded-full px-4">
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+            <UserButton />
+          </SignedIn>
         </nav>
       </div>
     </header>
