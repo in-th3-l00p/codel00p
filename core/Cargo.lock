@@ -230,6 +230,7 @@ name = "codel00p-cli"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64",
  "codel00p-cron",
  "codel00p-harness",
  "codel00p-mcp",

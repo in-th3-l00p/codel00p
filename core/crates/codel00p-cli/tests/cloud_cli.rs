@@ -247,7 +247,38 @@ fn cloud_requires_connection_details() {
     let output = run_codel00p(&db_path, &["cloud", "status"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("stderr utf8");
-    assert!(stderr.contains("missing --api-url"));
+    assert!(stderr.contains("--api-url"), "stderr: {stderr}");
+}
+
+#[test]
+fn cloud_uses_stored_login_credentials() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let server = MockServer::start();
+    server.mock(|when, then| {
+        when.method(GET).path("/me");
+        then.status(200).json_body(json!({
+            "user_id": "user_admin",
+            "email": "admin@team.dev",
+            "org": { "id": "org_acme", "name": "Acme" },
+            "org_role": "admin"
+        }));
+    });
+
+    // Simulate what `codel00p login` writes (CODEL00P_HOME = db_path.parent()).
+    std::fs::write(
+        dir.path().join("credentials.toml"),
+        format!(
+            "token = \"stored-token\"\napi_url = \"{}\"\n",
+            server.base_url()
+        ),
+    )
+    .expect("write credentials");
+
+    // No --api-url / --token: the command reads stored credentials.
+    let output = run_codel00p(&db_path, &["cloud", "status"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert!(stdout(&output).contains("user: user_admin"));
 }
 
 #[test]

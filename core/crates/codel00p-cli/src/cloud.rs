@@ -293,8 +293,15 @@ fn parse_connection(args: &[String]) -> CliResult<(Connection, Vec<String>)> {
         }
     }
 
-    let api_url = api_url.ok_or_else(|| "missing --api-url (or CODEL00P_API_URL)".to_string())?;
-    let token = token.ok_or_else(|| "missing --token (or CODEL00P_TOKEN)".to_string())?;
+    // Fall back to credentials stored by `codel00p login`.
+    let stored = crate::credentials::load();
+    let api_url = api_url.or(stored.api_url).ok_or_else(|| {
+        "missing cloud API URL — pass --api-url, set CODEL00P_API_URL, or `codel00p login --api-url <url>`"
+            .to_string()
+    })?;
+    let token = token.or(stored.token).ok_or_else(|| {
+        "not signed in — run `codel00p login` (or pass --token / CODEL00P_TOKEN)".to_string()
+    })?;
 
     Ok((
         Connection {
