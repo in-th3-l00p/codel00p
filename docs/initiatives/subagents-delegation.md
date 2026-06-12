@@ -82,8 +82,11 @@ queue — without losing session, memory, permission, or audit coherence.
 - [x] `delegate_task` tool + `leaf`/`orchestrator` roles + a `SubAgentSpawner`
       seam, in the harness. Slice:
       [2026-06-12-subagent-delegation-core](../superpowers/plans/2026-06-12-subagent-delegation-core.md).
-- [ ] Real spawner: build + run a child harness (model client, narrowed scope),
-      wired in the CLI.
+- [x] Real spawner: build + run a child harness (model client, read-only tools),
+      wired in the CLI behind a `delegate` tool-set. Slice:
+      [2026-06-12-subagent-real-spawner](../superpowers/plans/2026-06-12-subagent-real-spawner.md).
+- [ ] Narrow the child's permission scope to the parent's ceiling (currently
+      read-only by construction).
 - [ ] Child sessions with `parent_id`; merged event stream + audit.
 - [ ] `delegation.max_concurrent_children` batch execution.
 

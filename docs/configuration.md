@@ -66,7 +66,7 @@ workspace.project_name         workspace.memory_db
 agent.provider                 agent.model
 agent.base_url                 agent.provider_policy_preset
 agent.max_iterations           agent.permission_mode      # allow | ask | deny
-agent.tool_sets                # comma-separated: read,edit,command,git,all
+agent.tool_sets                # comma-separated: read,edit,command,git,delegate,all
 agent.stream                   agent.remember_permissions
 plugins.enabled                # comma-separated plugin ids (see `codel00p plugins`)
 ```

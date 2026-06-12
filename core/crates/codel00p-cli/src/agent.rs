@@ -9,11 +9,12 @@ use std::{
 
 use async_trait::async_trait;
 use codel00p_harness::{
-    AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
-    MemoryCandidateSink, MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode,
-    PermissionPolicy, PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
-    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, TokenSink, ToolRegistry,
-    UserMessage, Workspace,
+    AgentEventSink, AgentHarness, AgentRole, DelegatedTask, DelegationOutcome,
+    ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
+    MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode, PermissionPolicy,
+    PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
+    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, SessionId, SubAgentSpawner,
+    TokenSink, ToolRegistry, UserMessage, Workspace, delegation_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
@@ -22,7 +23,7 @@ use codel00p_mcp::{
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
-use codel00p_providers::default_registry;
+use codel00p_providers::{ProviderRegistry, default_registry};
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
 
 use crate::{
@@ -63,6 +64,7 @@ enum AgentToolSet {
     Edit,
     Command,
     Git,
+    Delegate,
     All,
 }
 
@@ -255,7 +257,7 @@ async fn build_agent_harness(
 
     let provider_registry = plugins.apply_to_provider_registry(default_registry());
     let provider_client = build_provider_client_with(
-        provider_registry,
+        provider_registry.clone(),
         &options.provider,
         options.provider_policy_preset.as_deref(),
     )?;
@@ -273,8 +275,22 @@ async fn build_agent_harness(
         .with_tag("agent")
         .with_tag("cli");
 
-    let tools =
+    let mut tools =
         plugins.apply_to_tool_registry(build_tool_registry(&options.tool_sets, mcp_servers).await?);
+    if options.tool_sets.contains(&AgentToolSet::Delegate) {
+        let spawner = Arc::new(CliSubAgentSpawner {
+            workspace: options.workspace.clone(),
+            provider_registry,
+            provider: options.provider.clone(),
+            model: options.model.clone(),
+            base_url: options.base_url.clone(),
+            policy_preset: options.provider_policy_preset.clone(),
+            max_iterations: options
+                .max_iterations
+                .unwrap_or(CHILD_DEFAULT_MAX_ITERATIONS),
+        });
+        tools = tools.with_registry(delegation_tools(AgentRole::Orchestrator, spawner));
+    }
 
     let mut builder = AgentHarness::builder()
         .model_client(model_client)
@@ -852,6 +868,7 @@ fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
         "edit" | "editing" | "write" => Ok(AgentToolSet::Edit),
         "command" | "commands" | "shell" => Ok(AgentToolSet::Command),
         "git" => Ok(AgentToolSet::Git),
+        "delegate" | "delegation" => Ok(AgentToolSet::Delegate),
         "all" => Ok(AgentToolSet::All),
         _ => Err(format!("unknown tool set: {value}")),
     }
@@ -1100,6 +1117,60 @@ fn split_command_spec(value: &str) -> CliResult<Vec<String>> {
     Ok(tokens)
 }
 
+/// Default iteration budget for a child agent when the parent run set none.
+const CHILD_DEFAULT_MAX_ITERATIONS: u32 = 4;
+
+/// Runs a child agent for a delegated task, reusing the orchestrator's provider
+/// configuration. Children run with read-only tools and as leaves (no further
+/// delegation), which bounds blast radius and depth for this first wiring.
+struct CliSubAgentSpawner {
+    workspace: PathBuf,
+    provider_registry: ProviderRegistry,
+    provider: String,
+    model: String,
+    base_url: Option<String>,
+    policy_preset: Option<String>,
+    max_iterations: u32,
+}
+
+#[async_trait]
+impl SubAgentSpawner for CliSubAgentSpawner {
+    async fn spawn(&self, task: DelegatedTask) -> Result<DelegationOutcome, HarnessError> {
+        let provider_client = build_provider_client_with(
+            self.provider_registry.clone(),
+            &self.provider,
+            self.policy_preset.as_deref(),
+        )
+        .map_err(|message| HarnessError::Configuration { message })?;
+        let model_client = ProviderModelClient::new(provider_client, &self.provider, &self.model);
+        let model_client = match &self.base_url {
+            Some(base_url) => model_client.with_base_url(base_url),
+            None => model_client,
+        };
+
+        let workspace = Workspace::new(&self.workspace)?;
+        let child_session_id = SessionId::new();
+
+        let outcome = AgentHarness::builder()
+            .model_client(model_client)
+            .workspace(workspace)
+            .tools(ToolRegistry::read_only_defaults())
+            .max_iterations(self.max_iterations)
+            .build()?
+            .run_turn(
+                child_session_id.clone(),
+                UserMessage::new(task.description()),
+            )
+            .await?;
+
+        Ok(DelegationOutcome::new(
+            outcome.assistant_message.unwrap_or_default(),
+            child_session_id,
+            outcome.tool_calls.len(),
+        ))
+    }
+}
+
 /// Assemble the plugins active for an agent run from layered configuration.
 ///
 /// Reads `[plugins] enabled` from the workspace's resolved settings and builds a
@@ -1135,6 +1206,9 @@ async fn build_tool_registry(
             AgentToolSet::Edit => registry.with_registry(ToolRegistry::editing_defaults()),
             AgentToolSet::Command => registry.with_registry(ToolRegistry::command_defaults()),
             AgentToolSet::Git => registry.with_registry(ToolRegistry::git_defaults()),
+            // Delegation needs the provider/model config to build a spawner, so
+            // it is folded in by `build_agent_harness`, not here.
+            AgentToolSet::Delegate => registry,
             AgentToolSet::All => registry
                 .with_registry(ToolRegistry::editing_defaults())
                 .with_registry(ToolRegistry::command_defaults())
@@ -1763,5 +1837,65 @@ impl MemoryCandidateSink for CliMemoryCandidateSink {
             created_ids,
             duplicate_ids,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use httpmock::{Method::POST, MockServer};
+    use serde_json::json;
+
+    // A child agent run goes through the real provider transport, so mock one
+    // chat-completions response and confirm the spawner returns its summary.
+    #[test]
+    fn cli_spawner_runs_a_child_and_returns_its_summary() {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST).path("/chat/completions");
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "message": { "role": "assistant", "content": "child summary" },
+                    "finish_reason": "stop"
+                }]
+            }));
+        });
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        // SAFETY: guarded by LOCK so no other test mutates this var concurrently.
+        unsafe {
+            std::env::set_var("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token");
+        }
+
+        let spawner = CliSubAgentSpawner {
+            workspace: dir.path().to_path_buf(),
+            provider_registry: default_registry(),
+            provider: "custom".to_string(),
+            model: "test-model".to_string(),
+            base_url: Some(server.base_url()),
+            policy_preset: None,
+            max_iterations: 2,
+        };
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let outcome = runtime
+            .block_on(spawner.spawn(DelegatedTask::new("summarize the project")))
+            .expect("spawn child");
+
+        // SAFETY: still under LOCK.
+        unsafe {
+            std::env::remove_var("CODEL00P_PROVIDER_CUSTOM_API_KEY");
+        }
+
+        mock.assert();
+        assert_eq!(outcome.summary(), "child summary");
+        assert_eq!(outcome.tool_calls(), 0);
     }
 }
