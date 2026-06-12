@@ -7,6 +7,7 @@ mod connector_permissions;
 mod help;
 mod mcp_server;
 mod memory;
+mod plugins;
 mod providers;
 mod session;
 mod settings;
@@ -46,6 +47,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
     match command.as_str() {
         "config" => return config_cmd::run(&workspace_start, rest),
         "providers" => return providers::run(&workspace_start, rest),
+        "plugins" => return plugins::run(&workspace_start, rest),
         _ => {}
     }
 

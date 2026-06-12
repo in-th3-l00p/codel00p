@@ -68,7 +68,24 @@ agent.base_url                 agent.provider_policy_preset
 agent.max_iterations           agent.permission_mode      # allow | ask | deny
 agent.tool_sets                # comma-separated: read,edit,command,git,all
 agent.stream                   agent.remember_permissions
+plugins.enabled                # comma-separated plugin ids (see `codel00p plugins`)
 ```
+
+## `codel00p plugins`
+
+Plugins contribute extra tools and lifecycle hooks to agent runs. Enabling a
+plugin records its id in `[plugins] enabled`; the agent loads enabled plugins
+from the built-in catalog at the start of each run.
+
+| Command | Description |
+| --- | --- |
+| `plugins list` | List available plugins and their enabled state (default) |
+| `plugins enable <id> [--project]` | Enable a plugin (user config, or project) |
+| `plugins disable <id> [--project]` | Disable a plugin |
+
+Enabling is an allow-list of built-in ids, not arbitrary code loading. An enabled
+id the catalog no longer knows is skipped with a warning rather than failing the
+run.
 
 ## `codel00p providers`
 
@@ -100,4 +117,7 @@ model = "openai/gpt-4o-mini"
 stream = true
 permission_mode = "ask"
 tool_sets = ["read", "edit"]
+
+[plugins]
+enabled = ["system-info"]
 ```

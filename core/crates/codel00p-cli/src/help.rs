@@ -6,6 +6,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "agent" => Some(AGENT_HELP),
             "config" => Some(CONFIG_HELP),
             "providers" => Some(PROVIDERS_HELP),
+            "plugins" => Some(PLUGINS_HELP),
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
@@ -56,6 +57,7 @@ Commands:
   agent      Run the coding agent
   config     View and edit configuration
   providers  Configure inference providers and credentials
+  plugins    Enable or disable agent plugins
   mcp        Expose codel00p as an MCP server
   memory     Review project memory
   session    Inspect persisted sessions
@@ -99,6 +101,18 @@ Commands:
   set-key <id> [<key>]          Store an API key (prompts if omitted)
   remove-key <id>               Remove a stored API key
   show <id>                     Show details for one provider
+";
+
+const PLUGINS_HELP: &str = "\
+Usage: codel00p plugins <command>
+
+Enable or disable plugins that add tools and lifecycle hooks to agent runs.
+Enabled plugin ids are stored in [plugins] enabled in config.toml.
+
+Commands:
+  list                          List available plugins and enabled state (default)
+  enable <id> [--project]       Enable a plugin (user config, or project)
+  disable <id> [--project]      Disable a plugin
 ";
 
 const AGENT_HELP: &str = "\

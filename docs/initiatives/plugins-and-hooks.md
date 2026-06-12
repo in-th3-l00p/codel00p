@@ -104,9 +104,12 @@ For third parties who cannot recompile codel00p:
 > contribution surface remains future work.
 
 ### Phase 2 — Config-driven enablement
-- [ ] `[plugins]` config table (layered, project + user).
-- [ ] `codel00p plugins list` / `enable` / `disable` CLI surface.
+- [x] `[plugins]` config table (layered, project + user) backed by a
+      `PluginCatalog` allow-list, plus the first built-in (`system-info`). Slice:
+      [2026-06-12-plugin-config-enablement](../superpowers/plans/2026-06-12-plugin-config-enablement.md).
+- [x] `codel00p plugins list` / `enable` / `disable` CLI surface.
 - [ ] Deferred toolset mutation to preserve prompt caching.
+- [ ] Wire `apply_to_provider_registry` into provider-client construction.
 
 ### Phase 3 — Out-of-process plugins
 - [ ] Document MCP as the runtime tool-extension path; align the footprint

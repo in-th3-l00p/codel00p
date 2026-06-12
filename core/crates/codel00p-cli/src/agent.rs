@@ -265,7 +265,7 @@ async fn build_agent_harness(
         .with_tag("agent")
         .with_tag("cli");
 
-    let plugins = load_plugins();
+    let plugins = load_plugins(&options.workspace)?;
     let tools =
         plugins.apply_to_tool_registry(build_tool_registry(&options.tool_sets, mcp_servers).await?);
 
@@ -1093,16 +1093,28 @@ fn split_command_spec(value: &str) -> CliResult<Vec<String>> {
     Ok(tokens)
 }
 
-/// Assemble the plugins active for an agent run.
+/// Assemble the plugins active for an agent run from layered configuration.
 ///
-/// This is the single seam through which built-in and third-party capability
-/// reaches the harness. It is intentionally empty today: config-driven plugin
-/// enablement (a `[plugins]` table and `codel00p plugins` commands) is the next
-/// slice of the Plugins & Hooks initiative. Wiring the call site now keeps the
-/// default tool/hook behaviour unchanged while giving later slices one place to
-/// register plugins.
-fn load_plugins() -> PluginRegistry {
-    PluginRegistry::new()
+/// Reads `[plugins] enabled` from the workspace's resolved settings and builds a
+/// registry from the built-in catalog. Enabled ids the catalog does not know are
+/// skipped with a warning rather than failing the run, so a stale config entry
+/// never bricks the agent. With no plugins enabled this returns an empty
+/// registry, leaving the default tool/hook behaviour unchanged.
+fn load_plugins(workspace: &Path) -> CliResult<PluginRegistry> {
+    let resolved = crate::settings::load_layered(workspace)?;
+    let catalog = crate::plugins::builtin_catalog();
+    let enabled = resolved.merged.plugins.enabled.clone().unwrap_or_default();
+
+    let (known, unknown): (Vec<String>, Vec<String>) =
+        enabled.into_iter().partition(|id| catalog.contains(id));
+    if !unknown.is_empty() {
+        eprintln!(
+            "warning: ignoring unknown plugin(s) in config: {}",
+            unknown.join(", ")
+        );
+    }
+
+    catalog.build(&known).map_err(|error| error.to_string())
 }
 
 async fn build_tool_registry(

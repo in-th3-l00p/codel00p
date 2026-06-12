@@ -160,6 +160,125 @@ impl PluginRegistry {
     }
 }
 
+/// A named, lazily-constructed plugin available to be enabled.
+///
+/// The catalog is how an application advertises which plugins exist (by stable
+/// id) without instantiating them until something turns them on. The factory is
+/// only invoked when the catalog builds a registry for an enabled id.
+pub struct PluginCatalogEntry {
+    id: &'static str,
+    description: &'static str,
+    factory: Box<dyn Fn() -> Arc<dyn Plugin> + Send + Sync>,
+}
+
+impl PluginCatalogEntry {
+    /// Stable id used to enable this plugin in configuration.
+    pub fn id(&self) -> &str {
+        self.id
+    }
+
+    /// One-line human description shown in listings.
+    pub fn description(&self) -> &str {
+        self.description
+    }
+}
+
+/// The set of plugins an application makes available, keyed by stable id.
+///
+/// Configuration enables plugins by id; [`Self::build`] resolves an enabled list
+/// into a [`PluginRegistry`]. Enabling is therefore a small, auditable allow-list
+/// rather than arbitrary code loading — which fits codel00p's governance model.
+#[derive(Default)]
+pub struct PluginCatalog {
+    entries: Vec<PluginCatalogEntry>,
+}
+
+impl PluginCatalog {
+    /// Create an empty catalog.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register an available plugin under a stable id.
+    ///
+    /// A later registration with the same id replaces an earlier one, so an
+    /// application can override a default catalog entry.
+    pub fn with(
+        mut self,
+        id: &'static str,
+        description: &'static str,
+        factory: impl Fn() -> Arc<dyn Plugin> + Send + Sync + 'static,
+    ) -> Self {
+        self.entries.retain(|entry| entry.id != id);
+        self.entries.push(PluginCatalogEntry {
+            id,
+            description,
+            factory: Box::new(factory),
+        });
+        self
+    }
+
+    /// Catalog entries in registration order.
+    pub fn entries(&self) -> &[PluginCatalogEntry] {
+        &self.entries
+    }
+
+    /// Available plugin ids, in registration order.
+    pub fn ids(&self) -> Vec<&str> {
+        self.entries.iter().map(|entry| entry.id).collect()
+    }
+
+    /// Whether a plugin with this id is available.
+    pub fn contains(&self, id: &str) -> bool {
+        self.entries.iter().any(|entry| entry.id == id)
+    }
+
+    /// Build a [`PluginRegistry`] from the enabled ids, in the given order.
+    ///
+    /// Returns an [`UnknownPluginError`] for the first id with no catalog entry,
+    /// so misconfiguration surfaces explicitly. Ids are instantiated once each;
+    /// duplicates in `enabled` are ignored.
+    pub fn build(&self, enabled: &[String]) -> Result<PluginRegistry, UnknownPluginError> {
+        let mut registry = PluginRegistry::new();
+        let mut seen = Vec::new();
+        for id in enabled {
+            if seen.iter().any(|already| already == id) {
+                continue;
+            }
+            let entry = self
+                .entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .ok_or_else(|| UnknownPluginError {
+                    id: id.clone(),
+                    available: self.ids().iter().map(|id| id.to_string()).collect(),
+                })?;
+            registry = registry.register((entry.factory)());
+            seen.push(id.clone());
+        }
+        Ok(registry)
+    }
+}
+
+/// Returned when configuration enables a plugin id the catalog does not know.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownPluginError {
+    pub id: String,
+    pub available: Vec<String>,
+}
+
+impl std::fmt::Display for UnknownPluginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown plugin: {}", self.id)?;
+        if !self.available.is_empty() {
+            write!(f, "; available plugins: {}", self.available.join(", "))?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for UnknownPluginError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,5 +458,48 @@ mod tests {
             providers.resolve("plugin-provider").map(|p| p.display_name),
             Some("Override Provider")
         );
+    }
+
+    fn sample_catalog() -> PluginCatalog {
+        PluginCatalog::new().with("sample", "a sample plugin", || Arc::new(SamplePlugin))
+    }
+
+    #[test]
+    fn catalog_builds_registry_for_enabled_ids() {
+        let catalog = sample_catalog();
+        assert!(catalog.contains("sample"));
+        assert_eq!(catalog.ids(), vec!["sample"]);
+
+        let registry = catalog
+            .build(&["sample".to_string()])
+            .expect("known plugin builds");
+        assert_eq!(registry.plugin_names(), vec!["sample".to_string()]);
+    }
+
+    #[test]
+    fn catalog_ignores_duplicate_enabled_ids() {
+        let registry = sample_catalog()
+            .build(&["sample".to_string(), "sample".to_string()])
+            .expect("duplicates are fine");
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn catalog_empty_enabled_list_builds_empty_registry() {
+        let registry = sample_catalog().build(&[]).expect("empty builds");
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn catalog_rejects_unknown_id() {
+        // `expect_err` would require `PluginRegistry: Debug`, which it cannot
+        // derive (it holds `Arc<dyn Plugin>`), so match the result instead.
+        let error = match sample_catalog().build(&["missing".to_string()]) {
+            Ok(_) => panic!("unknown id should error"),
+            Err(error) => error,
+        };
+        assert_eq!(error.id, "missing");
+        assert_eq!(error.available, vec!["sample".to_string()]);
+        assert!(error.to_string().contains("unknown plugin: missing"));
     }
 }

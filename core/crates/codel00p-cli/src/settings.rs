@@ -35,6 +35,8 @@ pub struct Settings {
     pub workspace: WorkspaceSettings,
     #[serde(skip_serializing_if = "AgentSettings::is_empty")]
     pub agent: AgentSettings,
+    #[serde(skip_serializing_if = "PluginSettings::is_empty")]
+    pub plugins: PluginSettings,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -71,6 +73,24 @@ pub struct AgentSettings {
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remember_permissions: Option<bool>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginSettings {
+    /// Ids of catalog plugins enabled for agent runs, in precedence order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<Vec<String>>,
+}
+
+impl PluginSettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.enabled, other.enabled);
+    }
 }
 
 impl WorkspaceSettings {
@@ -112,6 +132,7 @@ impl Settings {
         take(&mut self.config_version, other.config_version);
         self.workspace.merge(other.workspace);
         self.agent.merge(other.agent);
+        self.plugins.merge(other.plugins);
     }
 }
 
@@ -238,7 +259,7 @@ pub fn project_config_path(start: &Path) -> PathBuf {
 
 // --- Loading ---------------------------------------------------------------
 
-fn load_file(path: &Path) -> SettingsResult<Option<Settings>> {
+pub fn load_file(path: &Path) -> SettingsResult<Option<Settings>> {
     match fs::read_to_string(path) {
         Ok(text) => toml::from_str::<Settings>(&text)
             .map(Some)
@@ -351,6 +372,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.tool_sets", ValueKind::StrList),
     ("agent.stream", ValueKind::Bool),
     ("agent.remember_permissions", ValueKind::Bool),
+    ("plugins.enabled", ValueKind::StrList),
 ];
 
 pub fn known_keys() -> Vec<&'static str> {
@@ -392,6 +414,7 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.tool_sets" => agent.tool_sets.as_ref().map(|sets| sets.join(",")),
         "agent.stream" => agent.stream.map(|value| value.to_string()),
         "agent.remember_permissions" => agent.remember_permissions.map(|value| value.to_string()),
+        "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         _ => None,
     };
     Ok(value)
