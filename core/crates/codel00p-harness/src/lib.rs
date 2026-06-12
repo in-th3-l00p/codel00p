@@ -33,7 +33,10 @@ pub use event_sink::AgentEventSink;
 pub use events::HarnessEvent;
 pub use instructions::{ProjectInstruction, ProjectInstructionLoader, ProjectInstructions};
 pub use iteration_budget::IterationBudget;
-pub use learning::{ProposeSkillTool, ProposedSkill, SkillProposalSink, learning_tools};
+pub use learning::{
+    ProcedureSkillExtractor, ProposeSkillTool, ProposedSkill, SkillExtractionRequest,
+    SkillExtractor, SkillProposalSink, learning_tools,
+};
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use memory::{
     ExplicitTurnMemoryExtractor, MemoryCandidateSink, MemoryCandidateSinkOutcome,

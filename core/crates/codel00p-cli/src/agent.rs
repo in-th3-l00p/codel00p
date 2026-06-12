@@ -12,11 +12,11 @@ use codel00p_harness::{
     AgentEventSink, AgentHarness, AgentRole, DelegatedTask, DelegationOutcome,
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
     MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode, PermissionPolicy,
-    PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
-    ProjectMemoryProvider, ProjectMemoryRequest, ProposedSkill, ProviderModelClient, SessionId,
-    SkillContext, SkillPrompt, SkillProposalSink, SkillProvider, SkillSelectionRequest,
-    SubAgentSpawner, TokenSink, ToolRegistry, UserMessage, Workspace, delegation_tools,
-    learning_tools,
+    PermissionRequest, PermissionScope, ProcedureSkillExtractor, ProjectMemoryContext,
+    ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest, ProposedSkill,
+    ProviderModelClient, SessionId, SkillContext, SkillPrompt, SkillProposalSink, SkillProvider,
+    SkillSelectionRequest, SubAgentSpawner, TokenSink, ToolRegistry, UserMessage, Workspace,
+    delegation_tools, learning_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
@@ -27,7 +27,9 @@ use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
 use codel00p_providers::{ProviderRegistry, default_registry};
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
-use codel00p_skill::{SkillProposal, SkillSource, load_skills, propose_skill, select_skills};
+use codel00p_skill::{
+    SkillError, SkillProposal, SkillSource, load_skills, propose_skill, select_skills,
+};
 
 use crate::{
     config::{
@@ -326,6 +328,14 @@ async fn build_agent_harness(
         )))
         .turn_memory_extractor(memory_extractor)
         .memory_candidate_sink(memory_sink);
+    if options.tool_sets.contains(&AgentToolSet::Learn) {
+        // The agent can both explicitly propose skills (the tool above) and have
+        // procedures auto-extracted from completed multi-step turns. Both land in
+        // the same review queue.
+        builder = builder
+            .skill_extractor(ProcedureSkillExtractor::default())
+            .skill_proposal_sink(CliSkillProposalSink::new(crate::skills::user_skills_dir()));
+    }
     builder = plugins.apply_to_harness_builder(builder);
     if options.stream_events {
         builder = builder.event_sink(StdoutJsonEventSink);
@@ -1879,12 +1889,16 @@ impl SkillProposalSink for CliSkillProposalSink {
             instructions: skill.instructions().to_string(),
             created_by: "agent".to_string(),
         };
-        propose_skill(&self.skills_dir, &proposal).map_err(|error| {
-            HarnessError::Configuration {
+        match propose_skill(&self.skills_dir, &proposal) {
+            // Idempotent: a name already proposed or active is a benign no-op,
+            // so repeated tasks (e.g. automatic extraction) stay quiet.
+            Ok(_)
+            | Err(SkillError::CandidateExists { .. })
+            | Err(SkillError::AlreadyActive { .. }) => Ok(()),
+            Err(error) => Err(HarnessError::Configuration {
                 message: error.to_string(),
-            }
-        })?;
-        Ok(())
+            }),
+        }
     }
 }
 

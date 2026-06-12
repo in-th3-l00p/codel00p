@@ -95,8 +95,13 @@ policy) **approve**.
       auto-injected on future turns (the complete proposes→review→apply loop).
       Slice:
       [2026-06-12-agent-proposed-skills](../superpowers/plans/2026-06-12-agent-proposed-skills.md).
-- [ ] Automatic post-task extraction (propose without an explicit tool call),
-      feeding the same review queue.
+- [x] Automatic post-task extraction: a `SkillExtractor` seam + a deterministic
+      `ProcedureSkillExtractor` proposes a draft skill when a turn carried out a
+      real procedure (>= N mutating/command tool calls) and answered, feeding the
+      same review queue (idempotent, no extra inference). Slice:
+      [2026-06-12-automatic-skill-extraction](../superpowers/plans/2026-06-12-automatic-skill-extraction.md).
+- [ ] LLM-assisted extraction (synthesize higher-quality skills) behind the same
+      `SkillExtractor` seam.
 
 ### Phase 4 — Project/user model
 - [ ] Per-project and per-user model documents, refined across sessions, with

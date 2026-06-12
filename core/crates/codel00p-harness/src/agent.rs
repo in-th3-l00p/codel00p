@@ -8,6 +8,7 @@ use crate::{
     events::HarnessEvent,
     instructions::ProjectInstructionLoader,
     iteration_budget::IterationBudget,
+    learning::{SkillExtractionRequest, SkillExtractor, SkillProposalSink},
     lifecycle::{LifecycleHook, TurnLifecycleContext},
     memory::{
         MemoryCandidateSink, ProjectMemoryProvider, ProjectMemoryRequest,
@@ -37,6 +38,8 @@ pub struct AgentHarness {
     skill_provider: Option<Arc<dyn SkillProvider>>,
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
+    skill_extractor: Option<Arc<dyn SkillExtractor>>,
+    skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,
@@ -192,6 +195,19 @@ impl AgentHarness {
                     turn_id.clone(),
                     assistant_message.clone(),
                     session_state.messages().len(),
+                    &mut events,
+                )
+                .await;
+
+                self.extract_skill_candidates(
+                    session_state.session_id().clone(),
+                    turn_id.clone(),
+                    latest_user_message(&session_state),
+                    assistant_message.clone(),
+                    executed_tool_calls
+                        .iter()
+                        .map(|call: &ExecutedToolCall| call.name.clone())
+                        .collect(),
                     &mut events,
                 )
                 .await;
@@ -632,6 +648,66 @@ impl AgentHarness {
         }
     }
 
+    async fn extract_skill_candidates(
+        &self,
+        session_id: SessionId,
+        turn_id: TurnId,
+        goal: String,
+        assistant_message: Option<String>,
+        tool_calls: Vec<String>,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        let (Some(extractor), Some(sink)) = (&self.skill_extractor, &self.skill_proposal_sink)
+        else {
+            return;
+        };
+
+        let proposals = match extractor
+            .extract(SkillExtractionRequest::new(
+                session_id.clone(),
+                turn_id.clone(),
+                goal,
+                assistant_message,
+                tool_calls,
+            ))
+            .await
+        {
+            Ok(proposals) => proposals,
+            Err(error) => {
+                self.record_event(
+                    events,
+                    HarnessEvent::LifecycleHookFailed {
+                        event_id: EventId::new(),
+                        session_id,
+                        turn_id,
+                        hook: "skill_extraction".to_string(),
+                        message: error.to_string(),
+                    },
+                )
+                .await;
+                return;
+            }
+        };
+
+        for proposal in proposals {
+            // A duplicate proposal is expected (and benign) on repeated tasks;
+            // the sink treats it as a no-op, so only genuine errors surface here.
+            if let Err(error) = sink.propose(proposal).await {
+                self.record_event(
+                    events,
+                    HarnessEvent::LifecycleHookFailed {
+                        event_id: EventId::new(),
+                        session_id: session_id.clone(),
+                        turn_id: turn_id.clone(),
+                        hook: "skill_proposal".to_string(),
+                        message: error.to_string(),
+                    },
+                )
+                .await;
+            }
+        }
+    }
+
     async fn record_event(&self, events: &mut Vec<HarnessEvent>, event: HarnessEvent) {
         if let Some(event_sink) = &self.event_sink {
             event_sink.emit(&event).await;
@@ -679,6 +755,8 @@ pub struct AgentHarnessBuilder {
     skill_provider: Option<Arc<dyn SkillProvider>>,
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
+    skill_extractor: Option<Arc<dyn SkillExtractor>>,
+    skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
@@ -774,6 +852,22 @@ impl AgentHarnessBuilder {
         self
     }
 
+    pub fn skill_extractor<T>(mut self, skill_extractor: T) -> Self
+    where
+        T: SkillExtractor + 'static,
+    {
+        self.skill_extractor = Some(Arc::new(skill_extractor));
+        self
+    }
+
+    pub fn skill_proposal_sink<T>(mut self, skill_proposal_sink: T) -> Self
+    where
+        T: SkillProposalSink + 'static,
+    {
+        self.skill_proposal_sink = Some(Arc::new(skill_proposal_sink));
+        self
+    }
+
     pub fn max_iterations(mut self, max_iterations: u32) -> Self {
         self.max_iterations = Some(max_iterations);
         self
@@ -809,6 +903,8 @@ impl AgentHarnessBuilder {
             skill_provider: self.skill_provider,
             turn_memory_extractor: self.turn_memory_extractor,
             memory_candidate_sink: self.memory_candidate_sink,
+            skill_extractor: self.skill_extractor,
+            skill_proposal_sink: self.skill_proposal_sink,
             context_window: self.context_window,
             token_sink: self.token_sink,
             max_iterations: self.max_iterations.unwrap_or(4),
