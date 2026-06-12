@@ -1,0 +1,34 @@
+name: deploy-cloud
+
+# Auto-deploy the codel00p-cloud control-plane service to Fly.io whenever the
+# Rust workspace changes on main. Authenticated with the FLY_API_TOKEN repo
+# secret (a Fly deploy token scoped to the codel00p-cloud app). Build runs on
+# Fly's remote builder, so no Docker is needed on the runner.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - ".github/workflows/deploy-cloud.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy codel00p-cloud to Fly.io
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy (remote build from core/Dockerfile)
+        working-directory: core
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
