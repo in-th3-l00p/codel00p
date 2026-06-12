@@ -124,6 +124,10 @@ Commands:
   message --conversation <id> --user <id> <text>
                                 Handle one inbound message and print the reply.
                                 Control text: /help, /stop, /approve, /deny.
+  serve [--bind <addr>] [--port <n>]
+                                Run an HTTP webhook (default 127.0.0.1:8765).
+                                POST /message {conversation,user,text} -> {reply};
+                                GET /healthz. Adapters post platform events here.
 
 Messages run as restricted (read-only) agent turns for now.
 ";

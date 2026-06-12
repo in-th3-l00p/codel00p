@@ -77,8 +77,12 @@ harness, plus an adapter trait so platforms are pluggable
       [2026-06-12-gateway-core](../superpowers/plans/2026-06-12-gateway-core.md).
 - [x] `/help`, `/stop`, `/approve`, `/deny` control commands handled before the
       agent runs (approval is acknowledged; the live approval flow is below).
-- [ ] An HTTP webhook adapter (`gateway serve`) and a first real platform
-      adapter (Slack), inbound/outbound, as thin translators to `gateway message`.
+- [x] HTTP webhook: `codel00p gateway serve` — a minimal, dependency-free server
+      (`POST /message {conversation,user,text}` -> `{reply}`, `GET /healthz`) that
+      platform event subscriptions post to. Slice:
+      [2026-06-12-gateway-serve](../superpowers/plans/2026-06-12-gateway-serve.md).
+- [ ] A first real platform adapter (Slack), inbound/outbound, translating
+      platform events to `POST /message`.
 - [ ] Live permission-ask → chat `/approve` `/deny` flow (today messages run
       read-only).
 
