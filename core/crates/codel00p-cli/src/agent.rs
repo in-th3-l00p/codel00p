@@ -22,6 +22,7 @@ use codel00p_mcp::{
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
+use codel00p_providers::default_registry;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
 
 use crate::{
@@ -33,7 +34,7 @@ use crate::{
         ConnectorPermissionDecision, ConnectorPermissionStatus, is_rememberable_permission,
         load_decision, remember_decision,
     },
-    providers::build_provider_client,
+    providers::build_provider_client_with,
     session::{session_message_summary, session_role_label},
     settings::AgentSettings,
 };
@@ -249,8 +250,15 @@ async fn build_agent_harness(
     options: &AgentRunOptions,
     mcp_servers: &[McpServerSpec],
 ) -> CliResult<AgentHarness> {
-    let provider_client =
-        build_provider_client(&options.provider, options.provider_policy_preset.as_deref())?;
+    // Plugins are loaded once and contribute to providers, tools, and hooks.
+    let plugins = load_plugins(&options.workspace)?;
+
+    let provider_registry = plugins.apply_to_provider_registry(default_registry());
+    let provider_client = build_provider_client_with(
+        provider_registry,
+        &options.provider,
+        options.provider_policy_preset.as_deref(),
+    )?;
     let model_client = ProviderModelClient::new(provider_client, &options.provider, &options.model);
     let model_client = if let Some(base_url) = &options.base_url {
         model_client.with_base_url(base_url)
@@ -265,7 +273,6 @@ async fn build_agent_harness(
         .with_tag("agent")
         .with_tag("cli");
 
-    let plugins = load_plugins(&options.workspace)?;
     let tools =
         plugins.apply_to_tool_registry(build_tool_registry(&options.tool_sets, mcp_servers).await?);
 

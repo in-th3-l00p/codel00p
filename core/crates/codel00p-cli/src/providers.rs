@@ -4,15 +4,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use codel00p_providers::{InferenceClient, ProviderPolicy, default_registry};
+use codel00p_providers::{InferenceClient, ProviderPolicy, ProviderRegistry, default_registry};
 
 use crate::{config::CliResult, settings};
 
-pub fn build_provider_client(
+/// Build an inference client against a caller-supplied provider registry, so a
+/// plugin-extended provider set (see [`crate::plugins`]) can route inference the
+/// same way as built-in providers. Pass [`default_registry`] for the built-ins.
+pub fn build_provider_client_with(
+    registry: ProviderRegistry,
     provider: &str,
     policy_preset: Option<&str>,
 ) -> CliResult<InferenceClient> {
-    let registry = default_registry();
     if registry.resolve(provider).is_none() {
         return Err(format!("unknown provider: {provider}"));
     }
@@ -23,7 +26,10 @@ pub fn build_provider_client(
         .unwrap_or_else(ProviderPolicy::allow_all);
 
     if registry.credential_from_env(provider).is_none() {
-        let env_vars = provider_env_vars(provider);
+        let env_vars = registry
+            .resolve(provider)
+            .map(|profile| profile.env_vars.to_vec())
+            .unwrap_or_default();
         return if env_vars.is_empty() {
             Err(format!("missing credential for provider `{provider}`"))
         } else {
@@ -50,13 +56,6 @@ fn resolve_policy_preset(id: &str) -> CliResult<ProviderPolicy> {
             .join(", ");
         format!("unknown provider policy preset: {id}; available presets: {available}")
     })
-}
-
-pub fn provider_env_vars(provider: &str) -> Vec<&'static str> {
-    default_registry()
-        .resolve(provider)
-        .map(|profile| profile.env_vars.to_vec())
-        .unwrap_or_default()
 }
 
 // --- `codel00p providers` command -----------------------------------------
@@ -483,9 +482,16 @@ fn prompt_secret(prompt: &str) -> CliResult<String> {
 
 #[cfg(test)]
 mod tests {
-    use codel00p_providers::{ChatMessage, InferenceRequest};
+    use codel00p_providers::{ChatMessage, InferenceRequest, default_registry};
 
-    use super::{build_provider_client, provider_env_vars};
+    use super::build_provider_client_with;
+
+    fn provider_env_vars(provider: &str) -> Vec<&'static str> {
+        default_registry()
+            .resolve(provider)
+            .map(|profile| profile.env_vars.to_vec())
+            .unwrap_or_default()
+    }
 
     fn with_env_lock(test: impl FnOnce()) {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -540,7 +546,7 @@ mod tests {
                 std::env::set_var("CODEL00P_PROVIDER_OPENAI_API_KEY", "env-openai-key");
             }
 
-            let client = build_provider_client("openai", None).unwrap();
+            let client = build_provider_client_with(default_registry(), "openai", None).unwrap();
             let route = client
                 .resolve(
                     &InferenceRequest::builder("openai", "gpt-5-mini")
@@ -554,5 +560,67 @@ mod tests {
                 Some("environment:CODEL00P_PROVIDER_OPENAI_API_KEY")
             );
         });
+    }
+
+    #[test]
+    fn plugin_contributed_provider_is_routable() {
+        use std::sync::Arc;
+
+        use codel00p_plugin::{Plugin, PluginRegistry, ProviderProfile};
+        use codel00p_providers::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities};
+
+        struct ProviderPlugin;
+        impl Plugin for ProviderPlugin {
+            fn name(&self) -> &str {
+                "provider-plugin"
+            }
+
+            fn provider_profiles(&self) -> Vec<ProviderProfile> {
+                vec![ProviderProfile {
+                    id: "plugin-openai",
+                    aliases: &[],
+                    display_name: "Plugin OpenAI",
+                    description: "a plugin-contributed provider",
+                    api_mode: ApiMode::ChatCompletions,
+                    auth_type: AuthType::ApiKey,
+                    env_vars: &["CODEL00P_TEST_PLUGIN_PROVIDER_KEY"],
+                    default_base_url: Some("https://example.test/v1"),
+                    models_url: None,
+                    default_aux_model: None,
+                    output_token_parameter: OutputTokenParameter::MaxTokens,
+                    capabilities: ProviderCapabilities::agentic(),
+                }]
+            }
+        }
+
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let key = "CODEL00P_TEST_PLUGIN_PROVIDER_KEY";
+        unsafe {
+            std::env::set_var(key, "plugin-secret");
+        }
+
+        // Fold the plugin's provider into the built-in registry exactly as the
+        // agent run does, then route through it.
+        let registry = PluginRegistry::new()
+            .register(Arc::new(ProviderPlugin))
+            .apply_to_provider_registry(default_registry());
+        let client = build_provider_client_with(registry, "plugin-openai", None).unwrap();
+        let route = client
+            .resolve(
+                &InferenceRequest::builder("plugin-openai", "some-model")
+                    .message(ChatMessage::user("hello"))
+                    .build(),
+            )
+            .unwrap();
+
+        unsafe {
+            std::env::remove_var(key);
+        }
+
+        assert_eq!(
+            route.credential_source.as_deref(),
+            Some("environment:CODEL00P_TEST_PLUGIN_PROVIDER_KEY")
+        );
     }
 }

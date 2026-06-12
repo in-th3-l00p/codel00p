@@ -109,7 +109,8 @@ For third parties who cannot recompile codel00p:
       [2026-06-12-plugin-config-enablement](../superpowers/plans/2026-06-12-plugin-config-enablement.md).
 - [x] `codel00p plugins list` / `enable` / `disable` CLI surface.
 - [ ] Deferred toolset mutation to preserve prompt caching.
-- [ ] Wire `apply_to_provider_registry` into provider-client construction.
+- [x] Wire `apply_to_provider_registry` into provider-client construction. Slice:
+      [2026-06-12-plugin-provider-wiring](../superpowers/plans/2026-06-12-plugin-provider-wiring.md).
 
 ### Phase 3 — Out-of-process plugins
 - [ ] Document MCP as the runtime tool-extension path; align the footprint
