@@ -9,7 +9,10 @@ use std::{
 
 use async_trait::async_trait;
 use codel00p_cron::CronJob;
-use codel00p_gateway::GatewayCommand;
+use codel00p_gateway::{
+    GatewayCommand,
+    approvals::{ApprovalOutcome, ApprovalStore},
+};
 use codel00p_harness::{
     AgentEventSink, AgentHarness, AgentRole, DelegatedTask, DelegationOutcome,
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
@@ -64,6 +67,21 @@ struct AgentRunOptions {
     permission_mode: CliPermissionMode,
     remember_permissions: bool,
     mcp_servers: Vec<McpServerSpec>,
+    /// When set, the turn is a messaging-gateway turn: privileged tools pause
+    /// for a remote chat user's `/approve` decision instead of using the local
+    /// CLI permission mode. See [`GatewayApprovalPolicy`].
+    gateway_approval: Option<GatewayApproval>,
+}
+
+/// Routes a gateway turn's privileged-tool permissions through a remote chat
+/// user's `/approve` / `/deny` decisions, backed by a file [`ApprovalStore`].
+#[derive(Clone)]
+struct GatewayApproval {
+    store: ApprovalStore,
+    conversation: String,
+    /// A one-shot grant: the single tool the remote user just approved may run
+    /// once without re-prompting. Any *other* privileged tool re-prompts.
+    granted_tool: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,18 +180,35 @@ pub(crate) fn run_scheduled_job(
         permission_mode: CliPermissionMode::Allow,
         remember_permissions: false,
         mcp_servers: Vec::new(),
+        gateway_approval: None,
     };
 
     run_agent_turn(config, options, AgentSessionMode::Fresh)
 }
 
+/// The on-disk directory backing the gateway's pending-approval store.
+///
+/// Lives next to the conversation sessions (under `CODEL00P_HOME` in practice,
+/// isolated per test) so a pending request survives a process restart and is
+/// shared across the processes a deployment may run.
+fn approval_store_dir(config: &CliConfig) -> PathBuf {
+    config
+        .memory_db
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default()
+        .join("gateway-approvals")
+}
+
 /// Handle one inbound gateway message for a conversation.
 ///
-/// Control commands are answered directly; ordinary text runs as a read-only
-/// agent turn against the conversation's durable session (derived from the
-/// conversation id), so a chat thread is one continuous, resumable session. The
-/// `user` is the platform sender — recorded by the adapter; full identity
-/// governance (mapping to a codel00p org/role) is a later slice.
+/// Control commands are answered directly; ordinary text runs as an agent turn
+/// against the conversation's durable session (derived from the conversation
+/// id), so a chat thread is one continuous, resumable session. Privileged tools
+/// (edit, shell) are gated: the turn pauses and asks the remote user, who
+/// replies `/approve` or `/deny` — see [`GatewayApprovalPolicy`]. The `user` is
+/// the platform sender — recorded by the adapter; full identity governance
+/// (mapping to a codel00p org/role) is a later slice.
 pub(crate) fn run_gateway_message(
     config: CliConfig,
     defaults: &AgentSettings,
@@ -185,49 +220,119 @@ pub(crate) fn run_gateway_message(
     match codel00p_gateway::parse_command(text) {
         GatewayCommand::Help => Ok(format!("{}\n", codel00p_gateway::help_text())),
         GatewayCommand::Stop => Ok("Nothing is currently running.\n".to_string()),
-        GatewayCommand::Approve | GatewayCommand::Deny => {
-            Ok("No permission request is pending.\n".to_string())
-        }
+        GatewayCommand::Approve => gateway_resolve(config, defaults, conversation, true),
+        GatewayCommand::Deny => gateway_resolve(config, defaults, conversation, false),
         GatewayCommand::Message(message) => {
-            let provider = defaults
-                .provider
-                .clone()
-                .ok_or_else(|| "no provider configured; set agent.provider".to_string())?;
-            let model = defaults
-                .model
-                .clone()
-                .ok_or_else(|| "no model configured; set agent.model".to_string())?;
-            let session_id = codel00p_gateway::conversation_session_id(conversation);
-            let parsed = parse_session_id(&session_id)?;
-            let mode = if session_exists(&config, &parsed) {
-                AgentSessionMode::Resume
-            } else {
-                AgentSessionMode::Fresh
-            };
-            let workspace = env::current_dir().map_err(|error| error.to_string())?;
-
-            let options = AgentRunOptions {
-                prompt: message,
-                workspace,
-                provider,
-                model,
-                provider_policy_preset: defaults.provider_policy_preset.clone(),
-                base_url: defaults.base_url.clone(),
-                session_id: Some(session_id),
-                max_iterations: defaults.max_iterations,
-                json_events: false,
-                stream_events: false,
-                stream: false,
-                // Restricted by default: a remote sender cannot yet approve
-                // permissions inline (the /approve flow is a later slice).
-                tool_sets: vec![AgentToolSet::Read],
-                permission_mode: CliPermissionMode::Allow,
-                remember_permissions: false,
-                mcp_servers: Vec::new(),
-            };
-            run_agent_turn(config, options, mode)
+            let store = ApprovalStore::new(approval_store_dir(&config));
+            // A fresh message supersedes any stale pending request for the thread.
+            let _ = store.resolve(conversation, false);
+            gateway_turn(config, defaults, conversation, message, None)
         }
     }
+}
+
+/// Resolve the conversation's pending approval with the remote user's decision.
+///
+/// On `/deny`, the request is dropped. On `/approve`, the agent turn is resumed
+/// with a one-shot grant for exactly the approved tool, so it can complete the
+/// action the user just authorized (and re-prompt for anything further).
+fn gateway_resolve(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    conversation: &str,
+    approve: bool,
+) -> CliResult<String> {
+    let store = ApprovalStore::new(approval_store_dir(&config));
+    let pending = store.pending(conversation);
+    match store.resolve(conversation, approve) {
+        ApprovalOutcome::Nothing => Ok("No permission request is pending.\n".to_string()),
+        ApprovalOutcome::Denied => {
+            let tool = pending
+                .map(|p| p.tool)
+                .unwrap_or_else(|| "request".to_string());
+            Ok(format!("Denied the pending request to use `{tool}`.\n"))
+        }
+        ApprovalOutcome::Approved => {
+            let granted = pending.map(|p| p.tool);
+            gateway_turn(
+                config,
+                defaults,
+                conversation,
+                "The remote user approved your pending request. Carry it out and report the result."
+                    .to_string(),
+                granted,
+            )
+        }
+    }
+}
+
+/// Run (or resume) the conversation's agent turn, gating privileged tools on the
+/// remote user's approval. If the turn parks on a permission request, the reply
+/// is replaced with a clear prompt telling the user how to approve or deny.
+fn gateway_turn(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    conversation: &str,
+    prompt: String,
+    granted_tool: Option<String>,
+) -> CliResult<String> {
+    let provider = defaults
+        .provider
+        .clone()
+        .ok_or_else(|| "no provider configured; set agent.provider".to_string())?;
+    let model = defaults
+        .model
+        .clone()
+        .ok_or_else(|| "no model configured; set agent.model".to_string())?;
+    let session_id = codel00p_gateway::conversation_session_id(conversation);
+    let parsed = parse_session_id(&session_id)?;
+    let mode = if session_exists(&config, &parsed) {
+        AgentSessionMode::Resume
+    } else {
+        AgentSessionMode::Fresh
+    };
+    let workspace = env::current_dir().map_err(|error| error.to_string())?;
+    let store = ApprovalStore::new(approval_store_dir(&config));
+
+    let options = AgentRunOptions {
+        prompt,
+        workspace,
+        provider,
+        model,
+        provider_policy_preset: defaults.provider_policy_preset.clone(),
+        base_url: defaults.base_url.clone(),
+        session_id: Some(session_id),
+        max_iterations: defaults.max_iterations,
+        json_events: false,
+        stream_events: false,
+        stream: false,
+        // Read freely; edit/shell are available but pause for the remote user's
+        // `/approve` via the gateway approval policy below.
+        tool_sets: vec![
+            AgentToolSet::Read,
+            AgentToolSet::Edit,
+            AgentToolSet::Command,
+        ],
+        permission_mode: CliPermissionMode::Allow,
+        remember_permissions: false,
+        mcp_servers: Vec::new(),
+        gateway_approval: Some(GatewayApproval {
+            store: store.clone(),
+            conversation: conversation.to_string(),
+            granted_tool,
+        }),
+    };
+    let reply = run_agent_turn(config, options, mode)?;
+
+    // If a privileged tool parked the turn, surface the request instead of the
+    // agent's "I was denied" narration.
+    Ok(match store.pending(conversation) {
+        Some(pending) => format!(
+            "\u{1f512} Approval needed to use `{}`.\n{}\nReply /approve to allow or /deny to reject.\n",
+            pending.tool, pending.detail
+        ),
+        None => reply,
+    })
 }
 
 fn session_exists(config: &CliConfig, session_id: &SessionId) -> bool {
@@ -439,12 +544,22 @@ async fn build_agent_harness(
     let mut builder = AgentHarness::builder()
         .model_client(model_client)
         .workspace(workspace)
-        .tools(tools)
-        .permission_policy(CliPermissionPolicy::new(
+        .tools(tools);
+    // A gateway turn routes privileged-tool permissions to a remote chat user's
+    // `/approve` decision; everything else uses the local CLI permission mode.
+    builder = match &options.gateway_approval {
+        Some(approval) => builder.permission_policy(GatewayApprovalPolicy::new(
+            approval.store.clone(),
+            approval.conversation.clone(),
+            approval.granted_tool.clone(),
+        )),
+        None => builder.permission_policy(CliPermissionPolicy::new(
             config.clone(),
             options.permission_mode,
             options.remember_permissions,
-        ))
+        )),
+    };
+    let mut builder = builder
         .project_memory_provider(memory_provider)
         .skill_provider(CliSkillProvider::new(crate::skills::skill_sources(
             &options.workspace,
@@ -978,6 +1093,7 @@ fn parse_agent_flag_options(
         permission_mode,
         remember_permissions,
         mcp_servers,
+        gateway_approval: None,
     })
 }
 
@@ -1707,6 +1823,94 @@ fn http_client_from_spec(server: &McpServerSpec) -> CliResult<McpHttpClient> {
         endpoint = endpoint.with_request_timeout(Duration::from_millis(timeout_ms));
     }
     McpHttpClient::connect(endpoint).map_err(|error| error.to_string())
+}
+
+/// A permission policy for messaging-gateway turns: a remote chat user grants
+/// privileged tools out-of-band via `/approve`.
+///
+/// Read-only tools run freely. For any other scope the policy records a pending
+/// request in the [`ApprovalStore`] and *denies* the call, pausing the turn —
+/// the user is then prompted to `/approve` or `/deny`. An approval re-runs the
+/// turn carrying a single one-shot `granted_tool` grant, so exactly the approved
+/// tool may run once; anything further prompts again.
+struct GatewayApprovalPolicy {
+    store: ApprovalStore,
+    conversation: String,
+    /// `Some(tool)` until the matching tool runs once, then taken.
+    granted_tool: Mutex<Option<String>>,
+}
+
+impl GatewayApprovalPolicy {
+    fn new(store: ApprovalStore, conversation: String, granted_tool: Option<String>) -> Self {
+        Self {
+            store,
+            conversation,
+            granted_tool: Mutex::new(granted_tool),
+        }
+    }
+}
+
+/// A short, single-line description of what a tool wants to do, shown to the
+/// remote user in the approval prompt.
+fn describe_permission_request(request: &PermissionRequest) -> String {
+    let input = request.input();
+    // Prefer a `command` field (shell) for a crisp summary; otherwise show the
+    // compact tool input, truncated so a chat prompt stays readable.
+    if let Some(command) = input.get("command").and_then(|value| value.as_str()) {
+        return command.trim().to_string();
+    }
+    let mut rendered = match input {
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
+    };
+    const MAX: usize = 200;
+    if rendered.chars().count() > MAX {
+        rendered = rendered.chars().take(MAX).collect::<String>() + "…";
+    }
+    rendered
+}
+
+#[async_trait]
+impl PermissionPolicy for GatewayApprovalPolicy {
+    async fn decide(&self, request: PermissionRequest) -> Result<PermissionDecision, HarnessError> {
+        // Reading never needs a remote user's blessing.
+        if request.scope() == PermissionScope::ReadOnly {
+            return Ok(PermissionDecision::allow(
+                request.id(),
+                PermissionMode::Allow,
+            ));
+        }
+        // Consume a one-shot grant for exactly the tool the user just approved.
+        {
+            let mut granted = self
+                .granted_tool
+                .lock()
+                .map_err(|_| HarnessError::ToolFailed {
+                    name: request.tool_name().to_string(),
+                    message: "gateway approval lock was poisoned".to_string(),
+                })?;
+            if granted.as_deref() == Some(request.tool_name()) {
+                *granted = None;
+                return Ok(PermissionDecision::allow(request.id(), PermissionMode::Ask));
+            }
+        }
+        // Otherwise park the turn: record what is wanted and deny for now.
+        self.store
+            .record(
+                &self.conversation,
+                request.tool_name(),
+                &describe_permission_request(&request),
+            )
+            .map_err(|error| HarnessError::ToolFailed {
+                name: request.tool_name().to_string(),
+                message: format!("failed to record approval request: {error}"),
+            })?;
+        Ok(PermissionDecision::deny(
+            request.id(),
+            PermissionMode::Ask,
+            format!("awaiting remote /approve for {}", request.tool_name()),
+        ))
+    }
 }
 
 struct CliPermissionPolicy {

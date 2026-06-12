@@ -77,14 +77,20 @@ harness, plus an adapter trait so platforms are pluggable
       [2026-06-12-gateway-core](../superpowers/plans/2026-06-12-gateway-core.md).
 - [x] `/help`, `/stop`, `/approve`, `/deny` control commands handled before the
       agent runs (approval is acknowledged; the live approval flow is below).
-- [x] HTTP webhook: `codel00p gateway serve` — a minimal, dependency-free server
-      (`POST /message {conversation,user,text}` -> `{reply}`, `GET /healthz`) that
-      platform event subscriptions post to. Slice:
+- [x] HTTP webhook: `codel00p gateway serve` — server with `POST /message`
+      (`{conversation,user,text}` -> `{reply}`) and `GET /healthz`. Slice:
       [2026-06-12-gateway-serve](../superpowers/plans/2026-06-12-gateway-serve.md).
-- [ ] A first real platform adapter (Slack), inbound/outbound, translating
-      platform events to `POST /message`.
-- [ ] Live permission-ask → chat `/approve` `/deny` flow (today messages run
-      read-only).
+- [x] Webhook auth: `POST /message` requires `Authorization: Bearer
+      <CODEL00P_GATEWAY_SECRET>` (constant-time compare; open when unset for
+      trusted/local use). `GET /healthz` stays open.
+- [x] Slack inbound adapter: `POST /slack/events` parses the Slack Events API
+      (URL-verification handshake + message events; bots/subtypes ignored),
+      verified by Slack request signing (`CODEL00P_SLACK_SIGNING_SECRET`,
+      HMAC-SHA256 with replay protection).
+- [x] Live permission-ask → chat `/approve` `/deny` flow: privileged tools
+      (edit/shell) pause the turn, the remote user is asked, `/approve` resumes
+      with a one-shot grant for exactly the approved tool and `/deny` clears it.
+      File-backed pending store, sanitized per-conversation.
 
 ### Phase 2 — Governance integration
 - [ ] Clerk identity resolution for platform users; org/role enforcement.
