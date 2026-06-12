@@ -10,6 +10,8 @@
 //! [Messaging Gateway initiative](../../../docs/initiatives/messaging-gateway.md));
 //! concrete network adapters build on it in later slices.
 
+pub mod slack;
+
 /// What an inbound message resolves to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GatewayCommand {
