@@ -13,8 +13,9 @@ use codel00p_harness::{
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
     MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
-    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, SessionId, SubAgentSpawner,
-    TokenSink, ToolRegistry, UserMessage, Workspace, delegation_tools,
+    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, SessionId, SkillContext,
+    SkillPrompt, SkillProvider, SkillSelectionRequest, SubAgentSpawner, TokenSink, ToolRegistry,
+    UserMessage, Workspace, delegation_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
@@ -25,6 +26,7 @@ use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
 use codel00p_providers::{ProviderRegistry, default_registry};
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
+use codel00p_skill::{SkillSource, load_skills, select_skills};
 
 use crate::{
     config::{
@@ -313,6 +315,9 @@ async fn build_agent_harness(
             options.remember_permissions,
         ))
         .project_memory_provider(memory_provider)
+        .skill_provider(CliSkillProvider::new(crate::skills::skill_sources(
+            &options.workspace,
+        )))
         .turn_memory_extractor(memory_extractor)
         .memory_candidate_sink(memory_sink);
     builder = plugins.apply_to_harness_builder(builder);
@@ -1807,6 +1812,39 @@ fn persist_session_records(
     }
 
     Ok(())
+}
+
+/// Default number of skills injected into a turn.
+const SKILL_SELECTION_LIMIT: usize = 3;
+
+/// Selects locally-authored skills relevant to the turn and hands them to the
+/// harness for injection. Loading is filesystem-only, so it runs inline.
+struct CliSkillProvider {
+    sources: Vec<(SkillSource, PathBuf)>,
+    limit: usize,
+}
+
+impl CliSkillProvider {
+    fn new(sources: Vec<(SkillSource, PathBuf)>) -> Self {
+        Self {
+            sources,
+            limit: SKILL_SELECTION_LIMIT,
+        }
+    }
+}
+
+#[async_trait]
+impl SkillProvider for CliSkillProvider {
+    async fn select(&self, request: SkillSelectionRequest) -> Result<SkillContext, HarnessError> {
+        let skills = load_skills(&self.sources);
+        let selected = select_skills(&skills, request.query(), self.limit);
+        Ok(SkillContext::new(
+            selected
+                .into_iter()
+                .map(|skill| SkillPrompt::new(skill.name, skill.body))
+                .collect(),
+        ))
+    }
 }
 
 struct CliProjectMemoryProvider {

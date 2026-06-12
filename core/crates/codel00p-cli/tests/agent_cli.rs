@@ -3214,3 +3214,53 @@ fn agent_chat_streams_tokens_to_stdout() {
     assert_eq!(provider.calls(), 1);
     assert_eq!(stdout(&output), "Streamed reply.\n");
 }
+
+#[test]
+fn agent_run_injects_relevant_skill_into_the_request() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    // Author a skill in the user skills dir (CODEL00P_HOME/skills).
+    let skill_dir = dir.path().join("skills").join("deploy");
+    fs::create_dir_all(&skill_dir).expect("skill dir");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: deploy\ndescription: how to deploy\ntriggers:\n  - deploy\n---\nAlways run the smoke tests after deploying.\n",
+    )
+    .expect("write skill");
+
+    let server = MockServer::start();
+    // The mock only matches if the skill body was injected into the request.
+    let provider = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Always run the smoke tests after deploying.");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "done" }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    let output = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Please deploy the service",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    provider.assert();
+}

@@ -99,8 +99,10 @@ skill-name/
       (A `SkillRecord` protocol contract + TS mirror is deferred to when cloud
       sync needs it; local skills use the crate model.)
 - [x] `codel00p skills list/show/create`.
-- [ ] Relevance selection reusing memory retrieval; inject selected skills into
-      turn context.
+- [x] Relevance selection (trigger/name matching) + injecting selected skills
+      into the turn as a system message, mirroring project-memory injection.
+      Slice:
+      [2026-06-12-skill-context-injection](../superpowers/plans/2026-06-12-skill-context-injection.md).
 
 ### Phase 2 — Invocation & permissions
 - [ ] `use_skill` tool via plugin registry; permission-scoped script execution.

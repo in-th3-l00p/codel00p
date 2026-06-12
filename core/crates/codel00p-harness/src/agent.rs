@@ -15,12 +15,13 @@ use crate::{
     },
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
     session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage},
+    skills::{SkillProvider, SkillSelectionRequest},
     tool_registry::ToolRegistry,
     tool_result::ToolResult,
     turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TokenSink, TurnOutcome},
     workspace::Workspace,
 };
-use codel00p_protocol::{ContextWindowState, EventId, RuntimeErrorKind};
+use codel00p_protocol::{ContextWindowState, EventId, RuntimeErrorKind, SessionRole};
 use serde_json::json;
 
 const DEFAULT_COMPACTION_RECENT_MESSAGES: usize = 4;
@@ -33,6 +34,7 @@ pub struct AgentHarness {
     event_sink: Option<Arc<dyn AgentEventSink>>,
     lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
     project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
+    skill_provider: Option<Arc<dyn SkillProvider>>,
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     context_window: Option<ContextWindowState>,
@@ -132,6 +134,19 @@ impl AgentHarness {
                     .await?;
                 if !project_memory.is_empty() {
                     request = request.with_project_memory(project_memory);
+                }
+            }
+            if let Some(skill_provider) = &self.skill_provider {
+                let skills = skill_provider
+                    .select(SkillSelectionRequest::new(
+                        session_state.session_id().clone(),
+                        turn_id.clone(),
+                        session_state.messages().len(),
+                        latest_user_message(&session_state),
+                    ))
+                    .await?;
+                if !skills.is_empty() {
+                    request = request.with_skills(skills);
                 }
             }
 
@@ -625,6 +640,17 @@ impl AgentHarness {
     }
 }
 
+/// The most recent user message text, used to rank skills for the turn.
+fn latest_user_message(state: &SessionState) -> String {
+    state
+        .messages()
+        .iter()
+        .rev()
+        .find(|message| message.role() == SessionRole::User)
+        .map(|message| message.content().to_string())
+        .unwrap_or_default()
+}
+
 fn summarize_compacted_messages(messages: &[SessionMessage], keep_recent: usize) -> String {
     let compacted_count = messages.len().saturating_sub(keep_recent);
     let mut lines = vec![format!(
@@ -650,6 +676,7 @@ pub struct AgentHarnessBuilder {
     event_sink: Option<Arc<dyn AgentEventSink>>,
     lifecycle_hooks: Vec<Arc<dyn LifecycleHook>>,
     project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
+    skill_provider: Option<Arc<dyn SkillProvider>>,
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     context_window: Option<ContextWindowState>,
@@ -723,6 +750,14 @@ impl AgentHarnessBuilder {
         self
     }
 
+    pub fn skill_provider<T>(mut self, skill_provider: T) -> Self
+    where
+        T: SkillProvider + 'static,
+    {
+        self.skill_provider = Some(Arc::new(skill_provider));
+        self
+    }
+
     pub fn turn_memory_extractor<T>(mut self, turn_memory_extractor: T) -> Self
     where
         T: TurnMemoryExtractor + 'static,
@@ -771,6 +806,7 @@ impl AgentHarnessBuilder {
             event_sink: self.event_sink,
             lifecycle_hooks: self.lifecycle_hooks,
             project_memory_provider: self.project_memory_provider,
+            skill_provider: self.skill_provider,
             turn_memory_extractor: self.turn_memory_extractor,
             memory_candidate_sink: self.memory_candidate_sink,
             context_window: self.context_window,

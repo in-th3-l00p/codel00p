@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     errors::HarnessError, events::HarnessEvent, instructions::ProjectInstructions,
-    memory::ProjectMemoryContext, session::SessionState, tool_result::ToolResult,
+    memory::ProjectMemoryContext, session::SessionState, skills::SkillContext,
+    tool_result::ToolResult,
 };
 
 #[async_trait]
@@ -42,6 +43,7 @@ pub struct HarnessInferenceRequest {
     context_window: Option<ContextWindowState>,
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
+    skills: Option<SkillContext>,
 }
 
 impl HarnessInferenceRequest {
@@ -53,6 +55,7 @@ impl HarnessInferenceRequest {
             context_window: None,
             project_instructions: None,
             project_memory: None,
+            skills: None,
         }
     }
 
@@ -81,6 +84,11 @@ impl HarnessInferenceRequest {
         self
     }
 
+    pub fn with_skills(mut self, skills: SkillContext) -> Self {
+        self.skills = Some(skills);
+        self
+    }
+
     pub fn session_state(&self) -> &SessionState {
         &self.session_state
     }
@@ -103,6 +111,10 @@ impl HarnessInferenceRequest {
 
     pub fn project_memory(&self) -> Option<&ProjectMemoryContext> {
         self.project_memory.as_ref()
+    }
+
+    pub fn skills(&self) -> Option<&SkillContext> {
+        self.skills.as_ref()
     }
 }
 

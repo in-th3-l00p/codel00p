@@ -39,7 +39,7 @@ fn project_skills_dir(workspace_start: &Path) -> PathBuf {
         .unwrap_or_else(|| workspace_start.join(".codel00p").join("skills"))
 }
 
-fn skill_sources(workspace_start: &Path) -> Vec<(SkillSource, PathBuf)> {
+pub(crate) fn skill_sources(workspace_start: &Path) -> Vec<(SkillSource, PathBuf)> {
     vec![
         (SkillSource::User, user_skills_dir()),
         (SkillSource::Project, project_skills_dir(workspace_start)),

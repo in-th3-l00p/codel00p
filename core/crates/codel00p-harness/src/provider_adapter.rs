@@ -8,6 +8,7 @@ use crate::{
     errors::HarnessError,
     memory::MemoryPromptAssembler,
     session::SessionMessage,
+    skills::SkillPromptAssembler,
     turn::{
         HarnessInferenceRequest, HarnessInferenceResponse, ModelClient, ModelToolCall, TokenSink,
     },
@@ -54,6 +55,12 @@ impl ProviderModelClient {
 
         if let Some(project_memory) = request.project_memory()
             && let Some(prompt) = MemoryPromptAssembler.assemble(project_memory)
+        {
+            builder = builder.message(ChatMessage::system(prompt));
+        }
+
+        if let Some(skills) = request.skills()
+            && let Some(prompt) = SkillPromptAssembler.assemble(skills)
         {
             builder = builder.message(ChatMessage::system(prompt));
         }

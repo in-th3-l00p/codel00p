@@ -14,6 +14,7 @@ pub mod memory;
 pub mod permissions;
 pub mod provider_adapter;
 pub mod session;
+pub mod skills;
 pub mod tool_registry;
 pub mod tool_result;
 pub mod tools;
@@ -45,6 +46,9 @@ pub use permissions::{
 pub use provider_adapter::ProviderModelClient;
 pub use session::{
     SessionCompactionRecord, SessionId, SessionMessage, SessionState, TurnId, UserMessage,
+};
+pub use skills::{
+    SkillContext, SkillPrompt, SkillPromptAssembler, SkillProvider, SkillSelectionRequest,
 };
 pub use tool_registry::ToolRegistry;
 pub use tool_result::ToolResult;

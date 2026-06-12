@@ -89,6 +89,44 @@ pub fn load_skills(sources: &[(SkillSource, PathBuf)]) -> Vec<Skill> {
     by_name.into_values().collect()
 }
 
+/// Select up to `limit` skills relevant to `query`, most relevant first.
+///
+/// Relevance is a deterministic score: each `trigger` (or the skill name) that
+/// appears as a case-insensitive substring of the query counts once. Skills with
+/// no match are excluded, so an empty or unrelated query selects nothing.
+pub fn select_skills(skills: &[Skill], query: &str, limit: usize) -> Vec<Skill> {
+    let haystack = query.to_lowercase();
+    let mut scored: Vec<(usize, &Skill)> = skills
+        .iter()
+        .filter_map(|skill| {
+            let score = relevance_score(skill, &haystack);
+            (score > 0).then_some((score, skill))
+        })
+        .collect();
+    // Higher score first; ties broken by name for determinism.
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.cmp(&b.1.name)));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, skill)| skill.clone())
+        .collect()
+}
+
+fn relevance_score(skill: &Skill, lowercase_query: &str) -> usize {
+    let mut score = 0;
+    for trigger in &skill.triggers {
+        let trigger = trigger.trim().to_lowercase();
+        if !trigger.is_empty() && lowercase_query.contains(&trigger) {
+            score += 1;
+        }
+    }
+    let name = skill.name.to_lowercase();
+    if !name.is_empty() && lowercase_query.contains(&name) {
+        score += 1;
+    }
+    score
+}
+
 /// Load a single `SKILL.md` at `path` with the given source.
 pub fn load_skill(path: &Path, source: SkillSource) -> Result<Skill, SkillError> {
     let content = fs::read_to_string(path).map_err(|error| SkillError::Io {
@@ -312,6 +350,33 @@ mod tests {
         let error =
             load_skill(&dir.path().join("bad").join(SKILL_FILE), SkillSource::User).unwrap_err();
         assert!(matches!(error, SkillError::MissingFrontMatter { .. }));
+    }
+
+    #[test]
+    fn selects_skills_by_trigger_relevance() {
+        let dir = tempdir().expect("tempdir");
+        write_skill(
+            dir.path(),
+            "deploy",
+            "---\nname: deploy\ndescription: d\ntriggers: [deploy, ship]\n---\nbody\n",
+        );
+        write_skill(
+            dir.path(),
+            "lint",
+            "---\nname: lint\ndescription: d\ntriggers: [lint]\n---\nbody\n",
+        );
+        let skills = load_skills(&[(SkillSource::User, dir.path().to_path_buf())]);
+
+        let selected = select_skills(&skills, "please deploy the app", 5);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].name, "deploy");
+
+        // Unrelated query selects nothing.
+        assert!(select_skills(&skills, "write a poem", 5).is_empty());
+
+        // Limit is respected.
+        let both = select_skills(&skills, "deploy and lint", 1);
+        assert_eq!(both.len(), 1);
     }
 
     #[test]
