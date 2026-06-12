@@ -10,6 +10,7 @@
 //! [Messaging Gateway initiative](../../../docs/initiatives/messaging-gateway.md));
 //! concrete network adapters build on it in later slices.
 
+pub mod approvals;
 pub mod auth;
 pub mod slack;
 
