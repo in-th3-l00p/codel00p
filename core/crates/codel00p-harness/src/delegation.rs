@@ -147,6 +147,13 @@ impl Tool for DelegateTaskTool {
         })
     }
 
+    fn is_concurrency_safe(&self, _input: &Value) -> bool {
+        // Children are isolated runs, so a batch of delegations can execute
+        // concurrently; the spawner caps how many run at once. (Revisit once
+        // children may mutate a shared workspace — see worktree isolation.)
+        true
+    }
+
     fn permission_scope(&self, _input: &Value) -> PermissionScope {
         // Spawning a child agent is an external capability gated like a
         // connector; the child's own tool calls are permissioned separately.
@@ -227,6 +234,9 @@ mod tests {
         let orchestrator = delegation_tools(AgentRole::Orchestrator, Arc::new(StubSpawner::new()));
         assert_eq!(orchestrator.names(), vec!["delegate_task".to_string()]);
         assert!(AgentRole::Orchestrator.can_delegate());
+
+        // Delegations are batchable; the spawner caps actual concurrency.
+        assert!(orchestrator.is_concurrency_safe("delegate_task", &json!({})));
     }
 
     #[tokio::test]

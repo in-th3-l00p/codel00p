@@ -69,7 +69,12 @@ agent.max_iterations           agent.permission_mode      # allow | ask | deny
 agent.tool_sets                # comma-separated: read,edit,command,git,delegate,all
 agent.stream                   agent.remember_permissions
 plugins.enabled                # comma-separated plugin ids (see `codel00p plugins`)
+delegation.max_concurrent_children   # cap on child agents run concurrently (default 4)
 ```
+
+The `delegate` tool-set (`--tool-set delegate` or `agent.tool_sets`) lets an
+agent hand focused tasks to child agents via a `delegate_task` tool. Children run
+read-only and are recorded as their own sessions linked to the parent.
 
 ## `codel00p plugins`
 

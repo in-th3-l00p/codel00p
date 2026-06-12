@@ -85,10 +85,14 @@ queue — without losing session, memory, permission, or audit coherence.
 - [x] Real spawner: build + run a child harness (model client, read-only tools),
       wired in the CLI behind a `delegate` tool-set. Slice:
       [2026-06-12-subagent-real-spawner](../superpowers/plans/2026-06-12-subagent-real-spawner.md).
-- [ ] Narrow the child's permission scope to the parent's ceiling (currently
-      read-only by construction).
-- [ ] Child sessions with `parent_id`; merged event stream + audit.
-- [ ] `delegation.max_concurrent_children` batch execution.
+- [x] Child sessions persisted with `parent_id` (`SessionMetadata::with_parent`)
+      and a `subagent` source, so the agent tree is queryable/auditable. Slice:
+      [2026-06-12-subagent-lineage-and-batch](../superpowers/plans/2026-06-12-subagent-lineage-and-batch.md).
+- [x] `delegation.max_concurrent_children` batch execution (delegate_task is
+      concurrency-safe; a shared semaphore caps concurrent children).
+- [ ] Narrow the child's permission scope to the parent's ceiling. Conservatively
+      satisfied today — children run read-only, which is within any ceiling;
+      configurable child tool-sets need a scope lattice (deferred).
 
 ### Phase 2 — Worktree isolation
 - [ ] Worktree-isolated execution for mutating children; merge-back review.

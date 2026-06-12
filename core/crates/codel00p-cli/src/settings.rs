@@ -37,6 +37,8 @@ pub struct Settings {
     pub agent: AgentSettings,
     #[serde(skip_serializing_if = "PluginSettings::is_empty")]
     pub plugins: PluginSettings,
+    #[serde(skip_serializing_if = "DelegationSettings::is_empty")]
+    pub delegation: DelegationSettings,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -93,6 +95,27 @@ impl PluginSettings {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DelegationSettings {
+    /// Maximum number of child agents that may run concurrently in a batch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_children: Option<u32>,
+}
+
+impl DelegationSettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(
+            &mut self.max_concurrent_children,
+            other.max_concurrent_children,
+        );
+    }
+}
+
 impl WorkspaceSettings {
     fn is_empty(&self) -> bool {
         *self == Self::default()
@@ -133,6 +156,7 @@ impl Settings {
         self.workspace.merge(other.workspace);
         self.agent.merge(other.agent);
         self.plugins.merge(other.plugins);
+        self.delegation.merge(other.delegation);
     }
 }
 
@@ -373,6 +397,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.stream", ValueKind::Bool),
     ("agent.remember_permissions", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
+    ("delegation.max_concurrent_children", ValueKind::U32),
 ];
 
 pub fn known_keys() -> Vec<&'static str> {
@@ -415,6 +440,10 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.stream" => agent.stream.map(|value| value.to_string()),
         "agent.remember_permissions" => agent.remember_permissions.map(|value| value.to_string()),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
+        "delegation.max_concurrent_children" => settings
+            .delegation
+            .max_concurrent_children
+            .map(|value| value.to_string()),
         _ => None,
     };
     Ok(value)

@@ -211,7 +211,9 @@ fn run_agent_turn(
         let (session_state, previous_message_count) =
             prepare_session_state(&config, &options, session_mode)?;
 
-        let harness = build_agent_harness(&config, &options, &mcp_servers).await?;
+        let harness =
+            build_agent_harness(&config, &options, &mcp_servers, session_state.session_id())
+                .await?;
         let outcome = harness
             .run_turn_with_state(session_state, UserMessage::new(options.prompt.clone()))
             .await
@@ -251,6 +253,7 @@ async fn build_agent_harness(
     config: &CliConfig,
     options: &AgentRunOptions,
     mcp_servers: &[McpServerSpec],
+    parent_session_id: &SessionId,
 ) -> CliResult<AgentHarness> {
     // Plugins are loaded once and contribute to providers, tools, and hooks.
     let plugins = load_plugins(&options.workspace)?;
@@ -278,7 +281,14 @@ async fn build_agent_harness(
     let mut tools =
         plugins.apply_to_tool_registry(build_tool_registry(&options.tool_sets, mcp_servers).await?);
     if options.tool_sets.contains(&AgentToolSet::Delegate) {
+        let max_children = crate::settings::load_layered(&options.workspace)
+            .ok()
+            .and_then(|resolved| resolved.merged.delegation.max_concurrent_children)
+            .filter(|value| *value > 0)
+            .unwrap_or(DEFAULT_MAX_CONCURRENT_CHILDREN);
         let spawner = Arc::new(CliSubAgentSpawner {
+            config: config.clone(),
+            parent_session_id: parent_session_id.clone(),
             workspace: options.workspace.clone(),
             provider_registry,
             provider: options.provider.clone(),
@@ -288,6 +298,7 @@ async fn build_agent_harness(
             max_iterations: options
                 .max_iterations
                 .unwrap_or(CHILD_DEFAULT_MAX_ITERATIONS),
+            concurrency: Arc::new(tokio::sync::Semaphore::new(max_children as usize)),
         });
         tools = tools.with_registry(delegation_tools(AgentRole::Orchestrator, spawner));
     }
@@ -427,7 +438,9 @@ fn run_agent_chat(config: CliConfig, mut options: AgentRunOptions) -> CliResult<
                 }
             }
 
-            let harness = build_agent_harness(&config, &options, &mcp_servers).await?;
+            let harness =
+                build_agent_harness(&config, &options, &mcp_servers, session_state.session_id())
+                    .await?;
             let outcome = harness
                 .run_turn_with_state(session_state, UserMessage::new(prompt.to_string()))
                 .await
@@ -1120,10 +1133,19 @@ fn split_command_spec(value: &str) -> CliResult<Vec<String>> {
 /// Default iteration budget for a child agent when the parent run set none.
 const CHILD_DEFAULT_MAX_ITERATIONS: u32 = 4;
 
+/// Default cap on children running at once when config sets none.
+const DEFAULT_MAX_CONCURRENT_CHILDREN: u32 = 4;
+
 /// Runs a child agent for a delegated task, reusing the orchestrator's provider
 /// configuration. Children run with read-only tools and as leaves (no further
 /// delegation), which bounds blast radius and depth for this first wiring.
+///
+/// Each child session is persisted with the orchestrator's session as its
+/// `parent`, so the agent tree is queryable and auditable. A shared semaphore
+/// caps how many children run concurrently when the model delegates in a batch.
 struct CliSubAgentSpawner {
+    config: CliConfig,
+    parent_session_id: SessionId,
     workspace: PathBuf,
     provider_registry: ProviderRegistry,
     provider: String,
@@ -1131,11 +1153,21 @@ struct CliSubAgentSpawner {
     base_url: Option<String>,
     policy_preset: Option<String>,
     max_iterations: u32,
+    concurrency: Arc<tokio::sync::Semaphore>,
 }
 
 #[async_trait]
 impl SubAgentSpawner for CliSubAgentSpawner {
     async fn spawn(&self, task: DelegatedTask) -> Result<DelegationOutcome, HarnessError> {
+        // Cap concurrent children even when the harness fires a delegate batch.
+        let _permit =
+            self.concurrency
+                .acquire()
+                .await
+                .map_err(|error| HarnessError::Configuration {
+                    message: format!("delegation concurrency limiter closed: {error}"),
+                })?;
+
         let provider_client = build_provider_client_with(
             self.provider_registry.clone(),
             &self.provider,
@@ -1162,6 +1194,18 @@ impl SubAgentSpawner for CliSubAgentSpawner {
                 UserMessage::new(task.description()),
             )
             .await?;
+
+        // Record the child as its own session linked to the orchestrator, so the
+        // delegation is visible via `session show` and the audit trail.
+        persist_session_records(
+            &self.config,
+            &outcome.session_state,
+            &outcome.events,
+            0,
+            "subagent",
+            Some(self.parent_session_id.clone()),
+        )
+        .map_err(|message| HarnessError::Configuration { message })?;
 
         Ok(DelegationOutcome::new(
             outcome.assistant_message.unwrap_or_default(),
@@ -1721,11 +1765,32 @@ fn persist_turn_outcome(
     events: &[AgentEvent],
     message_start_index: usize,
 ) -> CliResult<()> {
-    let mut store = open_session_store(config)?;
-    match store.create_session(SessionMetadata::new(
-        session_state.session_id().clone(),
+    persist_session_records(
+        config,
+        session_state,
+        events,
+        message_start_index,
         "cli",
-    )) {
+        None,
+    )
+}
+
+/// Persist a session's new messages and events, creating it with `source` and an
+/// optional `parent` for lineage (used for sub-agent child sessions).
+fn persist_session_records(
+    config: &CliConfig,
+    session_state: &codel00p_harness::SessionState,
+    events: &[AgentEvent],
+    message_start_index: usize,
+    source: &str,
+    parent: Option<SessionId>,
+) -> CliResult<()> {
+    let mut store = open_session_store(config)?;
+    let mut metadata = SessionMetadata::new(session_state.session_id().clone(), source);
+    if let Some(parent) = parent {
+        metadata = metadata.with_parent(parent);
+    }
+    match store.create_session(metadata) {
         Ok(()) | Err(SessionStoreError::SessionAlreadyExists { .. }) => {}
         Err(error) => return Err(error.to_string()),
     }
@@ -1844,13 +1909,24 @@ impl MemoryCandidateSink for CliMemoryCandidateSink {
 mod tests {
     use super::*;
 
+    use codel00p_protocol::ProjectRef;
+    use codel00p_session::SessionStore;
     use httpmock::{Method::POST, MockServer};
     use serde_json::json;
 
+    fn test_config(dir: &std::path::Path) -> CliConfig {
+        CliConfig {
+            memory_db: dir.join("memory.sqlite"),
+            organization_id: "test-org".to_string(),
+            project: ProjectRef::new("test-project", "Test Project"),
+        }
+    }
+
     // A child agent run goes through the real provider transport, so mock one
-    // chat-completions response and confirm the spawner returns its summary.
+    // chat-completions response and confirm the spawner runs a child, returns
+    // its summary, and records the child session linked to its parent.
     #[test]
-    fn cli_spawner_runs_a_child_and_returns_its_summary() {
+    fn cli_spawner_runs_a_child_and_records_lineage() {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
@@ -1866,12 +1942,16 @@ mod tests {
         });
 
         let dir = tempfile::tempdir().expect("tempdir");
+        let config = test_config(dir.path());
+        let parent_session_id = SessionId::from_static("parent-session");
         // SAFETY: guarded by LOCK so no other test mutates this var concurrently.
         unsafe {
             std::env::set_var("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token");
         }
 
         let spawner = CliSubAgentSpawner {
+            config: config.clone(),
+            parent_session_id: parent_session_id.clone(),
             workspace: dir.path().to_path_buf(),
             provider_registry: default_registry(),
             provider: "custom".to_string(),
@@ -1879,6 +1959,7 @@ mod tests {
             base_url: Some(server.base_url()),
             policy_preset: None,
             max_iterations: 2,
+            concurrency: Arc::new(tokio::sync::Semaphore::new(2)),
         };
 
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -1897,5 +1978,12 @@ mod tests {
         mock.assert();
         assert_eq!(outcome.summary(), "child summary");
         assert_eq!(outcome.tool_calls(), 0);
+
+        // The child session is persisted with the parent as its lineage.
+        let store = open_session_store(&config).expect("session store");
+        let metadata = store
+            .metadata(outcome.child_session_id())
+            .expect("child session persisted");
+        assert_eq!(metadata.parent_session_id(), Some(&parent_session_id));
     }
 }
