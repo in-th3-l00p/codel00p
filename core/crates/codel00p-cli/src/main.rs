@@ -8,6 +8,7 @@ mod config_cmd;
 mod connector_permissions;
 mod credentials;
 mod cron;
+mod gateway;
 mod help;
 mod login;
 mod mcp_server;
@@ -67,6 +68,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
     match command.as_str() {
         "agent" => agent::run(config, agent_defaults, rest),
         "cron" => cron::run(config, agent_defaults, rest),
+        "gateway" => gateway::run(config, agent_defaults, rest),
         "mcp" => mcp_server::run(config, rest),
         "memory" => memory::run(config, rest),
         "cloud" => cloud::run(config, rest),

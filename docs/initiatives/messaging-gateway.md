@@ -69,10 +69,18 @@ harness, plus an adapter trait so platforms are pluggable
 ## Scope
 
 ### Phase 1 — Adapter framework + one platform
-- [ ] `PlatformAdapter` trait + `codel00p-gateway` host over the harness.
-- [ ] First adapter (Slack — strongest team fit), inbound/outbound + session
-      mapping.
-- [ ] `/stop`, `/approve`, `/deny` control commands bypassing the message queue.
+- [x] Gateway core: `codel00p-gateway` crate (control-command parsing +
+      conversation→session derivation) and `codel00p gateway message
+      --conversation <id> --user <id> <text>` — the per-message entrypoint a
+      platform adapter calls. Each conversation maps to a durable, resumable
+      agent session (a thread is remembered). Slice:
+      [2026-06-12-gateway-core](../superpowers/plans/2026-06-12-gateway-core.md).
+- [x] `/help`, `/stop`, `/approve`, `/deny` control commands handled before the
+      agent runs (approval is acknowledged; the live approval flow is below).
+- [ ] An HTTP webhook adapter (`gateway serve`) and a first real platform
+      adapter (Slack), inbound/outbound, as thin translators to `gateway message`.
+- [ ] Live permission-ask → chat `/approve` `/deny` flow (today messages run
+      read-only).
 
 ### Phase 2 — Governance integration
 - [ ] Clerk identity resolution for platform users; org/role enforcement.

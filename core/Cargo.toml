@@ -10,6 +10,7 @@ members = [
     "crates/codel00p-plugin",
     "crates/codel00p-skill",
     "crates/codel00p-cron",
+    "crates/codel00p-gateway",
     "crates/codel00p-cli",
     "crates/codel00p-cloud",
 ]

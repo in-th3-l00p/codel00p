@@ -9,6 +9,7 @@ use std::{
 
 use async_trait::async_trait;
 use codel00p_cron::CronJob;
+use codel00p_gateway::GatewayCommand;
 use codel00p_harness::{
     AgentEventSink, AgentHarness, AgentRole, DelegatedTask, DelegationOutcome,
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
@@ -164,6 +165,76 @@ pub(crate) fn run_scheduled_job(
     };
 
     run_agent_turn(config, options, AgentSessionMode::Fresh)
+}
+
+/// Handle one inbound gateway message for a conversation.
+///
+/// Control commands are answered directly; ordinary text runs as a read-only
+/// agent turn against the conversation's durable session (derived from the
+/// conversation id), so a chat thread is one continuous, resumable session. The
+/// `user` is the platform sender — recorded by the adapter; full identity
+/// governance (mapping to a codel00p org/role) is a later slice.
+pub(crate) fn run_gateway_message(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    conversation: &str,
+    user: &str,
+    text: &str,
+) -> CliResult<String> {
+    let _ = user;
+    match codel00p_gateway::parse_command(text) {
+        GatewayCommand::Help => Ok(format!("{}\n", codel00p_gateway::help_text())),
+        GatewayCommand::Stop => Ok("Nothing is currently running.\n".to_string()),
+        GatewayCommand::Approve | GatewayCommand::Deny => {
+            Ok("No permission request is pending.\n".to_string())
+        }
+        GatewayCommand::Message(message) => {
+            let provider = defaults
+                .provider
+                .clone()
+                .ok_or_else(|| "no provider configured; set agent.provider".to_string())?;
+            let model = defaults
+                .model
+                .clone()
+                .ok_or_else(|| "no model configured; set agent.model".to_string())?;
+            let session_id = codel00p_gateway::conversation_session_id(conversation);
+            let parsed = parse_session_id(&session_id)?;
+            let mode = if session_exists(&config, &parsed) {
+                AgentSessionMode::Resume
+            } else {
+                AgentSessionMode::Fresh
+            };
+            let workspace = env::current_dir().map_err(|error| error.to_string())?;
+
+            let options = AgentRunOptions {
+                prompt: message,
+                workspace,
+                provider,
+                model,
+                provider_policy_preset: defaults.provider_policy_preset.clone(),
+                base_url: defaults.base_url.clone(),
+                session_id: Some(session_id),
+                max_iterations: defaults.max_iterations,
+                json_events: false,
+                stream_events: false,
+                stream: false,
+                // Restricted by default: a remote sender cannot yet approve
+                // permissions inline (the /approve flow is a later slice).
+                tool_sets: vec![AgentToolSet::Read],
+                permission_mode: CliPermissionMode::Allow,
+                remember_permissions: false,
+                mcp_servers: Vec::new(),
+            };
+            run_agent_turn(config, options, mode)
+        }
+    }
+}
+
+fn session_exists(config: &CliConfig, session_id: &SessionId) -> bool {
+    open_session_store(config)
+        .ok()
+        .and_then(|store| store.metadata(session_id).ok())
+        .is_some()
 }
 
 fn agent_resume(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {

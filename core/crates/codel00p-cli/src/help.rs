@@ -9,6 +9,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "plugins" => Some(PLUGINS_HELP),
             "skills" => Some(SKILLS_HELP),
             "cron" => Some(CRON_HELP),
+            "gateway" => Some(GATEWAY_HELP),
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
@@ -64,6 +65,7 @@ Commands:
   plugins    Enable or disable agent plugins
   skills     List, show, and scaffold skills
   cron       Define and manage scheduled jobs
+  gateway    Reach the agent from chat platforms
   mcp        Expose codel00p as an MCP server
   memory     Review project memory
   session    Inspect persisted sessions
@@ -109,6 +111,21 @@ Commands:
 Push options:  --status <status>  --limit <n>  --dry-run  --json
 Pull options:  --actor <name>  --json
 Run usage:     codel00p cloud run <agent-id> --task \"...\" [--plan] [--limit n] [--json]
+";
+
+const GATEWAY_HELP: &str = "\
+Usage: codel00p gateway <command>
+
+Reach one agent core from chat platforms. Each conversation maps to a durable
+agent session, so a thread is a continuous, resumable conversation. A platform
+adapter (Slack, Telegram, a webhook) calls `gateway message` per inbound message.
+
+Commands:
+  message --conversation <id> --user <id> <text>
+                                Handle one inbound message and print the reply.
+                                Control text: /help, /stop, /approve, /deny.
+
+Messages run as restricted (read-only) agent turns for now.
 ";
 
 const CRON_HELP: &str = "\

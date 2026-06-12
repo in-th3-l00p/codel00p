@@ -232,6 +232,7 @@ dependencies = [
  "async-trait",
  "base64",
  "codel00p-cron",
+ "codel00p-gateway",
  "codel00p-harness",
  "codel00p-mcp",
  "codel00p-memory",
@@ -279,6 +280,10 @@ dependencies = [
  "thiserror",
  "toml",
 ]
+
+[[package]]
+name = "codel00p-gateway"
+version = "0.1.0"
 
 [[package]]
 name = "codel00p-harness"
