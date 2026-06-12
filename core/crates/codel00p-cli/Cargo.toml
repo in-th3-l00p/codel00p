@@ -23,6 +23,7 @@ codel00p-skill = { path = "../codel00p-skill" }
 codel00p-storage = { path = "../codel00p-storage", features = ["sqlite"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+base64 = "0.22.1"
 toml = "0.8.19"
 toml_edit = "0.22.22"
 tokio = { version = "1.45.1", features = ["rt", "sync"] }

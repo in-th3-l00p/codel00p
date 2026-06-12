@@ -199,7 +199,7 @@ fn cron_daemon_once_runs_due_jobs_then_tracks_state() {
         "out: {}",
         stdout(&first)
     );
-    assert!(provider.hits() >= 1);
+    assert!(provider.calls() >= 1);
 
     // Second tick right away: it just ran, so nothing is due (state tracked).
     let second = run_agent(home.path(), &["cron", "daemon", "--once"]);

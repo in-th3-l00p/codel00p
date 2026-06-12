@@ -13,6 +13,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
             "cloud" => Some(CLOUD_HELP),
+            "login" => Some(LOGIN_HELP),
             _ => None,
         },
         [command, subcommand, flag] if is_help(flag) => {
@@ -67,6 +68,25 @@ Commands:
   memory     Review project memory
   session    Inspect persisted sessions
   cloud      Sync project memory with the team cloud
+  login      Sign in to the codel00p cloud via your browser
+  logout     Clear stored cloud credentials
+";
+
+const LOGIN_HELP: &str = "\
+Usage: codel00p login [options]
+
+Sign in to the codel00p cloud. Opens your browser to authenticate (OAuth or
+email code via Clerk), then stores a session token in
+~/.codel00p/credentials.toml so `codel00p cloud` commands work without --token.
+
+Options:
+  --api-url <url>      Cloud service URL to store with the credentials
+                       (or set CODEL00P_API_URL)
+  --connect-url <url>  Web sign-in handoff URL
+                       (default http://localhost:3000/connect/cli,
+                        or set CODEL00P_LOGIN_URL)
+
+Run `codel00p logout` to clear stored credentials.
 ";
 
 const CLOUD_HELP: &str = "\

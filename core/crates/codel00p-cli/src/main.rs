@@ -6,8 +6,10 @@ mod cloud_client;
 mod config;
 mod config_cmd;
 mod connector_permissions;
+mod credentials;
 mod cron;
 mod help;
+mod login;
 mod mcp_server;
 mod memory;
 mod plugins;
@@ -53,6 +55,8 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "providers" => return providers::run(&workspace_start, rest),
         "plugins" => return plugins::run(&workspace_start, rest),
         "skills" => return skills::run(&workspace_start, rest),
+        "login" => return login::run_login(rest),
+        "logout" => return login::run_logout(rest),
         _ => {}
     }
 
