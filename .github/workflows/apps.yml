@@ -8,6 +8,9 @@ on:
 # Run all JavaScript actions on Node 24 (Node 20 is being phased out).
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Publishable key is public (ships in the client bundle); the landing app's
+  # `next build` prerenders Clerk-wrapped pages and needs it at build time.
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
 jobs:
   verify-apps:
