@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod commands;
 pub mod context;
+pub mod delegation;
 pub mod editing;
 pub mod errors;
 pub mod event_sink;
@@ -21,6 +22,10 @@ pub mod workspace;
 
 pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
+pub use delegation::{
+    AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner,
+    delegation_tools,
+};
 pub use errors::HarnessError;
 pub use event_sink::AgentEventSink;
 pub use events::HarnessEvent;

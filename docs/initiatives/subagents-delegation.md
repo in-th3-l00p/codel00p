@@ -79,7 +79,11 @@ queue — without losing session, memory, permission, or audit coherence.
 ## Scope
 
 ### Phase 1 — Synchronous delegation
-- [ ] `delegate_task` tool, `leaf`/`orchestrator` roles, scope inheritance.
+- [x] `delegate_task` tool + `leaf`/`orchestrator` roles + a `SubAgentSpawner`
+      seam, in the harness. Slice:
+      [2026-06-12-subagent-delegation-core](../superpowers/plans/2026-06-12-subagent-delegation-core.md).
+- [ ] Real spawner: build + run a child harness (model client, narrowed scope),
+      wired in the CLI.
 - [ ] Child sessions with `parent_id`; merged event stream + audit.
 - [ ] `delegation.max_concurrent_children` batch execution.
 
