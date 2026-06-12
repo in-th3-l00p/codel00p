@@ -58,6 +58,17 @@ impl ToolRegistry {
         self
     }
 
+    /// Insert an already type-erased tool.
+    ///
+    /// This is the entry point used when tools are contributed dynamically (for
+    /// example by a plugin) rather than by a statically typed `with_tool` call.
+    /// A later insertion with the same tool name replaces an earlier one, so
+    /// callers that fold several sources in sequence get last-writer-wins.
+    pub fn with_tool_arc(mut self, tool: Arc<dyn Tool>) -> Self {
+        self.tools.insert(tool.name().to_string(), tool);
+        self
+    }
+
     pub fn with_registry(mut self, registry: Self) -> Self {
         self.tools.extend(registry.tools);
         self

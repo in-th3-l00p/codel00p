@@ -1,0 +1,15 @@
+[package]
+name = "codel00p-plugin"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+codel00p-harness = { path = "../codel00p-harness" }
+codel00p-providers = { path = "../codel00p-providers" }
+
+[dev-dependencies]
+async-trait = "0.1.88"
+serde_json = "1.0.140"
+tokio = { version = "1.45.1", features = ["macros", "rt"] }
