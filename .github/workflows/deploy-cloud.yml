@@ -16,13 +16,17 @@ concurrency:
   group: deploy-cloud
   cancel-in-progress: false
 
+# Run all JavaScript actions on Node 24 (Node 20 is being phased out).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     name: Deploy codel00p-cloud to Fly.io
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
