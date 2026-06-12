@@ -68,9 +68,13 @@ A new `codel00p-scheduler` crate (or module) plus a `cronjob` tool and
 ## Scope
 
 ### Phase 1 — Job store & one-shot scheduling
-- [ ] Job record + schedule-spec parser (duration first).
-- [ ] `codel00p cron add/list/remove`; `codel00p cron run` foreground executor.
-- [ ] Runs produce normal auditable sessions; per-run interrupt + iteration cap.
+- [x] `CronJob` record + duration schedule-spec parser + file-backed `JobStore`
+      in a `codel00p-cron` crate, and `codel00p cron add/list/show/remove/
+      enable/disable`. Slice:
+      [2026-06-12-cron-job-store-and-cli](../superpowers/plans/2026-06-12-cron-job-store-and-cli.md).
+- [ ] `codel00p cron run <id>` foreground executor (runs the job as an agent
+      turn); runs produce normal auditable sessions; per-run interrupt + cap.
+- [ ] Background scheduler daemon driving due jobs.
 
 ### Phase 2 — Recurring + agent tool
 - [ ] NL-phrase and 5-field cron parsing.

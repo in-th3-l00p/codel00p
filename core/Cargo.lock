@@ -134,6 +134,7 @@ name = "codel00p-cli"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "codel00p-cron",
  "codel00p-harness",
  "codel00p-mcp",
  "codel00p-memory",
@@ -150,6 +151,16 @@ dependencies = [
  "tokio",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "codel00p-cron"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

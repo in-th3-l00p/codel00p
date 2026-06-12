@@ -8,6 +8,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "providers" => Some(PROVIDERS_HELP),
             "plugins" => Some(PLUGINS_HELP),
             "skills" => Some(SKILLS_HELP),
+            "cron" => Some(CRON_HELP),
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
@@ -60,9 +61,25 @@ Commands:
   providers  Configure inference providers and credentials
   plugins    Enable or disable agent plugins
   skills     List, show, and scaffold skills
+  cron       Define and manage scheduled jobs
   mcp        Expose codel00p as an MCP server
   memory     Review project memory
   session    Inspect persisted sessions
+";
+
+const CRON_HELP: &str = "\
+Usage: codel00p cron <command>
+
+Define jobs that run a prompt on a schedule. Jobs are saved under
+~/.codel00p/cron. Schedules are duration intervals: 30m, 2h, 1d, 1w (optionally
+prefixed with `every`). Running jobs on a schedule is a later slice.
+
+Commands:
+  list                          List scheduled jobs (default)
+  add <schedule> <prompt>       Add a job (--workspace/--provider/--model)
+  show <id>                     Show a job's details
+  remove <id>                   Delete a job
+  enable <id> / disable <id>    Toggle a job on or off
 ";
 
 const CONFIG_HELP: &str = "\

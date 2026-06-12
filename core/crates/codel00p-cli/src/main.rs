@@ -4,6 +4,7 @@ mod agent;
 mod config;
 mod config_cmd;
 mod connector_permissions;
+mod cron;
 mod help;
 mod mcp_server;
 mod memory;
@@ -50,6 +51,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "providers" => return providers::run(&workspace_start, rest),
         "plugins" => return plugins::run(&workspace_start, rest),
         "skills" => return skills::run(&workspace_start, rest),
+        "cron" => return cron::run(&workspace_start, rest),
         _ => {}
     }
 

@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1.88"
+codel00p-cron = { path = "../codel00p-cron" }
 codel00p-harness = { path = "../codel00p-harness" }
 codel00p-mcp = { path = "../codel00p-mcp" }
 codel00p-memory = { path = "../codel00p-memory", features = ["sqlite"] }
