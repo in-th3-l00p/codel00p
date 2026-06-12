@@ -141,6 +141,7 @@ dependencies = [
  "codel00p-protocol",
  "codel00p-providers",
  "codel00p-session",
+ "codel00p-skill",
  "codel00p-storage",
  "httpmock",
  "serde",
@@ -241,6 +242,15 @@ dependencies = [
  "codel00p-storage",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "codel00p-skill"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
  "thiserror",
 ]
 

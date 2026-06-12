@@ -8,6 +8,7 @@ members = [
     "crates/codel00p-memory",
     "crates/codel00p-mcp",
     "crates/codel00p-plugin",
+    "crates/codel00p-skill",
     "crates/codel00p-cli",
 ]
 resolver = "3"

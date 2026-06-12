@@ -93,12 +93,14 @@ skill-name/
 ## Scope
 
 ### Phase 1 — Skill model & local skills
-- [ ] Define `SKILL.md` schema + `SkillRecord` contract in `codel00p-protocol`
-      (+ TypeScript mirror in `protocol-ts`).
-- [ ] Skill loader with layered precedence (project > user > bundled).
+- [x] `Skill` model + `SKILL.md` front-matter parser in a `codel00p-skill`
+      crate, with a layered loader (project > user > bundled). Slice:
+      [2026-06-12-skill-model-and-cli](../superpowers/plans/2026-06-12-skill-model-and-cli.md).
+      (A `SkillRecord` protocol contract + TS mirror is deferred to when cloud
+      sync needs it; local skills use the crate model.)
+- [x] `codel00p skills list/show/create`.
 - [ ] Relevance selection reusing memory retrieval; inject selected skills into
       turn context.
-- [ ] `codel00p skills list/show/create`.
 
 ### Phase 2 — Invocation & permissions
 - [ ] `use_skill` tool via plugin registry; permission-scoped script execution.

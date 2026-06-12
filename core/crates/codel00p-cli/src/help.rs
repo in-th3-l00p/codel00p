@@ -7,6 +7,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "config" => Some(CONFIG_HELP),
             "providers" => Some(PROVIDERS_HELP),
             "plugins" => Some(PLUGINS_HELP),
+            "skills" => Some(SKILLS_HELP),
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
@@ -58,6 +59,7 @@ Commands:
   config     View and edit configuration
   providers  Configure inference providers and credentials
   plugins    Enable or disable agent plugins
+  skills     List, show, and scaffold skills
   mcp        Expose codel00p as an MCP server
   memory     Review project memory
   session    Inspect persisted sessions
@@ -101,6 +103,19 @@ Commands:
   set-key <id> [<key>]          Store an API key (prompts if omitted)
   remove-key <id>               Remove a stored API key
   show <id>                     Show details for one provider
+";
+
+const SKILLS_HELP: &str = "\
+Usage: codel00p skills <command>
+
+Skills are procedural memory: a SKILL.md (front matter + Markdown instructions)
+in ~/.codel00p/skills (user) or ./.codel00p/skills (project). Project skills
+override user skills with the same name.
+
+Commands:
+  list                          List available skills (default)
+  show <name>                   Show a skill's metadata and instructions
+  create <name> [--project]     Scaffold a new skill (user config, or project)
 ";
 
 const PLUGINS_HELP: &str = "\

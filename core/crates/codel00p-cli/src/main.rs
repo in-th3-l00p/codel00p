@@ -11,6 +11,7 @@ mod plugins;
 mod providers;
 mod session;
 mod settings;
+mod skills;
 
 use config::{CliResult, parse_global_overrides, resolve_cli_config};
 
@@ -48,6 +49,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "config" => return config_cmd::run(&workspace_start, rest),
         "providers" => return providers::run(&workspace_start, rest),
         "plugins" => return plugins::run(&workspace_start, rest),
+        "skills" => return skills::run(&workspace_start, rest),
         _ => {}
     }
 
