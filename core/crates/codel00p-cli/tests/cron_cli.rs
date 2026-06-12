@@ -3,11 +3,24 @@ use std::{
     process::{Command, Output},
 };
 
+use httpmock::{Method::POST, MockServer};
+use serde_json::json;
 use tempfile::tempdir;
 
 fn run(home: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
         .env("CODEL00P_HOME", home)
+        .current_dir(home)
+        .args(args)
+        .output()
+        .expect("run codel00p")
+}
+
+/// Like `run`, but with a provider credential set so an agent turn can resolve.
+fn run_agent(home: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .env("CODEL00P_HOME", home)
+        .env("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token")
         .current_dir(home)
         .args(args)
         .output()
@@ -62,4 +75,79 @@ fn cron_add_rejects_bad_schedule() {
     let output = run(home.path(), &["cron", "add", "soon", "do it"]);
     assert!(!output.status.success());
     assert!(stderr(&output).contains("invalid schedule"));
+}
+
+#[test]
+fn cron_run_executes_a_job_as_an_agent_turn() {
+    let home = tempdir().expect("tempdir");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "ran the nightly job" }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    // Point the agent at the mock provider via config.
+    assert!(
+        run(home.path(), &["config", "set", "agent.provider", "custom"])
+            .status
+            .success()
+    );
+    assert!(
+        run(home.path(), &["config", "set", "agent.model", "test-model"])
+            .status
+            .success()
+    );
+    assert!(
+        run(
+            home.path(),
+            &["config", "set", "agent.base_url", &server.base_url()]
+        )
+        .status
+        .success()
+    );
+
+    let add = run(
+        home.path(),
+        &["cron", "add", "1h", "summarize", "the", "day"],
+    );
+    assert!(add.status.success(), "stderr: {}", stderr(&add));
+
+    let output = run_agent(home.path(), &["cron", "run", "cron-1"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stdout(&output).contains("ran the nightly job"));
+    provider.assert();
+}
+
+#[test]
+fn cron_run_refuses_a_disabled_job() {
+    let home = tempdir().expect("tempdir");
+    assert!(
+        run(home.path(), &["config", "set", "agent.provider", "custom"])
+            .status
+            .success()
+    );
+    assert!(
+        run(home.path(), &["config", "set", "agent.model", "m"])
+            .status
+            .success()
+    );
+    assert!(
+        run(home.path(), &["cron", "add", "1h", "do it"])
+            .status
+            .success()
+    );
+    assert!(
+        run(home.path(), &["cron", "disable", "cron-1"])
+            .status
+            .success()
+    );
+
+    let output = run_agent(home.path(), &["cron", "run", "cron-1"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("disabled"));
 }

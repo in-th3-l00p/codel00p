@@ -8,6 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use codel00p_cron::CronJob;
 use codel00p_harness::{
     AgentEventSink, AgentHarness, AgentRole, DelegatedTask, DelegationOutcome,
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
@@ -111,6 +112,56 @@ pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliRe
 
 fn agent_run(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
     let options = parse_agent_run_options(defaults, args)?;
+    run_agent_turn(config, options, AgentSessionMode::Fresh)
+}
+
+/// Run a scheduled job as a fresh, restricted agent turn.
+///
+/// Provider and model come from the job, falling back to `agent.*` config.
+/// Unattended runs use a read-only tool set, so a schedule can never silently
+/// edit files or run shell commands until that is deliberately opted into. The
+/// run is persisted as a normal session, so it is auditable.
+pub(crate) fn run_scheduled_job(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    job: &CronJob,
+) -> CliResult<String> {
+    let provider = job
+        .provider
+        .clone()
+        .or_else(|| defaults.provider.clone())
+        .ok_or_else(|| {
+            "no provider configured; set agent.provider or the job's provider".to_string()
+        })?;
+    let model = job
+        .model
+        .clone()
+        .or_else(|| defaults.model.clone())
+        .ok_or_else(|| "no model configured; set agent.model or the job's model".to_string())?;
+    let workspace = match &job.workspace {
+        Some(path) => PathBuf::from(path),
+        None => env::current_dir().map_err(|error| error.to_string())?,
+    };
+
+    let options = AgentRunOptions {
+        prompt: job.prompt.clone(),
+        workspace,
+        provider,
+        model,
+        provider_policy_preset: defaults.provider_policy_preset.clone(),
+        base_url: defaults.base_url.clone(),
+        session_id: None,
+        max_iterations: defaults.max_iterations,
+        json_events: false,
+        stream_events: false,
+        stream: false,
+        // Restricted by default: an unattended run may only read.
+        tool_sets: vec![AgentToolSet::Read],
+        permission_mode: CliPermissionMode::Allow,
+        remember_permissions: false,
+        mcp_servers: Vec::new(),
+    };
+
     run_agent_turn(config, options, AgentSessionMode::Fresh)
 }
 

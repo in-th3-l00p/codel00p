@@ -72,8 +72,12 @@ A new `codel00p-scheduler` crate (or module) plus a `cronjob` tool and
       in a `codel00p-cron` crate, and `codel00p cron add/list/show/remove/
       enable/disable`. Slice:
       [2026-06-12-cron-job-store-and-cli](../superpowers/plans/2026-06-12-cron-job-store-and-cli.md).
-- [ ] `codel00p cron run <id>` foreground executor (runs the job as an agent
-      turn); runs produce normal auditable sessions; per-run interrupt + cap.
+- [x] `codel00p cron run <id>` foreground executor: runs the job as a fresh,
+      read-only (restricted-by-default) agent turn, persisted as a normal
+      auditable session; provider/model resolve from the job or `agent.*` config.
+      Slice:
+      [2026-06-12-cron-run-executor](../superpowers/plans/2026-06-12-cron-run-executor.md).
+- [ ] Per-run hard timeout (currently bounded by `max_iterations`).
 - [ ] Background scheduler daemon driving due jobs.
 
 ### Phase 2 — Recurring + agent tool

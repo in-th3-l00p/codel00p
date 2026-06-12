@@ -51,7 +51,6 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "providers" => return providers::run(&workspace_start, rest),
         "plugins" => return plugins::run(&workspace_start, rest),
         "skills" => return skills::run(&workspace_start, rest),
-        "cron" => return cron::run(&workspace_start, rest),
         _ => {}
     }
 
@@ -61,6 +60,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
 
     match command.as_str() {
         "agent" => agent::run(config, agent_defaults, rest),
+        "cron" => cron::run(config, agent_defaults, rest),
         "mcp" => mcp_server::run(config, rest),
         "memory" => memory::run(config, rest),
         "session" => session::run(config, rest),

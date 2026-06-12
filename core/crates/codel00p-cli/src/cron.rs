@@ -4,11 +4,14 @@
 //! manages job definitions; running them on a schedule (a daemon) and executing
 //! a job as an agent run are later slices.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use codel00p_cron::{JobStore, parse_schedule};
 
-use crate::{config::CliResult, settings};
+use crate::{
+    config::{CliConfig, CliResult},
+    settings::{self, AgentSettings},
+};
 
 fn cron_dir() -> PathBuf {
     settings::home_dir().join("cron")
@@ -18,7 +21,7 @@ fn store() -> JobStore {
     JobStore::new(cron_dir())
 }
 
-pub fn run(_workspace_start: &Path, args: &[String]) -> CliResult<String> {
+pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliResult<String> {
     let (command, rest) = match args.split_first() {
         Some((command, rest)) => (command.as_str(), rest),
         None => ("list", &[][..]),
@@ -30,8 +33,18 @@ pub fn run(_workspace_start: &Path, args: &[String]) -> CliResult<String> {
         "remove" | "rm" => cron_remove(rest),
         "enable" => cron_set_enabled(rest, true),
         "disable" => cron_set_enabled(rest, false),
+        "run" => cron_run(config, &defaults, rest),
         _ => Err(format!("unknown cron command: {command}")),
     }
+}
+
+fn cron_run(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
+    let id = args.first().ok_or("usage: cron run <id>")?;
+    let job = store().get(id).map_err(|error| error.to_string())?;
+    if !job.enabled {
+        return Err(format!("job {id} is disabled; enable it first"));
+    }
+    crate::agent::run_scheduled_job(config, defaults, &job)
 }
 
 fn cron_list() -> CliResult<String> {
