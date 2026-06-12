@@ -10,7 +10,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use codel00p_cron::{JobStore, due_jobs, parse_schedule};
+use codel00p_cron::{CronJob, JobStore, due_jobs, parse_schedule};
 
 use crate::{
     config::{CliConfig, CliResult},
@@ -40,6 +40,7 @@ pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliRe
     match command {
         "list" => cron_list(),
         "add" => cron_add(rest),
+        "add-command" => cron_add_command(rest),
         "show" => cron_show(rest),
         "remove" | "rm" => cron_remove(rest),
         "enable" => cron_set_enabled(rest, true),
@@ -50,13 +51,70 @@ pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliRe
     }
 }
 
+/// `codel00p` subcommands that a scheduled command job may run. Deliberately
+/// narrow: only safe maintenance, never `agent`, `config`, or `providers`.
+const COMMAND_JOB_ALLOWLIST: &[&str] = &["skills", "memory", "session"];
+
+fn validate_command(command: &[String]) -> CliResult<()> {
+    let first = command.first().map(String::as_str).unwrap_or("");
+    if COMMAND_JOB_ALLOWLIST.contains(&first) {
+        Ok(())
+    } else {
+        Err(format!(
+            "command jobs may only run: {} (got `{first}`)",
+            COMMAND_JOB_ALLOWLIST.join(", ")
+        ))
+    }
+}
+
+fn cron_add_command(args: &[String]) -> CliResult<String> {
+    let usage = "usage: cron add-command <schedule> <codel00p subcommand...>";
+    let (schedule, command) = args.split_first().ok_or(usage)?;
+    if command.is_empty() {
+        return Err(usage.to_string());
+    }
+    validate_command(command)?;
+    let job = store()
+        .add_command(schedule, command.to_vec())
+        .map_err(|error| error.to_string())?;
+    let schedule = parse_schedule(&job.schedule)
+        .map(|s| s.describe())
+        .unwrap_or_else(|_| job.schedule.clone());
+    Ok(format!("Added {} ({schedule}): {}\n", job.id, job.action()))
+}
+
 fn cron_run(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
     let id = args.first().ok_or("usage: cron run <id>")?;
     let job = store().get(id).map_err(|error| error.to_string())?;
     if !job.enabled {
         return Err(format!("job {id} is disabled; enable it first"));
     }
-    crate::agent::run_scheduled_job(config, defaults, &job)
+    execute_job(config, defaults, &job)
+}
+
+/// Run a job: a command job runs a `codel00p` subcommand in a subprocess; an
+/// agent job runs its prompt as a restricted agent turn.
+fn execute_job(config: CliConfig, defaults: &AgentSettings, job: &CronJob) -> CliResult<String> {
+    match &job.command {
+        Some(command) => run_command_job(command),
+        None => crate::agent::run_scheduled_job(config, defaults, job),
+    }
+}
+
+fn run_command_job(command: &[String]) -> CliResult<String> {
+    validate_command(command)?;
+    let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+    let output = std::process::Command::new(exe)
+        .args(command)
+        .output()
+        .map_err(|error| format!("failed to run command job: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "command job failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 struct DaemonOptions {
@@ -125,7 +183,7 @@ fn run_due_tick(config: &CliConfig, defaults: &AgentSettings) -> Vec<String> {
     let mut ran = Vec::new();
     for job in due_jobs(&jobs, now) {
         let _ = store.mark_ran(&job.id, now);
-        if let Err(error) = crate::agent::run_scheduled_job(config.clone(), defaults, job) {
+        if let Err(error) = execute_job(config.clone(), defaults, job) {
             eprintln!("cron {}: {error}", job.id);
         }
         ran.push(job.id.clone());
@@ -159,7 +217,7 @@ fn cron_list() -> CliResult<String> {
             "  [{state:<3}] {:<10} {:<14} {}\n",
             job.id,
             schedule,
-            truncate(&job.prompt, 48)
+            truncate(&job.action(), 48)
         ));
     }
     output.push_str("\nShow:    codel00p cron show <id>\nRemove:  codel00p cron remove <id>\n");
@@ -264,7 +322,10 @@ fn cron_show(args: &[String]) -> CliResult<String> {
         Some(epoch) => output.push_str(&format!("  last run:  {epoch} (epoch seconds)\n")),
         None => output.push_str("  last run:  never\n"),
     }
-    output.push_str(&format!("  prompt:    {}\n", job.prompt));
+    match &job.command {
+        Some(command) => output.push_str(&format!("  command:   codel00p {}\n", command.join(" "))),
+        None => output.push_str(&format!("  prompt:    {}\n", job.prompt)),
+    }
     Ok(output)
 }
 

@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::Path,
     process::{Command, Output},
 };
@@ -211,4 +212,59 @@ fn cron_daemon_once_runs_due_jobs_then_tracks_state() {
 
     // The run is recorded on the job.
     assert!(!stdout(&run(home.path(), &["cron", "show", "cron-1"])).contains("never"));
+}
+
+#[test]
+fn cron_command_job_runs_a_maintenance_command() {
+    let home = tempdir().expect("tempdir");
+
+    // A stale agent-created skill that the curator should retire.
+    let skill_dir = home.path().join("skills").join("agent-skill");
+    fs::create_dir_all(&skill_dir).expect("skill dir");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: agent-skill\ndescription: d\ncreated_by: agent\n---\nbody\n",
+    )
+    .expect("write skill");
+
+    // Schedule the curator as a maintenance command job.
+    let add = run(
+        home.path(),
+        &[
+            "cron",
+            "add-command",
+            "1h",
+            "skills",
+            "curate",
+            "--apply",
+            "--min-age",
+            "0",
+        ],
+    );
+    assert!(add.status.success(), "stderr: {}", stderr(&add));
+    assert!(stdout(&add).contains("$ codel00p skills curate"));
+
+    // A daemon tick runs the due command job, which runs the curator.
+    let tick = run(home.path(), &["cron", "daemon", "--once"]);
+    assert!(tick.status.success(), "stderr: {}", stderr(&tick));
+    assert!(stdout(&tick).contains("Ran 1 job(s)"));
+
+    // The scheduled curator archived the stale agent skill.
+    assert!(
+        home.path()
+            .join("skills/.archive/agent-skill/SKILL.md")
+            .exists(),
+        "the scheduled command job should have curated the skill"
+    );
+}
+
+#[test]
+fn cron_add_command_rejects_disallowed_commands() {
+    let home = tempdir().expect("tempdir");
+    let output = run(
+        home.path(),
+        &["cron", "add-command", "1h", "agent", "run", "x"],
+    );
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("command jobs may only run"));
 }

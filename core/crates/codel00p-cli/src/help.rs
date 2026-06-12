@@ -100,11 +100,13 @@ prefixed with `every`).
 
 Commands:
   list                          List scheduled jobs (default)
-  add <schedule> <prompt>       Add a job (--workspace/--provider/--model)
+  add <schedule> <prompt>       Add an agent job (--workspace/--provider/--model)
+  add-command <schedule> <cmd>  Add a maintenance job that runs `codel00p <cmd>`
+                                (e.g. add-command 1d skills curate --apply)
   show <id>                     Show a job's details
   remove <id>                   Delete a job
   enable <id> / disable <id>    Toggle a job on or off
-  run <id>                      Run a job now as a read-only agent turn
+  run <id>                      Run a job now
   daemon [--interval <dur>]     Run due jobs on a loop (default every 60s)
          [--once]               Run one check now and exit (e.g. from system cron)
 ";

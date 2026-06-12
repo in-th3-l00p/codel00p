@@ -94,8 +94,10 @@ policy) **approve**.
       bundled skills are never touched; archived skills move to `<root>/.archive`
       and can be restored. Slice:
       [2026-06-12-skill-curator](../superpowers/plans/2026-06-12-skill-curator.md).
-- [ ] Run the curator automatically (a scheduled/command job; today via
-      `skills curate --apply` under system cron).
+- [x] Run the curator automatically: a cron **command job**
+      (`cron add-command <schedule> skills curate --apply`) runs it on the
+      scheduler daemon. The loop now self-prunes with no human in the loop. Slice:
+      [2026-06-12-cron-command-jobs](../superpowers/plans/2026-06-12-cron-command-jobs.md).
 - [ ] Reconcile with existing staleness/similarity scoring; apply to memory.
 
 ### Phase 3 — Procedure synthesis

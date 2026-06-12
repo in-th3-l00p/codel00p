@@ -117,6 +117,11 @@ pub struct CronJob {
     pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// If set, the job runs a `codel00p` subcommand (these args) instead of the
+    /// prompt as an agent turn — used for unattended maintenance like
+    /// `skills curate --apply`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<Vec<String>>,
     /// Epoch seconds of the last run attempt, or `None` if it has never run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run_epoch: Option<u64>,
@@ -126,6 +131,14 @@ impl CronJob {
     /// The parsed schedule, or an error if the stored spec is invalid.
     pub fn parsed_schedule(&self) -> Result<Schedule, CronError> {
         parse_schedule(&self.schedule)
+    }
+
+    /// A one-line description of what the job does, for listings.
+    pub fn action(&self) -> String {
+        match &self.command {
+            Some(args) => format!("$ codel00p {}", args.join(" ")),
+            None => self.prompt.clone(),
+        }
     }
 
     /// Whether this job should run at `now` (epoch seconds): it must be enabled,
@@ -188,6 +201,30 @@ impl JobStore {
             workspace,
             provider,
             model,
+            command: None,
+            last_run_epoch: None,
+        };
+        self.write(&job)?;
+        Ok(job)
+    }
+
+    /// Save a new command job that runs `codel00p <command>` on a schedule.
+    pub fn add_command(&self, schedule: &str, command: Vec<String>) -> Result<CronJob, CronError> {
+        parse_schedule(schedule)?;
+        if command.iter().all(|arg| arg.trim().is_empty()) {
+            return Err(CronError::EmptyPrompt);
+        }
+
+        let id = format!("cron-{}", self.next_index());
+        let job = CronJob {
+            id: id.clone(),
+            schedule: schedule.trim().to_string(),
+            prompt: String::new(),
+            enabled: true,
+            workspace: None,
+            provider: None,
+            model: None,
+            command: Some(command),
             last_run_epoch: None,
         };
         self.write(&job)?;
@@ -397,6 +434,33 @@ mod tests {
         // a is never-run (due); b just ran (not due).
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].prompt, "a");
+    }
+
+    #[test]
+    fn command_jobs_round_trip() {
+        let dir = tempdir().unwrap();
+        let store = JobStore::new(dir.path());
+        let job = store
+            .add_command(
+                "1d",
+                vec!["skills".into(), "curate".into(), "--apply".into()],
+            )
+            .unwrap();
+        assert_eq!(
+            job.command.as_deref().unwrap(),
+            ["skills", "curate", "--apply"]
+        );
+        assert!(job.prompt.is_empty());
+        assert_eq!(job.action(), "$ codel00p skills curate --apply");
+
+        // Survives persistence and is due like any other job.
+        let loaded = store.get(&job.id).unwrap();
+        assert_eq!(loaded.command, job.command);
+        assert!(loaded.is_due(10_000));
+
+        // Agent jobs still describe via prompt.
+        let agent = store.add("1h", "nightly", None, None, None).unwrap();
+        assert_eq!(agent.action(), "nightly");
     }
 
     #[test]

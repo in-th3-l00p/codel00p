@@ -85,6 +85,11 @@ A new `codel00p-scheduler` crate (or module) plus a `cronjob` tool and
       [2026-06-12-cron-scheduler-daemon](../superpowers/plans/2026-06-12-cron-scheduler-daemon.md).
       This is the heartbeat the self-improvement curator and the sub-agent
       dispatcher build on.
+- [x] Command jobs: `codel00p cron add-command <schedule> <subcommand>` schedules
+      a `codel00p` maintenance subcommand (allow-listed: skills/memory/session)
+      instead of an agent prompt, so the curator and other upkeep run
+      automatically. Slice:
+      [2026-06-12-cron-command-jobs](../superpowers/plans/2026-06-12-cron-command-jobs.md).
 
 ### Phase 2 — Recurring + agent tool
 - [ ] NL-phrase and 5-field cron parsing.
