@@ -12,10 +12,11 @@ import type {
 } from "@/lib/dashboard-types";
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const { userId, orgRole } = await auth();
   if (!userId) {
     redirect("/sign-in");
   }
+  const isAdmin = orgRole === "org:admin" || orgRole === "admin";
 
   const client = await cloudClient();
 
@@ -78,6 +79,7 @@ export default async function DashboardPage() {
     projects,
     agents,
     hasOrg: Boolean(viewer?.org),
+    isAdmin,
     cloudError
   };
 

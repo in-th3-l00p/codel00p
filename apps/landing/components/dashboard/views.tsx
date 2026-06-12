@@ -7,6 +7,7 @@ import {
   SourceBadge,
   StatCard
 } from "./primitives";
+import { NewProjectForm } from "./new-project-form";
 
 export function DashboardContent({
   view,
@@ -81,33 +82,45 @@ function OrganizationsView({ data }: { data: DashboardData }) {
 }
 
 function ProjectsView({ data }: { data: DashboardData }) {
-  if (data.projects.length === 0) {
-    return (
-      <EmptyState
-        title="No projects in view"
-        body="Projects belong to the active organization; switch organizations in the top bar to see others."
-      />
-    );
-  }
   return (
-    <ul className="rise flex flex-col gap-2">
-      {data.projects.map((project) => (
-        <DataRow
-          key={project.id}
-          href={`/projects/${project.id}`}
-          title={project.name}
-          subtitle={project.slug ?? project.id}
-          badge={<SourceBadge source={project.source} />}
-          meta={
-            project.repositoryUrl ? (
-              <span className="font-mono">{shortRepo(project.repositoryUrl)}</span>
-            ) : (
-              <span aria-hidden>manage →</span>
-            )
+    <div className="rise flex flex-col gap-6">
+      {data.projects.length === 0 ? (
+        <EmptyState
+          title="No projects yet"
+          body={
+            data.isAdmin
+              ? "Create the org's first project below, then open it to add agents and MCP servers."
+              : "Projects belong to the active organization. Only org admins can create them."
           }
         />
-      ))}
-    </ul>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {data.projects.map((project) => (
+            <DataRow
+              key={project.id}
+              href={`/projects/${project.id}`}
+              title={project.name}
+              subtitle={project.slug ?? project.id}
+              badge={<SourceBadge source={project.source} />}
+              meta={
+                project.repositoryUrl ? (
+                  <span className="font-mono">{shortRepo(project.repositoryUrl)}</span>
+                ) : (
+                  <span aria-hidden>manage →</span>
+                )
+              }
+            />
+          ))}
+        </ul>
+      )}
+
+      {data.isAdmin && data.hasOrg ? (
+        <div>
+          <SectionHeading>New project</SectionHeading>
+          <NewProjectForm />
+        </div>
+      ) : null}
+    </div>
   );
 }
 

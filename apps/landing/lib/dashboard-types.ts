@@ -39,6 +39,8 @@ export type DashboardData = {
   agents: AgentItem[];
   /** Whether an organization is active for the viewer. */
   hasOrg: boolean;
+  /** Whether the viewer is an admin of the active org (gates create actions). */
+  isAdmin: boolean;
   /** Set when the cloud service couldn't be reached or returned an error. */
   cloudError?: string;
 };
