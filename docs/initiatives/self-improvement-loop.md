@@ -88,9 +88,15 @@ policy) **approve**.
 - [ ] Memory retrieval/application usage signal surfaced in `memory quality`.
 
 ### Phase 2 — Curator
-- [ ] Scheduled curator job producing archive candidates for stale agent-created
-      entries (review-gated, snapshot-backed, never silent).
-- [ ] Reconcile with existing staleness/similarity scoring.
+- [x] `codel00p skills curate`: reversibly archives `created_by: agent` skills
+      that are unused (zero recorded uses) and older than a grace period
+      (default 7d); dry-run by default, `--apply` to act. Human-authored and
+      bundled skills are never touched; archived skills move to `<root>/.archive`
+      and can be restored. Slice:
+      [2026-06-12-skill-curator](../superpowers/plans/2026-06-12-skill-curator.md).
+- [ ] Run the curator automatically (a scheduled/command job; today via
+      `skills curate --apply` under system cron).
+- [ ] Reconcile with existing staleness/similarity scoring; apply to memory.
 
 ### Phase 3 — Procedure synthesis
 - [x] Agent-proposed skills: a `propose_skill` tool (the `learn` tool-set) lets

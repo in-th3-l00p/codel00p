@@ -165,6 +165,8 @@ Commands:
   candidates                    List agent-proposed skills awaiting review
   approve <name> [--project]    Approve a candidate (it becomes active)
   reject <name> [--project]     Reject a candidate (archived)
+  curate [--apply]              List (or archive) stale, unused agent-created
+         [--min-age <dur>]      skills; reversible (default grace period 7d)
 ";
 
 const PLUGINS_HELP: &str = "\

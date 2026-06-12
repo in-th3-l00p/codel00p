@@ -50,6 +50,8 @@ pub enum SkillError {
     CandidateExists { name: String },
     #[error("no candidate named `{name}` awaiting review")]
     UnknownCandidate { name: String },
+    #[error("no active skill named `{name}`")]
+    UnknownSkill { name: String },
     #[error("invalid skill name `{name}`: use letters, digits, `-`, `_`")]
     InvalidName { name: String },
 }
@@ -253,6 +255,68 @@ pub fn reject_candidate(skills_dir: &Path, name: &str) -> Result<(), SkillError>
     }
     rename(&from, &archive)?;
     Ok(())
+}
+
+// --- Curation: retiring stale agent-created skills -------------------------
+//
+// The curator reversibly archives active skills the agent created that are not
+// earning their place in context. Archived skills move to `<root>/.archive` and
+// are no longer loaded (so never injected), but can be restored. Bundled and
+// human-authored skills are never touched (see [`is_curatable`]).
+
+/// The `.archive` directory of retired active skills under a skills root.
+pub fn archive_root(skills_dir: &Path) -> PathBuf {
+    skills_dir.join(ARCHIVE_DIR)
+}
+
+/// Reversibly archive an active skill, moving it out of the loaded set.
+pub fn archive_skill(skills_dir: &Path, name: &str) -> Result<PathBuf, SkillError> {
+    validate_name(name)?;
+    let from = skills_dir.join(name);
+    if !from.join(SKILL_FILE).is_file() {
+        return Err(SkillError::UnknownSkill {
+            name: name.to_string(),
+        });
+    }
+    let to = archive_root(skills_dir).join(name);
+    create_dir_all(&archive_root(skills_dir))?;
+    if to.exists() {
+        fs::remove_dir_all(&to).map_err(|source| SkillError::Io {
+            path: to.clone(),
+            source,
+        })?;
+    }
+    rename(&from, &to)?;
+    Ok(to.join(SKILL_FILE))
+}
+
+/// Restore a previously archived skill back into the active set.
+pub fn restore_skill(skills_dir: &Path, name: &str) -> Result<PathBuf, SkillError> {
+    validate_name(name)?;
+    let from = archive_root(skills_dir).join(name);
+    if !from.join(SKILL_FILE).is_file() {
+        return Err(SkillError::UnknownSkill {
+            name: name.to_string(),
+        });
+    }
+    let to = skills_dir.join(name);
+    if to.join(SKILL_FILE).is_file() {
+        return Err(SkillError::AlreadyActive {
+            name: name.to_string(),
+        });
+    }
+    rename(&from, &to)?;
+    Ok(to.join(SKILL_FILE))
+}
+
+/// Whether a skill should be curated (reversibly archived): the agent created
+/// it, it has never been used, and it is older than `min_age_secs`.
+///
+/// Human-authored or bundled skills are never curatable, and a grace period
+/// (`min_age_secs`) keeps a freshly-approved skill from being archived before it
+/// has had a chance to be used.
+pub fn is_curatable(skill: &Skill, usage: SkillUsage, age_secs: u64, min_age_secs: u64) -> bool {
+    skill.created_by.as_deref() == Some("agent") && usage.count == 0 && age_secs >= min_age_secs
 }
 
 /// Skill names become directory names, so keep them filesystem- and
@@ -659,6 +723,73 @@ mod tests {
                 .join(SKILL_FILE)
                 .is_file()
         );
+    }
+
+    #[test]
+    fn archiving_and_restoring_a_skill() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        write_skill(
+            root,
+            "stale",
+            "---\nname: stale\ndescription: d\ncreated_by: agent\n---\nbody\n",
+        );
+
+        // Active before archiving.
+        assert_eq!(
+            load_skills(&[(SkillSource::User, root.to_path_buf())]).len(),
+            1
+        );
+
+        archive_skill(root, "stale").expect("archive");
+        // No longer loaded, but preserved in .archive.
+        assert!(load_skills(&[(SkillSource::User, root.to_path_buf())]).is_empty());
+        assert!(archive_root(root).join("stale").join(SKILL_FILE).is_file());
+
+        restore_skill(root, "stale").expect("restore");
+        assert_eq!(
+            load_skills(&[(SkillSource::User, root.to_path_buf())]).len(),
+            1
+        );
+
+        assert!(matches!(
+            archive_skill(root, "missing"),
+            Err(SkillError::UnknownSkill { .. })
+        ));
+    }
+
+    #[test]
+    fn curatable_only_targets_unused_old_agent_skills() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        write_skill(
+            root,
+            "agent-skill",
+            "---\nname: agent-skill\ndescription: d\ncreated_by: agent\n---\nbody\n",
+        );
+        write_skill(
+            root,
+            "human-skill",
+            "---\nname: human-skill\ndescription: d\n---\nbody\n",
+        );
+        let skills = load_skills(&[(SkillSource::User, root.to_path_buf())]);
+        let agent = skills.iter().find(|s| s.name == "agent-skill").unwrap();
+        let human = skills.iter().find(|s| s.name == "human-skill").unwrap();
+
+        let unused = SkillUsage::default();
+        let used = SkillUsage {
+            count: 3,
+            last_used_epoch: Some(5),
+        };
+
+        // Agent-created, unused, old enough -> curatable.
+        assert!(is_curatable(agent, unused, 100, 50));
+        // Too new (within the grace period) -> not yet.
+        assert!(!is_curatable(agent, unused, 10, 50));
+        // Used -> keep it.
+        assert!(!is_curatable(agent, used, 100, 50));
+        // Human-authored -> never curatable.
+        assert!(!is_curatable(human, unused, 100, 50));
     }
 
     #[test]

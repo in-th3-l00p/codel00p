@@ -7,14 +7,19 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
+use codel00p_cron::parse_schedule;
 use codel00p_skill::{
-    SKILL_FILE, SkillSource, approve_candidate, load_candidates, load_skills, load_usage,
-    reject_candidate,
+    SKILL_FILE, Skill, SkillSource, approve_candidate, archive_skill, is_curatable,
+    load_candidates, load_skills, load_usage, reject_candidate,
 };
 
 use crate::{config::CliResult, settings};
+
+/// Default grace period before an unused agent skill becomes curatable (7 days).
+const DEFAULT_CURATE_MIN_AGE_SECS: u64 = 7 * 86_400;
 
 pub fn run(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     let (command, rest) = match args.split_first() {
@@ -28,6 +33,7 @@ pub fn run(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         "candidates" => skills_candidates(workspace_start),
         "approve" => skills_review(workspace_start, rest, Review::Approve),
         "reject" => skills_review(workspace_start, rest, Review::Reject),
+        "curate" => skills_curate(workspace_start, rest),
         _ => Err(format!("unknown skills command: {command}")),
     }
 }
@@ -256,4 +262,123 @@ fn skills_review(workspace_start: &Path, args: &[String], action: Review) -> Cli
             Ok(format!("Rejected skill {} (archived).\n", options.name))
         }
     }
+}
+
+// --- curation: retire stale agent-created skills ---------------------------
+
+struct CurateOptions {
+    apply: bool,
+    min_age_secs: u64,
+}
+
+fn parse_curate(args: &[String]) -> CliResult<CurateOptions> {
+    let mut apply = false;
+    let mut min_age_secs = DEFAULT_CURATE_MIN_AGE_SECS;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--apply" => {
+                apply = true;
+                index += 1;
+            }
+            "--min-age" => {
+                let value = args
+                    .get(index + 1)
+                    .cloned()
+                    .filter(|v| !v.starts_with("--"))
+                    .ok_or("missing value for --min-age")?;
+                // A bare integer is seconds (so 0 disables the grace period);
+                // otherwise it is a duration like 7d.
+                min_age_secs = match value.parse::<u64>() {
+                    Ok(secs) => secs,
+                    Err(_) => parse_schedule(&value)
+                        .map(|s| s.interval_secs())
+                        .map_err(|error| error.to_string())?,
+                };
+                index += 2;
+            }
+            flag if flag.starts_with("--") => {
+                return Err(format!("unknown skills curate option: {flag}"));
+            }
+            value => return Err(format!("unexpected argument: {value}")),
+        }
+    }
+    Ok(CurateOptions {
+        apply,
+        min_age_secs,
+    })
+}
+
+fn skills_curate(workspace_start: &Path, args: &[String]) -> CliResult<String> {
+    let options = parse_curate(args)?;
+    let skills = load_skills(&skill_sources(workspace_start));
+    let user_usage = load_usage(&user_skills_dir());
+    let project_usage = load_usage(&project_skills_dir(workspace_start));
+    let now = now_epoch();
+
+    let stale: Vec<&Skill> = skills
+        .iter()
+        .filter(|skill| {
+            let usage = match skill.source {
+                SkillSource::Project => project_usage.get(&skill.name),
+                _ => user_usage.get(&skill.name),
+            };
+            is_curatable(
+                skill,
+                usage,
+                skill_age_secs(&skill.path, now),
+                options.min_age_secs,
+            )
+        })
+        .collect();
+
+    if stale.is_empty() {
+        return Ok("No stale agent-created skills to curate.\n".to_string());
+    }
+
+    if !options.apply {
+        let mut output =
+            String::from("Stale agent-created skills (unused past the grace period):\n");
+        for skill in &stale {
+            output.push_str(&format!("  {}\n", skill.name));
+        }
+        output.push_str("\nArchive them (reversible):  codel00p skills curate --apply\n");
+        return Ok(output);
+    }
+
+    let mut archived = Vec::new();
+    for skill in &stale {
+        if let Some(root) = skill_root(&skill.path) {
+            archive_skill(&root, &skill.name).map_err(|error| error.to_string())?;
+            archived.push(skill.name.clone());
+        }
+    }
+    Ok(format!(
+        "Archived {} stale skill(s): {}\nRestore with the skill files under <root>/.archive.\n",
+        archived.len(),
+        archived.join(", ")
+    ))
+}
+
+fn now_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Age of a skill file in seconds (0 if its mtime can't be read, so an
+/// unreadable mtime is treated as new and never curated).
+fn skill_age_secs(path: &Path, now: u64) -> u64 {
+    fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|mtime| mtime.duration_since(UNIX_EPOCH).ok())
+        .map(|d| now.saturating_sub(d.as_secs()))
+        .unwrap_or(0)
+}
+
+/// `<root>/<name>/SKILL.md` -> `<root>`.
+fn skill_root(skill_file: &Path) -> Option<PathBuf> {
+    skill_file.parent()?.parent().map(Path::to_path_buf)
 }
