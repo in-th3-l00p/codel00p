@@ -3365,3 +3365,55 @@ fn agent_proposes_skill_then_review_activates_it() {
         stdout(&list_after)
     );
 }
+
+#[test]
+fn agent_run_records_skill_usage() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+
+    let skill_dir = dir.path().join("skills").join("deploy");
+    fs::create_dir_all(&skill_dir).expect("skill dir");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: deploy\ndescription: how to deploy\ntriggers:\n  - deploy\n---\nShip carefully.\n",
+    )
+    .expect("write skill");
+
+    let server = MockServer::start();
+    let _provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "ok" }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    // Before the run, the skill is unused.
+    assert!(stdout(&run_codel00p(&db_path, &["skills", "list"])).contains("unused"));
+
+    let run = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "run",
+            "Please deploy the service",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+    assert!(run.status.success(), "stderr: {}", stderr(&run));
+
+    // The injected skill's usage is now recorded.
+    let listed = stdout(&run_codel00p(&db_path, &["skills", "list"]));
+    assert!(listed.contains("deploy"), "list: {listed}");
+    assert!(listed.contains("used 1x"), "list: {listed}");
+}

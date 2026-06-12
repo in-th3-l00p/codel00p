@@ -80,8 +80,12 @@ policy) **approve**.
 ## Scope
 
 ### Phase 1 — Usage signal
-- [ ] Append-log of memory/skill retrieval + application events.
-- [ ] Usage metrics surfaced in `memory quality` and `skills list`.
+- [x] Skill usage tracking: a `.usage.json` per skills root (count + last-used),
+      recorded once per turn when a skill is injected, surfaced in `skills list`.
+      Slice:
+      [2026-06-12-skill-usage-tracking](../superpowers/plans/2026-06-12-skill-usage-tracking.md).
+      This is the signal the curator consumes.
+- [ ] Memory retrieval/application usage signal surfaced in `memory quality`.
 
 ### Phase 2 — Curator
 - [ ] Scheduled curator job producing archive candidates for stale agent-created

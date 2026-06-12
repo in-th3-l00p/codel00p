@@ -20,6 +20,11 @@ use std::{
 use serde::Serialize;
 use thiserror::Error;
 
+pub mod usage;
+pub use usage::{
+    SkillUsage, USAGE_FILE, UsageLog, load_usage, record_skill_usage, record_usage, usage_path,
+};
+
 /// The canonical file name inside a skill directory.
 pub const SKILL_FILE: &str = "SKILL.md";
 

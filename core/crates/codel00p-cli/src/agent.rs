@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env, fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -29,7 +29,8 @@ use codel00p_protocol::AgentEvent;
 use codel00p_providers::{ProviderRegistry, default_registry};
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
 use codel00p_skill::{
-    SkillError, SkillProposal, SkillSource, load_skills, propose_skill, select_skills,
+    SkillError, SkillProposal, SkillSource, load_skills, propose_skill, record_skill_usage,
+    select_skills,
 };
 
 use crate::{
@@ -1890,9 +1891,14 @@ const SKILL_SELECTION_LIMIT: usize = 3;
 
 /// Selects locally-authored skills relevant to the turn and hands them to the
 /// harness for injection. Loading is filesystem-only, so it runs inline.
+///
+/// Each selected skill's usage is recorded once per turn. The provider is built
+/// fresh per turn, so `recorded` deduplicates across the agentic loop's
+/// iterations (which each call `select`).
 struct CliSkillProvider {
     sources: Vec<(SkillSource, PathBuf)>,
     limit: usize,
+    recorded: Mutex<HashSet<String>>,
 }
 
 impl CliSkillProvider {
@@ -1900,7 +1906,16 @@ impl CliSkillProvider {
         Self {
             sources,
             limit: SKILL_SELECTION_LIMIT,
+            recorded: Mutex::new(HashSet::new()),
         }
+    }
+
+    /// True the first time `name` is seen this turn, so usage is counted once.
+    fn first_use_this_turn(&self, name: &str) -> bool {
+        self.recorded
+            .lock()
+            .expect("usage lock")
+            .insert(name.to_string())
     }
 }
 
@@ -1909,13 +1924,27 @@ impl SkillProvider for CliSkillProvider {
     async fn select(&self, request: SkillSelectionRequest) -> Result<SkillContext, HarnessError> {
         let skills = load_skills(&self.sources);
         let selected = select_skills(&skills, request.query(), self.limit);
-        Ok(SkillContext::new(
-            selected
-                .into_iter()
-                .map(|skill| SkillPrompt::new(skill.name, skill.body))
-                .collect(),
-        ))
+        let now = now_epoch_secs();
+
+        let prompts = selected
+            .into_iter()
+            .map(|skill| {
+                if self.first_use_this_turn(&skill.name) {
+                    // Best-effort: usage tracking must never fail a turn.
+                    let _ = record_skill_usage(&skill, now);
+                }
+                SkillPrompt::new(skill.name, skill.body)
+            })
+            .collect();
+        Ok(SkillContext::new(prompts))
     }
+}
+
+fn now_epoch_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// Records agent-proposed skills as review candidates under the user skills dir.

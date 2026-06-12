@@ -10,7 +10,8 @@ use std::{
 };
 
 use codel00p_skill::{
-    SKILL_FILE, SkillSource, approve_candidate, load_candidates, load_skills, reject_candidate,
+    SKILL_FILE, SkillSource, approve_candidate, load_candidates, load_skills, load_usage,
+    reject_candidate,
 };
 
 use crate::{config::CliResult, settings};
@@ -57,18 +58,25 @@ fn skills_list(workspace_start: &Path) -> CliResult<String> {
         return Ok("No skills found. Create one: codel00p skills create <name>\n".to_string());
     }
 
+    let user_usage = load_usage(&user_skills_dir());
+    let project_usage = load_usage(&project_skills_dir(workspace_start));
+
     let mut output = String::from("Skills:\n");
     for skill in &skills {
-        let version = skill
-            .version
-            .as_deref()
-            .map(|value| format!(" v{value}"))
-            .unwrap_or_default();
+        let usage = match skill.source {
+            SkillSource::Project => project_usage.get(&skill.name),
+            _ => user_usage.get(&skill.name),
+        };
+        let used = if usage.count == 0 {
+            "unused".to_string()
+        } else {
+            format!("used {}x", usage.count)
+        };
         output.push_str(&format!(
-            "  {:<20} [{}]{}  {}\n",
+            "  {:<20} [{}] {:<10} {}\n",
             skill.name,
             skill.source.label(),
-            version,
+            used,
             skill.description
         ));
     }
