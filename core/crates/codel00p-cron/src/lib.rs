@@ -117,6 +117,9 @@ pub struct CronJob {
     pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Epoch seconds of the last run attempt, or `None` if it has never run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run_epoch: Option<u64>,
 }
 
 impl CronJob {
@@ -124,6 +127,27 @@ impl CronJob {
     pub fn parsed_schedule(&self) -> Result<Schedule, CronError> {
         parse_schedule(&self.schedule)
     }
+
+    /// Whether this job should run at `now` (epoch seconds): it must be enabled,
+    /// have a valid schedule, and either have never run or be past its next-run
+    /// time. A never-run job is due on the first check.
+    pub fn is_due(&self, now: u64) -> bool {
+        if !self.enabled {
+            return false;
+        }
+        let Ok(schedule) = self.parsed_schedule() else {
+            return false;
+        };
+        match self.last_run_epoch {
+            None => true,
+            Some(last) => schedule.next_after(last) <= now,
+        }
+    }
+}
+
+/// The enabled jobs in `jobs` that are due to run at `now`.
+pub fn due_jobs(jobs: &[CronJob], now: u64) -> Vec<&CronJob> {
+    jobs.iter().filter(|job| job.is_due(now)).collect()
 }
 
 fn default_true() -> bool {
@@ -164,6 +188,7 @@ impl JobStore {
             workspace,
             provider,
             model,
+            last_run_epoch: None,
         };
         self.write(&job)?;
         Ok(job)
@@ -207,6 +232,14 @@ impl JobStore {
     pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<CronJob, CronError> {
         let mut job = self.get(id)?;
         job.enabled = enabled;
+        self.write(&job)?;
+        Ok(job)
+    }
+
+    /// Record that a job ran at `ran_at_epoch`, advancing when it is next due.
+    pub fn mark_ran(&self, id: &str, ran_at_epoch: u64) -> Result<CronJob, CronError> {
+        let mut job = self.get(id)?;
+        job.last_run_epoch = Some(ran_at_epoch);
         self.write(&job)?;
         Ok(job)
     }
@@ -328,6 +361,42 @@ mod tests {
         assert!(store.remove("cron-1").unwrap());
         assert!(!store.remove("cron-1").unwrap());
         assert_eq!(store.list().len(), 1);
+    }
+
+    #[test]
+    fn due_detection_tracks_run_state() {
+        let dir = tempdir().unwrap();
+        let store = JobStore::new(dir.path());
+        let job = store.add("1h", "nightly", None, None, None).unwrap();
+
+        // Never run -> due now.
+        assert!(job.is_due(10_000));
+
+        // After running, not due again until an interval has passed.
+        let ran = store.mark_ran(&job.id, 10_000).unwrap();
+        assert_eq!(ran.last_run_epoch, Some(10_000));
+        assert!(!ran.is_due(10_000));
+        assert!(!ran.is_due(10_000 + 3_599));
+        assert!(ran.is_due(10_000 + 3_600));
+
+        // Disabled jobs are never due.
+        let off = store.set_enabled(&job.id, false).unwrap();
+        assert!(!off.is_due(10_000 + 100_000));
+    }
+
+    #[test]
+    fn due_jobs_filters_to_runnable() {
+        let dir = tempdir().unwrap();
+        let store = JobStore::new(dir.path());
+        store.add("1h", "a", None, None, None).unwrap();
+        let b = store.add("1h", "b", None, None, None).unwrap();
+        store.mark_ran(&b.id, 10_000).unwrap();
+
+        let jobs = store.list();
+        let due = due_jobs(&jobs, 10_000);
+        // a is never-run (due); b just ran (not due).
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].prompt, "a");
     }
 
     #[test]

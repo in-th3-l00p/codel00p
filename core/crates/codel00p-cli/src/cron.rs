@@ -1,17 +1,28 @@
-//! The `codel00p cron` command: define and manage scheduled jobs.
+//! The `codel00p cron` command: define, run, and schedule jobs.
 //!
-//! Jobs are saved under `~/.codel00p/cron` as one TOML file each. This slice
-//! manages job definitions; running them on a schedule (a daemon) and executing
-//! a job as an agent run are later slices.
+//! Jobs are saved under `~/.codel00p/cron` as one TOML file each. `cron run`
+//! executes a job once; `cron daemon` runs due jobs on a loop.
 
-use std::path::PathBuf;
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use codel00p_cron::{JobStore, parse_schedule};
+use codel00p_cron::{JobStore, due_jobs, parse_schedule};
 
 use crate::{
     config::{CliConfig, CliResult},
     settings::{self, AgentSettings},
 };
+
+fn now_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 fn cron_dir() -> PathBuf {
     settings::home_dir().join("cron")
@@ -34,6 +45,7 @@ pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliRe
         "enable" => cron_set_enabled(rest, true),
         "disable" => cron_set_enabled(rest, false),
         "run" => cron_run(config, &defaults, rest),
+        "daemon" => cron_daemon(config, &defaults, rest),
         _ => Err(format!("unknown cron command: {command}")),
     }
 }
@@ -45,6 +57,88 @@ fn cron_run(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> Cli
         return Err(format!("job {id} is disabled; enable it first"));
     }
     crate::agent::run_scheduled_job(config, defaults, &job)
+}
+
+struct DaemonOptions {
+    interval_secs: u64,
+    once: bool,
+}
+
+fn parse_daemon(args: &[String]) -> CliResult<DaemonOptions> {
+    let mut interval_secs = 60;
+    let mut once = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--once" => {
+                once = true;
+                index += 1;
+            }
+            "--interval" => {
+                let value = value_after(args, index, "--interval")?;
+                interval_secs = parse_schedule(&value)
+                    .map(|schedule| schedule.interval_secs())
+                    .map_err(|error| error.to_string())?;
+                index += 2;
+            }
+            flag if flag.starts_with("--") => {
+                return Err(format!("unknown cron daemon option: {flag}"));
+            }
+            value => return Err(format!("unexpected argument: {value}")),
+        }
+    }
+    Ok(DaemonOptions {
+        interval_secs,
+        once,
+    })
+}
+
+fn cron_daemon(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
+    let options = parse_daemon(args)?;
+    if options.once {
+        return Ok(tick_summary(&run_due_tick(&config, defaults)));
+    }
+
+    let mut stderr = io::stderr();
+    writeln!(
+        stderr,
+        "codel00p cron daemon — checking every {}s (Ctrl-C to stop)",
+        options.interval_secs
+    )
+    .ok();
+    loop {
+        let ran = run_due_tick(&config, defaults);
+        if !ran.is_empty() {
+            writeln!(stderr, "ran: {}", ran.join(", ")).ok();
+        }
+        thread::sleep(Duration::from_secs(options.interval_secs));
+    }
+}
+
+/// Run every job due now. Marks each as run *before* executing so a slow run is
+/// not double-fired by a later tick, and a failing run is logged but does not
+/// stop the daemon. Returns the ids that were due.
+fn run_due_tick(config: &CliConfig, defaults: &AgentSettings) -> Vec<String> {
+    let now = now_epoch();
+    let store = store();
+    let jobs = store.list();
+    let mut ran = Vec::new();
+    for job in due_jobs(&jobs, now) {
+        let _ = store.mark_ran(&job.id, now);
+        if let Err(error) = crate::agent::run_scheduled_job(config.clone(), defaults, job) {
+            eprintln!("cron {}: {error}", job.id);
+        }
+        ran.push(job.id.clone());
+    }
+    ran
+}
+
+fn tick_summary(ran: &[String]) -> String {
+    if ran.is_empty() {
+        "No jobs due.\n".to_string()
+    } else {
+        format!("Ran {} job(s): {}\n", ran.len(), ran.join(", "))
+    }
 }
 
 fn cron_list() -> CliResult<String> {
@@ -165,6 +259,10 @@ fn cron_show(args: &[String]) -> CliResult<String> {
     }
     if let Some(model) = &job.model {
         output.push_str(&format!("  model:     {model}\n"));
+    }
+    match job.last_run_epoch {
+        Some(epoch) => output.push_str(&format!("  last run:  {epoch} (epoch seconds)\n")),
+        None => output.push_str("  last run:  never\n"),
     }
     output.push_str(&format!("  prompt:    {}\n", job.prompt));
     Ok(output)

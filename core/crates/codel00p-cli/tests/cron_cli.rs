@@ -151,3 +151,64 @@ fn cron_run_refuses_a_disabled_job() {
     assert!(!output.status.success());
     assert!(stderr(&output).contains("disabled"));
 }
+
+#[test]
+fn cron_daemon_once_runs_due_jobs_then_tracks_state() {
+    let home = tempdir().expect("tempdir");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "did the work" }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    assert!(
+        run(home.path(), &["config", "set", "agent.provider", "custom"])
+            .status
+            .success()
+    );
+    assert!(
+        run(home.path(), &["config", "set", "agent.model", "test-model"])
+            .status
+            .success()
+    );
+    assert!(
+        run(
+            home.path(),
+            &["config", "set", "agent.base_url", &server.base_url()]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        run(home.path(), &["cron", "add", "1h", "nightly", "sweep"])
+            .status
+            .success()
+    );
+
+    // First tick: the never-run job is due and executes.
+    let first = run_agent(home.path(), &["cron", "daemon", "--once"]);
+    assert!(first.status.success(), "stderr: {}", stderr(&first));
+    assert!(
+        stdout(&first).contains("Ran 1 job(s): cron-1"),
+        "out: {}",
+        stdout(&first)
+    );
+    assert!(provider.hits() >= 1);
+
+    // Second tick right away: it just ran, so nothing is due (state tracked).
+    let second = run_agent(home.path(), &["cron", "daemon", "--once"]);
+    assert!(second.status.success(), "stderr: {}", stderr(&second));
+    assert!(
+        stdout(&second).contains("No jobs due"),
+        "out: {}",
+        stdout(&second)
+    );
+
+    // The run is recorded on the job.
+    assert!(!stdout(&run(home.path(), &["cron", "show", "cron-1"])).contains("never"));
+}

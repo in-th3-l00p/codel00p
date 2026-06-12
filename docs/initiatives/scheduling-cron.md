@@ -78,7 +78,13 @@ A new `codel00p-scheduler` crate (or module) plus a `cronjob` tool and
       Slice:
       [2026-06-12-cron-run-executor](../superpowers/plans/2026-06-12-cron-run-executor.md).
 - [ ] Per-run hard timeout (currently bounded by `max_iterations`).
-- [ ] Background scheduler daemon driving due jobs.
+- [x] Background scheduler daemon driving due jobs: `codel00p cron daemon`
+      (loop, `--interval`, `--once`) runs jobs whose next-run has passed, tracks
+      `last_run` per job, marks-before-run for single-flight, and logs failures
+      without stopping. Slice:
+      [2026-06-12-cron-scheduler-daemon](../superpowers/plans/2026-06-12-cron-scheduler-daemon.md).
+      This is the heartbeat the self-improvement curator and the sub-agent
+      dispatcher build on.
 
 ### Phase 2 — Recurring + agent tool
 - [ ] NL-phrase and 5-field cron parsing.

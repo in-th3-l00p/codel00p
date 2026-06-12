@@ -72,7 +72,7 @@ Usage: codel00p cron <command>
 
 Define jobs that run a prompt on a schedule. Jobs are saved under
 ~/.codel00p/cron. Schedules are duration intervals: 30m, 2h, 1d, 1w (optionally
-prefixed with `every`). A background scheduler daemon is a later slice.
+prefixed with `every`).
 
 Commands:
   list                          List scheduled jobs (default)
@@ -81,6 +81,8 @@ Commands:
   remove <id>                   Delete a job
   enable <id> / disable <id>    Toggle a job on or off
   run <id>                      Run a job now as a read-only agent turn
+  daemon [--interval <dur>]     Run due jobs on a loop (default every 60s)
+         [--once]               Run one check now and exit (e.g. from system cron)
 ";
 
 const CONFIG_HELP: &str = "\
