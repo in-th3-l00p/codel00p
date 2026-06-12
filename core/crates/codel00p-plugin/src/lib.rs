@@ -25,7 +25,9 @@
 
 use std::sync::Arc;
 
-pub use codel00p_harness::{AgentEventSink, LifecycleHook, Tool, ToolRegistry};
+pub use codel00p_harness::{
+    AgentEventSink, AgentHarnessBuilder, LifecycleHook, Tool, ToolRegistry,
+};
 pub use codel00p_providers::{ProviderProfile, ProviderRegistry};
 
 /// A unit of codel00p capability that can be contributed to the agent runtime.
@@ -140,6 +142,21 @@ impl PluginRegistry {
             .iter()
             .flat_map(|plugin| plugin.provider_profiles())
             .fold(base, |registry, profile| registry.register(profile))
+    }
+
+    /// Add every plugin's lifecycle hooks to a harness builder.
+    ///
+    /// This covers the contribution surface the harness builder owns directly.
+    /// Tools and provider profiles are applied separately
+    /// ([`Self::apply_to_tool_registry`] / [`Self::apply_to_provider_registry`])
+    /// because the caller owns those base registries, and event sinks are not
+    /// folded here yet: the harness currently drives a single event sink, so
+    /// callers retrieve plugin sinks via [`Self::event_sinks`] until multi-sink
+    /// support lands in a later phase.
+    pub fn apply_to_harness_builder(&self, builder: AgentHarnessBuilder) -> AgentHarnessBuilder {
+        self.lifecycle_hooks()
+            .into_iter()
+            .fold(builder, |builder, hook| builder.lifecycle_hook_arc(hook))
     }
 }
 

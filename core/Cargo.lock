@@ -137,6 +137,7 @@ dependencies = [
  "codel00p-harness",
  "codel00p-mcp",
  "codel00p-memory",
+ "codel00p-plugin",
  "codel00p-protocol",
  "codel00p-providers",
  "codel00p-session",

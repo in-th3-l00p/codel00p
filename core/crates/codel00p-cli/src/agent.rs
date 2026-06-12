@@ -20,6 +20,7 @@ use codel00p_mcp::{
     StdioServerCommand,
 };
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
+use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
 
@@ -264,10 +265,14 @@ async fn build_agent_harness(
         .with_tag("agent")
         .with_tag("cli");
 
+    let plugins = load_plugins();
+    let tools =
+        plugins.apply_to_tool_registry(build_tool_registry(&options.tool_sets, mcp_servers).await?);
+
     let mut builder = AgentHarness::builder()
         .model_client(model_client)
         .workspace(workspace)
-        .tools(build_tool_registry(&options.tool_sets, mcp_servers).await?)
+        .tools(tools)
         .permission_policy(CliPermissionPolicy::new(
             config.clone(),
             options.permission_mode,
@@ -276,6 +281,7 @@ async fn build_agent_harness(
         .project_memory_provider(memory_provider)
         .turn_memory_extractor(memory_extractor)
         .memory_candidate_sink(memory_sink);
+    builder = plugins.apply_to_harness_builder(builder);
     if options.stream_events {
         builder = builder.event_sink(StdoutJsonEventSink);
     }
@@ -1085,6 +1091,18 @@ fn split_command_spec(value: &str) -> CliResult<Vec<String>> {
         tokens.push(current);
     }
     Ok(tokens)
+}
+
+/// Assemble the plugins active for an agent run.
+///
+/// This is the single seam through which built-in and third-party capability
+/// reaches the harness. It is intentionally empty today: config-driven plugin
+/// enablement (a `[plugins]` table and `codel00p plugins` commands) is the next
+/// slice of the Plugins & Hooks initiative. Wiring the call site now keeps the
+/// default tool/hook behaviour unchanged while giving later slices one place to
+/// register plugins.
+fn load_plugins() -> PluginRegistry {
+    PluginRegistry::new()
 }
 
 async fn build_tool_registry(

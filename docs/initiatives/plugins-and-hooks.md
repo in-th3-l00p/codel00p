@@ -90,8 +90,9 @@ For third parties who cannot recompile codel00p:
       aggregates tools, lifecycle hooks, event sinks, and provider profiles
       (last-writer-wins). Slice:
       [2026-06-12-plugin-registry-crate](../superpowers/plans/2026-06-12-plugin-registry-crate.md).
-- [ ] Wire `PluginRegistry` into `AgentHarnessBuilder` + CLI so plugins load at
-      runtime.
+- [x] Wire `PluginRegistry` into `AgentHarnessBuilder` + CLI so plugins load at
+      runtime (tools + lifecycle hooks; event sinks/providers deferred). Slice:
+      [2026-06-12-plugin-registry-harness-wiring](../superpowers/plans/2026-06-12-plugin-registry-harness-wiring.md).
 - [ ] Migrate built-in tools and providers to register through the registry.
 - [ ] Route existing `AgentEventSink`/memory hooks through `LifecycleHook`.
 - [ ] Golden tests proving identical behavior pre/post refactor.

@@ -705,6 +705,16 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Add an already type-erased lifecycle hook.
+    ///
+    /// This is the entry point used when hooks are contributed dynamically (for
+    /// example by a plugin) rather than by a statically typed `lifecycle_hook`
+    /// call. Hooks run in the order they are added.
+    pub fn lifecycle_hook_arc(mut self, lifecycle_hook: Arc<dyn LifecycleHook>) -> Self {
+        self.lifecycle_hooks.push(lifecycle_hook);
+        self
+    }
+
     pub fn project_memory_provider<T>(mut self, project_memory_provider: T) -> Self
     where
         T: ProjectMemoryProvider + 'static,
