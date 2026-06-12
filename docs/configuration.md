@@ -66,7 +66,7 @@ workspace.project_name         workspace.memory_db
 agent.provider                 agent.model
 agent.base_url                 agent.provider_policy_preset
 agent.max_iterations           agent.permission_mode      # allow | ask | deny
-agent.tool_sets                # comma-separated: read,edit,command,git,delegate,all
+agent.tool_sets                # comma-separated: read,edit,command,git,delegate,learn,all
 agent.stream                   agent.remember_permissions
 plugins.enabled                # comma-separated plugin ids (see `codel00p plugins`)
 delegation.max_concurrent_children   # cap on child agents run concurrently (default 4)
@@ -75,6 +75,12 @@ delegation.max_concurrent_children   # cap on child agents run concurrently (def
 The `delegate` tool-set (`--tool-set delegate` or `agent.tool_sets`) lets an
 agent hand focused tasks to child agents via a `delegate_task` tool. Children run
 read-only and are recorded as their own sessions linked to the parent.
+
+The `learn` tool-set (`--tool-set learn`) lets an agent propose reusable skills
+it discovers via a `propose_skill` tool. Proposals wait in the review queue
+(`codel00p skills candidates`) and are not applied until approved
+(`codel00p skills approve <name>`); approved skills are then auto-injected on
+relevant future turns.
 
 ## `codel00p plugins`
 

@@ -110,12 +110,17 @@ Usage: codel00p skills <command>
 
 Skills are procedural memory: a SKILL.md (front matter + Markdown instructions)
 in ~/.codel00p/skills (user) or ./.codel00p/skills (project). Project skills
-override user skills with the same name.
+override user skills with the same name. With `--tool-set learn`, an agent can
+propose skills it learns; proposals wait in the review queue below and are not
+used until approved.
 
 Commands:
-  list                          List available skills (default)
+  list                          List active skills (default)
   show <name>                   Show a skill's metadata and instructions
   create <name> [--project]     Scaffold a new skill (user config, or project)
+  candidates                    List agent-proposed skills awaiting review
+  approve <name> [--project]    Approve a candidate (it becomes active)
+  reject <name> [--project]     Reject a candidate (archived)
 ";
 
 const PLUGINS_HELP: &str = "\
@@ -152,7 +157,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, all
+  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
@@ -172,7 +177,7 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, all
+  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
@@ -206,7 +211,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations per turn
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, all
+  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions

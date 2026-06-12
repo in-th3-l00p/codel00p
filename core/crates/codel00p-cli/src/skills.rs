@@ -9,7 +9,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use codel00p_skill::{SKILL_FILE, SkillSource, load_skills};
+use codel00p_skill::{
+    SKILL_FILE, SkillSource, approve_candidate, load_candidates, load_skills, reject_candidate,
+};
 
 use crate::{config::CliResult, settings};
 
@@ -22,11 +24,14 @@ pub fn run(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         "list" => skills_list(workspace_start),
         "show" => skills_show(workspace_start, rest),
         "create" => skills_create(workspace_start, rest),
+        "candidates" => skills_candidates(workspace_start),
+        "approve" => skills_review(workspace_start, rest, Review::Approve),
+        "reject" => skills_review(workspace_start, rest, Review::Reject),
         _ => Err(format!("unknown skills command: {command}")),
     }
 }
 
-fn user_skills_dir() -> PathBuf {
+pub(crate) fn user_skills_dir() -> PathBuf {
     settings::home_dir().join("skills")
 }
 
@@ -153,4 +158,94 @@ fn skills_create(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         options.name,
         file.display()
     ))
+}
+
+// --- review queue: agent-proposed skills -----------------------------------
+
+fn skills_candidates(workspace_start: &Path) -> CliResult<String> {
+    let mut candidates = load_candidates(&user_skills_dir());
+    candidates.extend(load_candidates(&project_skills_dir(workspace_start)));
+    if candidates.is_empty() {
+        return Ok("No skill candidates awaiting review.\n".to_string());
+    }
+
+    candidates.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut output = String::from("Skill candidates (awaiting review):\n");
+    for skill in &candidates {
+        let by = skill
+            .created_by
+            .as_deref()
+            .map(|value| format!(" [{value}]"))
+            .unwrap_or_default();
+        output.push_str(&format!(
+            "  {:<20}{}  {}\n",
+            skill.name, by, skill.description
+        ));
+    }
+    output.push_str(
+        "\nApprove:  codel00p skills approve <name>\n\
+         Reject:   codel00p skills reject <name>\n\
+         Inspect:  codel00p skills show <name>   (after approving)\n",
+    );
+    Ok(output)
+}
+
+enum Review {
+    Approve,
+    Reject,
+}
+
+struct ReviewOptions {
+    name: String,
+    project: bool,
+}
+
+fn parse_review(args: &[String], verb: &str) -> CliResult<ReviewOptions> {
+    let mut name = None;
+    let mut project = false;
+    for arg in args {
+        match arg.as_str() {
+            "--project" => project = true,
+            flag if flag.starts_with("--") => {
+                return Err(format!("unknown skills {verb} option: {flag}"));
+            }
+            value => {
+                if name.is_some() {
+                    return Err(format!("unexpected argument: {value}"));
+                }
+                name = Some(value.to_string());
+            }
+        }
+    }
+    Ok(ReviewOptions {
+        name: name.ok_or_else(|| format!("usage: skills {verb} <name> [--project]"))?,
+        project,
+    })
+}
+
+fn skills_review(workspace_start: &Path, args: &[String], action: Review) -> CliResult<String> {
+    let verb = match action {
+        Review::Approve => "approve",
+        Review::Reject => "reject",
+    };
+    let options = parse_review(args, verb)?;
+    let root = if options.project {
+        project_skills_dir(workspace_start)
+    } else {
+        user_skills_dir()
+    };
+
+    match action {
+        Review::Approve => {
+            approve_candidate(&root, &options.name).map_err(|error| error.to_string())?;
+            Ok(format!(
+                "Approved skill {}. It will be applied on relevant future turns.\n",
+                options.name
+            ))
+        }
+        Review::Reject => {
+            reject_candidate(&root, &options.name).map_err(|error| error.to_string())?;
+            Ok(format!("Rejected skill {} (archived).\n", options.name))
+        }
+    }
 }

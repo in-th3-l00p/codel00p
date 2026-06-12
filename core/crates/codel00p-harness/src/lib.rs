@@ -9,6 +9,7 @@ pub mod events;
 pub mod git;
 pub mod instructions;
 pub mod iteration_budget;
+pub mod learning;
 pub mod lifecycle;
 pub mod memory;
 pub mod permissions;
@@ -32,6 +33,7 @@ pub use event_sink::AgentEventSink;
 pub use events::HarnessEvent;
 pub use instructions::{ProjectInstruction, ProjectInstructionLoader, ProjectInstructions};
 pub use iteration_budget::IterationBudget;
+pub use learning::{ProposeSkillTool, ProposedSkill, SkillProposalSink, learning_tools};
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use memory::{
     ExplicitTurnMemoryExtractor, MemoryCandidateSink, MemoryCandidateSinkOutcome,

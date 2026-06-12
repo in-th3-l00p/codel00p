@@ -23,6 +23,11 @@ use thiserror::Error;
 /// The canonical file name inside a skill directory.
 pub const SKILL_FILE: &str = "SKILL.md";
 
+/// Subdirectory of a skills root holding proposed (unreviewed) skills.
+pub const CANDIDATES_DIR: &str = ".candidates";
+/// Subdirectory of the candidates dir holding rejected proposals.
+pub const ARCHIVE_DIR: &str = ".archive";
+
 #[derive(Debug, Error)]
 pub enum SkillError {
     #[error("failed to read skill at {path}: {source}")]
@@ -34,6 +39,14 @@ pub enum SkillError {
     MissingFrontMatter { path: PathBuf },
     #[error("skill {path} has no `name` and its directory name could not be used")]
     MissingName { path: PathBuf },
+    #[error("a skill named `{name}` is already active")]
+    AlreadyActive { name: String },
+    #[error("a candidate named `{name}` is already awaiting review")]
+    CandidateExists { name: String },
+    #[error("no candidate named `{name}` awaiting review")]
+    UnknownCandidate { name: String },
+    #[error("invalid skill name `{name}`: use letters, digits, `-`, `_`")]
+    InvalidName { name: String },
 }
 
 /// Where a skill was loaded from, lowest to highest precedence.
@@ -65,6 +78,10 @@ pub struct Skill {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
     pub triggers: Vec<String>,
+    /// Provenance: who authored the skill (`agent` or `user`), if recorded.
+    /// The curator keys off `agent` to retire stale machine-proposed skills.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
     pub source: SkillSource,
     pub path: PathBuf,
     #[serde(skip)]
@@ -136,6 +153,164 @@ pub fn load_skill(path: &Path, source: SkillSource) -> Result<Skill, SkillError>
     parse_skill(path, source, &content)
 }
 
+// --- Candidate lifecycle ---------------------------------------------------
+//
+// Self-improvement is review-gated: the agent *proposes* skills, humans (or
+// policy) *approve* them. Proposals live under `<skills_root>/.candidates/` and
+// are never loaded as active skills, so an unreviewed proposal can never reach a
+// future turn's context. Approving moves the proposal into the active set;
+// rejecting archives it (reversible).
+
+/// A proposed skill awaiting review.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SkillProposal {
+    pub name: String,
+    pub description: String,
+    pub triggers: Vec<String>,
+    pub instructions: String,
+    /// `agent` for machine-proposed skills, `user` for human-authored ones.
+    pub created_by: String,
+}
+
+/// The `.candidates` directory under a skills root.
+pub fn candidates_root(skills_dir: &Path) -> PathBuf {
+    skills_dir.join(CANDIDATES_DIR)
+}
+
+/// Write a proposal as a review candidate, returning its `SKILL.md` path.
+///
+/// Fails if an active skill or an existing candidate already uses the name, so a
+/// proposal never silently overwrites reviewed work.
+pub fn propose_skill(skills_dir: &Path, proposal: &SkillProposal) -> Result<PathBuf, SkillError> {
+    validate_name(&proposal.name)?;
+
+    if skills_dir.join(&proposal.name).join(SKILL_FILE).is_file() {
+        return Err(SkillError::AlreadyActive {
+            name: proposal.name.clone(),
+        });
+    }
+    let dir = candidates_root(skills_dir).join(&proposal.name);
+    let file = dir.join(SKILL_FILE);
+    if file.is_file() {
+        return Err(SkillError::CandidateExists {
+            name: proposal.name.clone(),
+        });
+    }
+
+    create_dir_all(&dir)?;
+    write_file(&file, &render_skill_md(proposal))?;
+    Ok(file)
+}
+
+/// Load the skills awaiting review under a skills root.
+pub fn load_candidates(skills_dir: &Path) -> Vec<Skill> {
+    scan_dir(&candidates_root(skills_dir), SkillSource::User)
+}
+
+/// Approve a candidate, moving it into the active skill set so it is loaded and
+/// injected on future turns.
+pub fn approve_candidate(skills_dir: &Path, name: &str) -> Result<PathBuf, SkillError> {
+    validate_name(name)?;
+    let from = candidates_root(skills_dir).join(name);
+    if !from.join(SKILL_FILE).is_file() {
+        return Err(SkillError::UnknownCandidate {
+            name: name.to_string(),
+        });
+    }
+    let to = skills_dir.join(name);
+    if to.join(SKILL_FILE).is_file() {
+        return Err(SkillError::AlreadyActive {
+            name: name.to_string(),
+        });
+    }
+    rename(&from, &to)?;
+    Ok(to.join(SKILL_FILE))
+}
+
+/// Reject a candidate, archiving it under `.candidates/.archive` (reversible).
+pub fn reject_candidate(skills_dir: &Path, name: &str) -> Result<(), SkillError> {
+    validate_name(name)?;
+    let from = candidates_root(skills_dir).join(name);
+    if !from.join(SKILL_FILE).is_file() {
+        return Err(SkillError::UnknownCandidate {
+            name: name.to_string(),
+        });
+    }
+    let archive = candidates_root(skills_dir).join(ARCHIVE_DIR).join(name);
+    if let Some(parent) = archive.parent() {
+        create_dir_all(parent)?;
+    }
+    if archive.exists() {
+        fs::remove_dir_all(&archive).map_err(|source| SkillError::Io {
+            path: archive.clone(),
+            source,
+        })?;
+    }
+    rename(&from, &archive)?;
+    Ok(())
+}
+
+/// Skill names become directory names, so keep them filesystem- and
+/// review-safe: no separators, traversal, or surprises.
+fn validate_name(name: &str) -> Result<(), SkillError> {
+    let valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if valid {
+        Ok(())
+    } else {
+        Err(SkillError::InvalidName {
+            name: name.to_string(),
+        })
+    }
+}
+
+fn render_skill_md(proposal: &SkillProposal) -> String {
+    let description = sanitize_inline(&proposal.description);
+    let mut out = String::from("---\n");
+    out.push_str(&format!("name: {}\n", proposal.name));
+    out.push_str(&format!("description: \"{description}\"\n"));
+    out.push_str(&format!("created_by: {}\n", proposal.created_by));
+    if !proposal.triggers.is_empty() {
+        out.push_str("triggers:\n");
+        for trigger in &proposal.triggers {
+            out.push_str(&format!("  - {}\n", sanitize_inline(trigger)));
+        }
+    }
+    out.push_str("---\n");
+    out.push_str(proposal.instructions.trim());
+    out.push('\n');
+    out
+}
+
+/// Flatten to a single line and drop double quotes, so a value is safe inside
+/// the simple front-matter the loader parses back.
+fn sanitize_inline(value: &str) -> String {
+    value.replace(['\n', '\r'], " ").replace('"', "'")
+}
+
+fn create_dir_all(path: &Path) -> Result<(), SkillError> {
+    fs::create_dir_all(path).map_err(|source| SkillError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+fn write_file(path: &Path, contents: &str) -> Result<(), SkillError> {
+    fs::write(path, contents).map_err(|source| SkillError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+fn rename(from: &Path, to: &Path) -> Result<(), SkillError> {
+    fs::rename(from, to).map_err(|source| SkillError::Io {
+        path: from.to_path_buf(),
+        source,
+    })
+}
+
 fn scan_dir(dir: &Path, source: SkillSource) -> Vec<Skill> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
@@ -172,6 +347,7 @@ fn parse_skill(path: &Path, source: SkillSource, content: &str) -> Result<Skill,
         description: scalar(&map, "description").unwrap_or("").to_string(),
         author: scalar(&map, "author").map(str::to_string),
         triggers: list(&map, "triggers"),
+        created_by: scalar(&map, "created_by").map(str::to_string),
         source,
         path: path.to_path_buf(),
         body: body.trim().to_string(),
@@ -377,6 +553,107 @@ mod tests {
         // Limit is respected.
         let both = select_skills(&skills, "deploy and lint", 1);
         assert_eq!(both.len(), 1);
+    }
+
+    fn sample_proposal(name: &str) -> SkillProposal {
+        SkillProposal {
+            name: name.to_string(),
+            description: "Ship the app safely".to_string(),
+            triggers: vec!["deploy".to_string(), "release".to_string()],
+            instructions: "1. Run tests.\n2. Deploy.\n3. Smoke test.".to_string(),
+            created_by: "agent".to_string(),
+        }
+    }
+
+    #[test]
+    fn proposed_skill_is_a_candidate_not_an_active_skill() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        propose_skill(root, &sample_proposal("deploy")).expect("propose");
+
+        // Not visible as an active skill...
+        assert!(load_skills(&[(SkillSource::User, root.to_path_buf())]).is_empty());
+        // ...but visible as a candidate, with provenance preserved.
+        let candidates = load_candidates(root);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].name, "deploy");
+        assert_eq!(candidates[0].created_by.as_deref(), Some("agent"));
+        assert_eq!(candidates[0].triggers, vec!["deploy", "release"]);
+    }
+
+    #[test]
+    fn proposal_is_rejected_when_name_is_taken() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+
+        propose_skill(root, &sample_proposal("deploy")).expect("first propose");
+        // A second proposal of the same name is a duplicate candidate.
+        assert!(matches!(
+            propose_skill(root, &sample_proposal("deploy")),
+            Err(SkillError::CandidateExists { .. })
+        ));
+
+        // And an active skill blocks proposing the same name.
+        write_skill(
+            root,
+            "active",
+            "---\nname: active\ndescription: d\n---\nbody\n",
+        );
+        assert!(matches!(
+            propose_skill(root, &sample_proposal("active")),
+            Err(SkillError::AlreadyActive { .. })
+        ));
+    }
+
+    #[test]
+    fn proposal_rejects_unsafe_names() {
+        let dir = tempdir().expect("tempdir");
+        assert!(matches!(
+            propose_skill(dir.path(), &sample_proposal("../escape")),
+            Err(SkillError::InvalidName { .. })
+        ));
+    }
+
+    #[test]
+    fn approving_a_candidate_activates_it() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        propose_skill(root, &sample_proposal("deploy")).expect("propose");
+
+        approve_candidate(root, "deploy").expect("approve");
+
+        // Now an active skill, no longer a candidate.
+        let active = load_skills(&[(SkillSource::User, root.to_path_buf())]);
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].name, "deploy");
+        assert!(load_candidates(root).is_empty());
+
+        // Approving an unknown candidate errors.
+        assert!(matches!(
+            approve_candidate(root, "missing"),
+            Err(SkillError::UnknownCandidate { .. })
+        ));
+    }
+
+    #[test]
+    fn rejecting_a_candidate_archives_it() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        propose_skill(root, &sample_proposal("deploy")).expect("propose");
+
+        reject_candidate(root, "deploy").expect("reject");
+
+        // Gone from the review queue and never activated...
+        assert!(load_candidates(root).is_empty());
+        assert!(load_skills(&[(SkillSource::User, root.to_path_buf())]).is_empty());
+        // ...but preserved in the archive for recovery.
+        assert!(
+            candidates_root(root)
+                .join(ARCHIVE_DIR)
+                .join("deploy")
+                .join(SKILL_FILE)
+                .is_file()
+        );
     }
 
     #[test]

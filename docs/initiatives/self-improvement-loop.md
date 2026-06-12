@@ -89,7 +89,14 @@ policy) **approve**.
 - [ ] Reconcile with existing staleness/similarity scoring.
 
 ### Phase 3 — Procedure synthesis
-- [ ] Post-task skill-candidate extractor feeding the Skills review queue.
+- [x] Agent-proposed skills: a `propose_skill` tool (the `learn` tool-set) lets
+      the agent capture a learned procedure as a review candidate; CLI
+      `skills candidates/approve/reject` close the loop, and approved skills are
+      auto-injected on future turns (the complete proposes→review→apply loop).
+      Slice:
+      [2026-06-12-agent-proposed-skills](../superpowers/plans/2026-06-12-agent-proposed-skills.md).
+- [ ] Automatic post-task extraction (propose without an explicit tool call),
+      feeding the same review queue.
 
 ### Phase 4 — Project/user model
 - [ ] Per-project and per-user model documents, refined across sessions, with

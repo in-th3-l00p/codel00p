@@ -13,9 +13,10 @@ use codel00p_harness::{
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
     MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope, ProjectMemoryContext, ProjectMemoryItem,
-    ProjectMemoryProvider, ProjectMemoryRequest, ProviderModelClient, SessionId, SkillContext,
-    SkillPrompt, SkillProvider, SkillSelectionRequest, SubAgentSpawner, TokenSink, ToolRegistry,
-    UserMessage, Workspace, delegation_tools,
+    ProjectMemoryProvider, ProjectMemoryRequest, ProposedSkill, ProviderModelClient, SessionId,
+    SkillContext, SkillPrompt, SkillProposalSink, SkillProvider, SkillSelectionRequest,
+    SubAgentSpawner, TokenSink, ToolRegistry, UserMessage, Workspace, delegation_tools,
+    learning_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
@@ -26,7 +27,7 @@ use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
 use codel00p_providers::{ProviderRegistry, default_registry};
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
-use codel00p_skill::{SkillSource, load_skills, select_skills};
+use codel00p_skill::{SkillProposal, SkillSource, load_skills, propose_skill, select_skills};
 
 use crate::{
     config::{
@@ -67,6 +68,7 @@ enum AgentToolSet {
     Command,
     Git,
     Delegate,
+    Learn,
     All,
 }
 
@@ -303,6 +305,10 @@ async fn build_agent_harness(
             concurrency: Arc::new(tokio::sync::Semaphore::new(max_children as usize)),
         });
         tools = tools.with_registry(delegation_tools(AgentRole::Orchestrator, spawner));
+    }
+    if options.tool_sets.contains(&AgentToolSet::Learn) {
+        let sink = Arc::new(CliSkillProposalSink::new(crate::skills::user_skills_dir()));
+        tools = tools.with_registry(learning_tools(sink));
     }
 
     let mut builder = AgentHarness::builder()
@@ -887,6 +893,7 @@ fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
         "command" | "commands" | "shell" => Ok(AgentToolSet::Command),
         "git" => Ok(AgentToolSet::Git),
         "delegate" | "delegation" => Ok(AgentToolSet::Delegate),
+        "learn" | "learning" => Ok(AgentToolSet::Learn),
         "all" => Ok(AgentToolSet::All),
         _ => Err(format!("unknown tool set: {value}")),
     }
@@ -1258,6 +1265,9 @@ async fn build_tool_registry(
             // Delegation needs the provider/model config to build a spawner, so
             // it is folded in by `build_agent_harness`, not here.
             AgentToolSet::Delegate => registry,
+            // Learning needs the skills directory to record proposals, so it is
+            // folded in by `build_agent_harness`, not here.
+            AgentToolSet::Learn => registry,
             AgentToolSet::All => registry
                 .with_registry(ToolRegistry::editing_defaults())
                 .with_registry(ToolRegistry::command_defaults())
@@ -1844,6 +1854,37 @@ impl SkillProvider for CliSkillProvider {
                 .map(|skill| SkillPrompt::new(skill.name, skill.body))
                 .collect(),
         ))
+    }
+}
+
+/// Records agent-proposed skills as review candidates under the user skills dir.
+/// Proposals stay inactive until a human runs `codel00p skills approve`.
+struct CliSkillProposalSink {
+    skills_dir: PathBuf,
+}
+
+impl CliSkillProposalSink {
+    fn new(skills_dir: PathBuf) -> Self {
+        Self { skills_dir }
+    }
+}
+
+#[async_trait]
+impl SkillProposalSink for CliSkillProposalSink {
+    async fn propose(&self, skill: ProposedSkill) -> Result<(), HarnessError> {
+        let proposal = SkillProposal {
+            name: skill.name().to_string(),
+            description: skill.description().to_string(),
+            triggers: skill.triggers().to_vec(),
+            instructions: skill.instructions().to_string(),
+            created_by: "agent".to_string(),
+        };
+        propose_skill(&self.skills_dir, &proposal).map_err(|error| {
+            HarnessError::Configuration {
+                message: error.to_string(),
+            }
+        })?;
+        Ok(())
     }
 }
 
