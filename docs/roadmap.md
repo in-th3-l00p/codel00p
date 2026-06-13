@@ -146,16 +146,28 @@ Exit criteria:
 Goal: let organizations manage AI usage, project memory, providers, and audit
 history centrally.
 
-Build:
+Implemented:
 
-- organization, team, user, role, project, and invitation models;
-- shared project memory sync;
-- provider policy and organization credentials;
+- organization, team, user, role, and project models via **Clerk
+  Organizations**; the `codel00p-cloud` axum service keys product data by Clerk
+  org/user IDs and verifies session JWTs (RS256 via JWKS) at the boundary;
+- full org-scoped CRUD for projects, agents, and MCP server configs plus a
+  reviewed-memory queue, exposed over HTTP and the typed `@codel00p/sdk`;
+- shared project-memory sync (`codel00p cloud push|pull|status`) and stored
+  agent runs resolved into RunPlans (`codel00p cloud run`);
+- a **Postgres storage backend** behind `codel00p-storage`, deployed and
+  **verified durable in production** (survives restarts; Fly.io `codel00p-cloud`
+  + `codel00p-db`);
+- live updates over server-sent events (`GET /events`) so desktop and web
+  reflect changes without polling.
+
+Still to build:
+
+- provider policy and organization-managed credentials end to end;
 - permission policy management;
 - usage, cost, and budget views;
-- audit history and activity feeds;
-- sync conflict representation and resolution;
-- cloud storage backend behind `codel00p-storage`.
+- organization-wide audit history and activity feeds;
+- sync conflict representation and resolution.
 
 Exit criteria:
 
@@ -167,16 +179,26 @@ Exit criteria:
 Goal: expose the agent, memory, and governance workflow through polished user
 interfaces.
 
-Build:
+Implemented:
+
+- an Electron **desktop control center** with Clerk sign-in, a live
+  organization dashboard (projects, agents, MCP servers), custom dark account
+  UI, and an install view when the `codel00p` binary is absent;
+- a memory candidate **review queue** (cloud service + web dashboard);
+- **cloud sign-in across every surface**: web `/sign-in` + dashboard, the
+  desktop OAuth handoff, and the `codel00p login` browser flow for the CLI
+  (localhost loopback + Clerk `cli` JWT template, credentials at
+  `~/.codel00p/credentials.toml`);
+- **live protocol event rendering** with end-to-end token streaming in the CLI
+  and desktop; bare `codel00p` opens the interactive chat.
+
+Still to build:
 
 - desktop session supervision timeline;
 - permission approval UI;
-- memory candidate review queue;
-- project knowledge browser;
+- a richer project knowledge browser;
 - provider status and configuration views;
-- team activity views;
-- cloud sign-in and workspace switching;
-- shared protocol event rendering across CLI, desktop, and cloud.
+- team activity views and workspace switching.
 
 Exit criteria:
 
@@ -208,16 +230,21 @@ Exit criteria:
 Goal: package codel00p as a cohesive open-source product with an enterprise
 cloud path.
 
-Build:
+Started:
 
-- installers and package distribution;
+- **hosted cloud deployment**: `codel00p-cloud` runs on Fly.io (`iad`, always-on)
+  with a managed Postgres database, auto-deployed from `main` via GitHub Actions
+  and fronted by the `codel00p` Vercel web app;
+- **prebuilt release binaries and a curl installer** for distribution.
+
+Still to build:
+
 - migrations and compatibility policy;
 - security review and sandboxing;
 - privacy controls;
 - eval suite for agent, provider, memory, and MCP behavior;
-- docs site;
-- release channels;
-- hosted cloud deployment.
+- a docs site;
+- release channels.
 
 Exit criteria:
 
