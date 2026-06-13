@@ -43,15 +43,17 @@ fn run(args: Vec<String>) -> CliResult<String> {
     settings::load_env_file();
 
     let (overrides, rest) = parse_global_overrides(args)?;
-    let Some((command, rest)) = rest.split_first() else {
-        return Err("missing command".to_string());
+    // With no subcommand, `codel00p` opens the interactive chat — the primary UI.
+    let (command, rest): (&str, &[String]) = match rest.split_first() {
+        Some((command, rest)) => (command.as_str(), rest),
+        None => ("agent", &[]),
     };
 
     let workspace_start = env::current_dir().map_err(|error| error.to_string())?;
 
     // Config and provider management operate on settings files directly and do
     // not need a resolved workspace/memory configuration.
-    match command.as_str() {
+    match command {
         "config" => return config_cmd::run(&workspace_start, rest),
         "providers" => return providers::run(&workspace_start, rest),
         "plugins" => return plugins::run(&workspace_start, rest),
@@ -65,7 +67,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
     let agent_defaults = resolved.merged.agent.clone();
     let config = resolve_cli_config(&resolved, overrides);
 
-    match command.as_str() {
+    match command {
         "agent" => agent::run(config, agent_defaults, rest),
         "cron" => cron::run(config, agent_defaults, rest),
         "gateway" => gateway::run(config, agent_defaults, rest),

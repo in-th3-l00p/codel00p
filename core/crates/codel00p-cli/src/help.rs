@@ -47,7 +47,9 @@ fn is_help(value: &str) -> bool {
 }
 
 const TOP_LEVEL_HELP: &str = "\
-Usage: codel00p [global options] <command>
+Usage: codel00p [global options] [command]
+
+Run `codel00p` with no command to open the interactive chat — the primary UI.
 
 Configuration is read from ~/.codel00p/config.toml (and ./.codel00p/config.toml).
 Run `codel00p config setup` once, then most commands need no flags.

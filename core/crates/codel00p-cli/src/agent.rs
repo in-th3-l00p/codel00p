@@ -117,8 +117,9 @@ struct McpServerSpec {
 }
 
 pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliResult<String> {
+    // No subcommand opens the interactive chat — the primary UI.
     let Some((command, rest)) = args.split_first() else {
-        return Err("missing agent command".to_string());
+        return agent_chat(config, &defaults, &[]);
     };
 
     match command.as_str() {
