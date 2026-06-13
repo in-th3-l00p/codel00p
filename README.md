@@ -56,6 +56,7 @@ asset is the project knowledge that codel00p captures and makes reusable.
 
 ## Documentation
 
+- [Pitch](docs/pitch.md)
 - [Project Description](docs/project.md)
 - [Configuration](docs/configuration.md)
 - [Product Roadmap](docs/product-roadmap.md)
