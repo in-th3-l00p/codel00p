@@ -452,7 +452,13 @@ fn run_agent_turn(
         let outcome = harness
             .run_turn_with_state(session_state, UserMessage::new(options.prompt.clone()))
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| {
+                crate::error_help::humanize_provider_error(
+                    &error.to_string(),
+                    &options.provider,
+                    &options.model,
+                )
+            })?;
 
         let mut output = String::new();
         if let Some(message) = &outcome.assistant_message {
@@ -704,10 +710,29 @@ fn run_agent_chat(config: CliConfig, mut options: AgentRunOptions) -> CliResult<
             let harness =
                 build_agent_harness(&config, &options, &mcp_servers, session_state.session_id())
                     .await?;
-            let outcome = harness
-                .run_turn_with_state(session_state, UserMessage::new(prompt.to_string()))
+            let outcome = match harness
+                .run_turn_with_state(session_state.clone(), UserMessage::new(prompt.to_string()))
                 .await
-                .map_err(|error| error.to_string())?;
+            {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    // A failed turn (e.g. an unsupported model) explains itself and
+                    // keeps the chat open — `session_state` is unchanged (we passed
+                    // a clone), so the user can `/model <id>` and retry instead of
+                    // losing the whole conversation.
+                    writeln!(
+                        stderr,
+                        "\n{}",
+                        crate::error_help::humanize_provider_error(
+                            &error.to_string(),
+                            &options.provider,
+                            &options.model,
+                        )
+                    )
+                    .ok();
+                    continue;
+                }
+            };
 
             if let Some(message) = &outcome.assistant_message {
                 if options.stream {

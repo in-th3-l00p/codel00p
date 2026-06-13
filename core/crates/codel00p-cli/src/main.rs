@@ -8,6 +8,7 @@ mod config_cmd;
 mod connector_permissions;
 mod credentials;
 mod cron;
+mod error_help;
 mod gateway;
 mod help;
 mod login;
