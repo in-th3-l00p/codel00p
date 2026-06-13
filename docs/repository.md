@@ -30,9 +30,13 @@ through the root `pnpm verify:core` script.
 
 `apps/` contains deployable surfaces:
 
-- `landing`: public Next.js website;
-- `cloud`: organization and team web platform;
+- `landing`: public Next.js site — marketing, documentation, and the
+  authenticated cloud control surface (sign-in + organization dashboard),
+  deployed to Vercel;
 - `desktop`: Electron control center.
+
+The cloud control-plane API itself is a Rust service
+(`core/crates/codel00p-cloud`); the apps call it through `@codel00p/sdk`.
 
 Apps can depend on `packages/*`. Apps should not become homes for shared product
 logic.

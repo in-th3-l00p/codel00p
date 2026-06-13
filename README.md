@@ -130,9 +130,24 @@ pnpm install
 pnpm typecheck
 pnpm build
 pnpm dev:landing
-pnpm dev:cloud
 pnpm dev:desktop
 ```
+
+## Deployment
+
+The control surfaces run as live services:
+
+- **Web** — `apps/landing` is one Next.js app serving the marketing site, the
+  documentation, and the authenticated cloud control surface (custom Clerk
+  sign-in plus an organization dashboard for projects, agents, and MCP servers).
+  It deploys to **Vercel** (production from `main`).
+- **Backend** — `core/crates/codel00p-cloud` is the Rust (axum) control-plane
+  API, deployed to **Fly.io** with **Postgres**. It verifies Clerk session JWTs
+  and is the source of truth for organization data; the web app reaches it via
+  `@codel00p/sdk` over `CODEL00P_API_URL`.
+- **CI/CD** — GitHub Actions verifies the Rust core and the apps on every push,
+  and auto-deploys `codel00p-cloud` to Fly when `core/` changes on `main`; Vercel
+  handles web deploys.
 
 ## Current implementation
 
