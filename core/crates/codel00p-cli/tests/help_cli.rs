@@ -16,12 +16,36 @@ fn stderr(output: &Output) -> String {
 }
 
 #[test]
+fn bare_invocation_opens_chat() {
+    // Bare `codel00p` (no subcommand) must route to the interactive chat — the
+    // primary UI — not error. With an isolated, unconfigured home it reaches the
+    // chat path and reports the missing provider instead of "missing command".
+    let home = tempfile::tempdir().expect("tempdir");
+    let output = Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .env("CODEL00P_HOME", home.path())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("run codel00p");
+    let combined =
+        String::from_utf8_lossy(&output.stderr).to_string() + &stdout(&output);
+    assert!(
+        combined.contains("no provider configured"),
+        "bare invocation should enter chat; got: {combined}"
+    );
+    assert!(
+        !combined.contains("missing command"),
+        "bare invocation must not error; got: {combined}"
+    );
+}
+
+#[test]
 fn top_level_help_prints_without_project_flags() {
     let output = run_codel00p(&["--help"]);
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let help = stdout(&output);
-    assert!(help.contains("Usage: codel00p [global options] <command>"));
+    assert!(help.contains("Usage: codel00p [global options] [command]"));
+    assert!(help.contains("open the interactive chat"));
     assert!(help.contains("agent      Run the coding agent"));
     assert!(help.contains("config     View and edit configuration"));
     assert!(help.contains("providers  Configure inference providers and credentials"));
