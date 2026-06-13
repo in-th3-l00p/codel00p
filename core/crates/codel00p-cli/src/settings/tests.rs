@@ -1,5 +1,10 @@
+use super::paths::default_memory_db;
 use super::*;
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    env, fs,
+    path::Path,
+    sync::{Mutex, MutexGuard},
+};
 
 // Path resolution reads process env; serialize tests that touch it.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
