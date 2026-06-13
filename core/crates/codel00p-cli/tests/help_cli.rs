@@ -18,18 +18,21 @@ fn stderr(output: &Output) -> String {
 #[test]
 fn bare_invocation_opens_chat() {
     // Bare `codel00p` (no subcommand) must route to the interactive chat — the
-    // primary UI — not error. With an isolated, unconfigured home it reaches the
-    // chat path and reports the missing provider instead of "missing command".
+    // primary UI — not the old "missing command" error. With empty stdin the
+    // chat either starts its banner (provider configured) or reports the missing
+    // provider (not configured); both prove it reached the chat path.
     let home = tempfile::tempdir().expect("tempdir");
     let output = Command::new(env!("CARGO_BIN_EXE_codel00p"))
         .env("CODEL00P_HOME", home.path())
+        .current_dir(home.path())
         .stdin(std::process::Stdio::null())
         .output()
         .expect("run codel00p");
-    let combined =
-        String::from_utf8_lossy(&output.stderr).to_string() + &stdout(&output);
+    let combined = String::from_utf8_lossy(&output.stderr).to_string() + &stdout(&output);
     assert!(
-        combined.contains("no provider configured"),
+        combined.contains("no provider configured")
+            || combined.contains("Type a message")
+            || combined.contains("codel00p chat"),
         "bare invocation should enter chat; got: {combined}"
     );
     assert!(
@@ -44,14 +47,17 @@ fn top_level_help_prints_without_project_flags() {
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let help = stdout(&output);
-    assert!(help.contains("Usage: codel00p [global options] [command]"));
-    assert!(help.contains("open the interactive chat"));
-    assert!(help.contains("agent      Run the coding agent"));
-    assert!(help.contains("config     View and edit configuration"));
-    assert!(help.contains("providers  Configure inference providers and credentials"));
+    assert!(help.contains("Usage"));
+    assert!(help.contains("codel00p [options] [command]"));
+    assert!(help.contains("open the interactive chat (default)"));
+    assert!(help.contains("agent      Run the agent"));
+    assert!(help.contains("config     Settings, providers, and plugins"));
+    assert!(help.contains("auth       Sign in or out of the codel00p cloud"));
     assert!(help.contains("mcp        Expose codel00p as an MCP server"));
     assert!(help.contains("memory     Review project memory"));
     assert!(help.contains("session    Inspect persisted sessions"));
+    // providers and plugins moved under config; login/logout under auth.
+    assert!(!help.contains("\nlogin "), "login should not be top-level");
 }
 
 #[test]
@@ -118,8 +124,21 @@ fn command_help_prints_without_project_flags() {
             "Usage: codel00p config <command>",
         ),
         (
-            &["providers", "--help"][..],
-            "Usage: codel00p providers <command>",
+            &["config", "providers", "--help"][..],
+            "Usage: codel00p config providers <command>",
+        ),
+        (
+            &["config", "plugins", "--help"][..],
+            "Usage: codel00p config plugins <command>",
+        ),
+        (&["auth", "--help"][..], "Usage: codel00p auth <command>"),
+        (
+            &["auth", "login", "--help"][..],
+            "Usage: codel00p auth login [options]",
+        ),
+        (
+            &["auth", "logout", "--help"][..],
+            "Usage: codel00p auth logout",
         ),
         (
             &["session", "list", "--help"][..],

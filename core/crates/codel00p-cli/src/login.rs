@@ -64,7 +64,7 @@ pub fn run_login(args: &[String]) -> CliResult<String> {
     match org {
         Some(org) => output.push_str(&format!("Active organization: {org}\n")),
         None => output.push_str(
-            "No active organization — select one in the web app, then `codel00p login` again.\n",
+            "No active organization — select one in the web app, then `codel00p auth login` again.\n",
         ),
     }
     output.push_str(&format!(
@@ -241,7 +241,7 @@ fn result_page(success: bool) -> String {
     let body = if success {
         "Return to your terminal — you can close this tab."
     } else {
-        "Something went wrong. Return to the terminal and run codel00p login again."
+        "Something went wrong. Return to the terminal and run codel00p auth login again."
     };
     format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" />\

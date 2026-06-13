@@ -5,8 +5,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
         [command, flag] if is_help(flag) => match command.as_str() {
             "agent" => Some(AGENT_HELP),
             "config" => Some(CONFIG_HELP),
-            "providers" => Some(PROVIDERS_HELP),
-            "plugins" => Some(PLUGINS_HELP),
+            "auth" => Some(AUTH_HELP),
             "skills" => Some(SKILLS_HELP),
             "cron" => Some(CRON_HELP),
             "gateway" => Some(GATEWAY_HELP),
@@ -14,7 +13,6 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
             "cloud" => Some(CLOUD_HELP),
-            "login" => Some(LOGIN_HELP),
             _ => None,
         },
         [command, subcommand, flag] if is_help(flag) => {
@@ -23,6 +21,10 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
                 ("agent", "resume") => Some(AGENT_RESUME_HELP),
                 ("agent", "chat") => Some(AGENT_CHAT_HELP),
                 ("agent", "mcp") => Some(AGENT_MCP_HELP),
+                ("config", "providers") => Some(PROVIDERS_HELP),
+                ("config", "plugins") => Some(PLUGINS_HELP),
+                ("auth", "login") => Some(LOGIN_HELP),
+                ("auth", "logout") => Some(LOGOUT_HELP),
                 ("mcp", "permissions") => Some(MCP_PERMISSIONS_HELP),
                 ("mcp", "serve") => Some(MCP_SERVE_HELP),
                 ("session", "list") => Some(SESSION_LIST_HELP),
@@ -47,37 +49,45 @@ fn is_help(value: &str) -> bool {
 }
 
 const TOP_LEVEL_HELP: &str = "\
-Usage: codel00p [global options] [command]
+  codel00p — your terminal coding agent
 
-Run `codel00p` with no command to open the interactive chat — the primary UI.
+Usage
+  codel00p [options] [command]
+  codel00p                       open the interactive chat (default)
 
-Configuration is read from ~/.codel00p/config.toml (and ./.codel00p/config.toml).
-Run `codel00p config setup` once, then most commands need no flags.
-
-Global options (override configuration for one invocation):
-  --memory-db <path>          SQLite database for memory and sessions
-  --organization-id <id>      Organization scope
-  --project-id <id>           Project scope
-  --project-name <name>       Project display name
-
-Commands:
-  agent      Run the coding agent
-  config     View and edit configuration
-  providers  Configure inference providers and credentials
-  plugins    Enable or disable agent plugins
+Commands
+  agent      Run the agent — run · resume · chat · mcp
+  config     Settings, providers, and plugins
+  auth       Sign in or out of the codel00p cloud
+  cloud      Sync project memory with your team
+  session    Inspect persisted sessions
+  memory     Review project memory
   skills     List, show, and scaffold skills
-  cron       Define and manage scheduled jobs
+  cron       Schedule unattended agent jobs
   gateway    Reach the agent from chat platforms
   mcp        Expose codel00p as an MCP server
-  memory     Review project memory
-  session    Inspect persisted sessions
-  cloud      Sync project memory with the team cloud
-  login      Sign in to the codel00p cloud via your browser
-  logout     Clear stored cloud credentials
+
+Options
+  --project-id <id>          Project scope
+  --organization-id <id>     Organization scope
+  --project-name <name>      Project display name
+  --memory-db <path>         Memory and session database
+
+  Run `codel00p <command> --help` for details · `codel00p config setup` to begin.
+";
+
+const AUTH_HELP: &str = "\
+Usage: codel00p auth <command>
+
+Sign in to the codel00p cloud so `codel00p cloud` commands work without a token.
+
+Commands:
+  login    Sign in via your browser; stores a session token
+  logout   Clear stored cloud credentials
 ";
 
 const LOGIN_HELP: &str = "\
-Usage: codel00p login [options]
+Usage: codel00p auth login [options]
 
 Sign in to the codel00p cloud. Opens your browser to authenticate (OAuth or
 email code via Clerk), then stores a session token in
@@ -90,7 +100,13 @@ Options:
                        (default http://localhost:3000/connect/cli,
                         or set CODEL00P_LOGIN_URL)
 
-Run `codel00p logout` to clear stored credentials.
+Run `codel00p auth logout` to clear stored credentials.
+";
+
+const LOGOUT_HELP: &str = "\
+Usage: codel00p auth logout
+
+Clear the cloud credentials stored in ~/.codel00p/credentials.toml.
 ";
 
 const CLOUD_HELP: &str = "\
@@ -163,6 +179,8 @@ Configuration lives in ~/.codel00p/config.toml (user) and ./.codel00p/config.tom
 Commands:
   show [--json|--raw]   Show the effective configuration (default)
   setup                 Guided first-run setup (provider, key, model)
+  providers <command>   Inference providers and API keys (try `--help`)
+  plugins <command>     Enable or disable agent plugins (try `--help`)
   path [--project]      Print the config file path
   edit [--project]      Open the config file in $EDITOR
   init [--force]        Write a starter config file
@@ -180,7 +198,7 @@ Keys: workspace.{organization_id,project_id,project_name,memory_db},
 ";
 
 const PROVIDERS_HELP: &str = "\
-Usage: codel00p providers <command>
+Usage: codel00p config providers <command>
 
 Configure which provider/model codel00p uses and store API keys (in
 ~/.codel00p/.env, never in config.toml).
@@ -215,7 +233,7 @@ Commands:
 ";
 
 const PLUGINS_HELP: &str = "\
-Usage: codel00p plugins <command>
+Usage: codel00p config plugins <command>
 
 Enable or disable plugins that add tools and lifecycle hooks to agent runs.
 Enabled plugin ids are stored in [plugins] enabled in config.toml.

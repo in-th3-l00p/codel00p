@@ -30,14 +30,21 @@ fn providers_use_sets_default_and_list_marks_it() {
 
     let used = run(
         home.path(),
-        &["providers", "use", "custom", "--model", "test-model"],
+        &[
+            "config",
+            "providers",
+            "use",
+            "custom",
+            "--model",
+            "test-model",
+        ],
     );
     assert!(used.status.success(), "stderr: {}", stderr(&used));
 
     let model = run(home.path(), &["config", "get", "agent.model"]);
     assert_eq!(stdout(&model).trim(), "test-model");
 
-    let list = run(home.path(), &["providers", "list"]);
+    let list = run(home.path(), &["config", "providers", "list"]);
     let listing = stdout(&list);
     assert!(listing.contains("custom"), "listing: {listing}");
     assert!(listing.contains("(default)"), "listing: {listing}");
@@ -49,7 +56,7 @@ fn providers_set_key_writes_env_and_show_reports_it() {
 
     let set = run(
         home.path(),
-        &["providers", "set-key", "custom", "sk-test-123"],
+        &["config", "providers", "set-key", "custom", "sk-test-123"],
     );
     assert!(set.status.success(), "stderr: {}", stderr(&set));
 
@@ -59,19 +66,25 @@ fn providers_set_key_writes_env_and_show_reports_it() {
         ".env: {env_contents}"
     );
 
-    let show = run(home.path(), &["providers", "show", "custom"]);
+    let show = run(home.path(), &["config", "providers", "show", "custom"]);
     assert!(stdout(&show).contains("credential:   set via"));
 
-    let removed = run(home.path(), &["providers", "remove-key", "custom"]);
+    let removed = run(
+        home.path(),
+        &["config", "providers", "remove-key", "custom"],
+    );
     assert!(removed.status.success());
-    let show = run(home.path(), &["providers", "show", "custom"]);
+    let show = run(home.path(), &["config", "providers", "show", "custom"]);
     assert!(stdout(&show).contains("credential:   missing"));
 }
 
 #[test]
 fn providers_use_rejects_unknown_provider() {
     let home = tempdir().expect("tempdir");
-    let output = run(home.path(), &["providers", "use", "not-a-provider"]);
+    let output = run(
+        home.path(),
+        &["config", "providers", "use", "not-a-provider"],
+    );
     assert!(!output.status.success());
     assert!(stderr(&output).contains("unknown provider"));
 }
@@ -79,7 +92,7 @@ fn providers_use_rejects_unknown_provider() {
 #[test]
 fn providers_list_is_the_default_subcommand() {
     let home = tempdir().expect("tempdir");
-    let output = run(home.path(), &["providers"]);
+    let output = run(home.path(), &["config", "providers"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     assert!(stdout(&output).contains("Providers"));
 }

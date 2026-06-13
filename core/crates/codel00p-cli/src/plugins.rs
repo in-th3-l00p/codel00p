@@ -128,8 +128,8 @@ fn plugins_list(workspace_start: &Path) -> CliResult<String> {
     }
 
     output.push_str(
-        "\nEnable:  codel00p plugins enable <id>\n\
-         Disable: codel00p plugins disable <id>\n",
+        "\nEnable:  codel00p config plugins enable <id>\n\
+         Disable: codel00p config plugins disable <id>\n",
     );
     Ok(output)
 }

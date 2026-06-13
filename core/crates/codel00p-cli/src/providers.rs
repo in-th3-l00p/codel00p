@@ -215,9 +215,9 @@ fn providers_list(workspace_start: &Path) -> CliResult<String> {
         ));
     }
     output.push_str(
-        "\nSet a key:  codel00p providers set-key <id>\n\
-         Use one:    codel00p providers use <id> --model <model>\n\
-         Details:    codel00p providers show <id>\n",
+        "\nSet a key:  codel00p config providers set-key <id>\n\
+         Use one:    codel00p config providers use <id> --model <model>\n\
+         Details:    codel00p config providers show <id>\n",
     );
     Ok(output)
 }
@@ -310,7 +310,7 @@ fn providers_use(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     let store = DotenvCredentialStore::new();
     if !profile.env_vars.iter().any(|var| store.get(var).is_some()) {
         output.push_str(&format!(
-            "No credential found — run: codel00p providers set-key {}\n",
+            "No credential found — run: codel00p config providers set-key {}\n",
             profile.id
         ));
     }
@@ -399,7 +399,7 @@ fn providers_show(args: &[String]) -> CliResult<String> {
     output.push_str(&match credential {
         Some(var) => format!("  credential:   set via {var}\n"),
         None => format!(
-            "  credential:   missing — run: codel00p providers set-key {}\n",
+            "  credential:   missing — run: codel00p config providers set-key {}\n",
             profile.id
         ),
     });

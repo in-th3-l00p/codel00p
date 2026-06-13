@@ -1,4 +1,4 @@
-use std::{env, process::ExitCode};
+use std::{env, path::Path, process::ExitCode};
 
 mod agent;
 mod cloud;
@@ -51,15 +51,12 @@ fn run(args: Vec<String>) -> CliResult<String> {
 
     let workspace_start = env::current_dir().map_err(|error| error.to_string())?;
 
-    // Config and provider management operate on settings files directly and do
+    // Config and capability management operate on settings files directly and do
     // not need a resolved workspace/memory configuration.
     match command {
-        "config" => return config_cmd::run(&workspace_start, rest),
-        "providers" => return providers::run(&workspace_start, rest),
-        "plugins" => return plugins::run(&workspace_start, rest),
+        "config" => return run_config(&workspace_start, rest),
+        "auth" => return run_auth(rest),
         "skills" => return skills::run(&workspace_start, rest),
-        "login" => return login::run_login(rest),
-        "logout" => return login::run_logout(rest),
         _ => {}
     }
 
@@ -76,5 +73,27 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "cloud" => cloud::run(config, rest),
         "session" => session::run(config, rest),
         _ => Err(format!("unknown command: {command}")),
+    }
+}
+
+/// `config` groups all configuration: the settings file itself plus the
+/// `providers` and `plugins` capability registries.
+fn run_config(workspace_start: &Path, args: &[String]) -> CliResult<String> {
+    match args.split_first() {
+        Some((sub, rest)) if sub == "providers" => providers::run(workspace_start, rest),
+        Some((sub, rest)) if sub == "plugins" => plugins::run(workspace_start, rest),
+        _ => config_cmd::run(workspace_start, args),
+    }
+}
+
+/// `auth` groups cloud sign-in and sign-out.
+fn run_auth(args: &[String]) -> CliResult<String> {
+    match args.split_first() {
+        Some((sub, rest)) if sub == "login" => login::run_login(rest),
+        Some((sub, rest)) if sub == "logout" => login::run_logout(rest),
+        Some((sub, _)) => Err(format!(
+            "unknown auth command: {sub}\nUsage: codel00p auth <login|logout>"
+        )),
+        None => Err("usage: codel00p auth <login|logout>".to_string()),
     }
 }
