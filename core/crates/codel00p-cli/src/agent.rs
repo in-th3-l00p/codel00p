@@ -599,12 +599,15 @@ fn run_agent_chat(config: CliConfig, mut options: AgentRunOptions) -> CliResult<
         let mut mcp_servers = load_mcp_servers_from_workspace(&options.workspace)?;
         mcp_servers.extend(options.mcp_servers.clone());
 
-        let session_id = options
-            .session_id
-            .as_deref()
-            .map(parse_session_id)
-            .transpose()?
-            .unwrap_or_default();
+        // A bare `codel00p` chat starts a fresh conversation each launch. Resuming
+        // is explicit (`--session-id`, or `/sessions` to find one) — never the
+        // implicit default, which `SessionId::default()` would collapse onto a
+        // single process-counter id (`session-1`) shared across every launch,
+        // replaying an unbounded history until it overflows the context window.
+        let session_id = match options.session_id.as_deref() {
+            Some(value) => parse_session_id(value)?,
+            None => parse_session_id(&fresh_chat_session_id())?,
+        };
         let (mut session_state, mut persisted_message_count) =
             load_chat_session_state(&config, session_id)?;
 
@@ -805,6 +808,16 @@ fn split_chat_command(command: &str) -> (&str, Option<&str>) {
         }
         None => (command, None),
     }
+}
+
+/// A unique session id for a freshly launched chat, so each launch is its own
+/// conversation rather than colliding on the process-counter default.
+fn fresh_chat_session_id() -> String {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    format!("chat-{stamp}")
 }
 
 fn load_chat_session_state(

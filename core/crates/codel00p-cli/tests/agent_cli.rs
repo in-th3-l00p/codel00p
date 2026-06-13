@@ -2969,6 +2969,47 @@ fn agent_chat_exit_command_does_not_call_the_provider() {
 }
 
 #[test]
+fn agent_chat_starts_a_fresh_session_each_launch() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let session_id = |output: &Output| {
+        stderr(output)
+            .lines()
+            .find_map(|line| {
+                line.split("(session ")
+                    .nth(1)
+                    .map(|rest| rest.trim_end_matches(')').to_string())
+            })
+            .expect("session id in banner")
+    };
+
+    // Two bare chat launches (no --session-id), each ended immediately by /exit.
+    let args = &[
+        "agent",
+        "chat",
+        "--provider",
+        "custom",
+        "--model",
+        "test-model",
+    ][..];
+    let first = run_codel00p_with_stdin(&db_path, args, "/exit\n");
+    let second = run_codel00p_with_stdin(&db_path, args, "/exit\n");
+
+    // Each launch is its own fresh conversation — never the implicit shared
+    // default that would replay an unbounded history into every turn.
+    let first_id = session_id(&first);
+    assert!(first_id.starts_with("chat-"), "fresh chat id: {first_id}");
+    assert_ne!(
+        first_id,
+        session_id(&second),
+        "each launch must start a new session"
+    );
+    assert!(!stderr(&first).contains("Resumed conversation"));
+    assert!(!stderr(&second).contains("Resumed conversation"));
+}
+
+#[test]
 fn agent_chat_rejects_unknown_options() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
