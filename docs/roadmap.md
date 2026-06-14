@@ -191,11 +191,18 @@ Implemented:
   `~/.codel00p/credentials.toml`);
 - **live protocol event rendering** with end-to-end token streaming in the CLI
   and desktop; bare `codel00p` opens the interactive chat.
+- a **full-screen terminal UI** (`ratatui`): streaming transcript, tool-call
+  timeline, **inline permission-approval modal**, model picker, and a read-only
+  org **entity browser** (projects, agents, MCP servers, memory, org/role).
+  See [TUI initiative](initiatives/tui.md). Non-TTY/CI falls back to the line REPL.
 
 Still to build:
 
 - desktop session supervision timeline;
-- permission approval UI;
+- desktop/web permission approval UI (the **terminal** approval modal shipped);
+- TUI phase 3: writable org switching (Clerk token re-mint), a real Users tab
+  (backend `GET /org/members`), mouse, themes, and usage meters
+  (see [TUI initiative](initiatives/tui.md));
 - a richer project knowledge browser;
 - provider status and configuration views;
 - team activity views and workspace switching.
@@ -235,16 +242,23 @@ Started:
 - **hosted cloud deployment**: `codel00p-cloud` runs on Fly.io (`iad`, always-on)
   with a managed Postgres database, auto-deployed from `main` via GitHub Actions
   and fronted by the `codel00p` Vercel web app;
-- **prebuilt release binaries and a curl installer** for distribution.
+- **prebuilt release binaries and a curl installer** for distribution;
+- a **self-updater**: `codel00p update` pulls the matching release asset, verifies
+  its SHA-256, and replaces the running binary; a throttled daily background check
+  nudges users (CLI line + TUI header chip); `codel00p version` reports the build.
+  Released binaries are tag-stamped via `build.rs` + `CODEL00P_RELEASE_VERSION`
+  (release.yml). **Release process**: bump `core/crates/codel00p-cli/Cargo.toml`
+  version, commit, push a `vX.Y.Z` tag — verified end to end (v0.1.0 → v0.2.0).
 
 Still to build:
 
+- Windows self-update (today it points users at `install.ps1`);
 - migrations and compatibility policy;
 - security review and sandboxing;
 - privacy controls;
 - eval suite for agent, provider, memory, and MCP behavior;
 - a docs site;
-- release channels.
+- release channels (stable/beta).
 
 Exit criteria:
 

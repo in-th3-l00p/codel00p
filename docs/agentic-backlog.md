@@ -10,6 +10,14 @@ execution backends, programmatic tool calling, TUI), see the
 next phase into dated slice plans under `superpowers/plans/` and add the active
 slice here.
 
+## Session marker (2026-06-14)
+
+Latest release: **v0.2.0** (`main` clean and pushed). This session shipped the
+**ratatui terminal UI** (item 6) and the **self-updater** (item 7) — both verified
+end to end. Suggested next slices, in order: the two cloud-backed TUI gaps
+(`GET /org/members` Users tab, then Clerk re-mint for writable org switching),
+then resume the standing priorities below (provider route intelligence / memory).
+
 ## Active Priority
 
 ### 1. Provider Route Intelligence
@@ -130,14 +138,43 @@ Build:
 
 Goal: expose the agent, memory, and governance loop visually.
 
-Build:
+Shipped: a full-screen **terminal UI** (`ratatui`) — streaming transcript,
+tool timeline, inline permission-approval modal, model picker, and a read-only
+org entity browser. See [TUI initiative](initiatives/tui.md).
+
+Next TUI slices (each independently shippable/testable):
+
+- backend `GET /org/members` route (Clerk Backend API) + `OrgMember` protocol
+  type + `CloudClient::list_org_members` → real Users tab (today: "pending");
+- Clerk token re-mint in `login.rs` → **writable org switching** from the Org tab
+  (today read-only; the stored token is scoped to one org);
+- model picker sourced from a provider `list_models` call (today: static catalog
+  in `tui/app.rs`);
+- TUI mouse support, configurable themes, token/usage meters; session switcher.
+
+Still to build (desktop/web):
 
 - desktop session supervision timeline;
-- permission approval UI;
+- desktop/web permission approval UI (terminal one shipped);
 - memory candidate review queue;
 - project knowledge browser;
 - provider status and configuration views;
 - team activity views.
+
+### 7. Release & Self-Update (shipped — follow-ups)
+
+Goal: let installed CLIs detect and install new releases instantly.
+
+Shipped: `codel00p update` (SHA-256-verified in-place replace), daily background
+check + nudge (CLI line + TUI header chip), `codel00p version`, tag-stamped
+release binaries (`build.rs` + release.yml). Verified end to end v0.1.0 → v0.2.0.
+**Release = bump `codel00p-cli` Cargo.toml version, commit, push a `vX.Y.Z` tag.**
+
+Follow-ups:
+
+- Windows self-update (today points at `install.ps1`);
+- `cargo-dist` or similar to keep installer/updater/asset names in lockstep;
+- release channels (stable/beta) once cadence justifies it.
 
 ## Selection Rule
 
