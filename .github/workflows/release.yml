@@ -49,8 +49,12 @@ jobs:
           workspaces: core
 
       - name: Build
+        # Stamp the binary with the release tag so `codel00p version` and the
+        # self-updater report the version this artifact actually shipped as.
         run: cargo build --release --bin codel00p --target ${{ matrix.target }}
         working-directory: core
+        env:
+          CODEL00P_RELEASE_VERSION: ${{ github.ref_name }}
 
       - name: Package (unix)
         if: runner.os != 'Windows'

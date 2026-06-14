@@ -44,6 +44,9 @@ pub(crate) struct App {
     pub(crate) theme: Theme,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
+    /// A newer release version if one is already known (from the update cache),
+    /// shown as a header chip. Read once at startup; never blocks.
+    pub(crate) update_available: Option<String>,
 }
 
 impl App {
@@ -73,6 +76,7 @@ impl App {
             theme: Theme::default(),
             should_quit: false,
             tick: 0,
+            update_available: crate::update::cached_newer_version(),
         }
     }
 

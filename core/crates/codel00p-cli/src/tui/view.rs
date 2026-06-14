@@ -45,15 +45,23 @@ pub(crate) fn render(app: &App, frame: &mut Frame) {
 }
 
 fn draw_header(app: &App, frame: &mut Frame, area: Rect) {
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::styled("codel00p", app.theme.accent()),
         Span::styled("  agent", app.theme.muted()),
         Span::styled(
             format!("  ·  session {}", app.session_label()),
             app.theme.muted(),
         ),
-    ]);
-    frame.render_widget(Paragraph::new(line), area);
+    ];
+    if let Some(version) = &app.update_available {
+        spans.push(Span::styled(
+            format!("   ⬆ v{version} available · run `codel00p update`"),
+            Style::default()
+                .fg(app.theme.notice)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn draw_conversation(app: &App, frame: &mut Frame, area: Rect) {

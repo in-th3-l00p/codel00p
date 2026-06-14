@@ -13,6 +13,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "memory" => Some(MEMORY_HELP),
             "session" => Some(SESSION_HELP),
             "cloud" => Some(CLOUD_HELP),
+            "update" => Some(UPDATE_HELP),
             _ => None,
         },
         [command, subcommand, flag] if is_help(flag) => {
@@ -66,6 +67,8 @@ Commands
   cron       Schedule unattended agent jobs
   gateway    Reach the agent from chat platforms
   mcp        Expose codel00p as an MCP server
+  update     Check for and install a newer codel00p
+  version    Print the installed version
 
 Options
   --project-id <id>          Project scope
@@ -74,6 +77,23 @@ Options
   --memory-db <path>         Memory and session database
 
   Run `codel00p <command> --help` for details · `codel00p config setup` to begin.
+";
+
+const UPDATE_HELP: &str = "\
+Usage: codel00p update [options]
+
+Checks GitHub Releases for a newer codel00p and installs it in place, replacing the
+running binary. codel00p also checks for updates in the background (at most once a
+day) and nudges you when a newer release is available.
+
+Options:
+  --check            Report whether an update is available; do not install
+  --yes, -y          Install without the confirmation prompt
+  --force            Reinstall even if already up to date
+  --version <tag>    Install a specific release tag, e.g. v0.2.0
+
+Environment:
+  CODEL00P_DISABLE_UPDATE_CHECK   set to any value to silence background checks
 ";
 
 const AUTH_HELP: &str = "\

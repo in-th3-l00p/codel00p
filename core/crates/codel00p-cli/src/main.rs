@@ -20,6 +20,7 @@ mod session;
 mod settings;
 mod skills;
 mod tui;
+mod update;
 
 use config::{CliResult, parse_global_overrides, resolve_cli_config};
 
@@ -37,6 +38,14 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Vec<String>) -> CliResult<String> {
+    // `--version` / `-V` / `version` report the build and exit before anything else.
+    if matches!(
+        args.first().map(String::as_str),
+        Some("--version" | "-V" | "version")
+    ) {
+        return Ok(format!("codel00p {}\n", update::current_version()));
+    }
+
     if let Some(help) = help::help_for(&args) {
         return Ok(help.to_string());
     }
@@ -51,6 +60,15 @@ fn run(args: Vec<String>) -> CliResult<String> {
         None => ("agent", &[]),
     };
 
+    // `update` manages itself; every other command refreshes the update cache in the
+    // background and nudges (once) if a newer release is already known.
+    if command != "update" {
+        update::spawn_background_check();
+        if let Some(notice) = update::startup_notice() {
+            eprintln!("{notice}\n");
+        }
+    }
+
     let workspace_start = env::current_dir().map_err(|error| error.to_string())?;
 
     // Config and capability management operate on settings files directly and do
@@ -59,6 +77,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "config" => return run_config(&workspace_start, rest),
         "auth" => return run_auth(rest),
         "skills" => return skills::run(&workspace_start, rest),
+        "update" => return update::run(rest),
         _ => {}
     }
 
