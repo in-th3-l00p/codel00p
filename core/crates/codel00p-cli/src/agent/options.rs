@@ -2,32 +2,33 @@
 
 use super::*;
 
-pub(super) struct AgentRunOptions {
-    pub(super) prompt: String,
-    pub(super) workspace: PathBuf,
-    pub(super) provider: String,
-    pub(super) model: String,
-    pub(super) provider_policy_preset: Option<String>,
-    pub(super) base_url: Option<String>,
-    pub(super) session_id: Option<String>,
-    pub(super) max_iterations: Option<u32>,
-    pub(super) json_events: bool,
-    pub(super) stream_events: bool,
-    pub(super) stream: bool,
-    pub(super) tool_sets: Vec<AgentToolSet>,
-    pub(super) permission_mode: CliPermissionMode,
-    pub(super) remember_permissions: bool,
-    pub(super) mcp_servers: Vec<McpServerSpec>,
+#[derive(Clone)]
+pub(crate) struct AgentRunOptions {
+    pub(crate) prompt: String,
+    pub(crate) workspace: PathBuf,
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    pub(crate) provider_policy_preset: Option<String>,
+    pub(crate) base_url: Option<String>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) max_iterations: Option<u32>,
+    pub(crate) json_events: bool,
+    pub(crate) stream_events: bool,
+    pub(crate) stream: bool,
+    pub(crate) tool_sets: Vec<AgentToolSet>,
+    pub(crate) permission_mode: CliPermissionMode,
+    pub(crate) remember_permissions: bool,
+    pub(crate) mcp_servers: Vec<McpServerSpec>,
     /// When set, the turn is a messaging-gateway turn: privileged tools pause
     /// for a remote chat user's `/approve` decision instead of using the local
     /// CLI permission mode. See [`GatewayApprovalPolicy`].
-    pub(super) gateway_approval: Option<GatewayApproval>,
+    pub(crate) gateway_approval: Option<GatewayApproval>,
 }
 
 /// Routes a gateway turn's privileged-tool permissions through a remote chat
 /// user's `/approve` / `/deny` decisions, backed by a file [`ApprovalStore`].
 #[derive(Clone)]
-pub(super) struct GatewayApproval {
+pub(crate) struct GatewayApproval {
     pub(super) store: ApprovalStore,
     pub(super) conversation: String,
     /// A one-shot grant: the single tool the remote user just approved may run
@@ -36,7 +37,7 @@ pub(super) struct GatewayApproval {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum AgentToolSet {
+pub(crate) enum AgentToolSet {
     Read,
     Edit,
     Command,
@@ -47,7 +48,7 @@ pub(super) enum AgentToolSet {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum CliPermissionMode {
+pub(crate) enum CliPermissionMode {
     Allow,
     Ask,
     Deny,

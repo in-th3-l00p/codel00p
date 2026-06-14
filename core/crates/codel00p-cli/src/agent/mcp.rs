@@ -10,4 +10,4 @@ mod spec;
 
 pub(super) use cli::agent_mcp;
 pub(super) use registry::build_mcp_registry_for_server;
-pub(super) use spec::{McpServerSpec, load_mcp_servers_from_workspace, parse_mcp_server};
+pub(crate) use spec::{McpServerSpec, load_mcp_servers_from_workspace, parse_mcp_server};

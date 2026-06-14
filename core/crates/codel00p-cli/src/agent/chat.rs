@@ -244,7 +244,7 @@ fn split_chat_command(command: &str) -> (&str, Option<&str>) {
 
 /// A unique session id for a freshly launched chat, so each launch is its own
 /// conversation rather than colliding on the process-counter default.
-pub(super) fn fresh_chat_session_id() -> String {
+pub(crate) fn fresh_chat_session_id() -> String {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_nanos())
@@ -252,7 +252,7 @@ pub(super) fn fresh_chat_session_id() -> String {
     format!("chat-{stamp}")
 }
 
-pub(super) fn load_chat_session_state(
+pub(crate) fn load_chat_session_state(
     config: &CliConfig,
     session_id: codel00p_harness::SessionId,
 ) -> CliResult<(codel00p_harness::SessionState, usize)> {
@@ -270,7 +270,7 @@ pub(super) fn load_chat_session_state(
     }
 }
 
-pub(super) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
+pub(crate) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
     let store = open_session_store(config)?;
     let sessions = store.list_sessions().map_err(|error| error.to_string())?;
     if sessions.is_empty() {
@@ -295,7 +295,7 @@ pub(super) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
     Ok(output)
 }
 
-pub(super) fn chat_history_listing(session_state: &codel00p_harness::SessionState) -> String {
+pub(crate) fn chat_history_listing(session_state: &codel00p_harness::SessionState) -> String {
     let messages = session_state.messages();
     if messages.is_empty() {
         return "No messages in this conversation yet.\n".to_string();
@@ -325,7 +325,7 @@ pub(super) fn chat_tools_listing(registry: &ToolRegistry) -> String {
     output
 }
 
-pub(super) fn chat_memory_listing(config: &CliConfig) -> CliResult<String> {
+pub(crate) fn chat_memory_listing(config: &CliConfig) -> CliResult<String> {
     let store = open_memory_store(config)?;
     let items = store
         .retrieve(MemoryQuery::new(config.project.clone()).with_limit(10))

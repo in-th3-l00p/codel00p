@@ -86,7 +86,7 @@ impl PermissionPolicy for GatewayApprovalPolicy {
     }
 }
 
-pub(super) struct CliPermissionPolicy {
+pub(crate) struct CliPermissionPolicy {
     config: CliConfig,
     mode: CliPermissionMode,
     remember_permissions: bool,
@@ -94,7 +94,7 @@ pub(super) struct CliPermissionPolicy {
 }
 
 impl CliPermissionPolicy {
-    pub(super) fn new(
+    pub(crate) fn new(
         config: CliConfig,
         mode: CliPermissionMode,
         remember_permissions: bool,
@@ -111,29 +111,37 @@ impl CliPermissionPolicy {
 #[async_trait]
 impl PermissionPolicy for CliPermissionPolicy {
     async fn decide(&self, request: PermissionRequest) -> Result<PermissionDecision, HarnessError> {
-        match self.mode {
-            CliPermissionMode::Allow => Ok(PermissionDecision::allow(
-                request.id(),
-                PermissionMode::Allow,
-            )),
-            CliPermissionMode::Ask => {
-                if let Some(decision) = self.remembered_decision(&request)? {
-                    return Ok(decision);
-                }
-                let decision = self.decide_with_prompt(&request)?;
-                self.persist_decision_if_needed(&request, &decision)?;
-                Ok(decision)
-            }
-            CliPermissionMode::Deny => Ok(PermissionDecision::deny(
-                request.id(),
-                PermissionMode::Deny,
-                format!("{} denied by CLI permission mode", request.tool_name()),
-            )),
+        if let Some(decision) = self.fast_path(&request)? {
+            return Ok(decision);
         }
+        // Only Ask mode without a remembered decision reaches the stdin prompt.
+        let decision = self.decide_with_prompt(&request)?;
+        self.persist_decision_if_needed(&request, &decision)?;
+        Ok(decision)
     }
 }
 
 impl CliPermissionPolicy {
+    /// Resolve without any interactive prompt when possible. Returns `None` only
+    /// when Ask mode needs a fresh approval, which either stdin or the TUI handles.
+    pub(crate) fn fast_path(
+        &self,
+        request: &PermissionRequest,
+    ) -> Result<Option<PermissionDecision>, HarnessError> {
+        match self.mode {
+            CliPermissionMode::Allow => Ok(Some(PermissionDecision::allow(
+                request.id(),
+                PermissionMode::Allow,
+            ))),
+            CliPermissionMode::Ask => self.remembered_decision(request),
+            CliPermissionMode::Deny => Ok(Some(PermissionDecision::deny(
+                request.id(),
+                PermissionMode::Deny,
+                format!("{} denied by CLI permission mode", request.tool_name()),
+            ))),
+        }
+    }
+
     fn remembered_decision(
         &self,
         request: &PermissionRequest,
@@ -164,7 +172,7 @@ impl CliPermissionPolicy {
         })
     }
 
-    fn persist_decision_if_needed(
+    pub(crate) fn persist_decision_if_needed(
         &self,
         request: &PermissionRequest,
         decision: &PermissionDecision,

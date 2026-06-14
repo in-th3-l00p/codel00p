@@ -69,6 +69,25 @@ pub(super) async fn build_agent_harness(
     mcp_servers: &[McpServerSpec],
     parent_session_id: &SessionId,
 ) -> CliResult<AgentHarness> {
+    build_agent_harness_with(config, options, mcp_servers, parent_session_id, None).await
+}
+
+/// Async bridge used by the TUI to receive harness output without blocking the
+/// render loop.
+#[derive(Clone)]
+pub(crate) struct UiBridge {
+    pub(crate) tx: tokio::sync::mpsc::UnboundedSender<crate::tui::Msg>,
+}
+
+/// Builds an `AgentHarness`, optionally wiring its token/event/permission I/O to
+/// a TUI channel instead of stdin/stdout.
+pub(crate) async fn build_agent_harness_with(
+    config: &CliConfig,
+    options: &AgentRunOptions,
+    mcp_servers: &[McpServerSpec],
+    parent_session_id: &SessionId,
+    ui_bridge: Option<UiBridge>,
+) -> CliResult<AgentHarness> {
     // Plugins are loaded once and contribute to providers, tools, and hooks.
     let plugins = load_plugins(&options.workspace)?;
 
@@ -127,13 +146,23 @@ pub(super) async fn build_agent_harness(
         .tools(tools);
     // A gateway turn routes privileged-tool permissions to a remote chat user's
     // `/approve` decision; everything else uses the local CLI permission mode.
-    builder = match &options.gateway_approval {
-        Some(approval) => builder.permission_policy(GatewayApprovalPolicy::new(
+    builder = match (&options.gateway_approval, &ui_bridge) {
+        (Some(approval), _) => builder.permission_policy(GatewayApprovalPolicy::new(
             approval.store.clone(),
             approval.conversation.clone(),
             approval.granted_tool.clone(),
         )),
-        None => builder.permission_policy(CliPermissionPolicy::new(
+        (None, Some(ui)) => {
+            builder.permission_policy(crate::tui::bridge::TuiPermissionPolicy::new(
+                CliPermissionPolicy::new(
+                    config.clone(),
+                    options.permission_mode,
+                    options.remember_permissions,
+                ),
+                ui.tx.clone(),
+            ))
+        }
+        (None, None) => builder.permission_policy(CliPermissionPolicy::new(
             config.clone(),
             options.permission_mode,
             options.remember_permissions,
@@ -155,11 +184,17 @@ pub(super) async fn build_agent_harness(
             .skill_proposal_sink(CliSkillProposalSink::new(crate::skills::user_skills_dir()));
     }
     builder = plugins.apply_to_harness_builder(builder);
-    if options.stream_events {
-        builder = builder.event_sink(StdoutJsonEventSink);
-    }
-    if options.stream {
-        builder = builder.token_sink(StdoutTokenSink);
+    if let Some(ui) = &ui_bridge {
+        builder = builder
+            .token_sink(crate::tui::bridge::ChannelTokenSink::new(ui.tx.clone()))
+            .event_sink(crate::tui::bridge::ChannelEventSink::new(ui.tx.clone()));
+    } else {
+        if options.stream_events {
+            builder = builder.event_sink(StdoutJsonEventSink);
+        }
+        if options.stream {
+            builder = builder.token_sink(StdoutTokenSink);
+        }
     }
     if let Some(max_iterations) = options.max_iterations {
         builder = builder.max_iterations(max_iterations);

@@ -65,28 +65,32 @@ mod skills;
 mod tooling;
 mod turn;
 
+pub(crate) use chat::{
+    chat_history_listing, chat_memory_listing, chat_sessions_listing, fresh_chat_session_id,
+    load_chat_session_state,
+};
 pub use command::run;
 pub(crate) use command::{run_gateway_message, run_scheduled_job};
+pub(crate) use mcp::{McpServerSpec, load_mcp_servers_from_workspace};
+pub(crate) use options::{AgentRunOptions, CliPermissionMode};
+pub(crate) use permissions::CliPermissionPolicy;
+pub(crate) use session_state::persist_turn_outcome;
+pub(crate) use turn::{UiBridge, build_agent_harness_with};
 
 use chat::run_agent_chat;
 use delegation::{
     CHILD_DEFAULT_MAX_ITERATIONS, CliSubAgentSpawner, DEFAULT_MAX_CONCURRENT_CHILDREN,
 };
 use events::{StdoutJsonEventSink, StdoutTokenSink};
-use mcp::{
-    McpServerSpec, agent_mcp, build_mcp_registry_for_server, load_mcp_servers_from_workspace,
-    parse_mcp_server,
-};
+use mcp::{agent_mcp, build_mcp_registry_for_server, parse_mcp_server};
 use memory::{CliMemoryCandidateSink, CliProjectMemoryProvider};
 use options::{
-    AgentRunOptions, AgentSessionMode, AgentToolSet, CliPermissionMode, GatewayApproval,
-    parse_agent_chat_options, parse_agent_resume_options, parse_agent_run_options,
+    AgentSessionMode, AgentToolSet, GatewayApproval, parse_agent_chat_options,
+    parse_agent_resume_options, parse_agent_run_options,
 };
-use permissions::{CliPermissionPolicy, GatewayApprovalPolicy};
+use permissions::GatewayApprovalPolicy;
 use plugins::load_plugins;
-use session_state::{
-    persist_session_records, persist_turn_outcome, prepare_session_state, replay_session_messages,
-};
+use session_state::{persist_session_records, prepare_session_state, replay_session_messages};
 use skills::{CliSkillProposalSink, CliSkillProvider};
 use tooling::build_tool_registry;
 use turn::{build_agent_harness, run_agent_turn};

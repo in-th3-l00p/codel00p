@@ -19,6 +19,7 @@ mod providers;
 mod session;
 mod settings;
 mod skills;
+mod tui;
 
 use config::{CliResult, parse_global_overrides, resolve_cli_config};
 

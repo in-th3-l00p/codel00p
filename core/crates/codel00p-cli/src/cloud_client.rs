@@ -1,4 +1,4 @@
-use codel00p_protocol::{Agent, McpServer, MemoryEntry, NewMemoryCandidate, Viewer};
+use codel00p_protocol::{Agent, McpServer, MemoryEntry, NewMemoryCandidate, Project, Viewer};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -47,6 +47,16 @@ impl CloudClient {
         candidate: &NewMemoryCandidate,
     ) -> Result<MemoryEntry, String> {
         self.post(&format!("/projects/{project_id}/memory"), candidate)
+    }
+
+    /// `GET /projects` — the organization's projects (org scope from the token).
+    pub fn list_projects(&self) -> Result<Vec<Project>, String> {
+        self.get("/projects")
+    }
+
+    /// `GET /projects/{id}/agents` — the project's stored agent definitions.
+    pub fn list_agents(&self, project_id: &str) -> Result<Vec<Agent>, String> {
+        self.get(&format!("/projects/{project_id}/agents"))
     }
 
     /// `GET /projects/{id}/agents/{agent_id}` — a stored agent definition.
@@ -226,6 +236,43 @@ mod tests {
         let error = client.list_memory("proj_1", None).unwrap_err();
         assert!(error.contains("403"));
         assert!(error.contains("requires organization admin"));
+    }
+
+    #[test]
+    fn list_projects_and_agents() {
+        let server = MockServer::start();
+        let projects_mock = server.mock(|when, then| {
+            when.method(GET).path("/projects");
+            then.status(200).json_body(json!([{
+                "id": "proj_1",
+                "org_id": "org_a",
+                "name": "codel00p",
+                "slug": "codel00p"
+            }]));
+        });
+        let agents_mock = server.mock(|when, then| {
+            when.method(GET).path("/projects/proj_1/agents");
+            then.status(200).json_body(json!([{
+                "id": "agent_1",
+                "org_id": "org_a",
+                "project_id": "proj_1",
+                "name": "Reviewer",
+                "provider": "anthropic",
+                "model": "claude-opus-4-8",
+                "created_by": "user_admin"
+            }]));
+        });
+
+        let client = CloudClient::new(server.base_url(), "tok").expect("client");
+        let projects = client.list_projects().expect("projects");
+        let agents = client.list_agents("proj_1").expect("agents");
+
+        projects_mock.assert();
+        agents_mock.assert();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].id(), "proj_1");
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].model(), "claude-opus-4-8");
     }
 
     #[test]

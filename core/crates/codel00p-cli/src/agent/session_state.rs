@@ -49,7 +49,7 @@ pub(super) fn replay_session_messages(
     Ok(session_state)
 }
 
-pub(super) fn persist_turn_outcome(
+pub(crate) fn persist_turn_outcome(
     config: &CliConfig,
     session_state: &codel00p_harness::SessionState,
     events: &[AgentEvent],

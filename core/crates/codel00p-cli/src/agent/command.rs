@@ -236,5 +236,17 @@ fn agent_resume(config: CliConfig, defaults: &AgentSettings, args: &[String]) ->
 
 fn agent_chat(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
     let options = parse_agent_chat_options(defaults, args)?;
-    run_agent_chat(config, options)
+    // The full-screen TUI is the primary interface on an interactive terminal.
+    // Machine-readable modes (`--json-events`/`--stream-events`) and non-TTY
+    // stdout (pipes, CI) fall back to the plain line REPL so scripted usage and
+    // output redirection keep working unchanged.
+    let interactive = std::io::IsTerminal::is_terminal(&std::io::stdout())
+        && std::io::IsTerminal::is_terminal(&std::io::stdin())
+        && !options.json_events
+        && !options.stream_events;
+    if interactive {
+        crate::tui::run_agent_tui(config, options)
+    } else {
+        run_agent_chat(config, options)
+    }
 }
