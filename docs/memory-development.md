@@ -61,29 +61,29 @@ should be documented near the code and summarized in repository docs. The memory
 engine is only useful if contributors and users understand what the system is
 allowed to remember.
 
-## Proposed stack
+## Stack
 
-The core memory engine should be implemented in Rust.
+The core memory engine is implemented in Rust (`codel00p-memory`).
 
 Rust is a good fit because the memory engine needs strict data contracts,
 portable binaries, predictable performance, and embeddability across the CLI,
 harness, desktop app, and cloud services.
 
-Initial crates:
+As built, the module layout is:
 
 ```text
 core/crates/codel00p-memory/
   src/
     lib.rs
     error.rs
-    ids.rs
-    schema.rs
-    lifecycle.rs
-    storage.rs
-    retrieval.rs
-    extraction.rs
-    audit.rs
-    sync.rs
+    extraction.rs   // candidate extraction (e.g. `remember:` directives)
+    inputs.rs       // MemoryCandidateInput, extraction inputs
+    query.rs        // list/retrieval/similarity/staleness/quality query builders
+    records.rs      // MemoryRecord, quality scoring
+    repository.rs   // the MemoryRepository trait + storage-backed handle
+    review.rs       // ReviewDecision, MemoryEdit, MemoryMerge, audit events
+    store.rs        // storage-backed repository implementation
+    util.rs
 ```
 
 Initial dependencies should stay conservative:
@@ -99,18 +99,21 @@ The first version should not require a vector database.
 
 ## Core domain types
 
-The first implementation should define these domain concepts:
+The domain concepts, as implemented (names reflect the current code):
 
-- `MemoryEntry`: approved durable project knowledge.
-- `MemoryCandidate`: proposed knowledge waiting for review.
-- `MemoryScope`: organization, project, repository, module, path, user, or team
-  boundary.
-- `MemoryCategory`: codebase fact, architecture decision, workflow, team
-  convention, task outcome, or domain glossary.
-- `MemorySource`: where the knowledge came from, such as a session summary,
-  file path, issue, pull request, human note, or imported document.
-- `MemoryReview`: approval, edit, rejection, archive, or deletion action.
-- `MemoryQuery`: retrieval request from the harness or interface.
+- `MemoryEntry` (in `codel00p-protocol`): a durable memory record with a
+  `MemoryStatus` (`candidate`/`approved`/`rejected`/`archived`).
+- `MemoryCandidateInput`: proposed knowledge submitted for review.
+- `MemoryKind`: architecture, convention, workflow, decision, deployment, or
+  troubleshooting. (The doc's earlier `MemoryCategory` name; the broader
+  `MemoryScope` of organization/repository/module/path is **not** implemented —
+  scoping is by `ProjectRef` plus `MemorySensitivity`.)
+- `MemorySource`: where the knowledge came from (a session/turn, optionally with
+  a source URI).
+- `ReviewDecision` + `MemoryEdit` + `MemoryMerge`: the review, edit, and merge
+  actions (the doc's earlier `MemoryReview`), recorded as `MemoryAuditEvent`s.
+- `MemoryQuery` (and the `*Query`/`*Filter` builders in `query.rs`): retrieval
+  requests from the harness or interface.
 - `RetrievedMemory`: selected memory plus score, reason, and source metadata.
 
 The schema should make review state explicit. An unreviewed candidate is not

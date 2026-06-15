@@ -68,56 +68,51 @@ credentials.
 
 ## Rust crate shape
 
-The provider layer should be implemented as a Rust workspace package:
+The provider layer is the `codel00p-providers` workspace package. The actual
+layout (the nine built-in profiles are centralized in `registry.rs`, not split
+into a `providers/` directory):
 
 ```text
 core/crates/codel00p-providers/
   src/
     lib.rs
-    error.rs
-    registry.rs
-    profile.rs
-    request.rs
-    response.rs
-    credentials.rs
-    policy.rs
-    usage.rs
+    registry.rs          profile.rs
+    request.rs           response.rs
+    client.rs  client/   runtime.rs   stream.rs
+    credentials.rs       policy.rs
+    model_catalog.rs     pricing_catalog.rs
+    error.rs             error_classifier.rs
+    aws_managed_identity.rs
+    azure_managed_identity.rs
+    gcp_managed_identity.rs
     transports/
-      mod.rs
-      chat_completions.rs
-      anthropic_messages.rs
-      responses.rs
-      bedrock_converse.rs
+      mod.rs             sse.rs
+      chat_completions.rs        azure_chat_completions.rs
+      anthropic_messages.rs      responses.rs
+      bedrock_converse.rs  bedrock_converse/
       gemini.rs
-      external_process.rs
-    providers/
-      mod.rs
-      anthropic.rs
-      openai.rs
-      azure_foundry.rs
-      bedrock.rs
-      gemini.rs
-      github.rs
-      openrouter.rs
-      custom.rs
 ```
 
 Responsibilities:
 
-- `profile.rs`: provider metadata and hooks represented as Rust traits and
-  serializable configuration.
-- `registry.rs`: provider lookup by canonical ID, alias, organization policy,
-  or configured endpoint.
+- `profile.rs`: provider metadata and hooks as Rust traits and serializable
+  configuration.
+- `registry.rs`: the built-in provider profiles and lookup by canonical ID,
+  alias, organization policy, or configured endpoint.
 - `request.rs`: provider-neutral inference request types.
 - `response.rs`: normalized model output, tool calls, reasoning, provider data,
-  and finish reasons.
-- `credentials.rs`: local secret, environment, organization secret, cloud
-  proxy, OAuth, AWS SDK, and external-process credential resolution.
-- `policy.rs`: organization allowlists, model restrictions, spend ceilings,
-  audit fields, and data-residency constraints.
-- `usage.rs`: normalized token, cache, reasoning, and cost metadata.
-- `transports/*`: protocol-specific request builders and response parsers.
-- `providers/*`: built-in profiles for the initial supported providers.
+  finish reasons, and the normalized token/cache/reasoning/cost usage metadata.
+- `client.rs` / `runtime.rs` / `stream.rs`: the high-level inference client,
+  route resolution + fallback, and the streaming boundary.
+- `credentials.rs` + the `*_managed_identity.rs` files: local secret,
+  environment, organization secret, cloud proxy, OAuth, AWS SDK, and
+  managed-identity (Azure/AWS/GCP) credential resolution.
+- `policy.rs`: organization allowlists, model restrictions, capability rules,
+  audit fields, and built-in policy presets.
+- `model_catalog.rs` / `pricing_catalog.rs`: normalized model descriptors and
+  request-priced cost metadata.
+- `transports/*`: protocol-specific request builders and response parsers
+  (`sse.rs` is the shared server-sent-events reader).
 
 ## Core Rust contracts
 
@@ -132,7 +127,7 @@ pub enum ApiMode {
     Responses,
     BedrockConverse,
     Gemini,
-    ExternalProcess,
+    ExternalProcess, // declared, but no transport is implemented yet
 }
 
 pub enum AuthType {

@@ -203,10 +203,26 @@ Pitch:
 > A storage boundary that lets codel00p swap local and cloud backends without
 > rewriting service logic.
 
-The first Rust implementation exists at
-[`core/crates/codel00p-storage`](../core/crates/codel00p-storage). It currently defines
-the storage traits, an in-memory backend used by `codel00p-session` tests, and
-a feature-gated SQLite backend for durable local project state.
+The Rust implementation exists at
+[`core/crates/codel00p-storage`](../core/crates/codel00p-storage). It defines the
+storage traits and three backends behind the same API: an in-memory backend, a
+feature-gated SQLite backend for durable local project state, and a
+feature-gated Postgres backend for the hosted cloud service.
+
+## Additional shipped crates
+
+Beyond the conceptual subprojects above, the workspace also ships these crates
+(each with its own section in [`core/README.md`](../core/README.md)):
+
+- `codel00p-session` — durable session metadata and append-only replay.
+- `codel00p-mcp` — Model Context Protocol client and server.
+- `codel00p-cron` — recurring job scheduling (the [Scheduling initiative](initiatives/scheduling-cron.md)).
+- `codel00p-gateway` — per-conversation messaging gateway (the [Gateway initiative](initiatives/messaging-gateway.md)).
+- `codel00p-skill` — procedural-memory skills (the [Skills initiative](initiatives/skills-system.md)).
+- `codel00p-plugin` — the in-process extension seam (the [Plugins initiative](initiatives/plugins-and-hooks.md)).
+
+`codel00p-sync` and `codel00p-research` below remain **conceptual** — there are
+no crates by those names yet; sync behavior currently lives in `codel00p-cloud`.
 
 ## codel00p-research
 

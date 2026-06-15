@@ -8,18 +8,26 @@ each other's runtime internals.
 
 ## Current Scope
 
-The first protocol crate includes:
+The protocol crate's modules and their key types:
 
-- `ProtocolVersion`;
-- `SessionId`, `TurnId`, and `EventId`;
-- `SessionMessage` and `SessionRole`;
-- `ToolCall` and `ToolResult`;
-- `AgentEvent`;
-- `ProjectRef`;
-- `ProviderRef`;
-- built-in provider policy preset metadata for cloud, desktop, and SDK
-  configuration surfaces;
-- `MemoryEntry`, `MemoryKind`, `MemoryStatus`, and `MemorySource`.
+- `version`: `ProtocolVersion`;
+- `ids`: `SessionId`, `TurnId`, `EventId`;
+- `session`: `SessionMessage`, `SessionRole`;
+- `tools`: `ToolCall`, `ToolResult`;
+- `events`: `AgentEvent`;
+- `provider`: `ProviderRef`;
+- `permissions`: `PermissionScope`, `PermissionMode`, permission decisions;
+- `context`: `ContextWindowState` (context-window budgeting, consumed by the
+  harness);
+- `runtime` and `persistence`: shared runtime and session-persistence shapes;
+- `memory`: `MemoryEntry`, `MemoryKind`, `MemoryStatus`, `MemorySensitivity`,
+  `MemorySource`;
+- `cloud`: the team control-plane contracts — `Project`, `Agent`, `McpServer`,
+  `OrgRef`, `OrgRole`, `OrgMember`, `Viewer`, and the memory-review types.
+
+Note: provider **policy preset** metadata lives in `codel00p-providers`
+(`policy.rs`) and the `@codel00p/protocol-ts` TS package, not in this Rust
+crate — see Boundaries below.
 
 ## Boundaries
 
