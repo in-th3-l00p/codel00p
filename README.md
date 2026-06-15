@@ -162,9 +162,11 @@ The control surfaces run as live services:
   API, deployed to **Fly.io** with **Postgres**. It verifies Clerk session JWTs
   and is the source of truth for organization data; the web app reaches it via
   `@codel00p/sdk` over `CODEL00P_API_URL`.
-- **CI/CD** — GitHub Actions verifies the Rust core and the apps on every push,
-  and auto-deploys `codel00p-cloud` to Fly when `core/` changes on `main`; Vercel
-  handles web deploys.
+- **CI/CD** — GitHub Actions verifies the Rust core (`core.yml`: fmt, test,
+  clippy) and the apps (`apps.yml`) on every push, enforces 100% storage line
+  coverage (`storage-coverage.yml`), auto-deploys `codel00p-cloud` to Fly when
+  `core/` changes on `main` (`deploy-cloud.yml`), and builds multi-platform
+  binaries on `v*` tags (`release.yml`); Vercel handles web deploys.
 
 ## Current implementation
 
