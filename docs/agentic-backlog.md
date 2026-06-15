@@ -48,7 +48,9 @@ Build:
   responses and surfaced as `retry_after_secs` in failed route-attempt metadata;
 - model catalog listing with normalized model descriptors and safe credential
   source/kind/source-kind, auth type, and catalog URL source metadata;
-- fallback routing for retryable failures with ordered route-attempt metadata;
+- fallback routing for retryable failures with ordered route-attempt metadata,
+  plus bounded retry-with-backoff on the same route (exponential delay + jitter,
+  honoring a provider `Retry-After` hint, capped) before falling back;
 - normalized usage and explicit request-priced cost metadata, including safe
   pricing source labels;
 - provider and model allowlist policy hooks for project and organization rules;

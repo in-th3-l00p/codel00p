@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use serde_json::{Value, json};
 
@@ -22,8 +23,10 @@ use crate::{
 
 mod builder;
 mod metadata;
+mod retry;
 
 pub use builder::InferenceClientBuilder;
+pub use retry::RetryPolicy;
 
 use builder::{ProviderProxyRoute, StoredUsagePricing};
 use metadata::{FailedRouteAttempt, attach_route_metadata, failed_attempt, successful_attempt};
@@ -36,6 +39,18 @@ pub struct InferenceClient {
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, StoredUsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
+    retry: RetryPolicy,
+}
+
+/// A pseudo-random jitter fraction in `[0, 1)` for backoff, derived from the wall
+/// clock. Enough to de-correlate retries across clients without an RNG
+/// dependency; never used for anything security-sensitive.
+fn jitter_fraction() -> f64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.subsec_nanos())
+        .unwrap_or(0);
+    f64::from(nanos % 1_000_000) / 1_000_000.0
 }
 
 impl InferenceClient {
@@ -45,7 +60,7 @@ impl InferenceClient {
     ) -> Result<InferenceResponse, ProviderError> {
         let fallback_routes = request.fallback_routes.clone();
         let mut attempts = Vec::new();
-        let mut last_error = match self.complete_one(request.clone()).await {
+        let mut last_error = match self.complete_one_with_retry(request.clone()).await {
             Ok((route, response)) => {
                 attempts.push(successful_attempt(&route, &request.model));
                 let response =
@@ -84,7 +99,7 @@ impl InferenceClient {
             fallback_request.base_url = fallback.base_url.clone();
             fallback_request.fallback_routes.clear();
 
-            match self.complete_one(fallback_request).await {
+            match self.complete_one_with_retry(fallback_request).await {
                 Ok((route, response)) => {
                     attempts.push(successful_attempt(&route, &fallback.model));
                     let response = self.attach_cost_estimate(
@@ -122,6 +137,36 @@ impl InferenceClient {
         }
 
         Err(last_error)
+    }
+
+    /// Runs one route, retrying transient failures (rate limits, overload) in
+    /// place with backoff before giving up. A retryable error honors the
+    /// provider's `Retry-After` hint when present, otherwise backs off
+    /// exponentially with jitter; non-retryable errors return immediately so the
+    /// caller can fall back. The final failure carries the route metadata of the
+    /// last attempt.
+    async fn complete_one_with_retry(
+        &self,
+        request: InferenceRequest,
+    ) -> Result<(ResolvedInferenceRoute, InferenceResponse), FailedRouteAttempt> {
+        let mut attempt = 0u32;
+        loop {
+            match self.complete_one(request.clone()).await {
+                Ok(success) => return Ok(success),
+                Err(failed) => {
+                    let classified = classify_provider_error(&failed.error);
+                    if !self.retry.should_retry(attempt, classified.retryable()) {
+                        return Err(failed);
+                    }
+                    let retry_after = classified.retry_after_secs().map(Duration::from_secs);
+                    let delay = self.retry.delay(attempt, retry_after, jitter_fraction());
+                    if !delay.is_zero() {
+                        tokio::time::sleep(delay).await;
+                    }
+                    attempt += 1;
+                }
+            }
+        }
     }
 
     /// Completes a request while streaming assistant text to `sink` as it

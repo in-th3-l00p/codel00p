@@ -10,6 +10,7 @@ impl InferenceClient {
             policy: ProviderPolicy::allow_all(),
             model_pricing: BTreeMap::new(),
             provider_proxies: BTreeMap::new(),
+            retry: RetryPolicy::default(),
         }
     }
 }
@@ -34,11 +35,18 @@ pub struct InferenceClientBuilder {
     policy: ProviderPolicy,
     model_pricing: BTreeMap<String, BTreeMap<String, StoredUsagePricing>>,
     provider_proxies: BTreeMap<String, ProviderProxyRoute>,
+    retry: RetryPolicy,
 }
 
 impl InferenceClientBuilder {
     pub fn registry(mut self, registry: ProviderRegistry) -> Self {
         self.registry = registry;
+        self
+    }
+
+    /// Overrides the per-route retry policy (default: two retries with backoff).
+    pub fn retry_policy(mut self, retry: RetryPolicy) -> Self {
+        self.retry = retry;
         self
     }
 
@@ -261,6 +269,7 @@ impl InferenceClientBuilder {
             policy,
             model_pricing,
             provider_proxies,
+            retry: self.retry,
         }
     }
 }
