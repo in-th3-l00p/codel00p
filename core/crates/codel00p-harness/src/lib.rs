@@ -21,6 +21,7 @@ pub mod tool_registry;
 pub mod tool_result;
 pub mod tools;
 pub mod turn;
+pub mod web;
 pub mod workspace;
 
 pub use agent::{AgentHarness, AgentHarnessBuilder};
@@ -64,6 +65,7 @@ pub use turn::{
     ExecutedToolCall, HarnessInferenceRequest, HarnessInferenceResponse, ModelClient,
     ModelToolCall, TokenSink, TurnOutcome,
 };
+pub use web::{WebFetchTool, WebSearchTool, web_tools};
 pub use workspace::Workspace;
 
 pub fn crate_name() -> &'static str {

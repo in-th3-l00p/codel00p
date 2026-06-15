@@ -11,6 +11,10 @@ codel00p-protocol = { path = "../codel00p-protocol" }
 codel00p-providers = { path = "../codel00p-providers" }
 codel00p-memory = { path = "../codel00p-memory" }
 futures = "0.3.31"
+reqwest = { version = "0.12.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 thiserror = "2.0.12"
