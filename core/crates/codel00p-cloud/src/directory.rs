@@ -228,10 +228,7 @@ mod tests {
             last_name: Some("Lovelace".into()),
             ..PublicUserData::default()
         };
-        assert_eq!(
-            user.display_name(),
-            Some("Lovelace".to_string())
-        );
+        assert_eq!(user.display_name(), Some("Lovelace".to_string()));
         user = PublicUserData {
             first_name: Some("  ".into()),
             ..PublicUserData::default()
