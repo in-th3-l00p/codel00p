@@ -1,7 +1,7 @@
 use codel00p_protocol::RuntimeErrorKind;
 use codel00p_providers::{
     ChatMessage, Credential, CredentialKind, InferenceClient, InferenceRequest,
-    ProviderCapabilities, ProviderPolicy, default_registry,
+    ProviderCapabilities, ProviderPolicy, RetryPolicy, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
@@ -41,6 +41,10 @@ async fn falls_back_when_primary_route_is_rate_limited() {
 
     let client = InferenceClient::builder()
         .registry(default_registry())
+        // Isolate fallback behavior from retry: this test asserts the primary is
+        // tried exactly once before falling back. Retry-on-the-same-route has its
+        // own test.
+        .retry_policy(RetryPolicy::disabled())
         .credential("openrouter", Credential::api_key("openrouter-key"))
         .credential("custom", Credential::api_key("custom-key"))
         .policy(

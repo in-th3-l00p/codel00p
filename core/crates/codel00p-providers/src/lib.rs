@@ -47,7 +47,7 @@ pub use azure_managed_identity::{
     AZURE_MANAGED_IDENTITY_TOKEN_ENDPOINT, AzureManagedIdentityCredentialResolver,
     AzureManagedIdentitySelector,
 };
-pub use client::{InferenceClient, InferenceClientBuilder};
+pub use client::{InferenceClient, InferenceClientBuilder, RetryPolicy};
 pub use credentials::{
     Credential, CredentialKind, CredentialSourceKind, ManagedIdentityCredentialRequest,
     ManagedIdentityCredentialResolver, ResolvedProviderCredential,
