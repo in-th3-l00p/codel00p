@@ -9,7 +9,7 @@ pub enum MessageRole {
     Tool,
 }
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{ToolCall, UsagePricing};
 
@@ -78,6 +78,7 @@ pub struct InferenceRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolDefinition>,
+    pub tool_choice: Option<ToolChoice>,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
     pub base_url: Option<String>,
@@ -98,6 +99,7 @@ impl InferenceRequest {
                 model: model.into(),
                 messages: Vec::new(),
                 tools: Vec::new(),
+                tool_choice: None,
                 temperature: None,
                 max_output_tokens: None,
                 base_url: None,
@@ -155,6 +157,67 @@ impl ToolDefinition {
     }
 }
 
+/// Provider-neutral control over whether (and which) tool the model must call.
+/// Maps to each provider's `tool_choice` / `tool_config` knob.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolChoice {
+    /// The model decides whether to call a tool (the provider default).
+    Auto,
+    /// The model must call some tool.
+    Required,
+    /// The model must not call any tool.
+    None,
+    /// The model must call this specific tool.
+    Tool(String),
+}
+
+impl ToolChoice {
+    /// OpenAI-compatible chat-completions / Responses form (also Azure, GitHub).
+    pub fn openai_value(&self) -> Value {
+        match self {
+            ToolChoice::Auto => json!("auto"),
+            ToolChoice::Required => json!("required"),
+            ToolChoice::None => json!("none"),
+            ToolChoice::Tool(name) => json!({ "type": "function", "function": { "name": name } }),
+        }
+    }
+
+    /// Anthropic Messages form.
+    pub fn anthropic_value(&self) -> Value {
+        match self {
+            ToolChoice::Auto => json!({ "type": "auto" }),
+            ToolChoice::Required => json!({ "type": "any" }),
+            ToolChoice::None => json!({ "type": "none" }),
+            ToolChoice::Tool(name) => json!({ "type": "tool", "name": name }),
+        }
+    }
+
+    /// Gemini `toolConfig` form (`functionCallingConfig`). Keys are camelCase to
+    /// match the Gemini REST API (a raw value is not subject to serde renaming).
+    pub fn gemini_config(&self) -> Value {
+        match self {
+            ToolChoice::Auto => json!({ "functionCallingConfig": { "mode": "AUTO" } }),
+            ToolChoice::Required => json!({ "functionCallingConfig": { "mode": "ANY" } }),
+            ToolChoice::None => json!({ "functionCallingConfig": { "mode": "NONE" } }),
+            ToolChoice::Tool(name) => json!({
+                "functionCallingConfig": { "mode": "ANY", "allowedFunctionNames": [name] }
+            }),
+        }
+    }
+
+    /// AWS Bedrock Converse `toolChoice` form. `None` because Bedrock has no
+    /// "none" choice — the caller omits tools entirely instead.
+    pub fn bedrock_value(&self) -> Option<Value> {
+        match self {
+            ToolChoice::Auto => Some(json!({ "auto": {} })),
+            ToolChoice::Required => Some(json!({ "any": {} })),
+            ToolChoice::Tool(name) => Some(json!({ "tool": { "name": name } })),
+            ToolChoice::None => Option::None,
+        }
+    }
+}
+
 /// Builder for [`InferenceRequest`].
 #[derive(Debug, Clone)]
 pub struct InferenceRequestBuilder {
@@ -169,6 +232,13 @@ impl InferenceRequestBuilder {
 
     pub fn tool(mut self, tool: ToolDefinition) -> Self {
         self.request.tools.push(tool);
+        self
+    }
+
+    /// Controls whether/which tool the model must call. Without this the provider
+    /// default (auto) applies.
+    pub fn tool_choice(mut self, choice: ToolChoice) -> Self {
+        self.request.tool_choice = Some(choice);
         self
     }
 
@@ -223,5 +293,73 @@ impl InferenceRequestBuilder {
 
     pub fn build(self) -> InferenceRequest {
         self.request
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn openai_tool_choice_forms() {
+        assert_eq!(ToolChoice::Auto.openai_value(), json!("auto"));
+        assert_eq!(ToolChoice::Required.openai_value(), json!("required"));
+        assert_eq!(ToolChoice::None.openai_value(), json!("none"));
+        assert_eq!(
+            ToolChoice::Tool("read_file".into()).openai_value(),
+            json!({ "type": "function", "function": { "name": "read_file" } })
+        );
+    }
+
+    #[test]
+    fn anthropic_tool_choice_forms() {
+        assert_eq!(
+            ToolChoice::Auto.anthropic_value(),
+            json!({ "type": "auto" })
+        );
+        assert_eq!(
+            ToolChoice::Required.anthropic_value(),
+            json!({ "type": "any" })
+        );
+        assert_eq!(
+            ToolChoice::None.anthropic_value(),
+            json!({ "type": "none" })
+        );
+        assert_eq!(
+            ToolChoice::Tool("read_file".into()).anthropic_value(),
+            json!({ "type": "tool", "name": "read_file" })
+        );
+    }
+
+    #[test]
+    fn gemini_tool_choice_forms_are_camel_case() {
+        assert_eq!(
+            ToolChoice::Required.gemini_config(),
+            json!({ "functionCallingConfig": { "mode": "ANY" } })
+        );
+        assert_eq!(
+            ToolChoice::Tool("read_file".into()).gemini_config(),
+            json!({
+                "functionCallingConfig": { "mode": "ANY", "allowedFunctionNames": ["read_file"] }
+            })
+        );
+    }
+
+    #[test]
+    fn bedrock_tool_choice_forms_omit_none() {
+        assert_eq!(
+            ToolChoice::Auto.bedrock_value(),
+            Some(json!({ "auto": {} }))
+        );
+        assert_eq!(
+            ToolChoice::Required.bedrock_value(),
+            Some(json!({ "any": {} }))
+        );
+        assert_eq!(
+            ToolChoice::Tool("read_file".into()).bedrock_value(),
+            Some(json!({ "tool": { "name": "read_file" } }))
+        );
+        // Bedrock has no "none"; the transport omits tools instead.
+        assert_eq!(ToolChoice::None.bedrock_value(), None);
     }
 }

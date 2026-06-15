@@ -63,7 +63,7 @@ impl BedrockConverseRequest {
                 request.temperature,
                 request.max_output_tokens,
             ),
-            tool_config: BedrockToolConfig::from_tools(request.tools),
+            tool_config: BedrockToolConfig::from_tools(request.tools, request.tool_choice.as_ref()),
         })
     }
 }
@@ -202,15 +202,18 @@ enum BedrockToolResultContent {
 #[serde(rename_all = "camelCase")]
 struct BedrockToolConfig {
     tools: Vec<BedrockTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
 }
 
 impl BedrockToolConfig {
-    fn from_tools(tools: Vec<ToolDefinition>) -> Option<Self> {
+    fn from_tools(tools: Vec<ToolDefinition>, choice: Option<&crate::ToolChoice>) -> Option<Self> {
         if tools.is_empty() {
             None
         } else {
             Some(Self {
                 tools: tools.into_iter().map(BedrockTool::from).collect(),
+                tool_choice: choice.and_then(|choice| choice.bedrock_value()),
             })
         }
     }

@@ -65,7 +65,7 @@ pub use tool_result::ToolResult;
 pub use tools::{Tool, ToolSpec};
 pub use turn::{
     ExecutedToolCall, HarnessInferenceRequest, HarnessInferenceResponse, ModelClient,
-    ModelToolCall, TokenSink, TurnOutcome,
+    ModelToolCall, TokenSink, ToolChoice, TurnOutcome,
 };
 pub use web::{WebFetchTool, WebSearchTool, web_tools};
 pub use workspace::Workspace;

@@ -88,6 +88,9 @@ impl AgentHarness {
                     self.workspace.root().display().to_string(),
                     self.tools.specs(),
                 );
+            if let Some(tool_choice) = &self.tool_choice {
+                request = request.with_tool_choice(tool_choice.clone());
+            }
             if let Some(context_window) = &self.context_window {
                 request = request.with_context_window(context_window.clone());
             }

@@ -125,6 +125,8 @@ struct ResponsesRequest {
     max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<ResponsesTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     stream: bool,
 }
@@ -141,6 +143,14 @@ impl ResponsesRequest {
             input.extend(ResponsesInputItem::from_chat_message(provider, message)?);
         }
 
+        let tool_choice = (!request.tools.is_empty())
+            .then(|| {
+                request
+                    .tool_choice
+                    .as_ref()
+                    .map(|choice| choice.openai_value())
+            })
+            .flatten();
         Ok(Self {
             model: request.model,
             input,
@@ -148,6 +158,7 @@ impl ResponsesRequest {
             temperature: request.temperature,
             max_output_tokens: request.max_output_tokens,
             tools: request.tools.into_iter().map(ResponsesTool::from).collect(),
+            tool_choice,
             stream: false,
         })
     }

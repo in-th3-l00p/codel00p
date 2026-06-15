@@ -21,7 +21,9 @@ use crate::{
     tool_registry::ToolRegistry,
     tool_result::ToolResult,
     truncation::ToolOutputTruncation,
-    turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TokenSink, TurnOutcome},
+    turn::{
+        ExecutedToolCall, HarnessInferenceRequest, ModelClient, TokenSink, ToolChoice, TurnOutcome,
+    },
     workspace::Workspace,
 };
 use codel00p_protocol::{ContextWindowState, EventId, RuntimeErrorKind, SessionRole};
@@ -54,5 +56,6 @@ pub struct AgentHarness {
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,
     tool_output_truncation: ToolOutputTruncation,
+    tool_choice: Option<ToolChoice>,
     cancel: CancelSignal,
 }

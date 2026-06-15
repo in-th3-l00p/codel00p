@@ -76,6 +76,10 @@ impl ProviderModelClient {
             ));
         }
 
+        if let Some(tool_choice) = request.tool_choice() {
+            builder = builder.tool_choice(tool_choice.clone());
+        }
+
         builder.build()
     }
 

@@ -1,11 +1,32 @@
 use codel00p_harness::{
     HarnessInferenceRequest, MemoryPromptAssembler, ModelToolCall, ProjectInstruction,
     ProjectInstructions, ProjectMemoryContext, ProjectMemoryItem, ProviderModelClient, SessionId,
-    SessionState, ToolSpec, UserMessage,
+    SessionState, ToolChoice, ToolSpec, UserMessage,
 };
 use codel00p_protocol::MemoryKind;
 use codel00p_providers::{InferenceResponse, MessageRole, ToolCall};
 use serde_json::json;
+
+#[test]
+fn forwards_tool_choice_to_the_provider_request() {
+    let mut state = SessionState::new(SessionId::from_static("session-choice"));
+    state.push_user(UserMessage::new("Use a tool."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_runtime_context(
+            "/workspace",
+            vec![ToolSpec::new(
+                "read_file",
+                "Read a file.",
+                json!({ "type": "object" }),
+            )],
+        )
+        .with_tool_choice(ToolChoice::Required);
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    assert_eq!(provider_request.tool_choice, Some(ToolChoice::Required));
+}
 
 #[test]
 fn maps_harness_session_messages_to_provider_request() {

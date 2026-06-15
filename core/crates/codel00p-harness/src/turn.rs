@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use codel00p_protocol::ContextWindowState;
 pub use codel00p_protocol::ToolCall as ModelToolCall;
-pub use codel00p_providers::TokenSink;
+pub use codel00p_providers::{TokenSink, ToolChoice};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -44,6 +44,8 @@ pub struct HarnessInferenceRequest {
     tool_names: Vec<String>,
     /// Full model-facing tool definitions (name, description, JSON Schema).
     tools: Vec<ToolSpec>,
+    /// Optional control over whether/which tool the model must call.
+    tool_choice: Option<ToolChoice>,
     context_window: Option<ContextWindowState>,
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
@@ -57,6 +59,7 @@ impl HarnessInferenceRequest {
             workspace_root: None,
             tool_names: Vec::new(),
             tools: Vec::new(),
+            tool_choice: None,
             context_window: None,
             project_instructions: None,
             project_memory: None,
@@ -95,6 +98,11 @@ impl HarnessInferenceRequest {
         self
     }
 
+    pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+        self.tool_choice = Some(tool_choice);
+        self
+    }
+
     pub fn session_state(&self) -> &SessionState {
         &self.session_state
     }
@@ -110,6 +118,11 @@ impl HarnessInferenceRequest {
     /// The full model-facing tool definitions advertised to the provider.
     pub fn tools(&self) -> &[ToolSpec] {
         &self.tools
+    }
+
+    /// The configured tool-choice control, if any.
+    pub fn tool_choice(&self) -> Option<&ToolChoice> {
+        self.tool_choice.as_ref()
     }
 
     pub fn context_window(&self) -> Option<&ContextWindowState> {
