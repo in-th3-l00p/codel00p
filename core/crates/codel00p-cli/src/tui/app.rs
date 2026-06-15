@@ -7,9 +7,29 @@ use tokio::sync::oneshot;
 use crate::agent::{AgentRunOptions, McpServerSpec};
 use crate::config::CliConfig;
 
+use super::composer::Composer;
 use super::conversation::Conversation;
 use super::overlay::{ModelChoice, Overlay};
 use super::theme::Theme;
+
+/// Transcript scroll state. `offset_from_bottom` counts visual rows scrolled up
+/// from the newest line; `follow` keeps the view pinned to the bottom as new
+/// content streams in (a log tail). The renderer is the source of truth: it clamps
+/// `offset_from_bottom` to the real wrapped height each frame.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ScrollState {
+    pub(crate) offset_from_bottom: u16,
+    pub(crate) follow: bool,
+}
+
+impl Default for ScrollState {
+    fn default() -> Self {
+        Self {
+            offset_from_bottom: 0,
+            follow: true,
+        }
+    }
+}
 
 /// Live status of the in-flight turn, for the status bar and spinner.
 #[derive(Clone, Debug, Default)]
@@ -48,7 +68,12 @@ pub(crate) struct App {
     pub(crate) session_state: SessionState,
     pub(crate) persisted_message_count: usize,
     pub(crate) conversation: Conversation,
-    pub(crate) input: String,
+    pub(crate) composer: Composer,
+    /// Transcript scroll position (see [`ScrollState`]).
+    pub(crate) scroll: ScrollState,
+    /// The conversation viewport height from the last render, so paging keys can
+    /// scroll by a screenful. Updated by `view::render`.
+    pub(crate) viewport_rows: u16,
     pub(crate) overlay: Overlay,
     pub(crate) pending_permission: Option<oneshot::Sender<codel00p_harness::PermissionDecision>>,
     pub(crate) turn: TurnStatus,
@@ -78,7 +103,9 @@ impl App {
             session_state,
             persisted_message_count,
             conversation: Conversation::default(),
-            input: String::new(),
+            composer: Composer::default(),
+            scroll: ScrollState::default(),
+            viewport_rows: 0,
             overlay: Overlay::None,
             pending_permission: None,
             turn: TurnStatus::default(),

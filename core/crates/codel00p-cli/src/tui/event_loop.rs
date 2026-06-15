@@ -7,7 +7,9 @@ use std::io::{self, Stdout};
 use std::panic;
 
 use codel00p_harness::UserMessage;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind, MouseEventKind,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -97,6 +99,11 @@ fn map_event(event: Event) -> Option<Msg> {
         // Ignore key-release events so a single press isn't handled twice on
         // platforms that report both.
         Event::Key(key) if key.kind != KeyEventKind::Release => Some(Msg::Key(key)),
+        Event::Mouse(mouse) => match mouse.kind {
+            MouseEventKind::ScrollUp => Some(Msg::Scroll(3)),
+            MouseEventKind::ScrollDown => Some(Msg::Scroll(-3)),
+            _ => None,
+        },
         Event::Resize(_, _) => Some(Msg::Resize),
         _ => None,
     }

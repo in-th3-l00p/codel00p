@@ -13,6 +13,17 @@ use super::picker::PickerOutcome;
 pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
     match msg {
         Msg::Key(key) => handle_key(app, key),
+        Msg::Scroll(delta) => {
+            // Mouse wheel only scrolls the transcript when no overlay is focused.
+            if !app.overlay.is_open() {
+                if delta > 0 {
+                    scroll_up(app, delta as u16);
+                } else {
+                    scroll_down(app, delta.unsigned_abs());
+                }
+            }
+            Vec::new()
+        }
         Msg::Resize | Msg::Tick => {
             app.tick = app.tick.wrapping_add(1);
             Vec::new()
@@ -133,6 +144,7 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
                     app.session_state = *session_state;
                     app.persisted_message_count = persisted;
                     app.conversation = super::conversation::Conversation::default();
+                    app.scroll = super::app::ScrollState::default();
                     app.turn = super::app::TurnStatus::default();
                     app.refresh_usage();
                     app.conversation.push_notice(format!(
@@ -382,9 +394,25 @@ fn handle_input_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         KeyCode::F(3) => open_entities(app, EntityTab::Projects),
         KeyCode::F(4) => open_entities(app, EntityTab::Org),
         KeyCode::F(5) => open_sessions(app),
+        // Transcript scrolling.
+        KeyCode::PageUp => {
+            scroll_up(app, page_step(app));
+            Vec::new()
+        }
+        KeyCode::PageDown => {
+            scroll_down(app, page_step(app));
+            Vec::new()
+        }
         KeyCode::Enter => {
-            let line = app.input.trim().to_string();
-            app.input.clear();
+            // Alt/Shift+Enter inserts a newline; plain Enter submits.
+            if key
+                .modifiers
+                .intersects(KeyModifiers::ALT | KeyModifiers::SHIFT)
+            {
+                app.composer.insert_newline();
+                return Vec::new();
+            }
+            let line = app.composer.take();
             if line.is_empty() {
                 Vec::new()
             } else if let Some(command) = line.strip_prefix('/') {
@@ -394,22 +422,64 @@ fn handle_input_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
             }
         }
         KeyCode::Backspace => {
-            app.input.pop();
+            app.composer.backspace();
+            Vec::new()
+        }
+        KeyCode::Delete => {
+            app.composer.delete();
+            Vec::new()
+        }
+        KeyCode::Left => {
+            app.composer.left();
+            Vec::new()
+        }
+        KeyCode::Right => {
+            app.composer.right();
+            Vec::new()
+        }
+        KeyCode::Home => {
+            app.composer.home();
+            Vec::new()
+        }
+        KeyCode::End => {
+            app.composer.end();
             Vec::new()
         }
         KeyCode::Esc => {
-            if app.input.is_empty() {
+            if app.composer.is_empty() {
                 vec![Effect::Quit]
             } else {
-                app.input.clear();
+                app.composer.clear();
                 Vec::new()
             }
         }
         KeyCode::Char(c) => {
-            app.input.push(c);
+            app.composer.insert_char(c);
             Vec::new()
         }
         _ => Vec::new(),
+    }
+}
+
+/// One screenful of transcript rows for paging keys, from the last rendered
+/// viewport height (minus one row of overlap). At least one row.
+fn page_step(app: &App) -> u16 {
+    app.viewport_rows.saturating_sub(1).max(1)
+}
+
+/// Scrolls the transcript up (toward older messages), leaving "follow" mode so the
+/// view holds position instead of snapping back to the newest line.
+fn scroll_up(app: &mut App, rows: u16) {
+    app.scroll.follow = false;
+    app.scroll.offset_from_bottom = app.scroll.offset_from_bottom.saturating_add(rows);
+}
+
+/// Scrolls the transcript down (toward newer messages). Reaching the bottom
+/// re-enables follow mode so new content keeps tailing.
+fn scroll_down(app: &mut App, rows: u16) {
+    app.scroll.offset_from_bottom = app.scroll.offset_from_bottom.saturating_sub(rows);
+    if app.scroll.offset_from_bottom == 0 {
+        app.scroll.follow = true;
     }
 }
 
@@ -420,6 +490,7 @@ fn submit_turn(app: &mut App, prompt: String) -> Vec<Effect> {
         return Vec::new();
     }
     app.conversation.push_user(prompt.clone());
+    app.scroll = super::app::ScrollState::default();
     app.turn = super::app::TurnStatus {
         running: true,
         ..Default::default()
@@ -463,6 +534,7 @@ fn handle_slash(app: &mut App, command: &str) -> Vec<Effect> {
             app.session_state = SessionState::new(id);
             app.persisted_message_count = 0;
             app.conversation = super::conversation::Conversation::default();
+            app.scroll = super::app::ScrollState::default();
             app.conversation.push_notice(format!(
                 "Started a new conversation ({}).",
                 app.session_label()
@@ -601,11 +673,11 @@ mod tests {
     fn typing_then_enter_submits_a_turn() {
         let mut app = test_app();
         type_str(&mut app, "hello");
-        assert_eq!(app.input, "hello");
+        assert_eq!(app.composer.text(), "hello");
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(matches!(effects.as_slice(), [Effect::SubmitTurn(p)] if p == "hello"));
         assert!(app.turn.running);
-        assert!(app.input.is_empty());
+        assert!(app.composer.is_empty());
         assert!(matches!(app.conversation.blocks.last(), Some(ChatBlock::User(t)) if t == "hello"));
     }
 
@@ -723,7 +795,7 @@ mod tests {
         type_str(&mut app, "oops");
         let effects = update(&mut app, key(KeyCode::Esc));
         assert!(effects.is_empty());
-        assert!(app.input.is_empty());
+        assert!(app.composer.is_empty());
     }
 
     #[test]
@@ -930,5 +1002,54 @@ mod tests {
             app.conversation.blocks.as_slice(),
             [ChatBlock::Notice(_)]
         ));
+    }
+
+    #[test]
+    fn page_up_scrolls_and_leaves_follow_then_page_down_resumes() {
+        let mut app = test_app();
+        app.viewport_rows = 10;
+        update(&mut app, key(KeyCode::PageUp));
+        assert!(!app.scroll.follow);
+        assert!(app.scroll.offset_from_bottom > 0);
+        // Page back down past the top of the scrollback returns to following.
+        update(&mut app, key(KeyCode::PageDown));
+        update(&mut app, key(KeyCode::PageDown));
+        assert_eq!(app.scroll.offset_from_bottom, 0);
+        assert!(app.scroll.follow);
+    }
+
+    #[test]
+    fn mouse_wheel_scrolls_the_transcript() {
+        let mut app = test_app();
+        app.viewport_rows = 10;
+        update(&mut app, Msg::Scroll(3));
+        assert!(!app.scroll.follow);
+        assert_eq!(app.scroll.offset_from_bottom, 3);
+        update(&mut app, Msg::Scroll(-3));
+        assert_eq!(app.scroll.offset_from_bottom, 0);
+        assert!(app.scroll.follow);
+    }
+
+    #[test]
+    fn alt_enter_inserts_newline_without_submitting() {
+        let mut app = test_app();
+        type_str(&mut app, "line one");
+        let alt_enter = Msg::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+        let effects = update(&mut app, alt_enter);
+        assert!(effects.is_empty());
+        assert!(!app.turn.running);
+        type_str(&mut app, "line two");
+        assert_eq!(app.composer.text(), "line one\nline two");
+    }
+
+    #[test]
+    fn submitting_a_turn_re_pins_to_the_latest() {
+        let mut app = test_app();
+        app.scroll.follow = false;
+        app.scroll.offset_from_bottom = 5;
+        type_str(&mut app, "hi");
+        update(&mut app, key(KeyCode::Enter));
+        assert!(app.scroll.follow);
+        assert_eq!(app.scroll.offset_from_bottom, 0);
     }
 }

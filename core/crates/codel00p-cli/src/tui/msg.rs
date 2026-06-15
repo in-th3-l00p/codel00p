@@ -15,6 +15,9 @@ pub(crate) enum Msg {
     Key(KeyEvent),
     Resize,
     Tick,
+    /// Scroll the transcript by a number of rows (positive = up/older, negative =
+    /// down/newer). Emitted by the mouse wheel.
+    Scroll(i16),
     /// A streamed assistant text token.
     Token(String),
     /// A structured harness event (tool lifecycle, compaction, etc.).

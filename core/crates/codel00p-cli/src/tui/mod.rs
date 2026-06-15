@@ -11,6 +11,7 @@
 pub(crate) mod app;
 pub(crate) mod bridge;
 pub(crate) mod cloud_data;
+pub(crate) mod composer;
 pub(crate) mod conversation;
 pub(crate) mod event_loop;
 pub(crate) mod msg;

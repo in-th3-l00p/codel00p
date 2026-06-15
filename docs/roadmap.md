@@ -68,6 +68,11 @@ Recently shipped:
 - **recency-ordered session listing**: `session list` (and the chat sessions
   overlay) now sort most-recent-first by `created_at`, with the timestamp also in
   `session list --json` — the companion to `agent continue`.
+- **TUI chat rework**: wrap-aware transcript scrolling (PageUp/PageDown + mouse
+  wheel, with follow-the-tail) that fixes the clipped-bottom overflow bug; an
+  editable composer with a real cursor (←/→, Home/End, Delete, Alt+Enter newline)
+  that wraps and grows instead of overflowing; and a redesigned, role-labeled
+  transcript (colored accent bars + `You`/`codel00p` headers).
 
 Next:
 
