@@ -20,10 +20,16 @@ Latest release: **v0.2.0**. This session shipped the **real TUI Users tab** —
 `docs/superpowers/plans/2026-06-15-org-members-users-tab.md`); verified green
 end to end (`cargo fmt --check`, `cargo test --workspace`, `cargo clippy
 --workspace --all-targets -D warnings`) after installing the Rust toolchain in
-this shell. Suggested next slice: the
-remaining cloud-backed TUI gap — **Clerk token re-mint** in `login.rs` for
-writable org switching from the Org tab — then resume the standing priorities
-below (provider route intelligence / memory).
+this shell.
+
+Active follow-up slice: **CLI org token re-mint** on
+`feat/tui-writable-org-switching` (plan:
+`docs/superpowers/plans/2026-06-15-cli-org-token-remint.md`). This adds
+`codel00p auth login --org <org_id>` plus a `/connect/cli?org_id=...` web
+handoff that activates the requested Clerk org before minting the CLI JWT. The
+remaining slice is wiring the TUI Org tab to invoke this primitive from a real
+organization picker, then resuming the standing priorities below (provider route
+intelligence / memory).
 
 ## Active Priority
 

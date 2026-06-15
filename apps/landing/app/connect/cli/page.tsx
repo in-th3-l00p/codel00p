@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 
 import { CliHandoff } from "./handoff";
+import { CliOrgActivation } from "./org-activation";
 
 /**
  * Browser-based sign-in handoff for the `codel00p` CLI. The CLI opens this page
@@ -13,10 +14,15 @@ import { CliHandoff } from "./handoff";
 export default async function ConnectCliPage({
   searchParams
 }: {
-  searchParams: Promise<{ port?: string; state?: string }>;
+  searchParams: Promise<{
+    port?: string;
+    state?: string;
+    org_id?: string;
+    activated?: string;
+  }>;
 }) {
-  const { port, state } = await searchParams;
-  const { userId, redirectToSignIn, getToken } = await auth();
+  const { port, state, org_id: requestedOrgId, activated } = await searchParams;
+  const { userId, orgId, redirectToSignIn, getToken } = await auth();
 
   if (!userId) {
     return redirectToSignIn();
@@ -28,6 +34,16 @@ export default async function ConnectCliPage({
   if (!validPort || !state) {
     return (
       <CliHandoff error="This sign-in link is missing a valid callback. Start again from the terminal." />
+    );
+  }
+
+  if (requestedOrgId && requestedOrgId !== orgId && activated !== "1") {
+    return <CliOrgActivation orgId={requestedOrgId} port={port} state={state} />;
+  }
+
+  if (requestedOrgId && requestedOrgId !== orgId) {
+    return (
+      <CliHandoff error="Could not activate the requested organization. Check that your account is a member and try again." />
     );
   }
 

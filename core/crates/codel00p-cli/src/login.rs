@@ -24,6 +24,7 @@ pub fn run_login(args: &[String]) -> CliResult<String> {
     let mut api_url = env::var("CODEL00P_API_URL")
         .ok()
         .filter(|v| !v.trim().is_empty());
+    let mut org_id = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -35,11 +36,15 @@ pub fn run_login(args: &[String]) -> CliResult<String> {
                 api_url = Some(required_value(args, index, "--api-url")?);
                 index += 2;
             }
+            "--org" | "--org-id" => {
+                org_id = Some(required_value(args, index, args[index].as_str())?);
+                index += 2;
+            }
             flag => return Err(format!("unknown login option: {flag}")),
         }
     }
 
-    let token = run_loopback(&connect_url)?;
+    let token = run_loopback(&connect_url, org_id.as_deref())?;
     let claims = decode_claims(&token).unwrap_or_default();
     let mut credentials = Credentials {
         token: Some(token),
@@ -88,13 +93,13 @@ pub fn run_logout(args: &[String]) -> CliResult<String> {
 
 /// Starts a localhost loopback, opens the browser to the handoff page (with the
 /// port + a CSRF `state`), and waits for the redirect carrying the token.
-fn run_loopback(connect_url: &str) -> CliResult<String> {
+fn run_loopback(connect_url: &str, org_id: Option<&str>) -> CliResult<String> {
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let state = random_state();
 
-    let target = format!("{connect_url}?port={port}&state={state}");
+    let target = login_target(connect_url, port, &state, org_id);
     open_browser(&target)?;
     println!("Opening your browser to sign in…");
     println!("If it doesn't open, visit:\n  {target}");
@@ -121,6 +126,15 @@ fn run_loopback(connect_url: &str) -> CliResult<String> {
             Err(e) => return Err(e.to_string()),
         }
     }
+}
+
+fn login_target(connect_url: &str, port: u16, state: &str, org_id: Option<&str>) -> String {
+    let mut target = format!("{connect_url}?port={port}&state={state}");
+    if let Some(org_id) = org_id.filter(|value| !value.trim().is_empty()) {
+        target.push_str("&org_id=");
+        target.push_str(&url_encode(org_id));
+    }
+    target
 }
 
 fn read_request_line(stream: &mut std::net::TcpStream) -> Option<String> {
@@ -232,6 +246,19 @@ fn url_decode(value: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+fn url_encode(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
 fn result_page(success: bool) -> String {
     let heading = if success {
         "You&rsquo;re signed in"
@@ -280,6 +307,29 @@ mod tests {
     fn url_decodes_percent_escapes() {
         assert_eq!(url_decode("a%2Bb%20c"), "a+b c");
         assert_eq!(url_decode("plain-token_value"), "plain-token_value");
+    }
+
+    #[test]
+    fn url_encode_escapes_query_values() {
+        assert_eq!(url_encode("org_123"), "org_123");
+        assert_eq!(url_encode("org with spaces"), "org%20with%20spaces");
+    }
+
+    #[test]
+    fn login_target_appends_requested_org() {
+        assert_eq!(
+            login_target(
+                "http://localhost:3000/connect/cli",
+                9123,
+                "state",
+                Some("org_123")
+            ),
+            "http://localhost:3000/connect/cli?port=9123&state=state&org_id=org_123"
+        );
+        assert_eq!(
+            login_target("http://localhost:3000/connect/cli", 9123, "state", None),
+            "http://localhost:3000/connect/cli?port=9123&state=state"
+        );
     }
 
     #[test]

@@ -139,6 +139,7 @@ Options:
   --connect-url <url>  Web sign-in handoff URL
                        (default http://localhost:3000/connect/cli,
                         or set CODEL00P_LOGIN_URL)
+  --org <id>           Request a token scoped to a Clerk organization
 
 Run `codel00p auth logout` to clear stored credentials.
 ";
