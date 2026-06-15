@@ -33,12 +33,20 @@ invocation. The user config directory is never treated as a project layer.
 ## Getting started
 
 ```bash
-codel00p config setup                       # guided: provider, key, model
+codel00p config providers setup             # guided wizard (same as `config setup`)
 # or, explicitly:
 codel00p providers use openrouter --model openai/gpt-4o-mini
 codel00p providers set-key openrouter       # prompts for the key
 codel00p agent chat                         # no flags needed
 ```
+
+`codel00p config providers setup` (and the alias `codel00p config setup`) is a
+guided walk-through: it lists every provider with a description and a mark for
+those that already have a key, prompts for the API key (stored in
+`~/.codel00p/.env`), offers an optional base-URL override, lets you pick a model
+— **fetched live from the provider** when a key is available, or typed by hand —
+optionally selects a provider policy preset, and saves to your user or project
+config.
 
 ## `codel00p config`
 
@@ -102,6 +110,7 @@ run.
 
 | Command | Description |
 | --- | --- |
+| `providers setup` | Guided wizard: pick a provider, store its key, choose a model (fetched live), optionally a base URL/preset, and save |
 | `providers list` | List providers and credential status (default) |
 | `providers use <id> [--model <m>] [--base-url <url>] [--preset <id>] [--project]` | Set the default provider/model |
 | `providers set-key <id> [<key>]` | Store an API key in `~/.codel00p/.env` (prompts if omitted) |

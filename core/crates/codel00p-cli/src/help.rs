@@ -245,6 +245,8 @@ Configure which provider/model codel00p uses and store API keys (in
 ~/.codel00p/.env, never in config.toml).
 
 Commands:
+  setup                         Guided walk-through: pick a provider, store its
+                                key, choose a model (fetched live), and save
   list                          List providers and credential status (default)
   use <id> [--model <model>]    Set the default provider/model
               [--base-url <url>] [--preset <id>] [--project]
