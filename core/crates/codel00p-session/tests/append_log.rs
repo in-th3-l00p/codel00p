@@ -153,3 +153,44 @@ fn lists_no_sessions_when_scope_is_empty() {
 
     assert!(store.list_sessions().expect("list sessions").is_empty());
 }
+
+#[test]
+fn created_at_round_trips_through_the_store() {
+    let mut store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "project-1"),
+        InMemoryStorage::default(),
+    );
+    let dated = SessionId::from_static("session-dated");
+    let undated = SessionId::from_static("session-undated");
+
+    store
+        .create_session(
+            SessionMetadata::new(dated.clone(), "cli").with_created_at(1_700_000_000_123),
+        )
+        .expect("create dated");
+    store
+        .create_session(SessionMetadata::new(undated.clone(), "cli"))
+        .expect("create undated");
+
+    assert_eq!(
+        store.metadata(&dated).expect("dated").created_at(),
+        Some(1_700_000_000_123)
+    );
+    assert_eq!(
+        store.metadata(&undated).expect("undated").created_at(),
+        None
+    );
+}
+
+#[test]
+fn metadata_without_created_at_deserializes_to_none() {
+    // A session persisted before `created_at` existed has no such field.
+    let legacy = serde_json::json!({
+        "session_id": "session-legacy",
+        "source": "cli",
+        "parent_session_id": null
+    });
+    let metadata: SessionMetadata = serde_json::from_value(legacy).expect("deserialize legacy");
+    assert_eq!(metadata.created_at(), None);
+    assert_eq!(metadata.session_id().as_str(), "session-legacy");
+}

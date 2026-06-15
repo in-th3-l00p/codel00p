@@ -20,6 +20,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             match (command.as_str(), subcommand.as_str()) {
                 ("agent", "run") => Some(AGENT_RUN_HELP),
                 ("agent", "resume") => Some(AGENT_RESUME_HELP),
+                ("agent", "continue") => Some(AGENT_CONTINUE_HELP),
                 ("agent", "chat") => Some(AGENT_CHAT_HELP),
                 ("agent", "mcp") => Some(AGENT_MCP_HELP),
                 ("config", "providers") => Some(PROVIDERS_HELP),
@@ -57,7 +58,7 @@ Usage
   codel00p                       open the interactive chat (default)
 
 Commands
-  agent      Run the agent — run · resume · chat · mcp
+  agent      Run the agent — run · resume · continue · chat · mcp
   config     Settings, providers, and plugins
   auth       Sign in or out of the codel00p cloud
   cloud      Sync project memory with your team
@@ -268,10 +269,11 @@ const AGENT_HELP: &str = "\
 Usage: codel00p [global options] agent <command>
 
 Commands:
-  run      Run one agent turn
-  resume   Resume a persisted agent session
-  chat     Start an interactive multi-turn chat session
-  mcp      Inspect MCP server tools
+  run       Run one agent turn
+  resume    Resume a persisted agent session
+  continue  Resume the most recent session
+  chat      Start an interactive multi-turn chat session
+  mcp       Inspect MCP server tools
 ";
 
 const AGENT_RUN_HELP: &str = "\
@@ -285,6 +287,29 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
+  --max-iterations <n>        Maximum model/tool iterations
+  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
+  --mcp-server <id=command>   Attach an MCP stdio server executable
+  --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --remember-permissions      Persist ask-mode MCP connector decisions
+  --stream-events             Stream serialized harness events during the turn
+  --stream                    Stream assistant text token by token to stdout
+  --json-events               Print serialized harness events after assistant text
+";
+
+const AGENT_CONTINUE_HELP: &str = "\
+Usage: codel00p [global options] agent continue <prompt> [options]
+
+Resumes the most recently created session, so you can keep going without
+looking up its id. Accepts the same options as `agent run`.
+
+Options:
+  --workspace <path>          Workspace root, defaults to current directory
+  --provider <id>             Provider id or alias
+  --model <id>                Provider model id
+  --provider-policy-preset <id>
+                              Built-in provider policy preset id
+  --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
   --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
   --mcp-server <id=command>   Attach an MCP stdio server executable

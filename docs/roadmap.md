@@ -56,6 +56,12 @@ Implemented:
   tools, resources, prompts, logging, roots, pagination, subscriptions,
   reconnects, diagnostics, and harness event routing.
 
+Recently shipped:
+
+- **most-recent session continue command** (`codel00p agent continue <prompt>`):
+  resumes the newest session by stamping a `created_at` on session metadata —
+  the codel00p analogue of Claude Code's `--continue`.
+
 Next:
 
 - richer patch/diff engine;
@@ -64,7 +70,6 @@ Next:
 - web fetch/search tools;
 - worktree-isolated execution;
 - PR preparation workflow;
-- most-recent session continue command;
 - deterministic context manifests.
 
 Exit criteria:

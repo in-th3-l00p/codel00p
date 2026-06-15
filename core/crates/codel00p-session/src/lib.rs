@@ -13,6 +13,11 @@ pub struct SessionMetadata {
     session_id: SessionId,
     source: String,
     parent_session_id: Option<SessionId>,
+    /// Creation time in unix epoch milliseconds, stamped by the caller. Optional
+    /// so sessions persisted before this field existed still deserialize; such
+    /// sessions sort oldest when picking the most recent conversation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_at: Option<u64>,
 }
 
 impl SessionMetadata {
@@ -21,11 +26,19 @@ impl SessionMetadata {
             session_id,
             source: source.into(),
             parent_session_id: None,
+            created_at: None,
         }
     }
 
     pub fn with_parent(mut self, parent_session_id: SessionId) -> Self {
         self.parent_session_id = Some(parent_session_id);
+        self
+    }
+
+    /// Stamps the creation time (unix epoch milliseconds). Time is supplied by
+    /// the caller so the store stays deterministic and testable.
+    pub fn with_created_at(mut self, created_at: u64) -> Self {
+        self.created_at = Some(created_at);
         self
     }
 
@@ -39,6 +52,10 @@ impl SessionMetadata {
 
     pub fn parent_session_id(&self) -> Option<&SessionId> {
         self.parent_session_id.as_ref()
+    }
+
+    pub fn created_at(&self) -> Option<u64> {
+        self.created_at
     }
 }
 

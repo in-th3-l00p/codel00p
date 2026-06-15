@@ -76,7 +76,8 @@ pub(super) fn persist_session_records(
     parent: Option<SessionId>,
 ) -> CliResult<()> {
     let mut store = open_session_store(config)?;
-    let mut metadata = SessionMetadata::new(session_state.session_id().clone(), source);
+    let mut metadata = SessionMetadata::new(session_state.session_id().clone(), source)
+        .with_created_at(now_millis());
     if let Some(parent) = parent {
         metadata = metadata.with_parent(parent);
     }
@@ -97,4 +98,66 @@ pub(super) fn persist_session_records(
     }
 
     Ok(())
+}
+
+/// Current unix time in milliseconds, used to stamp a session's creation time so
+/// `agent continue` can resume the most recent conversation. A clock error before
+/// the epoch is treated as `0` rather than failing a persist.
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// The id of the most recently created session: the highest `created_at`, with
+/// undated (pre-timestamp) sessions treated as oldest and ties broken by id so
+/// the choice is deterministic. `None` when there are no sessions.
+pub(super) fn latest_session_id(sessions: &[SessionMetadata]) -> Option<String> {
+    sessions
+        .iter()
+        .max_by(|left, right| {
+            left.created_at()
+                .unwrap_or(0)
+                .cmp(&right.created_at().unwrap_or(0))
+                .then_with(|| left.session_id().as_str().cmp(right.session_id().as_str()))
+        })
+        .map(|metadata| metadata.session_id().as_str().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::latest_session_id;
+    use codel00p_protocol::SessionId;
+    use codel00p_session::SessionMetadata;
+
+    fn dated(id: &'static str, created_at: u64) -> SessionMetadata {
+        SessionMetadata::new(SessionId::from_static(id), "cli").with_created_at(created_at)
+    }
+
+    #[test]
+    fn picks_the_newest_dated_session() {
+        let sessions = vec![
+            dated("session-a", 100),
+            dated("session-c", 300),
+            dated("session-b", 200),
+        ];
+        assert_eq!(latest_session_id(&sessions).as_deref(), Some("session-c"));
+    }
+
+    #[test]
+    fn undated_sessions_sort_oldest() {
+        let sessions = vec![
+            SessionMetadata::new(SessionId::from_static("session-legacy"), "cli"),
+            dated("session-new", 1),
+        ];
+        assert_eq!(latest_session_id(&sessions).as_deref(), Some("session-new"));
+    }
+
+    #[test]
+    fn ties_break_by_id_and_empty_is_none() {
+        let sessions = vec![dated("session-b", 5), dated("session-a", 5)];
+        assert_eq!(latest_session_id(&sessions).as_deref(), Some("session-b"));
+        assert_eq!(latest_session_id(&[]), None);
+    }
 }

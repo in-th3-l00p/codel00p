@@ -11,6 +11,7 @@ pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliRe
     match command.as_str() {
         "run" => agent_run(config, &defaults, rest),
         "resume" => agent_resume(config, &defaults, rest),
+        "continue" => agent_continue(config, &defaults, rest),
         "chat" => agent_chat(config, &defaults, rest),
         "mcp" => agent_mcp(config, rest),
         _ => Err(format!("unknown agent command: {command}")),
@@ -231,6 +232,25 @@ fn session_exists(config: &CliConfig, session_id: &SessionId) -> bool {
 
 fn agent_resume(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
     let options = parse_agent_resume_options(defaults, args)?;
+    run_agent_turn(config, options, AgentSessionMode::Resume)
+}
+
+/// `agent continue <prompt>` — resume the most recently created session without
+/// naming its id. Resolves the latest session, then runs the resume path.
+fn agent_continue(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    args: &[String],
+) -> CliResult<String> {
+    let session_id = {
+        let store = open_session_store(&config)?;
+        let sessions = store.list_sessions().map_err(|error| error.to_string())?;
+        latest_session_id(&sessions).ok_or_else(|| {
+            "no saved sessions to continue; start one with `agent run` or `agent chat`".to_string()
+        })?
+    };
+    let mut options = parse_agent_run_options(defaults, args)?;
+    options.session_id = Some(session_id);
     run_agent_turn(config, options, AgentSessionMode::Resume)
 }
 

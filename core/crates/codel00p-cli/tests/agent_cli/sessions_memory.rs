@@ -334,3 +334,124 @@ fn agent_run_extracts_reviewed_memory_and_reuses_approved_memory() {
     assert_eq!(stdout(&second_run), "Loaded reviewed project memory.\n");
     second.assert();
 }
+
+/// Runs `agent run` to completion against a mock provider, persisting `session_id`.
+fn seed_run(db_path: &Path, workspace: &Path, session_id: &str, prompt: &str, answer: &str) {
+    let server = MockServer::start();
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes(prompt);
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": answer }, "finish_reason": "stop" }
+            ]
+        }));
+    });
+    let run = run_codel00p(
+        db_path,
+        &[
+            "agent",
+            "run",
+            prompt,
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+            "--session-id",
+            session_id,
+        ],
+    );
+    assert!(run.status.success(), "stderr: {}", stderr(&run));
+    mock.assert();
+}
+
+#[test]
+fn agent_continue_resumes_the_most_recent_session() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    let workspace = dir.path().join("workspace");
+    fs::create_dir(&workspace).expect("create workspace");
+    fs::write(workspace.join("README.md"), "# codel00p\n").expect("write readme");
+
+    // An older session, then a newer one. `continue` must pick the newer.
+    seed_run(
+        &db_path,
+        &workspace,
+        "session-a",
+        "First request.",
+        "First answer.",
+    );
+    seed_run(
+        &db_path,
+        &workspace,
+        "session-b",
+        "Second request.",
+        "Second answer.",
+    );
+
+    // The continue turn must carry the newer session's history forward.
+    let server = MockServer::start();
+    let resume = server.mock(|when, then| {
+        when.method(POST)
+            .path("/chat/completions")
+            .body_includes("Second request.")
+            .body_includes("Second answer.")
+            .body_includes("Third request.");
+        then.status(200).json_body(json!({
+            "choices": [
+                { "message": { "role": "assistant", "content": "Continued answer." },
+                  "finish_reason": "stop" }
+            ]
+        }));
+    });
+
+    let continued = run_codel00p(
+        &db_path,
+        &[
+            "agent",
+            "continue",
+            "Third request.",
+            "--workspace",
+            workspace.to_str().expect("workspace path"),
+            "--provider",
+            "custom",
+            "--model",
+            "test-model",
+            "--base-url",
+            &server.base_url(),
+        ],
+    );
+    assert!(continued.status.success(), "stderr: {}", stderr(&continued));
+    assert_eq!(stdout(&continued), "Continued answer.\n");
+    resume.assert();
+
+    // The new turn landed on session-b, not the older session-a.
+    let newer = stdout(&run_codel00p(&db_path, &["session", "show", "session-b"]));
+    assert_eq!(occurrences(&newer, "\tmessage\tuser\tThird request.\n"), 1);
+    assert_eq!(
+        occurrences(&newer, "\tmessage\tassistant\tContinued answer.\n"),
+        1
+    );
+
+    let older = stdout(&run_codel00p(&db_path, &["session", "show", "session-a"]));
+    assert_eq!(occurrences(&older, "Third request."), 0);
+}
+
+#[test]
+fn agent_continue_without_sessions_reports_a_clear_error() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let output = run_codel00p(&db_path, &["agent", "continue", "Anything."]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("no saved sessions to continue"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}

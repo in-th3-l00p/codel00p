@@ -90,7 +90,9 @@ use options::{
 };
 use permissions::GatewayApprovalPolicy;
 use plugins::load_plugins;
-use session_state::{persist_session_records, prepare_session_state, replay_session_messages};
+use session_state::{
+    latest_session_id, persist_session_records, prepare_session_state, replay_session_messages,
+};
 use skills::{CliSkillProposalSink, CliSkillProvider};
 use tooling::build_tool_registry;
 use turn::{build_agent_harness, run_agent_turn};
