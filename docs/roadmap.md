@@ -193,16 +193,17 @@ Implemented:
   and desktop; bare `codel00p` opens the interactive chat.
 - a **full-screen terminal UI** (`ratatui`): streaming transcript, tool-call
   timeline, **inline permission-approval modal**, model picker, and a read-only
-  org **entity browser** (projects, agents, MCP servers, memory, org/role).
+  org **entity browser** (projects, agents, MCP servers, memory, **a real Users
+  roster** backed by `GET /org/members` over the Clerk Backend API, org/role).
   See [TUI initiative](initiatives/tui.md). Non-TTY/CI falls back to the line REPL.
 
 Still to build:
 
 - desktop session supervision timeline;
 - desktop/web permission approval UI (the **terminal** approval modal shipped);
-- TUI phase 3: writable org switching (Clerk token re-mint), a real Users tab
-  (backend `GET /org/members`), mouse, themes, and usage meters
-  (see [TUI initiative](initiatives/tui.md));
+- TUI phase 3: writable org switching (Clerk token re-mint), mouse, themes, and
+  usage meters (the read-only Users tab shipped; see
+  [TUI initiative](initiatives/tui.md));
 - a richer project knowledge browser;
 - provider status and configuration views;
 - team activity views and workspace switching.

@@ -91,9 +91,10 @@ desktop app embed the TUI rather than reimplementing chat in React.
 ### Phase 3 — Polish + remaining cloud — NEXT
 - [ ] **Writable org switching**: needs a Clerk token re-mint flow in `login.rs`
       (the stored token is scoped to one org); today the Org tab is read-only.
-- [ ] **Real Users tab**: needs a backend `GET /org/members` route (Clerk Backend
-      API) + an `OrgMember` protocol type + `CloudClient::list_org_members`; today
-      the tab shows "backend endpoint pending".
+- [x] **Real Users tab** (shipped 2026-06-15): backend `GET /org/members` route
+      (`ClerkDirectory` over the Clerk Backend API, 503 when unconfigured) +
+      `OrgMember` protocol type + `CloudClient::list_org_members`; the entity
+      browser now renders a read-only members picker instead of the placeholder.
 - [ ] Mouse support (click rows / wheel scroll), configurable themes, token/usage
       meters and gauges in the status bar.
 - [ ] Source the model picker from a provider `list_models` call instead of the

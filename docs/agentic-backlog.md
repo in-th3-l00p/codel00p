@@ -10,13 +10,18 @@ execution backends, programmatic tool calling, TUI), see the
 next phase into dated slice plans under `superpowers/plans/` and add the active
 slice here.
 
-## Session marker (2026-06-14)
+## Session marker (2026-06-15)
 
-Latest release: **v0.2.0** (`main` clean and pushed). This session shipped the
-**ratatui terminal UI** (item 6) and the **self-updater** (item 7) — both verified
-end to end. Suggested next slices, in order: the two cloud-backed TUI gaps
-(`GET /org/members` Users tab, then Clerk re-mint for writable org switching),
-then resume the standing priorities below (provider route intelligence / memory).
+Latest release: **v0.2.0**. This session shipped the **real TUI Users tab** —
+`GET /org/members` (Clerk Backend API → `OrgMember` protocol type →
+`CloudClient::list_org_members` → entity-browser picker), replacing the
+"pending a backend endpoint" placeholder. Landed on branch
+`feat/tui-org-members-users-tab` (see plan
+`docs/superpowers/plans/2026-06-15-org-members-users-tab.md`); local core
+verification was not available in this shell. Suggested next slice: the
+remaining cloud-backed TUI gap — **Clerk token re-mint** in `login.rs` for
+writable org switching from the Org tab — then resume the standing priorities
+below (provider route intelligence / memory).
 
 ## Active Priority
 
@@ -144,8 +149,9 @@ org entity browser. See [TUI initiative](initiatives/tui.md).
 
 Next TUI slices (each independently shippable/testable):
 
-- backend `GET /org/members` route (Clerk Backend API) + `OrgMember` protocol
-  type + `CloudClient::list_org_members` → real Users tab (today: "pending");
+- ~~backend `GET /org/members` route (Clerk Backend API) + `OrgMember` protocol
+  type + `CloudClient::list_org_members` → real Users tab~~ **shipped
+  2026-06-15** (`feat/tui-org-members-users-tab`);
 - Clerk token re-mint in `login.rs` → **writable org switching** from the Org tab
   (today read-only; the stored token is scoped to one org);
 - model picker sourced from a provider `list_models` call (today: static catalog
