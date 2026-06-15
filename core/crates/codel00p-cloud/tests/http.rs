@@ -631,6 +631,62 @@ async fn org_members_maps_clerk_directory() {
 }
 
 #[tokio::test]
+async fn orgs_maps_clerk_user_memberships() {
+    let clerk = MockServer::start_async().await;
+    let clerk_mock = clerk
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/v1/users/user_admin/organization_memberships")
+                .query_param("limit", "100")
+                .query_param("offset", "0")
+                .header("authorization", "Bearer sk_test_directory");
+            then.status(200).json_body(json!({
+                "data": [
+                    {
+                        "organization": {
+                            "id": "org_acme",
+                            "name": "Acme",
+                            "slug": "acme"
+                        }
+                    },
+                    {
+                        "organization": {
+                            "id": "org_loop",
+                            "name": "Loop Labs",
+                            "slug": null
+                        }
+                    }
+                ],
+                "total_count": 2
+            }));
+        })
+        .await;
+
+    let state = AppState::new(test_verifier())
+        .with_directory(ClerkDirectory::new("sk_test_directory", clerk.base_url()));
+    let base = spawn(state).await;
+
+    let response = reqwest::Client::new()
+        .get(format!("{base}/orgs"))
+        .bearer_auth(admin_token("org_acme"))
+        .send()
+        .await
+        .expect("send");
+    assert_eq!(response.status(), 200);
+
+    clerk_mock.assert_async().await;
+    let orgs: Value = response.json().await.expect("json");
+    let orgs = orgs.as_array().expect("array");
+    assert_eq!(orgs.len(), 2);
+    assert_eq!(orgs[0]["id"], "org_acme");
+    assert_eq!(orgs[0]["name"], "Acme");
+    assert_eq!(orgs[0]["slug"], "acme");
+    assert_eq!(orgs[1]["id"], "org_loop");
+    assert_eq!(orgs[1]["name"], "Loop Labs");
+    assert!(orgs[1].get("slug").is_none());
+}
+
+#[tokio::test]
 async fn org_members_requires_an_active_org() {
     let clerk = MockServer::start_async().await;
     let state = AppState::new(test_verifier())
@@ -652,6 +708,21 @@ async fn org_members_is_unavailable_without_a_directory() {
 
     let response = reqwest::Client::new()
         .get(format!("{base}/org/members"))
+        .bearer_auth(admin_token("org_acme"))
+        .send()
+        .await
+        .expect("send");
+    assert_eq!(response.status(), 503);
+    let body: Value = response.json().await.expect("json");
+    assert_eq!(body["error"], "service_unavailable");
+}
+
+#[tokio::test]
+async fn orgs_is_unavailable_without_a_directory() {
+    let base = spawn(AppState::new(test_verifier())).await;
+
+    let response = reqwest::Client::new()
+        .get(format!("{base}/orgs"))
         .bearer_auth(admin_token("org_acme"))
         .send()
         .await

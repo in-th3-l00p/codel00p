@@ -211,7 +211,7 @@ fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  F1           this help"),
         Line::from("  F2  /model   switch model"),
         Line::from("  F3  /entities browse projects · agents · MCP · memory"),
-        Line::from("  F4  /org      organization (read-only)"),
+        Line::from("  F4  /org      switch organization"),
         Line::from("  F5  /switch   resume a prior conversation"),
         Line::from("  /agents      jump to the agents tab"),
         Line::from("  /sessions /memory /history /tools /reset"),
@@ -299,11 +299,15 @@ fn draw_entities(app: &App, frame: &mut Frame, browser: &EntityBrowser) {
             "Approved memory",
         ),
         EntityTab::Users => draw_picker(frame, rows[1], &app.theme, &browser.users, "Users"),
-        EntityTab::Org => draw_org(app, frame, rows[1]),
+        EntityTab::Org => draw_org(app, frame, rows[1], browser),
     }
 }
 
-fn draw_org(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_org(app: &App, frame: &mut Frame, area: Rect, browser: &EntityBrowser) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(1)])
+        .split(area);
     let mut lines = vec![
         Line::from(Span::styled("Organization", app.theme.accent())),
         Line::from(""),
@@ -323,11 +327,9 @@ fn draw_org(app: &App, frame: &mut Frame, area: Rect) {
             if let Some(email) = viewer.email() {
                 lines.push(Line::from(format!("  you:   {email}")));
             }
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "  Switching orgs requires re-auth (a later release).",
-                app.theme.muted(),
-            )));
+            lines.push(Line::from(
+                "  Enter on an organization below to re-auth and switch.",
+            ));
         }
         (None, Some(error)) => lines.push(Line::from(Span::styled(
             format!("  {error}"),
@@ -335,7 +337,14 @@ fn draw_org(app: &App, frame: &mut Frame, area: Rect) {
         ))),
         (None, None) => lines.push(Line::from(Span::styled("  Loading…", app.theme.muted()))),
     }
-    frame.render_widget(Paragraph::new(lines), area);
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    draw_picker(
+        frame,
+        rows[1],
+        &app.theme,
+        &browser.orgs,
+        "Organizations — Enter to switch",
+    );
 }
 
 /// Draws the model picker: a `list_models` status line (loading / fell back to the

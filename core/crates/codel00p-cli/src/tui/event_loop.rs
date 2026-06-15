@@ -23,7 +23,7 @@ use crate::config::{CliConfig, CliResult};
 use super::app::App;
 use super::cloud_data;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
-use super::overlay::{ModelChoice, SessionSummary};
+use super::overlay::{ModelChoice, Overlay, SessionSummary};
 use super::update::update;
 use super::view;
 
@@ -86,7 +86,7 @@ async fn event_loop(app: &mut App, terminal: &mut Tui) -> CliResult<()> {
 
         let Some(msg) = msg else { continue };
         for effect in update(app, msg) {
-            execute_effect(app, effect, &tx);
+            execute_effect(app, terminal, effect, &tx)?;
         }
     }
     Ok(())
@@ -102,7 +102,12 @@ fn map_event(event: Event) -> Option<Msg> {
     }
 }
 
-fn execute_effect(app: &mut App, effect: Effect, tx: &UnboundedSender<Msg>) {
+fn execute_effect(
+    app: &mut App,
+    terminal: &mut Tui,
+    effect: Effect,
+    tx: &UnboundedSender<Msg>,
+) -> CliResult<()> {
     match effect {
         Effect::Quit => app.should_quit = true,
         Effect::SubmitTurn(prompt) => spawn_turn(app, prompt, tx.clone()),
@@ -127,7 +132,41 @@ fn execute_effect(app: &mut App, effect: Effect, tx: &UnboundedSender<Msg>) {
         Effect::ResumeSession(session_id) => {
             spawn_resume_session(app.config.clone(), session_id, tx.clone())
         }
+        Effect::SwitchOrg(org_id) => switch_org(app, terminal, org_id, tx)?,
     }
+    Ok(())
+}
+
+fn switch_org(
+    app: &mut App,
+    terminal: &mut Tui,
+    org_id: String,
+    tx: &UnboundedSender<Msg>,
+) -> CliResult<()> {
+    restore_terminal(terminal);
+    let result = crate::login::run_login(&["--org".to_string(), org_id]);
+    *terminal = setup_terminal().map_err(|error| format!("terminal setup failed: {error}"))?;
+
+    match result {
+        Ok(output) => {
+            let message = output.trim_end();
+            if !message.is_empty() {
+                app.conversation.push_notice(message.to_string());
+            }
+            app.cloud.configured = true;
+            app.overlay = Overlay::None;
+            spawn_cloud(CloudFetch::Viewer, tx.clone());
+            spawn_cloud(CloudFetch::Orgs, tx.clone());
+            spawn_cloud(CloudFetch::Projects, tx.clone());
+            spawn_cloud(CloudFetch::Users, tx.clone());
+        }
+        Err(error) => {
+            app.conversation
+                .push_error(format!("Organization switch failed: {error}"));
+        }
+    }
+
+    Ok(())
 }
 
 /// Spawns the agent turn on a task so the UI keeps rendering. The turn's tokens,

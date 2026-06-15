@@ -1,5 +1,5 @@
 use codel00p_protocol::{
-    Agent, McpServer, MemoryEntry, NewMemoryCandidate, OrgMember, Project, Viewer,
+    Agent, McpServer, MemoryEntry, NewMemoryCandidate, OrgMember, OrgRef, Project, Viewer,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -27,6 +27,11 @@ impl CloudClient {
     /// `GET /me` — the authenticated viewer and active organization.
     pub fn viewer(&self) -> Result<Viewer, String> {
         self.get("/me")
+    }
+
+    /// `GET /orgs` — organizations the caller belongs to.
+    pub fn list_orgs(&self) -> Result<Vec<OrgRef>, String> {
+        self.get("/orgs")
     }
 
     /// `GET /projects/{id}/memory` — optionally filtered by status.

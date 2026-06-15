@@ -14,6 +14,7 @@ import {
   type NewMemoryCandidate,
   type NewProject,
   type OrgMember,
+  type OrgRef,
   type Project,
   type ProjectRef,
   type ProjectUpdate,
@@ -38,6 +39,7 @@ export {
   type NewMemoryCandidate,
   type NewProject,
   type OrgMember,
+  type OrgRef,
   type Project,
   type ProjectRef,
   type ProjectUpdate,
@@ -109,6 +111,11 @@ export class Codel00pClient {
   /** `GET /me` — the authenticated caller and their active organization. */
   me(): Promise<Viewer> {
     return this.request<Viewer>("/me");
+  }
+
+  /** `GET /orgs` - organizations the authenticated caller belongs to. */
+  listOrgs(): Promise<OrgRef[]> {
+    return this.request<OrgRef[]>("/orgs");
   }
 
   /** `GET /org/members` - the active organization's read-only roster. */

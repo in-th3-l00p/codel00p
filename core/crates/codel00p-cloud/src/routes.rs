@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use codel00p_protocol::{
     Agent, AgentUpdate, McpServer, McpServerUpdate, MemoryAuditEntry, MemoryEntry,
     MemoryReviewAction, MemoryStatus, NewAgent, NewMcpServer, NewMemoryCandidate, NewProject,
-    OrgMember, Project, ProjectUpdate, Viewer,
+    OrgMember, OrgRef, Project, ProjectUpdate, Viewer,
 };
 use codel00p_storage::StorageBackend;
 use futures::Stream;
@@ -27,6 +27,7 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(health))
         .route("/me", get(me))
+        .route("/orgs", get(list_orgs))
         .route("/org/members", get(list_org_members))
         .route("/events", get(events))
         .route("/projects", get(list_projects).post(create_project))
@@ -78,6 +79,19 @@ async fn health() -> Json<Value> {
 
 async fn me(auth: AuthContext) -> Json<Viewer> {
     Json(auth.to_viewer())
+}
+
+/// `GET /orgs` — the organizations the caller belongs to, read from Clerk. This
+/// does not require an active organization because it powers selecting one.
+async fn list_orgs(
+    State(state): State<AppState>,
+    auth: AuthContext,
+) -> Result<Json<Vec<OrgRef>>, ApiError> {
+    let directory = state.directory().ok_or_else(|| {
+        ApiError::ServiceUnavailable("organization directory is not configured".into())
+    })?;
+    let orgs = directory.list_user_orgs(&auth.user_id).await?;
+    Ok(Json(orgs))
 }
 
 /// `GET /org/members` — the active organization's roster, read from Clerk. Any

@@ -45,6 +45,16 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
+        Msg::CloudOrgs(result) => {
+            with_entities(app, |browser| match result {
+                Ok(orgs) => {
+                    browser.orgs.set_items(orgs);
+                    browser.status = None;
+                }
+                Err(error) => browser.status = Some(error),
+            });
+            Vec::new()
+        }
         Msg::CloudProjects(result) => {
             with_entities(app, |browser| match result {
                 Ok(projects) => {
@@ -328,14 +338,37 @@ fn handle_entities_key(app: &mut App, mut browser: EntityBrowser, key: KeyEvent)
             app.overlay = Overlay::Entities(browser);
             Vec::new()
         }
-        EntityTab::Org => {
-            if key.code == KeyCode::Esc {
-                Vec::new()
-            } else {
+        EntityTab::Org => match browser.orgs.on_key(key) {
+            PickerOutcome::Selected => {
+                if let Some(org) = browser.orgs.selected_item() {
+                    let org_id = org.id().to_string();
+                    if app
+                        .cloud
+                        .viewer
+                        .as_ref()
+                        .and_then(|viewer| viewer.org())
+                        .map(|active| active.id() == org_id)
+                        .unwrap_or(false)
+                    {
+                        app.conversation
+                            .push_notice(format!("Already using organization {}.", org.name()));
+                        return Vec::new();
+                    }
+                    app.conversation.push_notice(format!(
+                        "Opening browser to switch to organization {}…",
+                        org.name()
+                    ));
+                    return vec![Effect::SwitchOrg(org_id)];
+                }
                 app.overlay = Overlay::Entities(browser);
                 Vec::new()
             }
-        }
+            PickerOutcome::Cancelled => Vec::new(),
+            PickerOutcome::Pending => {
+                app.overlay = Overlay::Entities(browser);
+                Vec::new()
+            }
+        },
     }
 }
 
@@ -473,6 +506,7 @@ fn open_entities(app: &mut App, tab: EntityTab) -> Vec<Effect> {
     app.overlay = Overlay::Entities(EntityBrowser::new(tab));
     vec![
         Effect::Cloud(CloudFetch::Viewer),
+        Effect::Cloud(CloudFetch::Orgs),
         Effect::Cloud(CloudFetch::Projects),
         Effect::Cloud(CloudFetch::Users),
     ]
@@ -550,7 +584,7 @@ mod tests {
     use crate::tui::conversation::Block as ChatBlock;
     use crate::tui::test_support::test_app;
     use codel00p_harness::{SessionId, SessionState, TurnId, TurnOutcome};
-    use codel00p_protocol::{OrgMember, OrgRole, PermissionRequest, PermissionScope};
+    use codel00p_protocol::{OrgMember, OrgRef, OrgRole, PermissionRequest, PermissionScope};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn key(code: KeyCode) -> Msg {
@@ -715,9 +749,52 @@ mod tests {
             effects.as_slice(),
             [
                 Effect::Cloud(CloudFetch::Viewer),
+                Effect::Cloud(CloudFetch::Orgs),
                 Effect::Cloud(CloudFetch::Projects),
                 Effect::Cloud(CloudFetch::Users)
             ]
+        ));
+    }
+
+    #[test]
+    fn cloud_orgs_populates_org_picker() {
+        let mut app = test_app();
+        app.overlay = Overlay::Entities(EntityBrowser::new(EntityTab::Org));
+
+        update(
+            &mut app,
+            Msg::CloudOrgs(Ok(vec![OrgRef::new("org_acme", "Acme").with_slug("acme")])),
+        );
+
+        match &app.overlay {
+            Overlay::Entities(browser) => {
+                let org = browser.orgs.selected_item().expect("selected org");
+                assert_eq!(org.id(), "org_acme");
+                assert_eq!(org.name(), "Acme");
+            }
+            _ => panic!("expected entity browser"),
+        }
+    }
+
+    #[test]
+    fn selecting_org_requests_login_switch() {
+        let mut app = test_app();
+        app.cloud.configured = true;
+        app.cloud.viewer = Some(
+            codel00p_protocol::Viewer::new("user_1")
+                .with_org(OrgRef::new("org_current", "Current"), OrgRole::Member),
+        );
+        let mut browser = EntityBrowser::new(EntityTab::Org);
+        browser
+            .orgs
+            .set_items(vec![OrgRef::new("org_next", "Next")]);
+        app.overlay = Overlay::Entities(browser);
+
+        let effects = update(&mut app, key(KeyCode::Enter));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SwitchOrg(org_id)] if org_id == "org_next"
         ));
     }
 

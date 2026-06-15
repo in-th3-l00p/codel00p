@@ -26,6 +26,7 @@ pub(crate) fn run_cloud_fetch(fetch: CloudFetch) -> Msg {
 
     match fetch {
         CloudFetch::Viewer => Msg::CloudViewer(client.viewer()),
+        CloudFetch::Orgs => Msg::CloudOrgs(client.list_orgs()),
         CloudFetch::Projects => Msg::CloudProjects(client.list_projects()),
         CloudFetch::Agents(project) => Msg::CloudAgents(client.list_agents(&project)),
         CloudFetch::Mcp(project) => Msg::CloudMcp(client.list_mcp_servers(&project)),
@@ -55,6 +56,7 @@ fn resolve_connection() -> Result<(String, String), String> {
 fn fetch_error(fetch: &CloudFetch, error: String) -> Msg {
     match fetch {
         CloudFetch::Viewer => Msg::CloudViewer(Err(error)),
+        CloudFetch::Orgs => Msg::CloudOrgs(Err(error)),
         CloudFetch::Projects => Msg::CloudProjects(Err(error)),
         CloudFetch::Agents(_) => Msg::CloudAgents(Err(error)),
         CloudFetch::Mcp(_) => Msg::CloudMcp(Err(error)),

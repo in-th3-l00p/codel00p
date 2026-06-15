@@ -22,14 +22,13 @@ end to end (`cargo fmt --check`, `cargo test --workspace`, `cargo clippy
 --workspace --all-targets -D warnings`) after installing the Rust toolchain in
 this shell.
 
-Active follow-up slice: **CLI org token re-mint** on
-`feat/tui-writable-org-switching` (plan:
-`docs/superpowers/plans/2026-06-15-cli-org-token-remint.md`). This adds
-`codel00p auth login --org <org_id>` plus a `/connect/cli?org_id=...` web
-handoff that activates the requested Clerk org before minting the CLI JWT. The
-remaining slice is wiring the TUI Org tab to invoke this primitive from a real
-organization picker, then resuming the standing priorities below (provider route
-intelligence / memory).
+Active follow-up slice: **TUI organization switching** on
+`feat/tui-org-switch-login` (plan:
+`docs/superpowers/plans/2026-06-15-tui-org-switching.md`). This builds on the
+CLI org token re-mint primitive by adding a Clerk-backed `GET /orgs` route,
+surfacing those orgs in the TUI Org tab, and invoking `auth login --org` from
+the selected organization. After that, resume the standing priorities below
+(provider route intelligence / memory).
 
 ## Active Priority
 
@@ -170,7 +169,7 @@ Next TUI slices (each independently shippable/testable):
   type + `CloudClient::list_org_members` → real Users tab~~ **shipped
   2026-06-15** (`feat/tui-org-members-users-tab`);
 - Clerk token re-mint in `login.rs` → **writable org switching** from the Org tab
-  (today read-only; the stored token is scoped to one org);
+  (in progress on `feat/tui-org-switch-login`);
 - model picker sourced from a provider `list_models` call (today: static catalog
   in `tui/app.rs`);
 - TUI mouse support, configurable themes, token/usage meters; session switcher.

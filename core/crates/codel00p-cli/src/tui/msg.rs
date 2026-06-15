@@ -4,7 +4,7 @@
 use codel00p_harness::{
     HarnessEvent, PermissionDecision, PermissionRequest, SessionState, TurnOutcome,
 };
-use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, Project, Viewer};
+use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRef, Project, Viewer};
 use crossterm::event::KeyEvent;
 use tokio::sync::oneshot;
 
@@ -26,6 +26,7 @@ pub(crate) enum Msg {
     /// Text to surface as a notice block (e.g. from a `/sessions` lookup).
     Notice(String),
     CloudViewer(Result<Viewer, String>),
+    CloudOrgs(Result<Vec<OrgRef>, String>),
     CloudProjects(Result<Vec<Project>, String>),
     CloudAgents(Result<Vec<Agent>, String>),
     CloudMcp(Result<Vec<McpServer>, String>),
@@ -51,6 +52,8 @@ pub(crate) enum Effect {
     Persist(Box<TurnOutcome>, usize),
     /// Fetch cloud data (blocking client, run off the UI task).
     Cloud(CloudFetch),
+    /// Re-authenticate through the browser for a selected organization.
+    SwitchOrg(String),
     /// Read local state and surface it as a notice.
     Local(LocalQuery),
     /// Fetch the provider model catalog for the picker (blocking client, off the UI
@@ -67,6 +70,7 @@ pub(crate) enum Effect {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum CloudFetch {
     Viewer,
+    Orgs,
     Projects,
     Agents(String),
     Mcp(String),

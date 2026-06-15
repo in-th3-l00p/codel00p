@@ -2,7 +2,7 @@
 //! modal, and help. All state here is pure and terminal-independent.
 
 use codel00p_harness::PermissionRequest;
-use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRole, Project};
+use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRef, OrgRole, Project};
 use crossterm::event::KeyEvent;
 
 use super::picker::{Picker, PickerItem, PickerOutcome};
@@ -149,6 +149,18 @@ impl PickerItem for OrgMember {
     }
 }
 
+impl PickerItem for OrgRef {
+    fn label(&self) -> String {
+        self.name().to_string()
+    }
+    fn detail(&self) -> Option<String> {
+        match self.slug() {
+            Some(slug) => Some(format!("{} · {slug}", self.id())),
+            None => Some(self.id().to_string()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EntityTab {
     Projects,
@@ -191,8 +203,8 @@ impl EntityTab {
     }
 }
 
-/// The org entity browser: a tab strip over project-scoped entity lists. Users and
-/// Org are read-only this pass (org switching still requires re-auth).
+/// The org entity browser: a tab strip over project-scoped entity lists plus an
+/// organization picker that can re-authenticate into another Clerk org.
 #[derive(Clone, Debug)]
 pub(crate) struct EntityBrowser {
     pub(crate) tab: EntityTab,
@@ -201,6 +213,7 @@ pub(crate) struct EntityBrowser {
     pub(crate) mcp: Picker<McpServer>,
     pub(crate) memory: Picker<MemoryEntry>,
     pub(crate) users: Picker<OrgMember>,
+    pub(crate) orgs: Picker<OrgRef>,
     /// The project whose agents/MCP/memory are currently shown.
     pub(crate) selected_project: Option<Project>,
     pub(crate) status: Option<String>,
@@ -215,6 +228,7 @@ impl EntityBrowser {
             mcp: Picker::new(Vec::new()),
             memory: Picker::new(Vec::new()),
             users: Picker::new(Vec::new()),
+            orgs: Picker::new(Vec::new()),
             selected_project: None,
             status: Some("Loading…".to_string()),
         }

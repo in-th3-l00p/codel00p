@@ -7,7 +7,7 @@
 
 use std::env;
 
-use codel00p_protocol::{OrgMember, OrgRole};
+use codel00p_protocol::{OrgMember, OrgRef, OrgRole};
 use serde::Deserialize;
 
 use crate::error::ApiError;
@@ -69,6 +69,31 @@ impl ClerkDirectory {
         Ok(members)
     }
 
+    /// Lists the organizations a user belongs to, using Clerk as the source of
+    /// truth. The returned refs are suitable for client-side org switching.
+    pub async fn list_user_orgs(&self, user_id: &str) -> Result<Vec<OrgRef>, ApiError> {
+        let mut offset = 0;
+        let mut orgs = Vec::new();
+        loop {
+            let payload = self.list_user_orgs_page(user_id, offset).await?;
+            let page_len = payload.data.len();
+            let total_count = payload
+                .total_count
+                .unwrap_or(payload.data.len() + offset as usize);
+            orgs.extend(
+                payload
+                    .data
+                    .into_iter()
+                    .filter_map(UserMembership::into_org),
+            );
+            if orgs.len() >= total_count || page_len == 0 {
+                break;
+            }
+            offset += PAGE_LIMIT;
+        }
+        Ok(orgs)
+    }
+
     async fn list_members_page(
         &self,
         org_id: &str,
@@ -97,6 +122,39 @@ impl ClerkDirectory {
             .await
             .map_err(|err| ApiError::Internal(format!("invalid clerk response: {err}")))
     }
+
+    async fn list_user_orgs_page(
+        &self,
+        user_id: &str,
+        offset: u32,
+    ) -> Result<UserMembershipList, ApiError> {
+        let user_id = path_encode(user_id);
+        let url = format!(
+            "{}/v1/users/{user_id}/organization_memberships",
+            self.api_base
+        );
+        let response = self
+            .http
+            .get(url)
+            .query(&[("limit", PAGE_LIMIT), ("offset", offset)])
+            .bearer_auth(&self.secret_key)
+            .send()
+            .await
+            .map_err(|err| ApiError::Internal(format!("clerk request failed: {err}")))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ApiError::Internal(format!(
+                "clerk organization lookup failed ({status}): {body}"
+            )));
+        }
+
+        response
+            .json()
+            .await
+            .map_err(|err| ApiError::Internal(format!("invalid clerk response: {err}")))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +162,26 @@ struct MembershipList {
     #[serde(default)]
     data: Vec<Membership>,
     total_count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserMembershipList {
+    #[serde(default)]
+    data: Vec<UserMembership>,
+    total_count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserMembership {
+    organization: Option<ClerkOrganization>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClerkOrganization {
+    id: String,
+    name: String,
+    #[serde(default)]
+    slug: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -147,6 +225,22 @@ impl Membership {
     }
 }
 
+impl UserMembership {
+    fn into_org(self) -> Option<OrgRef> {
+        let org = self.organization?;
+        let id = org.id.trim();
+        let name = org.name.trim();
+        if id.is_empty() || name.is_empty() {
+            return None;
+        }
+        let mut org_ref = OrgRef::new(id, name);
+        if let Some(slug) = org.slug {
+            org_ref = org_ref.with_slug(slug);
+        }
+        Some(org_ref)
+    }
+}
+
 impl PublicUserData {
     fn valid_user_id(&self) -> Option<String> {
         self.user_id
@@ -176,6 +270,19 @@ impl PublicUserData {
             .join(" ");
         if name.is_empty() { None } else { Some(name) }
     }
+}
+
+fn path_encode(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
 }
 
 #[cfg(test)]
@@ -248,5 +355,33 @@ mod tests {
             }),
         };
         assert!(membership.into_member().is_none());
+    }
+
+    #[test]
+    fn maps_user_membership_to_org_ref() {
+        let membership = UserMembership {
+            organization: Some(ClerkOrganization {
+                id: "org_acme".into(),
+                name: "Acme".into(),
+                slug: Some("acme".into()),
+            }),
+        };
+        let org = membership.into_org().expect("org");
+        assert_eq!(org.id(), "org_acme");
+        assert_eq!(org.name(), "Acme");
+        assert_eq!(org.slug(), Some("acme"));
+    }
+
+    #[test]
+    fn drops_user_membership_without_valid_org() {
+        let membership = UserMembership {
+            organization: Some(ClerkOrganization {
+                id: " ".into(),
+                name: "Acme".into(),
+                slug: None,
+            }),
+        };
+        assert!(membership.into_org().is_none());
+        assert!(UserMembership { organization: None }.into_org().is_none());
     }
 }

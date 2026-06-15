@@ -89,8 +89,8 @@ desktop app embed the TUI rather than reimplementing chat in React.
       /history /tools /reset` slash commands; Esc/Ctrl-C handling.)
 
 ### Phase 3 — Polish + remaining cloud — NEXT
-- [ ] **Writable org switching**: needs a Clerk token re-mint flow in `login.rs`
-      (the stored token is scoped to one org); today the Org tab is read-only.
+- [ ] **Writable org switching**: token re-mint primitive shipped; current slice
+      wires the Org tab to a real organization picker and `auth login --org`.
 - [x] **Real Users tab** (shipped 2026-06-15): backend `GET /org/members` route
       (`ClerkDirectory` over the Clerk Backend API, 503 when unconfigured) +
       `OrgMember` protocol type + `CloudClient::list_org_members`; the entity
