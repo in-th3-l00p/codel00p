@@ -13,7 +13,7 @@ initiative's next phase begins, break it into dated slice plans under
 
 ## Session marker (2026-06-15)
 
-Latest release: **v0.2.0**. This session shipped the **real TUI Users tab** —
+Latest release: **v0.3.0**. This session shipped the **real TUI Users tab** —
 `GET /org/members` (Clerk Backend API → `OrgMember` protocol type →
 `CloudClient::list_org_members` → entity-browser picker), replacing the
 "pending a backend endpoint" placeholder. Landed on `main` (see plan
@@ -189,7 +189,9 @@ Goal: let installed CLIs detect and install new releases instantly.
 
 Shipped: `codel00p update` (SHA-256-verified in-place replace), daily background
 check + nudge (CLI line + TUI header chip), `codel00p version`, tag-stamped
-release binaries (`build.rs` + release.yml). Verified end to end v0.1.0 → v0.2.0.
+release binaries (`build.rs` + release.yml). Verified end to end v0.1.0 → v0.2.0;
+v0.3.0 updates the release lookup to avoid unauthenticated GitHub REST API rate
+limits.
 **Release = bump `codel00p-cli` Cargo.toml version, commit, push a `vX.Y.Z` tag.**
 
 Follow-ups:

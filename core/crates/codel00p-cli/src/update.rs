@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use crate::config::CliResult;
 
 const REPO: &str = "in-th3-l00p/codel00p";
-const LATEST_API: &str = "https://api.github.com/repos/in-th3-l00p/codel00p/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://github.com/in-th3-l00p/codel00p/releases/latest";
 /// Re-check at most once per day.
 const CHECK_INTERVAL_SECS: u64 = 60 * 60 * 24;
 const NETWORK_TIMEOUT_SECS: u64 = 12;
@@ -174,9 +174,8 @@ fn fetch_latest_release() -> Result<Release, String> {
         .build()
         .map_err(|error| format!("failed to build http client: {error}"))?;
     let response = client
-        .get(LATEST_API)
+        .get(LATEST_RELEASE_URL)
         .header(reqwest::header::USER_AGENT, user_agent())
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .send()
         .map_err(|error| format!("could not reach GitHub: {error}"))?;
     if !response.status().is_success() {
@@ -185,13 +184,19 @@ fn fetch_latest_release() -> Result<Release, String> {
             response.status()
         ));
     }
-    response
-        .json::<Release>()
-        .map_err(|error| format!("could not parse release info: {error}"))
+    let tag_name = release_tag_from_url(response.url().as_str())
+        .ok_or_else(|| "could not determine latest GitHub release tag".to_string())?;
+    Ok(Release { tag_name })
 }
 
 fn user_agent() -> String {
     format!("codel00p/{}", current_version())
+}
+
+fn release_tag_from_url(url: &str) -> Option<String> {
+    let marker = "/releases/tag/";
+    let tag = url.split(marker).nth(1)?.split(['?', '#']).next()?.trim();
+    (!tag.is_empty()).then(|| tag.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -457,6 +462,23 @@ mod tests {
         // Unparseable inputs never trigger a nag.
         assert!(!is_newer("garbage", "0.1.0"));
         assert!(!is_newer("0.2.0", "garbage"));
+    }
+
+    #[test]
+    fn parses_latest_release_redirect_url() {
+        assert_eq!(
+            release_tag_from_url("https://github.com/in-th3-l00p/codel00p/releases/tag/v0.3.0")
+                .as_deref(),
+            Some("v0.3.0")
+        );
+        assert_eq!(
+            release_tag_from_url(
+                "https://github.com/in-th3-l00p/codel00p/releases/tag/v0.3.0?expanded=true"
+            )
+            .as_deref(),
+            Some("v0.3.0")
+        );
+        assert!(release_tag_from_url("https://github.com/in-th3-l00p/codel00p/releases").is_none());
     }
 
     #[test]
