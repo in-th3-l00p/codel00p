@@ -22,6 +22,7 @@ struct SessionSummary {
     parent_session_id: Option<String>,
     message_count: usize,
     event_count: usize,
+    created_at: Option<u64>,
 }
 
 fn session_list(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -46,8 +47,18 @@ fn session_list(config: CliConfig, args: &[String]) -> CliResult<String> {
                 .map(|id| id.as_str().to_string()),
             message_count,
             event_count,
+            created_at: metadata.created_at(),
         });
     }
+
+    // Most recent first: newest `created_at` on top, undated (pre-timestamp)
+    // sessions last, ties broken by id so the order is stable.
+    summaries.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| left.session_id.cmp(&right.session_id))
+    });
 
     if json_output {
         let records = summaries
@@ -85,6 +96,7 @@ fn session_summary_json(summary: &SessionSummary) -> serde_json::Value {
         "parent_session_id": summary.parent_session_id,
         "message_count": summary.message_count,
         "event_count": summary.event_count,
+        "created_at": summary.created_at,
     })
 }
 

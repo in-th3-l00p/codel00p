@@ -272,10 +272,18 @@ pub(crate) fn load_chat_session_state(
 
 pub(crate) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
     let store = open_session_store(config)?;
-    let sessions = store.list_sessions().map_err(|error| error.to_string())?;
+    let mut sessions = store.list_sessions().map_err(|error| error.to_string())?;
     if sessions.is_empty() {
         return Ok("No saved conversations yet.\n".to_string());
     }
+
+    // Most recent first, matching `session list`; undated sessions sink last.
+    sessions.sort_by(|left, right| {
+        right
+            .created_at()
+            .cmp(&left.created_at())
+            .then_with(|| left.session_id().as_str().cmp(right.session_id().as_str()))
+    });
 
     let mut output = String::new();
     for metadata in sessions {

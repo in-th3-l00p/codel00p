@@ -65,6 +65,9 @@ Recently shipped:
 - **cancellation and interruption**: Ctrl-C during `agent run` stops the turn at
   the next boundary via a cooperative `CancelSignal`, persisting partial progress
   instead of killing the process (TUI Esc-to-cancel is a follow-up).
+- **recency-ordered session listing**: `session list` (and the chat sessions
+  overlay) now sort most-recent-first by `created_at`, with the timestamp also in
+  `session list --json` — the companion to `agent continue`.
 
 Next:
 

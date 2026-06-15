@@ -32,14 +32,22 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr utf8")
 }
 
-fn seed_session(db_path: &Path, id: &'static str, source: &str, user_messages: &[&str]) {
+fn seed_session(
+    db_path: &Path,
+    id: &'static str,
+    source: &str,
+    created_at: Option<u64>,
+    user_messages: &[&str],
+) {
     let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
     let mut store =
         StorageBackedSessionStore::new(StorageScope::project("org-1", "project-1"), storage);
     let session_id = SessionId::from_static(id);
-    store
-        .create_session(SessionMetadata::new(session_id.clone(), source))
-        .expect("create session");
+    let mut metadata = SessionMetadata::new(session_id.clone(), source);
+    if let Some(created_at) = created_at {
+        metadata = metadata.with_created_at(created_at);
+    }
+    store.create_session(metadata).expect("create session");
     for message in user_messages {
         store
             .append_message(&session_id, SessionMessage::user(*message))
@@ -48,11 +56,18 @@ fn seed_session(db_path: &Path, id: &'static str, source: &str, user_messages: &
 }
 
 #[test]
-fn session_list_prints_all_conversations() {
+fn session_list_prints_all_conversations_newest_first() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
-    seed_session(&db_path, "session-a", "chat", &["hello", "again"]);
-    seed_session(&db_path, "session-b", "cli", &["one"]);
+    // session-b is newer than session-a despite sorting later by id.
+    seed_session(
+        &db_path,
+        "session-a",
+        "chat",
+        Some(1_000),
+        &["hello", "again"],
+    );
+    seed_session(&db_path, "session-b", "cli", Some(2_000), &["one"]);
 
     let output = run_codel00p(&db_path, &["session", "list"]);
 
@@ -66,17 +81,41 @@ fn session_list_prints_all_conversations() {
         listing.contains("session-b\tcli\t1 message(s)"),
         "stdout: {listing}"
     );
-    // Sorted by id: session-a appears before session-b.
+    // Most recent first: session-b (newer) appears before session-a.
     let a = listing.find("session-a").expect("session-a present");
     let b = listing.find("session-b").expect("session-b present");
-    assert!(a < b, "expected session-a before session-b: {listing}");
+    assert!(
+        b < a,
+        "expected newer session-b before session-a: {listing}"
+    );
+}
+
+#[test]
+fn session_list_sorts_undated_sessions_after_dated_ones() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_session(&db_path, "session-dated", "cli", Some(5_000), &["hi"]);
+    seed_session(&db_path, "session-legacy", "cli", None, &["hi"]);
+
+    let output = run_codel00p(&db_path, &["session", "list"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let listing = stdout(&output);
+    let dated = listing.find("session-dated").expect("dated present");
+    let legacy = listing.find("session-legacy").expect("legacy present");
+    assert!(dated < legacy, "dated session should sort first: {listing}");
 }
 
 #[test]
 fn session_list_json_reports_counts() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
-    seed_session(&db_path, "session-a", "chat", &["hello", "again"]);
+    seed_session(
+        &db_path,
+        "session-a",
+        "chat",
+        Some(1_234),
+        &["hello", "again"],
+    );
 
     let output = run_codel00p(&db_path, &["session", "list", "--json"]);
 
@@ -87,6 +126,7 @@ fn session_list_json_reports_counts() {
     assert_eq!(records[0]["session_id"], "session-a");
     assert_eq!(records[0]["source"], "chat");
     assert_eq!(records[0]["message_count"], 2);
+    assert_eq!(records[0]["created_at"], 1_234);
 }
 
 #[test]
