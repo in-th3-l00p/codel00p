@@ -121,6 +121,11 @@ impl ToolRegistry {
                 name: name.to_string(),
             })?;
 
+        // Validate arguments against the tool's schema before any side effect, so
+        // a malformed call becomes a self-correctable error rather than an ad-hoc
+        // failure mid-execution.
+        crate::validation::validate_tool_input(name, &tool.input_schema(), &input)?;
+
         tool.execute(workspace, input).await
     }
 }

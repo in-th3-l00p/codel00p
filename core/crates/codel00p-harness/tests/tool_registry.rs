@@ -152,3 +152,23 @@ fn default_tool_sets_carry_populated_schemas() {
     assert!(read.input_schema["properties"]["path"].is_object());
     assert!(!read.description.is_empty());
 }
+
+#[tokio::test]
+async fn execute_validates_arguments_against_schema_before_running() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::read_only_defaults();
+
+    // read_file requires `path`; calling it without one is rejected as a
+    // structured InvalidToolInput before any file access.
+    let error = registry
+        .execute("read_file", &workspace, json!({}))
+        .await
+        .expect_err("missing required arg should fail validation");
+
+    assert!(matches!(
+        error,
+        HarnessError::InvalidToolInput { ref name, ref message }
+            if name == "read_file" && message.contains("missing required field `path`")
+    ));
+}
