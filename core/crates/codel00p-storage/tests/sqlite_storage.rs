@@ -529,3 +529,74 @@ fn sqlite_documents_can_be_listed_by_scope_and_collection() {
 
     assert_eq!(ids, ["session-1", "session-2"]);
 }
+
+#[test]
+fn sqlite_list_values_without_prefix_returns_whole_scope_in_order() {
+    let mut storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let scope = StorageScope::project("org-1", "project-1");
+    let other_scope = StorageScope::project("org-1", "project-2");
+
+    storage
+        .put_value(StorageValue::new(
+            scope.clone(),
+            "provider.selected",
+            json!("openai"),
+        ))
+        .expect("put first value");
+    storage
+        .put_value(StorageValue::new(
+            scope.clone(),
+            "model.default",
+            json!("o1"),
+        ))
+        .expect("put second value");
+    storage
+        .put_value(StorageValue::new(
+            other_scope,
+            "provider.selected",
+            json!("anthropic"),
+        ))
+        .expect("put other scope value");
+
+    // `None` prefix lists every key in the scope, ordered by key, and excludes
+    // other scopes.
+    let values = storage
+        .list_values(&scope, None)
+        .expect("list values without prefix");
+    let keys = values.iter().map(StorageValue::key).collect::<Vec<_>>();
+
+    assert_eq!(keys, ["model.default", "provider.selected"]);
+}
+
+#[test]
+fn sqlite_documents_can_be_deleted() {
+    let mut storage = SqliteStorage::in_memory().expect("open sqlite storage");
+    let scope = StorageScope::project("org-1", "project-1");
+
+    storage
+        .put_document(StorageDocument::new(
+            scope.clone(),
+            "sessions",
+            "session-1",
+            json!({ "source": "cli" }),
+        ))
+        .expect("put document");
+
+    assert!(
+        storage
+            .delete_document(&scope, "sessions", "session-1")
+            .expect("delete document")
+    );
+    assert!(
+        storage
+            .get_document(&scope, "sessions", "session-1")
+            .expect("get after delete")
+            .is_none()
+    );
+    // Deleting again reports nothing was removed.
+    assert!(
+        !storage
+            .delete_document(&scope, "sessions", "session-1")
+            .expect("delete missing document")
+    );
+}
