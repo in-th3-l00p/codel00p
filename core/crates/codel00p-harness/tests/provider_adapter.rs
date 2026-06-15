@@ -1,7 +1,7 @@
 use codel00p_harness::{
     HarnessInferenceRequest, MemoryPromptAssembler, ModelToolCall, ProjectInstruction,
     ProjectInstructions, ProjectMemoryContext, ProjectMemoryItem, ProviderModelClient, SessionId,
-    SessionState, UserMessage,
+    SessionState, ToolSpec, UserMessage,
 };
 use codel00p_protocol::MemoryKind;
 use codel00p_providers::{InferenceResponse, MessageRole, ToolCall};
@@ -13,9 +13,25 @@ fn maps_harness_session_messages_to_provider_request() {
     state.push_user(UserMessage::new("Read the README."));
     state.push_assistant("I need to inspect it.");
     state.push_tool_result("call-1", "read_file", r#"{"content":"Agent Harness"}"#);
+    let read_schema = json!({
+        "type": "object",
+        "properties": { "path": { "type": "string" } },
+        "required": ["path"]
+    });
     let request = HarnessInferenceRequest::new(state).with_runtime_context(
         "/workspace",
-        vec!["read_file".to_string(), "search_text".to_string()],
+        vec![
+            ToolSpec::new(
+                "read_file",
+                "Read a file from the workspace.",
+                read_schema.clone(),
+            ),
+            ToolSpec::new(
+                "search_text",
+                "Search files for a query.",
+                json!({ "type": "object" }),
+            ),
+        ],
     );
 
     let provider_request =
@@ -34,6 +50,16 @@ fn maps_harness_session_messages_to_provider_request() {
             .map(|tool| tool.name.as_str())
             .collect::<Vec<_>>(),
         vec!["read_file", "search_text"]
+    );
+    // The real schema and description reach the provider — not the old stub.
+    assert_eq!(
+        provider_request.tools[0].description,
+        "Read a file from the workspace."
+    );
+    assert_eq!(provider_request.tools[0].parameters, read_schema);
+    assert_eq!(
+        provider_request.tools[1].description,
+        "Search files for a query."
     );
 }
 

@@ -9,7 +9,7 @@ use crate::{
     errors::HarnessError,
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
     tool_result::ToolResult,
-    tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool},
+    tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool, ToolSpec},
     web::web_tools,
     workspace::Workspace,
 };
@@ -82,6 +82,16 @@ impl ToolRegistry {
 
     pub fn names(&self) -> Vec<String> {
         self.tools.keys().cloned().collect()
+    }
+
+    /// Model-facing definitions (name, description, JSON Schema) for every
+    /// registered tool, in stable name order. This is what the provider request
+    /// advertises so the model sees real parameters.
+    pub fn specs(&self) -> Vec<ToolSpec> {
+        self.tools
+            .values()
+            .map(|tool| ToolSpec::from_tool(tool.as_ref()))
+            .collect()
     }
 
     pub fn is_concurrency_safe(&self, name: &str, input: &Value) -> bool {

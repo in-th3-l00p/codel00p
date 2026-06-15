@@ -27,24 +27,38 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                             "type": "function",
                             "function": {
                                 "name": "list_files",
-                                "description": "codel00p harness tool: list_files",
-                                "parameters": {"type": "object"}
+                                "description": "List files inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": { "path": { "type": "string" } }
+                                }
                             }
                         },
                         {
                             "type": "function",
                             "function": {
                                 "name": "read_file",
-                                "description": "codel00p harness tool: read_file",
-                                "parameters": {"type": "object"}
+                                "description": "Read a UTF-8 file inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["path"],
+                                    "properties": { "path": { "type": "string" } }
+                                }
                             }
                         },
                         {
                             "type": "function",
                             "function": {
                                 "name": "search_text",
-                                "description": "codel00p harness tool: search_text",
-                                "parameters": {"type": "object"}
+                                "description": "Search UTF-8 files inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["query"],
+                                    "properties": {
+                                        "query": { "type": "string" },
+                                        "path": { "type": "string" }
+                                    }
+                                }
                             }
                         }
                     ]
@@ -115,24 +129,38 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "list_files",
-                                "description": "codel00p harness tool: list_files",
-                                "parameters": {"type": "object"}
+                                "description": "List files inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": { "path": { "type": "string" } }
+                                }
                             }
                         },
                         {
                             "type": "function",
                             "function": {
                                 "name": "read_file",
-                                "description": "codel00p harness tool: read_file",
-                                "parameters": {"type": "object"}
+                                "description": "Read a UTF-8 file inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["path"],
+                                    "properties": { "path": { "type": "string" } }
+                                }
                             }
                         },
                         {
                             "type": "function",
                             "function": {
                                 "name": "search_text",
-                                "description": "codel00p harness tool: search_text",
-                                "parameters": {"type": "object"}
+                                "description": "Search UTF-8 files inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["query"],
+                                    "properties": {
+                                        "query": { "type": "string" },
+                                        "path": { "type": "string" }
+                                    }
+                                }
                             }
                         }
                     ]
@@ -188,24 +216,38 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "list_files",
-                                "description": "codel00p harness tool: list_files",
-                                "parameters": {"type": "object"}
+                                "description": "List files inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": { "path": { "type": "string" } }
+                                }
                             }
                         },
                         {
                             "type": "function",
                             "function": {
                                 "name": "read_file",
-                                "description": "codel00p harness tool: read_file",
-                                "parameters": {"type": "object"}
+                                "description": "Read a UTF-8 file inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["path"],
+                                    "properties": { "path": { "type": "string" } }
+                                }
                             }
                         },
                         {
                             "type": "function",
                             "function": {
                                 "name": "search_text",
-                                "description": "codel00p harness tool: search_text",
-                                "parameters": {"type": "object"}
+                                "description": "Search UTF-8 files inside the workspace root.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["query"],
+                                    "properties": {
+                                        "query": { "type": "string" },
+                                        "path": { "type": "string" }
+                                    }
+                                }
                             }
                         }
                     ]

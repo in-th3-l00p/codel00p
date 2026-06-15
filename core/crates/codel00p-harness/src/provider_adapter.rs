@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use codel00p_providers::{
     ChatMessage, InferenceClient, InferenceRequest, InferenceResponse, ToolDefinition,
 };
-use serde_json::json;
 
 use crate::{
     errors::HarnessError,
@@ -69,11 +68,11 @@ impl ProviderModelClient {
             builder = builder.message(map_session_message(message));
         }
 
-        for tool_name in request.tool_names() {
+        for tool in request.tools() {
             builder = builder.tool(ToolDefinition::function(
-                tool_name,
-                format!("codel00p harness tool: {tool_name}"),
-                json!({ "type": "object" }),
+                &tool.name,
+                &tool.description,
+                tool.input_schema.clone(),
             ));
         }
 
