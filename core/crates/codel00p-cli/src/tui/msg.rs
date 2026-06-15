@@ -2,7 +2,7 @@
 //! way state changes; `Effect` is the only way the loop touches the outside world.
 
 use codel00p_harness::{HarnessEvent, PermissionDecision, PermissionRequest, TurnOutcome};
-use codel00p_protocol::{Agent, McpServer, MemoryEntry, Project, Viewer};
+use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, Project, Viewer};
 use crossterm::event::KeyEvent;
 use tokio::sync::oneshot;
 
@@ -26,6 +26,7 @@ pub(crate) enum Msg {
     CloudAgents(Result<Vec<Agent>, String>),
     CloudMcp(Result<Vec<McpServer>, String>),
     CloudMemory(Result<Vec<MemoryEntry>, String>),
+    CloudUsers(Result<Vec<OrgMember>, String>),
 }
 
 /// Side effects the event loop executes after an update.
@@ -52,6 +53,7 @@ pub(crate) enum CloudFetch {
     Agents(String),
     Mcp(String),
     Memory(String),
+    Users,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

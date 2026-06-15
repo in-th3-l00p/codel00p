@@ -19,8 +19,8 @@ mod version;
 
 pub use cloud::{
     Agent, AgentUpdate, McpServer, McpServerUpdate, McpTransport, MemoryAuditEntry,
-    MemoryReviewAction, NewAgent, NewMcpServer, NewMemoryCandidate, NewProject, OrgRef, OrgRole,
-    Project, ProjectUpdate, Viewer,
+    MemoryReviewAction, NewAgent, NewMcpServer, NewMemoryCandidate, NewProject, OrgMember, OrgRef,
+    OrgRole, Project, ProjectUpdate, Viewer,
 };
 pub use context::{CompactionRecord, ContextWindowState, ToolProgress};
 pub use events::AgentEvent;

@@ -1,4 +1,6 @@
-use codel00p_protocol::{Agent, McpServer, MemoryEntry, NewMemoryCandidate, Project, Viewer};
+use codel00p_protocol::{
+    Agent, McpServer, MemoryEntry, NewMemoryCandidate, OrgMember, Project, Viewer,
+};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -52,6 +54,11 @@ impl CloudClient {
     /// `GET /projects` — the organization's projects (org scope from the token).
     pub fn list_projects(&self) -> Result<Vec<Project>, String> {
         self.get("/projects")
+    }
+
+    /// `GET /org/members` — the active organization's Clerk-backed roster.
+    pub fn list_org_members(&self) -> Result<Vec<OrgMember>, String> {
+        self.get("/org/members")
     }
 
     /// `GET /projects/{id}/agents` — the project's stored agent definitions.
@@ -273,6 +280,30 @@ mod tests {
         assert_eq!(projects[0].id(), "proj_1");
         assert_eq!(agents.len(), 1);
         assert_eq!(agents[0].model(), "claude-opus-4-8");
+    }
+
+    #[test]
+    fn list_org_members_reads_roster() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/org/members")
+                .header("authorization", "Bearer tok");
+            then.status(200).json_body(json!([{
+                "user_id": "user_1",
+                "role": "admin",
+                "email": "ada@example.com",
+                "name": "Ada Lovelace"
+            }]));
+        });
+
+        let client = CloudClient::new(server.base_url(), "tok").expect("client");
+        let members = client.list_org_members().expect("members");
+
+        mock.assert();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].user_id(), "user_1");
+        assert_eq!(members[0].email(), Some("ada@example.com"));
     }
 
     #[test]

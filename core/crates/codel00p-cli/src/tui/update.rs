@@ -79,6 +79,13 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             });
             Vec::new()
         }
+        Msg::CloudUsers(result) => {
+            with_entities(app, |browser| match result {
+                Ok(users) => browser.users.set_items(users),
+                Err(error) => browser.status = Some(error),
+            });
+            Vec::new()
+        }
     }
 }
 
@@ -226,7 +233,14 @@ fn handle_entities_key(app: &mut App, mut browser: EntityBrowser, key: KeyEvent)
             app.overlay = Overlay::Entities(browser);
             Vec::new()
         }
-        EntityTab::Users | EntityTab::Org => {
+        EntityTab::Users => {
+            if matches!(browser.users.on_key(key), PickerOutcome::Cancelled) {
+                return Vec::new();
+            }
+            app.overlay = Overlay::Entities(browser);
+            Vec::new()
+        }
+        EntityTab::Org => {
             if key.code == KeyCode::Esc {
                 Vec::new()
             } else {
@@ -358,6 +372,7 @@ fn open_entities(app: &mut App, tab: EntityTab) -> Vec<Effect> {
     vec![
         Effect::Cloud(CloudFetch::Viewer),
         Effect::Cloud(CloudFetch::Projects),
+        Effect::Cloud(CloudFetch::Users),
     ]
 }
 
@@ -432,7 +447,7 @@ mod tests {
     use crate::tui::conversation::Block as ChatBlock;
     use crate::tui::test_support::test_app;
     use codel00p_harness::{SessionId, SessionState, TurnId, TurnOutcome};
-    use codel00p_protocol::{PermissionRequest, PermissionScope};
+    use codel00p_protocol::{OrgMember, OrgRole, PermissionRequest, PermissionScope};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn key(code: KeyCode) -> Msg {
@@ -583,5 +598,46 @@ mod tests {
             app.conversation.blocks.last(),
             Some(ChatBlock::Notice(_))
         ));
+    }
+
+    #[test]
+    fn opening_entities_fetches_users_too() {
+        let mut app = test_app();
+        app.cloud.configured = true;
+        let effects = update(&mut app, key(KeyCode::F(3)));
+
+        assert!(matches!(app.overlay, Overlay::Entities(_)));
+        assert!(matches!(
+            effects.as_slice(),
+            [
+                Effect::Cloud(CloudFetch::Viewer),
+                Effect::Cloud(CloudFetch::Projects),
+                Effect::Cloud(CloudFetch::Users)
+            ]
+        ));
+    }
+
+    #[test]
+    fn cloud_users_populates_entity_browser() {
+        let mut app = test_app();
+        app.overlay = Overlay::Entities(EntityBrowser::new(EntityTab::Users));
+
+        update(
+            &mut app,
+            Msg::CloudUsers(Ok(vec![
+                OrgMember::new("user_1", OrgRole::Admin)
+                    .with_email("ada@example.com")
+                    .with_name("Ada Lovelace"),
+            ])),
+        );
+
+        match &app.overlay {
+            Overlay::Entities(browser) => {
+                let member = browser.users.selected_item().expect("selected member");
+                assert_eq!(member.user_id(), "user_1");
+                assert_eq!(member.name(), Some("Ada Lovelace"));
+            }
+            _ => panic!("expected entity browser"),
+        }
     }
 }

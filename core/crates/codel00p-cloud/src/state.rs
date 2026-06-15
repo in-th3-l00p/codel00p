@@ -5,6 +5,7 @@ use serde::Serialize;
 use tokio::sync::broadcast;
 
 use crate::auth::JwtVerifier;
+use crate::directory::ClerkDirectory;
 use crate::error::ApiError;
 
 /// A live change notification broadcast to SSE subscribers in an organization.
@@ -33,6 +34,7 @@ pub struct AppState {
     storage: Arc<Mutex<Box<dyn StorageBackend>>>,
     verifier: Arc<JwtVerifier>,
     events: broadcast::Sender<ChangeEvent>,
+    directory: Option<Arc<ClerkDirectory>>,
 }
 
 impl AppState {
@@ -48,11 +50,24 @@ impl AppState {
             storage: Arc::new(Mutex::new(storage)),
             verifier: Arc::new(verifier),
             events,
+            directory: None,
         }
+    }
+
+    /// Attaches a Clerk organization directory, enabling `GET /org/members`.
+    /// Without one the route reports the directory as unconfigured.
+    pub fn with_directory(mut self, directory: ClerkDirectory) -> Self {
+        self.directory = Some(Arc::new(directory));
+        self
     }
 
     pub fn verifier(&self) -> &JwtVerifier {
         &self.verifier
+    }
+
+    /// The organization directory, if one was configured.
+    pub(crate) fn directory(&self) -> Option<Arc<ClerkDirectory>> {
+        self.directory.clone()
     }
 
     /// Broadcasts a change to live subscribers. A send with no subscribers is a

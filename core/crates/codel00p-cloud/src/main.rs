@@ -1,7 +1,8 @@
 use std::env;
 
 use codel00p_cloud::{
-    AppState, JwtVerifier, app, clerk_frontend_api_from_publishable_key, storage_from_env,
+    AppState, ClerkDirectory, JwtVerifier, app, clerk_frontend_api_from_publishable_key,
+    storage_from_env,
 };
 use tokio::net::TcpListener;
 
@@ -16,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Connect off the async runtime: the blocking Postgres driver drives its own
     // runtime internally and panics if called from within one.
-    let state = match tokio::task::spawn_blocking(storage_from_env).await?? {
+    let mut state = match tokio::task::spawn_blocking(storage_from_env).await?? {
         Some(storage) => {
             println!("codel00p-cloud: using DATABASE_URL-backed storage");
             AppState::with_storage(storage, verifier)
@@ -26,6 +27,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             AppState::new(verifier)
         }
     };
+
+    match ClerkDirectory::from_env() {
+        Some(directory) => {
+            println!("codel00p-cloud: Clerk organization directory enabled (GET /org/members)");
+            state = state.with_directory(directory);
+        }
+        None => println!(
+            "codel00p-cloud: no CLERK_SECRET_KEY - /org/members will report the directory \
+             as unconfigured"
+        ),
+    }
 
     let port = env::var("PORT")
         .ok()

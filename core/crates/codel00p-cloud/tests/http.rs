@@ -3,9 +3,10 @@
 
 mod common;
 
-use codel00p_cloud::AppState;
+use codel00p_cloud::{AppState, ClerkDirectory};
 use common::{admin_token, member_token, spawn, test_verifier};
-use serde_json::Value;
+use httpmock::prelude::*;
+use serde_json::{Value, json};
 
 async fn server() -> String {
     spawn(AppState::new(test_verifier())).await
@@ -335,7 +336,7 @@ async fn agents_crud_lifecycle() {
         "claude-sonnet-4-6"
     );
 
-    // Delete → 204, then 404.
+    // Delete -> 204, then 404.
     let response = client
         .delete(format!("{base}/projects/{project}/agents/{agent_id}"))
         .bearer_auth(&admin)
@@ -564,4 +565,98 @@ async fn memory_search_returns_relevant_approved() {
             .len(),
         0
     );
+}
+
+#[tokio::test]
+async fn org_members_maps_clerk_directory() {
+    // A stand-in Clerk Backend API returning two memberships.
+    let clerk = MockServer::start_async().await;
+    let clerk_mock = clerk
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/v1/organizations/org_acme/memberships")
+                .query_param("limit", "100")
+                .query_param("offset", "0")
+                .header("authorization", "Bearer sk_test_directory");
+            then.status(200).json_body(json!({
+                "data": [
+                    {
+                        "role": "org:admin",
+                        "public_user_data": {
+                            "user_id": "user_admin",
+                            "first_name": "Ada",
+                            "last_name": "Lovelace",
+                            "identifier": "ada@example.com"
+                        }
+                    },
+                    {
+                        "role": "org:member",
+                        "public_user_data": {
+                            "user_id": "user_member",
+                            "first_name": null,
+                            "last_name": null,
+                            "identifier": "mem@example.com"
+                        }
+                    }
+                ],
+                "total_count": 2
+            }));
+        })
+        .await;
+
+    let state = AppState::new(test_verifier())
+        .with_directory(ClerkDirectory::new("sk_test_directory", clerk.base_url()));
+    let base = spawn(state).await;
+
+    // A plain member may view the roster.
+    let response = reqwest::Client::new()
+        .get(format!("{base}/org/members"))
+        .bearer_auth(member_token("org_acme"))
+        .send()
+        .await
+        .expect("send");
+    assert_eq!(response.status(), 200);
+
+    clerk_mock.assert_async().await;
+    let members: Value = response.json().await.expect("json");
+    let members = members.as_array().expect("array");
+    assert_eq!(members.len(), 2);
+    assert_eq!(members[0]["user_id"], "user_admin");
+    assert_eq!(members[0]["role"], "admin");
+    assert_eq!(members[0]["name"], "Ada Lovelace");
+    assert_eq!(members[0]["email"], "ada@example.com");
+    // No name falls through to absent rather than an empty string.
+    assert_eq!(members[1]["role"], "member");
+    assert!(members[1].get("name").is_none());
+}
+
+#[tokio::test]
+async fn org_members_requires_an_active_org() {
+    let clerk = MockServer::start_async().await;
+    let state = AppState::new(test_verifier())
+        .with_directory(ClerkDirectory::new("sk_test_directory", clerk.base_url()));
+    let base = spawn(state).await;
+
+    let response = reqwest::Client::new()
+        .get(format!("{base}/org/members"))
+        .send()
+        .await
+        .expect("send");
+    assert_eq!(response.status(), 401);
+}
+
+#[tokio::test]
+async fn org_members_is_unavailable_without_a_directory() {
+    // No directory configured (no Clerk secret key): the route reports 503.
+    let base = spawn(AppState::new(test_verifier())).await;
+
+    let response = reqwest::Client::new()
+        .get(format!("{base}/org/members"))
+        .bearer_auth(admin_token("org_acme"))
+        .send()
+        .await
+        .expect("send");
+    assert_eq!(response.status(), 503);
+    let body: Value = response.json().await.expect("json");
+    assert_eq!(body["error"], "service_unavailable");
 }

@@ -32,6 +32,7 @@ pub(crate) fn run_cloud_fetch(fetch: CloudFetch) -> Msg {
         CloudFetch::Memory(project) => {
             Msg::CloudMemory(client.list_memory(&project, Some("approved")))
         }
+        CloudFetch::Users => Msg::CloudUsers(client.list_org_members()),
     }
 }
 
@@ -58,5 +59,6 @@ fn fetch_error(fetch: &CloudFetch, error: String) -> Msg {
         CloudFetch::Agents(_) => Msg::CloudAgents(Err(error)),
         CloudFetch::Mcp(_) => Msg::CloudMcp(Err(error)),
         CloudFetch::Memory(_) => Msg::CloudMemory(Err(error)),
+        CloudFetch::Users => Msg::CloudUsers(Err(error)),
     }
 }

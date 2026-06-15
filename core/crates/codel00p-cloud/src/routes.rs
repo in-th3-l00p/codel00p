@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use codel00p_protocol::{
     Agent, AgentUpdate, McpServer, McpServerUpdate, MemoryAuditEntry, MemoryEntry,
     MemoryReviewAction, MemoryStatus, NewAgent, NewMcpServer, NewMemoryCandidate, NewProject,
-    Project, ProjectUpdate, Viewer,
+    OrgMember, Project, ProjectUpdate, Viewer,
 };
 use codel00p_storage::StorageBackend;
 use futures::Stream;
@@ -27,6 +27,7 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(health))
         .route("/me", get(me))
+        .route("/org/members", get(list_org_members))
         .route("/events", get(events))
         .route("/projects", get(list_projects).post(create_project))
         .route(
@@ -77,6 +78,22 @@ async fn health() -> Json<Value> {
 
 async fn me(auth: AuthContext) -> Json<Viewer> {
     Json(auth.to_viewer())
+}
+
+/// `GET /org/members` — the active organization's roster, read from Clerk. Any
+/// org member may view it. Returns `503` when no directory is configured (the
+/// service has no Clerk secret key), so the client can explain the gap.
+async fn list_org_members(
+    State(state): State<AppState>,
+    auth: AuthContext,
+) -> Result<Json<Vec<OrgMember>>, ApiError> {
+    let (org, _role) = auth.require_org()?;
+    let org_id = org.id().to_string();
+    let directory = state.directory().ok_or_else(|| {
+        ApiError::ServiceUnavailable("organization directory is not configured".into())
+    })?;
+    let members = directory.list_members(&org_id).await?;
+    Ok(Json(members))
 }
 
 /// `GET /events` — a Server-Sent Events stream of change notifications for the

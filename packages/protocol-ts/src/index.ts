@@ -55,6 +55,14 @@ export type OrgRef = {
   slug?: string;
 };
 
+/** A read-only Clerk organization member projection. */
+export type OrgMember = {
+  user_id: string;
+  role: OrgRole;
+  email?: string;
+  name?: string;
+};
+
 /** The authenticated caller, as returned by `GET /me`. */
 export type Viewer = {
   user_id: string;

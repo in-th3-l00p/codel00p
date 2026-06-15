@@ -76,6 +76,56 @@ impl OrgRole {
     }
 }
 
+/// A member of a Clerk organization, as returned by `GET /org/members`. codel00p
+/// does not own membership; this is a read-only projection of Clerk's directory,
+/// keyed by the Clerk `user_id`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrgMember {
+    user_id: String,
+    role: OrgRole,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+}
+
+impl OrgMember {
+    pub fn new(user_id: impl Into<String>, role: OrgRole) -> Self {
+        Self {
+            user_id: user_id.into(),
+            role,
+            email: None,
+            name: None,
+        }
+    }
+
+    pub fn with_email(mut self, email: impl Into<String>) -> Self {
+        self.email = non_empty(email.into());
+        self
+    }
+
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = non_empty(name.into());
+        self
+    }
+
+    pub fn user_id(&self) -> &str {
+        &self.user_id
+    }
+
+    pub fn role(&self) -> OrgRole {
+        self.role
+    }
+
+    pub fn email(&self) -> Option<&str> {
+        self.email.as_deref()
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+}
+
 /// The authenticated caller, resolved from a verified Clerk session token. This
 /// is the shape returned by `GET /me`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

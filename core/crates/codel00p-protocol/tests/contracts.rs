@@ -2,7 +2,7 @@ use codel00p_protocol::{
     Agent, AgentEvent, AgentUpdate, CompactionRecord, ContextWindowState, EventId, McpServer,
     McpServerUpdate, McpTransport, MemoryAuditEntry, MemoryEntry, MemoryKind, MemoryReviewAction,
     MemorySensitivity, MemorySource, MemoryStatus, NewAgent, NewMcpServer, NewMemoryCandidate,
-    NewProject, OrgRef, OrgRole, PermissionDecision, PermissionMode, PermissionRequest,
+    NewProject, OrgMember, OrgRef, OrgRole, PermissionDecision, PermissionMode, PermissionRequest,
     PermissionScope, Project, ProjectRef, ProjectUpdate, ProtocolVersion, ProviderRef,
     RuntimeErrorKind, SessionId, SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall,
     ToolProgress, ToolResult, TurnId, Viewer,
@@ -270,6 +270,31 @@ fn org_roles_normalize_from_clerk_claims() {
 
     let encoded = serde_json::to_value([OrgRole::Admin, OrgRole::Member]).expect("serialize roles");
     assert_eq!(encoded, json!(["admin", "member"]));
+}
+
+#[test]
+fn org_member_projects_clerk_membership() {
+    let member = OrgMember::new("user_123", OrgRole::Admin)
+        .with_email("dev@team.dev")
+        .with_name("Dev User");
+
+    let encoded = serde_json::to_value(&member).expect("serialize member");
+    let decoded: OrgMember = serde_json::from_value(encoded.clone()).expect("deserialize member");
+
+    assert_eq!(decoded, member);
+    assert_eq!(member.user_id(), "user_123");
+    assert_eq!(member.role(), OrgRole::Admin);
+    assert_eq!(member.email(), Some("dev@team.dev"));
+    assert_eq!(member.name(), Some("Dev User"));
+    assert_eq!(
+        encoded,
+        json!({
+            "user_id": "user_123",
+            "role": "admin",
+            "email": "dev@team.dev",
+            "name": "Dev User"
+        })
+    );
 }
 
 #[test]

@@ -21,6 +21,9 @@ pub enum ApiError {
 
     #[error("internal error: {0}")]
     Internal(String),
+
+    #[error("service unavailable: {0}")]
+    ServiceUnavailable(String),
 }
 
 impl ApiError {
@@ -37,6 +40,11 @@ impl ApiError {
             ApiError::Internal(message) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal",
+                message.clone(),
+            ),
+            ApiError::ServiceUnavailable(message) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
                 message.clone(),
             ),
         }

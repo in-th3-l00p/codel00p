@@ -2,7 +2,7 @@
 //! modal, and help. All state here is pure and terminal-independent.
 
 use codel00p_harness::PermissionRequest;
-use codel00p_protocol::{Agent, McpServer, MemoryEntry, Project};
+use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRole, Project};
 
 use super::picker::{Picker, PickerItem};
 
@@ -70,6 +70,25 @@ impl PickerItem for MemoryEntry {
     }
 }
 
+impl PickerItem for OrgMember {
+    fn label(&self) -> String {
+        self.name()
+            .or(self.email())
+            .unwrap_or_else(|| self.user_id())
+            .to_string()
+    }
+    fn detail(&self) -> Option<String> {
+        let role = match self.role() {
+            OrgRole::Admin => "admin",
+            OrgRole::Member => "member",
+        };
+        match self.email() {
+            Some(email) if email != self.label() => Some(format!("{role} · {email}")),
+            _ => Some(role.to_string()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EntityTab {
     Projects,
@@ -113,8 +132,7 @@ impl EntityTab {
 }
 
 /// The org entity browser: a tab strip over project-scoped entity lists. Users and
-/// Org are read-only this pass (see plan: org switching and member listing need
-/// backend/Clerk work).
+/// Org are read-only this pass (org switching still requires re-auth).
 #[derive(Clone, Debug)]
 pub(crate) struct EntityBrowser {
     pub(crate) tab: EntityTab,
@@ -122,6 +140,7 @@ pub(crate) struct EntityBrowser {
     pub(crate) agents: Picker<Agent>,
     pub(crate) mcp: Picker<McpServer>,
     pub(crate) memory: Picker<MemoryEntry>,
+    pub(crate) users: Picker<OrgMember>,
     /// The project whose agents/MCP/memory are currently shown.
     pub(crate) selected_project: Option<Project>,
     pub(crate) status: Option<String>,
@@ -135,6 +154,7 @@ impl EntityBrowser {
             agents: Picker::new(Vec::new()),
             mcp: Picker::new(Vec::new()),
             memory: Picker::new(Vec::new()),
+            users: Picker::new(Vec::new()),
             selected_project: None,
             status: Some("Loading…".to_string()),
         }

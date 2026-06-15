@@ -8,6 +8,7 @@
 
 pub mod agents;
 pub mod auth;
+pub mod directory;
 pub mod error;
 pub mod mcp;
 pub mod memory;
@@ -16,6 +17,7 @@ mod routes;
 mod state;
 
 pub use auth::{AuthContext, JwtVerifier, VerifierError, clerk_frontend_api_from_publishable_key};
+pub use directory::ClerkDirectory;
 pub use error::ApiError;
 pub use routes::app;
 pub use state::{AppState, ChangeEvent, storage_from_env};

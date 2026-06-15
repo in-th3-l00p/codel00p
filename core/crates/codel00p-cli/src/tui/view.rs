@@ -274,19 +274,7 @@ fn draw_entities(app: &App, frame: &mut Frame, browser: &EntityBrowser) {
             &browser.memory,
             "Approved memory",
         ),
-        EntityTab::Users => {
-            frame.render_widget(
-                Paragraph::new(vec![
-                    Line::from(Span::styled("Users", app.theme.accent())),
-                    Line::from(""),
-                    Line::from(Span::styled(
-                        "Member listing is pending a backend endpoint.",
-                        app.theme.muted(),
-                    )),
-                ]),
-                rows[1],
-            );
-        }
+        EntityTab::Users => draw_picker(frame, rows[1], &app.theme, &browser.users, "Users"),
         EntityTab::Org => draw_org(app, frame, rows[1]),
     }
 }

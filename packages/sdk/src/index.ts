@@ -13,6 +13,7 @@ import {
   type NewMcpServer,
   type NewMemoryCandidate,
   type NewProject,
+  type OrgMember,
   type Project,
   type ProjectRef,
   type ProjectUpdate,
@@ -36,6 +37,7 @@ export {
   type NewMcpServer,
   type NewMemoryCandidate,
   type NewProject,
+  type OrgMember,
   type Project,
   type ProjectRef,
   type ProjectUpdate,
@@ -107,6 +109,11 @@ export class Codel00pClient {
   /** `GET /me` — the authenticated caller and their active organization. */
   me(): Promise<Viewer> {
     return this.request<Viewer>("/me");
+  }
+
+  /** `GET /org/members` - the active organization's read-only roster. */
+  listOrgMembers(): Promise<OrgMember[]> {
+    return this.request<OrgMember[]>("/org/members");
   }
 
   /** `GET /projects` — projects owned by the caller's active organization. */
