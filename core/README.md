@@ -3,20 +3,30 @@
 `core/` is the Rust workspace for the codel00p engine.
 
 It contains the crates that should remain independent from any single user
-interface:
+interface. The 13 workspace members (see `core/Cargo.toml`):
 
-- `codel00p-protocol`: shared runtime, memory, provider, tool, and session
-  contracts.
-- `codel00p-storage`: backend-neutral storage primitives and local SQLite
-  backend.
-- `codel00p-memory`: candidate lifecycle, review audit, and deterministic
-  retrieval for durable project knowledge.
-- `codel00p-cli`: terminal review workflow for project memory.
-- `codel00p-providers`: inference provider profiles, policy, credentials, and
-  transports.
-- `codel00p-session`: durable session metadata and replay APIs.
-- `codel00p-harness`: agent runtime, memory-aware inference context, tool loop,
-  permissions, and lifecycle hooks.
+- `codel00p-protocol`: shared session, event, tool, provider, memory, and cloud
+  contracts (also the source for the TypeScript fixtures).
+- `codel00p-storage`: backend-neutral storage primitives (document, key-value,
+  append-log) with in-memory, SQLite, and Postgres backends.
+- `codel00p-session`: durable session metadata and append-only event/message
+  replay.
+- `codel00p-memory`: candidate lifecycle, review audit, deterministic
+  retrieval, quality scoring, and merge for durable project knowledge.
+- `codel00p-providers`: inference provider profiles, policy, credentials,
+  catalogs, and native streaming transports.
+- `codel00p-harness`: the agentic turn loop — tools, permissions, memory
+  injection, sub-agent delegation, skills, and lifecycle hooks.
+- `codel00p-mcp`: Model Context Protocol client and server integration.
+- `codel00p-cli`: the `codel00p` command-line interface and interactive TUI.
+- `codel00p-cloud`: the team control-plane HTTP API (Axum service, Clerk auth).
+- `codel00p-cron`: scheduling primitives — parse schedule specs and persist and
+  run cron jobs.
+- `codel00p-gateway`: the messaging gateway — one agent core reachable per
+  conversation (e.g. Slack).
+- `codel00p-skill`: skills — procedural memory codel00p can load and apply.
+- `codel00p-plugin`: in-process plugin registry for extending the harness and
+  provider registry.
 
 ## Commands
 

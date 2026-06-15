@@ -168,7 +168,7 @@ The control surfaces run as live services:
 
 ## Current implementation
 
-The first Rust modules have started:
+The Rust engine is 13 workspace crates (`core/crates/*`):
 
 - [codel00p-memory](core/crates/codel00p-memory): candidate creation, review
   lifecycle, audit history, and deterministic retrieval for approved project
@@ -192,7 +192,8 @@ The first Rust modules have started:
 - [codel00p-harness](core/crates/codel00p-harness): agent turn loop,
   workspace-safe read/edit/command/git tools, project instructions,
   permissions, compaction primitives, deterministic events, model-client
-  boundary, and provider adapter.
+  boundary, provider adapter, sub-agent delegation, and skill injection plus
+  the agent-proposed-skill learning loop.
 - [codel00p-protocol](core/crates/codel00p-protocol): shared data contracts for
   sessions, turns, events, tool calls, providers, projects, and memory entries.
 - [codel00p-storage](core/crates/codel00p-storage): backend-neutral storage
@@ -209,6 +210,18 @@ The first Rust modules have started:
 - [codel00p-mcp](core/crates/codel00p-mcp): MCP client/server runtime,
   stdio/HTTP transports, tools, resources, prompts, subscriptions, diagnostics,
   and harness event routing for external team tools.
+- [codel00p-cron](core/crates/codel00p-cron): scheduling primitives — parse
+  schedule specs, persist cron jobs, and run them on an interval (`codel00p cron`
+  incl. a `daemon`), including command jobs that feed the self-improvement loop.
+- [codel00p-gateway](core/crates/codel00p-gateway): the messaging gateway — one
+  agent core reachable per conversation, with Slack request signing/replay
+  protection and a file-backed one-shot approval store (`codel00p gateway`).
+- [codel00p-skill](core/crates/codel00p-skill): skills — procedural memory
+  (`SKILL.md`) codel00p can load, select, and apply, with a review-gated
+  curator and usage tracking (`codel00p skills`).
+- [codel00p-plugin](core/crates/codel00p-plugin): an in-process plugin registry
+  that extends the harness tool set and provider registry from config
+  (`codel00p plugins`).
 
 ## Current status
 

@@ -3,12 +3,13 @@
 This backlog is the working queue for the agentic loop. It is ordered by current
 leverage, not by final product importance.
 
-For the larger Hermes-parity capabilities not yet on this queue (plugins and
-hooks, skills, self-improvement loop, sub-agents, scheduling, messaging gateway,
-execution backends, programmatic tool calling, TUI), see the
-[Initiatives](initiatives/README.md) epics. As each initiative starts, break its
-next phase into dated slice plans under `superpowers/plans/` and add the active
-slice here.
+The larger Hermes-parity capabilities are tracked as phased epics under
+[Initiatives](initiatives/README.md). **Phase 1 of most has now shipped**
+(plugins & hooks, skills, self-improvement loop, sub-agent delegation,
+scheduling/cron, messaging gateway — the 2026-06-12 wave — plus the TUI); only
+execution backends and programmatic tool calling are unstarted. As each
+initiative's next phase begins, break it into dated slice plans under
+`superpowers/plans/` and surface the active slice here.
 
 ## Session marker (2026-06-15)
 
