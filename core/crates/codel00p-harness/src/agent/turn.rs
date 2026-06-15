@@ -443,11 +443,13 @@ impl AgentHarness {
                         }
                     };
 
-                    session_state.push_tool_result(
-                        tool_call.id(),
-                        tool_call.name(),
-                        result.content().to_string(),
-                    );
+                    // Cap the result shown to the model so verbose output cannot
+                    // flood the context window; the full output stays in the
+                    // executed-call record below and (when truncated) on disk.
+                    let recorded = self
+                        .tool_output_truncation
+                        .apply(tool_call.name(), &result.content().to_string());
+                    session_state.push_tool_result(tool_call.id(), tool_call.name(), recorded);
                     self.run_post_tool_hook(
                         TurnLifecycleContext::new(
                             session_state.session_id().clone(),

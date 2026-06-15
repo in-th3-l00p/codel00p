@@ -202,3 +202,53 @@ async fn denied_tool_call_is_recorded_without_executing_tool() {
         matches!(event, HarnessEvent::PermissionDenied { tool_name, .. } if tool_name == "counting")
     }));
 }
+
+#[tokio::test]
+async fn large_tool_result_is_truncated_in_the_model_context() {
+    let dir = tempdir().expect("tempdir");
+    let big = "A".repeat(5_000);
+    fs::write(dir.path().join("big.txt"), &big).expect("write big file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![ModelToolCall::new(
+                "call-1",
+                "read_file",
+                json!({ "path": "big.txt" }),
+            )],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "done"),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        .max_tool_result_bytes(256)
+        .max_iterations(4)
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-truncate"),
+            UserMessage::new("Read the big file."),
+        )
+        .await
+        .expect("run turn");
+
+    // What the model sees (the recorded session) is truncated; the full content
+    // is not in context.
+    let recorded = serde_json::to_string(outcome.session_state.messages()).expect("serialize");
+    assert!(recorded.contains("codel00p truncated"));
+    assert!(recorded.contains("full output at"));
+    assert!(!recorded.contains(&big));
+    assert!(recorded.len() < big.len());
+
+    // The executed-call record keeps the full, untruncated result.
+    assert_eq!(outcome.tool_calls.len(), 1);
+    let full = outcome.tool_calls[0].result.content()["content"]
+        .as_str()
+        .expect("content string");
+    assert_eq!(full, big);
+}
