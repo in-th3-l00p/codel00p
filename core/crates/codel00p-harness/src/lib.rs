@@ -60,7 +60,7 @@ pub use skills::{
 };
 pub use tool_registry::ToolRegistry;
 pub use tool_result::ToolResult;
-pub use tools::Tool;
+pub use tools::{Tool, ToolSpec};
 pub use turn::{
     ExecutedToolCall, HarnessInferenceRequest, HarnessInferenceResponse, ModelClient,
     ModelToolCall, TokenSink, TurnOutcome,

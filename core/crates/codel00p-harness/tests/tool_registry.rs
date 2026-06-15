@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use codel00p_harness::{HarnessError, Tool, ToolRegistry, ToolResult, Workspace};
+use codel00p_harness::{HarnessError, Tool, ToolRegistry, ToolResult, ToolSpec, Workspace};
 use serde_json::{Value, json};
 use tempfile::tempdir;
 
@@ -118,4 +118,37 @@ async fn unknown_tool_returns_controlled_error() {
         .expect_err("unknown tool should fail");
 
     assert!(matches!(error, HarnessError::ToolNotFound { name } if name == "missing"));
+}
+
+#[test]
+fn specs_expose_real_name_description_and_schema() {
+    let registry = ToolRegistry::new().with_tool(EchoTool);
+    let specs = registry.specs();
+
+    assert_eq!(
+        specs,
+        vec![ToolSpec::new(
+            "echo",
+            "Echoes the input payload.",
+            json!({
+                "type": "object",
+                "properties": { "value": { "type": "string" } }
+            }),
+        )]
+    );
+}
+
+#[test]
+fn default_tool_sets_carry_populated_schemas() {
+    let registry = ToolRegistry::read_only_defaults();
+    let read = registry
+        .specs()
+        .into_iter()
+        .find(|spec| spec.name == "read_file")
+        .expect("read_file registered");
+
+    // Not the old stub: read_file advertises its `path` parameter.
+    assert_ne!(read.input_schema, json!({ "type": "object" }));
+    assert!(read.input_schema["properties"]["path"].is_object());
+    assert!(!read.description.is_empty());
 }

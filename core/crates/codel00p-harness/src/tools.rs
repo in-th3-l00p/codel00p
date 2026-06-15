@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{errors::HarnessError, tool_result::ToolResult, workspace::Workspace};
@@ -8,6 +9,39 @@ use codel00p_protocol::PermissionScope;
 
 const MAX_LISTED_FILES: usize = 1_000;
 const MAX_SEARCH_MATCHES: usize = 200;
+
+/// A tool's model-facing definition: the name, description, and JSON Schema the
+/// model needs to call it. Produced from a [`Tool`] and sent to the provider, so
+/// the model sees real parameters instead of a stub.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ToolSpec {
+    pub name: String,
+    pub description: String,
+    pub input_schema: Value,
+}
+
+impl ToolSpec {
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        input_schema: Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            input_schema,
+        }
+    }
+
+    /// Builds a spec from a tool's trait methods.
+    pub fn from_tool(tool: &dyn Tool) -> Self {
+        Self {
+            name: tool.name().to_string(),
+            description: tool.description().to_string(),
+            input_schema: tool.input_schema(),
+        }
+    }
+}
 
 #[async_trait]
 pub trait Tool: Send + Sync {

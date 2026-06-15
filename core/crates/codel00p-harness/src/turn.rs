@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::HarnessError, events::HarnessEvent, instructions::ProjectInstructions,
     memory::ProjectMemoryContext, session::SessionState, skills::SkillContext,
-    tool_result::ToolResult,
+    tool_result::ToolResult, tools::ToolSpec,
 };
 
 #[async_trait]
@@ -39,7 +39,11 @@ pub trait ModelClient: Send + Sync {
 pub struct HarnessInferenceRequest {
     session_state: SessionState,
     workspace_root: Option<String>,
+    /// Tool names, kept in sync with `tools` so `tool_names()` stays a cheap
+    /// borrowed slice for events and callers that only need identifiers.
     tool_names: Vec<String>,
+    /// Full model-facing tool definitions (name, description, JSON Schema).
+    tools: Vec<ToolSpec>,
     context_window: Option<ContextWindowState>,
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
@@ -52,6 +56,7 @@ impl HarnessInferenceRequest {
             session_state,
             workspace_root: None,
             tool_names: Vec::new(),
+            tools: Vec::new(),
             context_window: None,
             project_instructions: None,
             project_memory: None,
@@ -62,10 +67,11 @@ impl HarnessInferenceRequest {
     pub fn with_runtime_context(
         mut self,
         workspace_root: impl Into<String>,
-        tool_names: Vec<String>,
+        tools: Vec<ToolSpec>,
     ) -> Self {
         self.workspace_root = Some(workspace_root.into());
-        self.tool_names = tool_names;
+        self.tool_names = tools.iter().map(|tool| tool.name.clone()).collect();
+        self.tools = tools;
         self
     }
 
@@ -99,6 +105,11 @@ impl HarnessInferenceRequest {
 
     pub fn tool_names(&self) -> &[String] {
         &self.tool_names
+    }
+
+    /// The full model-facing tool definitions advertised to the provider.
+    pub fn tools(&self) -> &[ToolSpec] {
+        &self.tools
     }
 
     pub fn context_window(&self) -> Option<&ContextWindowState> {
