@@ -21,6 +21,7 @@ pub mod tool_registry;
 pub mod tool_result;
 pub mod tools;
 pub mod turn;
+mod validation;
 pub mod web;
 pub mod workspace;
 
