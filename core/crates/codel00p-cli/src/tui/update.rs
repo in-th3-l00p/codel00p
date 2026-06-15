@@ -7,8 +7,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
-use super::overlay::{EntityBrowser, EntityTab, Overlay};
-use super::picker::{Picker, PickerOutcome};
+use super::overlay::{EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher};
+use super::picker::PickerOutcome;
 
 pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
     match msg {
@@ -86,6 +86,55 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             });
             Vec::new()
         }
+        Msg::Models(result) => {
+            // Drop the update if the user closed the picker before the fetch returned.
+            if let Overlay::Model(picker) = &mut app.overlay {
+                match result {
+                    Ok(models) if !models.is_empty() => picker.set_choices(models, None),
+                    // On error or an empty catalog, keep the static rows already shown
+                    // and note why, so any model id stays reachable via free-text.
+                    Ok(_) => picker.status = Some("No live models — showing catalog.".to_string()),
+                    Err(error) => {
+                        picker.status =
+                            Some(format!("Catalog unavailable ({error}) — showing catalog."));
+                    }
+                }
+            }
+            Vec::new()
+        }
+        Msg::SessionList(result) => {
+            if let Overlay::Sessions(switcher) = &mut app.overlay {
+                match result {
+                    Ok(sessions) if sessions.is_empty() => {
+                        switcher.set_sessions(
+                            Vec::new(),
+                            Some("No saved conversations yet.".to_string()),
+                        );
+                    }
+                    Ok(sessions) => switcher.set_sessions(sessions, None),
+                    Err(error) => switcher.status = Some(error),
+                }
+            }
+            Vec::new()
+        }
+        Msg::SessionResumed(result) => {
+            match result {
+                Ok((session_state, persisted)) => {
+                    app.session_state = *session_state;
+                    app.persisted_message_count = persisted;
+                    app.conversation = super::conversation::Conversation::default();
+                    app.turn = super::app::TurnStatus::default();
+                    app.refresh_usage();
+                    app.conversation.push_notice(format!(
+                        "Resumed conversation {} ({} message(s)).",
+                        app.session_label(),
+                        persisted
+                    ));
+                }
+                Err(error) => app.conversation.push_error(error),
+            }
+            Vec::new()
+        }
     }
 }
 
@@ -135,27 +184,66 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
                 None => Vec::new(),
             }
         }
-        Overlay::Model(mut picker) => match picker.on_key(key) {
-            PickerOutcome::Selected => {
-                if let Some(choice) = picker.selected_item() {
-                    app.options.provider = choice.provider.clone();
-                    app.options.model = choice.model.clone();
-                    app.conversation.push_notice(format!(
-                        "Model set to {} · {} (applies to the next turn).",
-                        choice.provider, choice.model
-                    ));
-                }
-                Vec::new()
+        Overlay::Model(mut picker) => {
+            // Enter with no highlighted row but a non-empty filter is a free-text
+            // model id, mirroring the CLI's unchecked `/model <id>`.
+            if key.code == KeyCode::Enter
+                && picker.selected_item().is_none()
+                && !picker.free_text().trim().is_empty()
+            {
+                let model = picker.free_text().trim().to_string();
+                apply_model(app, &app.options.provider.clone(), &model);
+                return Vec::new();
             }
+            match picker.on_key(key) {
+                PickerOutcome::Selected => {
+                    if let Some(choice) = picker.selected_item() {
+                        let (provider, model) = (choice.provider.clone(), choice.model.clone());
+                        apply_model(app, &provider, &model);
+                    }
+                    Vec::new()
+                }
+                PickerOutcome::Cancelled => Vec::new(),
+                PickerOutcome::Pending => {
+                    app.overlay = Overlay::Model(picker);
+                    Vec::new()
+                }
+            }
+        }
+        Overlay::Sessions(mut switcher) => match switcher.on_key(key) {
+            PickerOutcome::Selected => match switcher.selected_item() {
+                Some(session) => {
+                    let id = session.session_id.clone();
+                    match crate::config::parse_session_id(&id) {
+                        Ok(session_id) => vec![Effect::ResumeSession(session_id)],
+                        Err(error) => {
+                            app.conversation
+                                .push_error(format!("Cannot resume {id}: {error}"));
+                            Vec::new()
+                        }
+                    }
+                }
+                None => Vec::new(),
+            },
             PickerOutcome::Cancelled => Vec::new(),
             PickerOutcome::Pending => {
-                app.overlay = Overlay::Model(picker);
+                app.overlay = Overlay::Sessions(switcher);
                 Vec::new()
             }
         },
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
         Overlay::None => Vec::new(),
     }
+}
+
+/// Sets the provider/model for later turns and notes the change. Centralized so the
+/// catalog-row and free-text paths in the model picker stay consistent.
+fn apply_model(app: &mut App, provider: &str, model: &str) {
+    app.options.provider = provider.to_string();
+    app.options.model = model.to_string();
+    app.conversation.push_notice(format!(
+        "Model set to {provider} · {model} (applies to the next turn)."
+    ));
 }
 
 fn handle_entities_key(app: &mut App, mut browser: EntityBrowser, key: KeyEvent) -> Vec<Effect> {
@@ -260,6 +348,7 @@ fn handle_input_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         KeyCode::F(2) => open_model_picker(app),
         KeyCode::F(3) => open_entities(app, EntityTab::Projects),
         KeyCode::F(4) => open_entities(app, EntityTab::Org),
+        KeyCode::F(5) => open_sessions(app),
         KeyCode::Enter => {
             let line = app.input.trim().to_string();
             app.input.clear();
@@ -316,6 +405,7 @@ fn handle_slash(app: &mut App, command: &str) -> Vec<Effect> {
             app.overlay = Overlay::Help;
             Vec::new()
         }
+        "switch" => open_sessions(app),
         "sessions" => vec![Effect::Local(LocalQuery::Sessions)],
         "memory" => vec![Effect::Local(LocalQuery::Memory)],
         "history" => {
@@ -355,10 +445,22 @@ fn handle_slash(app: &mut App, command: &str) -> Vec<Effect> {
     }
 }
 
+/// Opens the model picker pre-populated with the static catalog (so it is usable
+/// instantly and offline) and kicks off a live `list_models` fetch that replaces the
+/// rows on success — falling back to the catalog on error or an empty result.
 fn open_model_picker(app: &mut App) -> Vec<Effect> {
     let choices = app.model_choices();
-    app.overlay = Overlay::Model(Picker::new(choices));
-    Vec::new()
+    let provider = app.options.provider.clone();
+    app.overlay = Overlay::Model(ModelPicker::new(
+        choices,
+        Some("Loading models…".to_string()),
+    ));
+    vec![Effect::FetchModels(provider)]
+}
+
+fn open_sessions(app: &mut App) -> Vec<Effect> {
+    app.overlay = Overlay::Sessions(SessionSwitcher::new());
+    vec![Effect::ListSessions]
 }
 
 fn open_entities(app: &mut App, tab: EntityTab) -> Vec<Effect> {
@@ -432,6 +534,7 @@ fn handle_turn_finished(
             let start = app.persisted_message_count;
             app.session_state = outcome.session_state.clone();
             app.persisted_message_count = outcome.session_state.messages().len();
+            app.refresh_usage();
             vec![Effect::Persist(outcome, start)]
         }
         Err(message) => {
@@ -640,5 +743,115 @@ mod tests {
             }
             _ => panic!("expected entity browser"),
         }
+    }
+
+    #[test]
+    fn f2_opens_model_picker_and_fetches_live_models() {
+        let mut app = test_app();
+        let effects = update(&mut app, key(KeyCode::F(2)));
+        assert!(matches!(app.overlay, Overlay::Model(_)));
+        // The static catalog is shown immediately and a live fetch is requested.
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::FetchModels(provider)] if provider == "anthropic"
+        ));
+    }
+
+    #[test]
+    fn models_message_replaces_picker_choices() {
+        use crate::tui::overlay::ModelChoice;
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(2)));
+        update(
+            &mut app,
+            Msg::Models(Ok(vec![ModelChoice {
+                provider: "anthropic".to_string(),
+                model: "live-model-1".to_string(),
+                note: Some("from catalog".to_string()),
+            }])),
+        );
+        match &app.overlay {
+            Overlay::Model(picker) => {
+                assert!(picker.status.is_none());
+                let choice = picker.selected_item().expect("a model row");
+                assert_eq!(choice.model, "live-model-1");
+            }
+            _ => panic!("expected model picker"),
+        }
+    }
+
+    #[test]
+    fn empty_models_result_falls_back_to_static_catalog() {
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(2)));
+        update(&mut app, Msg::Models(Ok(Vec::new())));
+        match &app.overlay {
+            Overlay::Model(picker) => {
+                // Catalog rows are retained and a fallback note is shown.
+                assert!(picker.selected_item().is_some());
+                assert!(picker.status.as_deref().unwrap_or("").contains("catalog"));
+            }
+            _ => panic!("expected model picker"),
+        }
+    }
+
+    #[test]
+    fn model_picker_free_text_sets_any_model_id() {
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(2)));
+        // Type an id no catalog row matches, then Enter.
+        type_str(&mut app, "zzz-custom-model");
+        update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::None));
+        assert_eq!(app.options.model, "zzz-custom-model");
+    }
+
+    #[test]
+    fn switch_opens_session_switcher_and_lists() {
+        let mut app = test_app();
+        type_str(&mut app, "/switch");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::Sessions(_)));
+        assert!(matches!(effects.as_slice(), [Effect::ListSessions]));
+    }
+
+    #[test]
+    fn session_list_populates_switcher_and_selecting_resumes() {
+        use crate::tui::overlay::SessionSummary;
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(5)));
+        update(
+            &mut app,
+            Msg::SessionList(Ok(vec![SessionSummary {
+                session_id: "chat-42".to_string(),
+                source: "cli".to_string(),
+                message_count: 3,
+            }])),
+        );
+        // Selecting the highlighted row fires a resume for that session id.
+        let effects = update(&mut app, key(KeyCode::Enter));
+        match effects.as_slice() {
+            [Effect::ResumeSession(id)] => assert_eq!(id.as_str(), "chat-42"),
+            other => panic!("expected ResumeSession, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn session_resumed_resets_conversation_and_usage() {
+        let mut app = test_app();
+        app.conversation.push_user("stale message");
+        app.persisted_message_count = 9;
+        let mut resumed = SessionState::new(SessionId::from_static("chat-42"));
+        resumed.push_assistant("prior answer");
+        update(&mut app, Msg::SessionResumed(Ok((Box::new(resumed), 1))));
+        assert_eq!(app.session_label(), "chat-42");
+        assert_eq!(app.persisted_message_count, 1);
+        assert_eq!(app.usage.messages, 1);
+        assert!(app.usage.estimated_tokens > 0);
+        // Conversation was reset to just the resume notice.
+        assert!(matches!(
+            app.conversation.blocks.as_slice(),
+            [ChatBlock::Notice(_)]
+        ));
     }
 }

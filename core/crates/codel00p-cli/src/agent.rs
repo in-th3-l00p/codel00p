@@ -66,8 +66,8 @@ mod tooling;
 mod turn;
 
 pub(crate) use chat::{
-    chat_history_listing, chat_memory_listing, chat_sessions_listing, fresh_chat_session_id,
-    load_chat_session_state,
+    chat_history_listing, chat_memory_listing, chat_session_summaries, chat_sessions_listing,
+    fresh_chat_session_id, load_chat_session_state,
 };
 pub use command::run;
 pub(crate) use command::{run_gateway_message, run_scheduled_job};

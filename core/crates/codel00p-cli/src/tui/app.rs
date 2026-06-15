@@ -20,6 +20,18 @@ pub(crate) struct TurnStatus {
     pub(crate) finish_reason: Option<String>,
 }
 
+/// Cumulative token usage for the current session, surfaced in the status bar.
+///
+/// The harness does not propagate provider `Usage` counters through `TurnOutcome`
+/// or its event stream, so this is a content-length estimate (~4 chars / token)
+/// recomputed from the session transcript after each turn. It is labeled as an
+/// approximation in the status bar; it tracks growth, not exact billing.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SessionUsage {
+    pub(crate) estimated_tokens: u64,
+    pub(crate) messages: usize,
+}
+
 /// Read-only cloud context shown in the Org tab and status bar.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CloudState {
@@ -40,6 +52,7 @@ pub(crate) struct App {
     pub(crate) overlay: Overlay,
     pub(crate) pending_permission: Option<oneshot::Sender<codel00p_harness::PermissionDecision>>,
     pub(crate) turn: TurnStatus,
+    pub(crate) usage: SessionUsage,
     pub(crate) cloud: CloudState,
     pub(crate) theme: Theme,
     pub(crate) should_quit: bool,
@@ -69,6 +82,7 @@ impl App {
             overlay: Overlay::None,
             pending_permission: None,
             turn: TurnStatus::default(),
+            usage: SessionUsage::default(),
             cloud: CloudState {
                 configured: cloud_configured,
                 ..CloudState::default()
@@ -82,6 +96,19 @@ impl App {
 
     pub(crate) fn session_label(&self) -> String {
         self.session_state.session_id().as_str().to_string()
+    }
+
+    /// Recomputes the cumulative usage estimate from the current session transcript.
+    /// Called after each turn finishes and after a session resume, so the status-bar
+    /// meter reflects the live conversation. ~4 characters per token is the usual
+    /// rough rule of thumb; see [`SessionUsage`] for why this is an estimate.
+    pub(crate) fn refresh_usage(&mut self) {
+        let messages = self.session_state.messages();
+        let chars: usize = messages.iter().map(|message| message.content().len()).sum();
+        self.usage = SessionUsage {
+            estimated_tokens: (chars as u64).div_ceil(4),
+            messages: messages.len(),
+        };
     }
 
     /// Builds the model picker choices: the active model first (marked current),

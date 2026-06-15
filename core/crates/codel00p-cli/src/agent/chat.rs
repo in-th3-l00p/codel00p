@@ -303,6 +303,46 @@ pub(crate) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
     Ok(output)
 }
 
+/// A prior conversation summarized for the TUI session switcher: its id, the source
+/// that created it (`cli`, `gateway`, …), and the number of messages in it. Mirrors
+/// [`chat_sessions_listing`] but returns structured rows instead of a text blob.
+pub(crate) struct ChatSessionSummary {
+    pub(crate) session_id: String,
+    pub(crate) source: String,
+    pub(crate) message_count: usize,
+}
+
+/// Lists prior conversations, most-recent first, for the TUI session switcher.
+pub(crate) fn chat_session_summaries(config: &CliConfig) -> CliResult<Vec<ChatSessionSummary>> {
+    let store = open_session_store(config)?;
+    let mut sessions = store.list_sessions().map_err(|error| error.to_string())?;
+    // Newest first: undated sessions sort oldest, ties broken by id (see
+    // `latest_session_id`), so the ordering is deterministic.
+    sessions.sort_by(|left, right| {
+        right
+            .created_at()
+            .unwrap_or(0)
+            .cmp(&left.created_at().unwrap_or(0))
+            .then_with(|| left.session_id().as_str().cmp(right.session_id().as_str()))
+    });
+
+    let mut summaries = Vec::with_capacity(sessions.len());
+    for metadata in sessions {
+        let message_count = store
+            .replay(metadata.session_id())
+            .map_err(|error| error.to_string())?
+            .iter()
+            .filter(|record| matches!(record.record(), SessionRecord::Message(_)))
+            .count();
+        summaries.push(ChatSessionSummary {
+            session_id: metadata.session_id().as_str().to_string(),
+            source: metadata.source().to_string(),
+            message_count,
+        });
+    }
+    Ok(summaries)
+}
+
 pub(crate) fn chat_history_listing(session_state: &codel00p_harness::SessionState) -> String {
     let messages = session_state.messages();
     if messages.is_empty() {

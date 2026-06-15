@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs, W
 
 use super::app::App;
 use super::conversation::{Block as ChatBlock, ToolState};
-use super::overlay::{EntityBrowser, EntityTab, Overlay};
+use super::overlay::{EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher};
 use super::picker::{Picker, PickerItem};
 use super::theme::Theme;
 
@@ -35,11 +35,8 @@ pub(crate) fn render(app: &App, frame: &mut Frame) {
         Overlay::None => {}
         Overlay::Help => draw_help(app, frame),
         Overlay::Permission(request) => draw_permission(app, frame, request),
-        Overlay::Model(picker) => {
-            let area = centered_rect(60, 60, frame.area());
-            frame.render_widget(Clear, area);
-            draw_picker(frame, area, &app.theme, picker, "Switch model");
-        }
+        Overlay::Model(picker) => draw_model_picker(app, frame, picker),
+        Overlay::Sessions(switcher) => draw_sessions(app, frame, switcher),
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
     }
 }
@@ -172,10 +169,36 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
             Style::default().fg(theme.accent),
         ),
         Span::styled(format!("  {turn}"), Style::default().fg(theme.tool)),
+        Span::styled(format!("   {}", usage_label(app)), theme.muted()),
         Span::styled(format!("   org: {org}"), theme.muted()),
-        Span::styled("    F2 model · F3 entities · F4 org · /help", theme.muted()),
+        Span::styled(
+            "    F2 model · F3 entities · F5 sessions · /help",
+            theme.muted(),
+        ),
     ]);
     frame.render_widget(Paragraph::new(line), area);
+}
+
+/// The status-bar usage meter: message count and an estimated-token total for the
+/// current conversation. The token figure is an approximation (see
+/// [`super::app::SessionUsage`]), so it is rendered with a leading `~`.
+fn usage_label(app: &App) -> String {
+    let usage = &app.usage;
+    format!(
+        "{} msg · ~{} tok",
+        usage.messages,
+        format_count(usage.estimated_tokens)
+    )
+}
+
+/// Formats a token count compactly: `1234` stays as-is, larger values use a `k`
+/// suffix (e.g. `12.3k`) so the meter fits the status bar.
+fn format_count(tokens: u64) -> String {
+    if tokens < 10_000 {
+        tokens.to_string()
+    } else {
+        format!("{:.1}k", tokens as f64 / 1000.0)
+    }
 }
 
 fn draw_help(app: &App, frame: &mut Frame) {
@@ -189,6 +212,7 @@ fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  F2  /model   switch model"),
         Line::from("  F3  /entities browse projects · agents · MCP · memory"),
         Line::from("  F4  /org      organization (read-only)"),
+        Line::from("  F5  /switch   resume a prior conversation"),
         Line::from("  /agents      jump to the agents tab"),
         Line::from("  /sessions /memory /history /tools /reset"),
         Line::from("  Esc          close overlay · clear input · quit"),
@@ -314,6 +338,68 @@ fn draw_org(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), area);
 }
 
+/// Draws the model picker: a `list_models` status line (loading / fell back to the
+/// catalog) above the filterable model list. Selecting a row, or Enter on a typed id
+/// the filter doesn't match, switches the model for the next turn.
+fn draw_model_picker(app: &App, frame: &mut Frame, picker: &ModelPicker) {
+    let area = centered_rect(60, 60, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" switch model ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+
+    let status = picker
+        .status
+        .clone()
+        .unwrap_or_else(|| "Enter to use · type any model id · Esc to close".to_string());
+    frame.render_widget(
+        Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
+        rows[0],
+    );
+    draw_picker(frame, rows[1], &app.theme, &picker.picker, "Models");
+}
+
+/// Draws the session switcher: a status line above the list of prior conversations.
+fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
+    let area = centered_rect(64, 60, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" switch session ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+
+    let status = switcher
+        .status
+        .clone()
+        .unwrap_or_else(|| "Enter to resume · Esc to close".to_string());
+    frame.render_widget(
+        Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
+        rows[0],
+    );
+    draw_picker(
+        frame,
+        rows[1],
+        &app.theme,
+        &switcher.sessions,
+        "Prior conversations",
+    );
+}
+
 fn draw_picker<T: PickerItem>(
     frame: &mut Frame,
     area: Rect,
@@ -436,5 +522,47 @@ mod tests {
         let rendered = render_to_string(&app, 80, 24);
         assert!(rendered.contains("help"));
         assert!(rendered.contains("switch model"));
+    }
+
+    #[test]
+    fn status_bar_renders_usage_meter() {
+        let mut app = test_app();
+        app.usage = crate::tui::app::SessionUsage {
+            estimated_tokens: 1234,
+            messages: 5,
+        };
+        let rendered = render_to_string(&app, 120, 12);
+        assert!(rendered.contains("5 msg"));
+        assert!(rendered.contains("~1234 tok"));
+    }
+
+    #[test]
+    fn usage_meter_abbreviates_large_token_counts() {
+        let mut app = test_app();
+        app.usage = crate::tui::app::SessionUsage {
+            estimated_tokens: 12_345,
+            messages: 40,
+        };
+        let rendered = render_to_string(&app, 120, 12);
+        assert!(rendered.contains("~12.3k tok"));
+    }
+
+    #[test]
+    fn renders_session_switcher_overlay() {
+        use crate::tui::overlay::{SessionSummary, SessionSwitcher};
+        let mut switcher = SessionSwitcher::new();
+        switcher.set_sessions(
+            vec![SessionSummary {
+                session_id: "chat-99".to_string(),
+                source: "cli".to_string(),
+                message_count: 2,
+            }],
+            None,
+        );
+        let mut app = test_app();
+        app.overlay = Overlay::Sessions(switcher);
+        let rendered = render_to_string(&app, 80, 20);
+        assert!(rendered.contains("switch session"));
+        assert!(rendered.contains("chat-99"));
     }
 }

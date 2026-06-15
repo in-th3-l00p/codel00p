@@ -23,6 +23,7 @@ use crate::config::{CliConfig, CliResult};
 use super::app::App;
 use super::cloud_data;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
+use super::overlay::{ModelChoice, SessionSummary};
 use super::update::update;
 use super::view;
 
@@ -121,6 +122,11 @@ fn execute_effect(app: &mut App, effect: Effect, tx: &UnboundedSender<Msg>) {
         }
         Effect::Cloud(fetch) => spawn_cloud(fetch, tx.clone()),
         Effect::Local(query) => spawn_local(app.config.clone(), query, tx.clone()),
+        Effect::FetchModels(provider) => spawn_models(provider, tx.clone()),
+        Effect::ListSessions => spawn_session_list(app.config.clone(), tx.clone()),
+        Effect::ResumeSession(session_id) => {
+            spawn_resume_session(app.config.clone(), session_id, tx.clone())
+        }
     }
 }
 
@@ -192,6 +198,67 @@ fn spawn_local(config: CliConfig, query: LocalQuery, tx: UnboundedSender<Msg>) {
             Err(error) => error,
         };
         let _ = tx.send(Msg::Notice(notice));
+    });
+}
+
+/// Fetches the provider's live model catalog off the UI task and feeds it back as a
+/// `Msg::Models`. `list_provider_models` is async (it makes an HTTP request), so it
+/// runs directly on a Tokio task rather than `spawn_blocking`.
+fn spawn_models(provider: String, tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        let result = crate::providers::list_provider_models(&provider)
+            .await
+            .map(|models| {
+                models
+                    .into_iter()
+                    .map(|model| ModelChoice {
+                        provider: model.provider,
+                        model: model.model,
+                        note: model.note,
+                    })
+                    .collect::<Vec<_>>()
+            });
+        let _ = tx.send(Msg::Models(result));
+    });
+}
+
+/// Lists prior sessions for the switcher overlay (a blocking session-store read run
+/// on `spawn_blocking`, like the cloud fetches).
+fn spawn_session_list(config: CliConfig, tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            crate::agent::chat_session_summaries(&config).map(|summaries| {
+                summaries
+                    .into_iter()
+                    .map(|summary| SessionSummary {
+                        session_id: summary.session_id,
+                        source: summary.source,
+                        message_count: summary.message_count,
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()));
+        let _ = tx.send(Msg::SessionList(result));
+    });
+}
+
+/// Replays a prior session so it can be resumed in place, returning the rebuilt
+/// `SessionState` plus its persisted message count over `Msg::SessionResumed`.
+fn spawn_resume_session(
+    config: CliConfig,
+    session_id: codel00p_harness::SessionId,
+    tx: UnboundedSender<Msg>,
+) {
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            crate::agent::load_chat_session_state(&config, session_id)
+                .map(|(state, persisted)| (Box::new(state), persisted))
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()));
+        let _ = tx.send(Msg::SessionResumed(result));
     });
 }
 
