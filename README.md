@@ -98,6 +98,22 @@ cd codel00p/core
 cargo build --release --bin codel00p
 ```
 
+## Uninstall
+
+The CLI removes itself. It shows what will be deleted and asks for confirmation
+first:
+
+```bash
+codel00p uninstall
+```
+
+By default it deletes the binary and keeps your data. Use `--purge` to also
+remove `~/.codel00p` (config, credentials, saved sessions, and memory), and
+`--yes` to skip the prompt (required in non-interactive shells). If you added the
+install directory to your shell `PATH`, remove that line too. On Windows the
+running binary cannot delete itself, so the command prints its path for manual
+removal.
+
 ## Repository layout
 
 ```text

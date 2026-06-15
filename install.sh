@@ -74,3 +74,6 @@ case ":$PATH:" in
     echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
     ;;
 esac
+
+echo
+echo "To remove codel00p later, run: codel00p uninstall"

@@ -14,6 +14,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "session" => Some(SESSION_HELP),
             "cloud" => Some(CLOUD_HELP),
             "update" => Some(UPDATE_HELP),
+            "uninstall" => Some(UNINSTALL_HELP),
             _ => None,
         },
         [command, subcommand, flag] if is_help(flag) => {
@@ -69,6 +70,7 @@ Commands
   gateway    Reach the agent from chat platforms
   mcp        Expose codel00p as an MCP server
   update     Check for and install a newer codel00p
+  uninstall  Remove codel00p from this machine
   version    Print the installed version
 
 Options
@@ -95,6 +97,23 @@ Options:
 
 Environment:
   CODEL00P_DISABLE_UPDATE_CHECK   set to any value to silence background checks
+";
+
+const UNINSTALL_HELP: &str = "\
+Usage: codel00p uninstall [options]
+
+Removes codel00p from this machine. By default it deletes the installed binary
+and keeps your data so a reinstall picks up where you left off. It shows what
+will be removed and asks for confirmation first.
+
+Options:
+  --purge            Also delete ~/.codel00p (config, credentials, sessions, memory)
+  --yes, -y          Skip the confirmation prompt (required in non-interactive shells)
+
+Notes:
+  • On Windows the running binary cannot delete itself; the path is printed for
+    manual removal.
+  • If you added the install directory to your shell PATH, remove that line too.
 ";
 
 const AUTH_HELP: &str = "\
