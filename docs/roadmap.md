@@ -73,6 +73,11 @@ Recently shipped:
   editable composer with a real cursor (←/→, Home/End, Delete, Alt+Enter newline)
   that wraps and grows instead of overflowing; and a redesigned, role-labeled
   transcript (colored accent bars + `You`/`codel00p` headers).
+- **Hermes-inspired chat polish**: assistant messages render **Markdown** (fenced
+  code blocks, headings, lists, blockquotes, inline bold/italic/code); the status
+  spinner cycles thinking/tool **verbs** (`pondering` → `reading`…); the empty
+  composer shows rotating placeholder hints and the empty transcript a welcome
+  banner — modeled on the Hermes `ui-tui` chat.
 
 Next:
 

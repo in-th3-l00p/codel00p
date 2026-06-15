@@ -38,6 +38,8 @@ pub(crate) struct TurnStatus {
     pub(crate) current_tool: Option<String>,
     pub(crate) iterations: u32,
     pub(crate) finish_reason: Option<String>,
+    /// The `App::tick` value when the turn started, for the long-run charm.
+    pub(crate) started_tick: u64,
 }
 
 /// Cumulative token usage for the current session, surfaced in the status bar.

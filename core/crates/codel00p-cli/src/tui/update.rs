@@ -493,6 +493,7 @@ fn submit_turn(app: &mut App, prompt: String) -> Vec<Effect> {
     app.scroll = super::app::ScrollState::default();
     app.turn = super::app::TurnStatus {
         running: true,
+        started_tick: app.tick,
         ..Default::default()
     };
     vec![Effect::SubmitTurn(prompt)]

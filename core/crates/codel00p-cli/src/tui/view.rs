@@ -85,10 +85,7 @@ fn draw_conversation(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.extend(block_lines(block, &theme, content_width));
     }
     if lines.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "Type a message and press Enter. F1 for help.",
-            theme.muted(),
-        )));
+        lines.extend(welcome_lines(&theme, content_width));
     }
 
     // The renderer is the source of truth for scroll: clamp the stored offset to the
@@ -127,11 +124,45 @@ fn draw_conversation(app: &mut App, frame: &mut Frame, area: Rect) {
 fn block_lines(block: &ChatBlock, theme: &Theme, width: usize) -> Vec<Line<'static>> {
     match block {
         ChatBlock::User(text) => role_block(theme.user, "You", text, width),
-        ChatBlock::Assistant(text) => role_block(theme.assistant, "codel00p", text, width),
+        ChatBlock::Assistant(text) => assistant_block(theme, text, width),
         ChatBlock::Notice(text) => note_block(theme.notice, "·", text, width),
         ChatBlock::Error(text) => note_block(theme.error, "!", text, width),
         ChatBlock::Tool { name, state } => tool_lines(theme, name, state),
     }
+}
+
+/// The assistant message: a bold role header, then the body rendered as Markdown
+/// (code blocks, lists, headings, inline styles), then a spacer.
+fn assistant_block(theme: &Theme, text: &str, width: usize) -> Vec<Line<'static>> {
+    let header = Style::default().fg(theme.assistant);
+    let mut out = vec![Line::from(vec![
+        Span::styled(format!("{BAR} "), header),
+        Span::styled("codel00p", header.add_modifier(Modifier::BOLD)),
+    ])];
+    out.extend(super::markdown::render_markdown(
+        text,
+        theme,
+        width.saturating_sub(2).max(1),
+    ));
+    out.push(Line::from(""));
+    out
+}
+
+/// The empty-transcript welcome: a compact brand line and a tagline.
+fn welcome_lines(theme: &Theme, _width: usize) -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(Span::styled("  ⌁ codel00p", theme.accent())),
+        Line::from(Span::styled(
+            "  your terminal coding agent — project memory that grows as you work",
+            theme.muted(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Type a message and press Enter · F1 for keys · /help for commands",
+            theme.muted(),
+        )),
+    ]
 }
 
 /// A user/assistant message: a bold role label, then the wrapped body under a
@@ -272,15 +303,27 @@ fn composer_rows(text: &str, cursor: usize, width: usize) -> usize {
 fn draw_input(app: &App, frame: &mut Frame, area: Rect) {
     let theme = &app.theme;
     let inner_w = area.width.saturating_sub(2).max(1) as usize;
-    let lines: Vec<Line> = char_wrap_lines(app.composer.text(), inner_w)
-        .into_iter()
-        .map(Line::from)
-        .collect();
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.accent))
         .title(" message · Enter ↵ send · Alt+Enter newline · F1 help ");
     let inner = block.inner(area);
+
+    // Show a rotating placeholder while the composer is empty.
+    if app.composer.is_empty() && !app.overlay.is_open() {
+        let hint = super::flavor::placeholder(&app.session_label());
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(hint, theme.muted()))).block(block),
+            area,
+        );
+        frame.set_cursor_position(Position::new(inner.x, inner.y));
+        return;
+    }
+
+    let lines: Vec<Line> = char_wrap_lines(app.composer.text(), inner_w)
+        .into_iter()
+        .map(Line::from)
+        .collect();
 
     // Keep the cursor row visible when the input is taller than the (capped) box.
     let (cursor_row, cursor_col) =
@@ -302,9 +345,14 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
     let theme = &app.theme;
     let turn = if app.turn.running {
         let glyph = SPINNER[(app.tick as usize) % SPINNER.len()];
-        match &app.turn.current_tool {
-            Some(tool) => format!("{glyph} {tool}"),
-            None => format!("{glyph} thinking"),
+        let verb = match &app.turn.current_tool {
+            Some(tool) => super::flavor::tool_verb(tool).to_string(),
+            None => super::flavor::thinking_verb(app.tick).to_string(),
+        };
+        let elapsed = app.tick.saturating_sub(app.turn.started_tick);
+        match super::flavor::charm(app.tick, elapsed) {
+            Some(charm) => format!("{glyph} {verb}… {charm}"),
+            None => format!("{glyph} {verb}…"),
         }
     } else {
         "idle".to_string()
@@ -738,6 +786,25 @@ mod tests {
         app.composer.set_text("WRAPME ".repeat(30));
         let rendered = render_to_string(&mut app, 30, 16);
         assert!(rendered.contains("WRAPME"));
+    }
+
+    #[test]
+    fn assistant_messages_render_markdown() {
+        let mut app = test_app();
+        app.conversation
+            .finalize_assistant("Here you go:\n\n- first\n- second");
+        let rendered = render_to_string(&mut app, 60, 20);
+        // The markdown bullet glyph appears (assistant body is rendered as markdown).
+        assert!(rendered.contains("• first"));
+        assert!(rendered.contains("• second"));
+    }
+
+    #[test]
+    fn empty_transcript_shows_the_welcome_banner() {
+        let mut app = test_app();
+        let rendered = render_to_string(&mut app, 80, 20);
+        assert!(rendered.contains("codel00p"));
+        assert!(rendered.contains("terminal coding agent"));
     }
 
     #[test]

@@ -14,6 +14,8 @@ pub(crate) mod cloud_data;
 pub(crate) mod composer;
 pub(crate) mod conversation;
 pub(crate) mod event_loop;
+pub(crate) mod flavor;
+pub(crate) mod markdown;
 pub(crate) mod msg;
 pub(crate) mod overlay;
 pub(crate) mod picker;
