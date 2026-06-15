@@ -268,6 +268,8 @@ pub(crate) struct ChatCompletionsRequest {
     max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<ChatCompletionsTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -288,6 +290,15 @@ impl ChatCompletionsRequest {
             OutputTokenParameter::MaxTokens => (request.max_output_tokens, None),
             OutputTokenParameter::MaxCompletionTokens => (None, request.max_output_tokens),
         };
+        // tool_choice is only meaningful when tools are advertised.
+        let tool_choice = (!request.tools.is_empty())
+            .then(|| {
+                request
+                    .tool_choice
+                    .as_ref()
+                    .map(|choice| choice.openai_value())
+            })
+            .flatten();
         Self {
             model: Some(request.model),
             messages: request
@@ -303,6 +314,7 @@ impl ChatCompletionsRequest {
                 .into_iter()
                 .map(ChatCompletionsTool::from)
                 .collect(),
+            tool_choice,
             stream: false,
             stream_options: None,
         }

@@ -131,6 +131,8 @@ struct AnthropicMessagesRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<AnthropicTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     stream: bool,
 }
@@ -158,6 +160,14 @@ impl AnthropicMessagesRequest {
             }
         }
 
+        let tool_choice = (!request.tools.is_empty())
+            .then(|| {
+                request
+                    .tool_choice
+                    .as_ref()
+                    .map(|choice| choice.anthropic_value())
+            })
+            .flatten();
         Ok(Self {
             model: request.model,
             max_tokens: request.max_output_tokens.unwrap_or(DEFAULT_MAX_TOKENS),
@@ -165,6 +175,7 @@ impl AnthropicMessagesRequest {
             system: join_system_messages(system_messages),
             temperature: request.temperature,
             tools: request.tools.into_iter().map(AnthropicTool::from).collect(),
+            tool_choice,
             stream: false,
         })
     }

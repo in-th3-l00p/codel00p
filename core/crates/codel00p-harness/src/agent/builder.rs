@@ -26,6 +26,7 @@ pub struct AgentHarnessBuilder {
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
     max_tool_result_bytes: Option<usize>,
+    tool_choice: Option<ToolChoice>,
     cancel: Option<CancelSignal>,
 }
 
@@ -148,6 +149,13 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Controls whether/which tool the model must call each turn. Without this the
+    /// provider default (auto) applies.
+    pub fn tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+        self.tool_choice = Some(tool_choice);
+        self
+    }
+
     /// Wires a cancellation signal the run loop polls at turn boundaries, so a
     /// caller (e.g. a Ctrl-C handler) can stop a turn and keep partial progress.
     pub fn cancel_signal(mut self, cancel: CancelSignal) -> Self {
@@ -195,6 +203,7 @@ impl AgentHarnessBuilder {
                 Some(bytes) => ToolOutputTruncation::new(bytes),
                 None => ToolOutputTruncation::new(16 * 1024),
             },
+            tool_choice: self.tool_choice,
             cancel: self.cancel.unwrap_or_default(),
         })
     }

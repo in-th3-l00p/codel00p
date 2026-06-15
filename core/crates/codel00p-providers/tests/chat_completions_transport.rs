@@ -1,6 +1,6 @@
 use codel00p_providers::{
     ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ToolCall,
-    default_registry,
+    ToolChoice, ToolDefinition, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
@@ -75,6 +75,48 @@ async fn chat_completions_posts_openai_compatible_payload_and_normalizes_respons
     assert_eq!(usage.output_tokens, 3);
     assert_eq!(usage.cache_read_tokens, 4);
     assert_eq!(usage.reasoning_tokens, 2);
+}
+
+#[tokio::test]
+async fn chat_completions_serializes_tool_choice() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .body_includes(r#""tool_choice":"required""#)
+                .body_includes(r#""name":"echo""#);
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": { "role": "assistant", "content": "ok" }
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .build();
+
+    client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("hi"))
+                .tool(ToolDefinition::function(
+                    "echo",
+                    "Echo the input.",
+                    json!({ "type": "object" }),
+                ))
+                .tool_choice(ToolChoice::Required)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
 }
 
 #[tokio::test]

@@ -136,6 +136,8 @@ struct GeminiRequest {
     generation_config: Option<GeminiGenerationConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<GeminiTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_config: Option<serde_json::Value>,
 }
 
 impl GeminiRequest {
@@ -173,6 +175,14 @@ impl GeminiRequest {
             }
         }
 
+        let tool_config = (!request.tools.is_empty())
+            .then(|| {
+                request
+                    .tool_choice
+                    .as_ref()
+                    .map(|choice| choice.gemini_config())
+            })
+            .flatten();
         Ok(Self {
             contents,
             system_instruction: GeminiSystemInstruction::from_parts(system_parts),
@@ -181,6 +191,7 @@ impl GeminiRequest {
                 request.max_output_tokens,
             ),
             tools: GeminiTool::from_tools(request.tools),
+            tool_config,
         })
     }
 }

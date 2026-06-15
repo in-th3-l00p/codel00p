@@ -68,7 +68,7 @@ pub use profile::{ApiMode, AuthType, OutputTokenParameter, ProviderCapabilities,
 pub use registry::{ProviderRegistry, default_registry};
 pub use request::{
     ChatMessage, InferenceFallbackRoute, InferenceRequest, InferenceRequestBuilder, MessageRole,
-    ToolDefinition,
+    ToolChoice, ToolDefinition,
 };
 pub use response::{InferenceResponse, ToolCall, Usage, UsageCostEstimate, UsagePricing};
 pub use runtime::{
