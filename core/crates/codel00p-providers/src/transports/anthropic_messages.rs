@@ -51,11 +51,14 @@ impl AnthropicMessagesTransport {
 
         let status = response.status();
         if !status.is_success() {
+            let retry_after = super::retry_after_seconds(response.headers());
             let body = response.text().await.unwrap_or_default();
-            return Err(ProviderError::Http {
-                provider: provider.to_string(),
-                message: format!("status {status}: {body}"),
-            });
+            return Err(super::http_status_error(
+                provider,
+                status,
+                &body,
+                retry_after,
+            ));
         }
 
         let wire_response =

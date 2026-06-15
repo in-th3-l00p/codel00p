@@ -38,7 +38,8 @@ Build:
 - route audit metadata; started with safe `ResolvedInferenceRoute` fields for
   auth type, base URL source, policy decision, model catalog URL, and provider
   capabilities, plus credential source/kind/source-kind labels and route policy
-  snapshots;
+  snapshots, and a provider `Retry-After` hint captured from rate-limit/overload
+  responses and surfaced as `retry_after_secs` in failed route-attempt metadata;
 - model catalog listing with normalized model descriptors and safe credential
   source/kind/source-kind, auth type, and catalog URL source metadata;
 - fallback routing for retryable failures with ordered route-attempt metadata;

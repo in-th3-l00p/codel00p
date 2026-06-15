@@ -78,5 +78,8 @@ pub(super) fn failed_attempt(
     };
     attempt["outcome"] = Value::String(outcome.to_string());
     attempt["error_kind"] = Value::String(format!("{:?}", classified.kind()));
+    if let Some(secs) = classified.retry_after_secs() {
+        attempt["retry_after_secs"] = json!(secs);
+    }
     attempt
 }
