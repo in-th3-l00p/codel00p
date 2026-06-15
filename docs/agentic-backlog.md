@@ -52,18 +52,19 @@ parameter schemas — `provider_adapter.rs` sends every tool as
 reliability below every mature agent. The floor must be fixed before the
 [programmatic `execute_code` capstone](initiatives/programmatic-tool-calling.md).
 
-Build (Phase 1 — floor; each an independent, offline-testable slice):
+**Phase 1 (floor) — SHIPPED 2026-06-15**, all green on `main`:
 
-- serialize real tool schemas + descriptions to providers (the #1 fix; slice
-  `2026-06-15-tool-schema-serialization.md`);
-- validate tool arguments against the schema before dispatch, returning a
-  structured, self-correctable error to the model;
-- tool-result truncation with persist-to-disk + preview to protect context;
-- `tool_choice` control (auto / required / specific / none) through the provider
-  contract.
+- ~~serialize real tool schemas + descriptions to providers~~ (PR #13);
+- ~~validate tool arguments against the schema before dispatch~~ (PR #14);
+- ~~tool-result truncation with persist-to-disk + preview~~ (PR #15);
+- ~~`tool_choice` control (auto / required / specific / none) across every
+  transport~~ (PR #16).
 
-Phase 2 (surface/orchestration) and Phase 3 (SOTA: programmatic tool calling,
-JSON mode, streaming args) are tracked in the initiative.
+**Next: Phase 2 (surface/orchestration)** — MCP tool search / progressive
+disclosure, a default sub-agent spawner so `delegate_task` works out of the box,
+and a repo-map / semantic code-search tool. Phase 3 (SOTA: programmatic
+`execute_code`, JSON mode, streaming args) follows. See the
+[initiative](initiatives/tool-calling-parity.md).
 
 ### 2. Provider Route Intelligence
 

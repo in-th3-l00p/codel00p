@@ -80,21 +80,20 @@ broader matrix; this initiative tracks the tool-calling slice of it.
 
 ## Scope (phased, by leverage)
 
-### Phase 1 — Floor: schema, validation, result hygiene
-- [ ] **Serialize real tool schemas + descriptions to providers.** Thread
-      `Tool::input_schema()` and `Tool::description()` (and concurrency hints)
-      from the registry through `HarnessInferenceRequest` into
-      `ToolDefinition`, replacing the `{"type":"object"}` stub. *The #1 fix.*
-      (slice: `2026-06-15-tool-schema-serialization.md`)
-- [ ] **Validate tool arguments against the schema before dispatch**, returning a
-      structured, model-readable error (missing/extra/typed fields) so the model
-      self-corrects — Hermes-style — instead of an opaque `execute()` failure.
-- [ ] **Tool-result truncation with persist-to-disk + preview.** A configurable
-      cap (per tool / global) that, on overflow, writes the full result to a
-      session file and returns a head/tail preview plus a pointer, protecting the
-      context window.
-- [ ] **`tool_choice` control** (auto / required-any / specific / none) threaded
-      through the provider contract and per transport.
+### Phase 1 — Floor: schema, validation, result hygiene — **SHIPPED 2026-06-15**
+- [x] **Serialize real tool schemas + descriptions to providers** — `ToolSpec` +
+      `ToolRegistry::specs()` threaded through `HarnessInferenceRequest` into
+      `ToolDefinition`, replacing the `{"type":"object"}` stub (PR #13).
+- [x] **Validate tool arguments against the schema before dispatch** — a lenient
+      JSON Schema subset in `validation.rs`; malformed calls return a structured
+      `InvalidToolInput` the model self-corrects from (PR #14).
+- [x] **Tool-result truncation with persist-to-disk + preview** —
+      `ToolOutputTruncation` (default 16 KiB, builder-configurable) caps the
+      model-visible result to a UTF-8-safe head/tail preview, persisting the full
+      output to a temp file (PR #15).
+- [x] **`tool_choice` control** (auto / required / none / specific) — provider-
+      neutral `ToolChoice` serialized across every transport, with an
+      `AgentHarness` builder setter (PR #16).
 
 ### Phase 2 — Surface & orchestration parity
 - [ ] **MCP tool search / progressive disclosure**: advertise only names +
