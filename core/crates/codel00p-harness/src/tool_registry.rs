@@ -10,6 +10,7 @@ use crate::{
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool},
+    web::web_tools,
     workspace::Workspace,
 };
 
@@ -48,6 +49,11 @@ impl ToolRegistry {
             .with_tool(GitDiffTool)
             .with_tool(GitLogTool)
             .with_tool(GitStatusTool)
+    }
+
+    /// Web tools (`web_fetch`, `web_search`) gated behind `PermissionScope::Network`.
+    pub fn web_defaults() -> Self {
+        Self::new().with_registry(web_tools())
     }
 
     pub fn with_tool<T>(mut self, tool: T) -> Self

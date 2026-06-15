@@ -13,6 +13,7 @@ pub(super) async fn build_tool_registry(
             AgentToolSet::Edit => registry.with_registry(ToolRegistry::editing_defaults()),
             AgentToolSet::Command => registry.with_registry(ToolRegistry::command_defaults()),
             AgentToolSet::Git => registry.with_registry(ToolRegistry::git_defaults()),
+            AgentToolSet::Web => registry.with_registry(ToolRegistry::web_defaults()),
             // Delegation needs the provider/model config to build a spawner, so
             // it is folded in by `build_agent_harness`, not here.
             AgentToolSet::Delegate => registry,
@@ -22,7 +23,8 @@ pub(super) async fn build_tool_registry(
             AgentToolSet::All => registry
                 .with_registry(ToolRegistry::editing_defaults())
                 .with_registry(ToolRegistry::command_defaults())
-                .with_registry(ToolRegistry::git_defaults()),
+                .with_registry(ToolRegistry::git_defaults())
+                .with_registry(ToolRegistry::web_defaults()),
         };
     }
     for server in mcp_servers {

@@ -326,6 +326,7 @@ dependencies = [
  "codel00p-providers",
  "futures",
  "httpmock",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
