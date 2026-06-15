@@ -61,11 +61,13 @@ Recently shipped:
 - **most-recent session continue command** (`codel00p agent continue <prompt>`):
   resumes the newest session by stamping a `created_at` on session metadata —
   the codel00p analogue of Claude Code's `--continue`.
+- **cancellation and interruption**: Ctrl-C during `agent run` stops the turn at
+  the next boundary via a cooperative `CancelSignal`, persisting partial progress
+  instead of killing the process (TUI Esc-to-cancel is a follow-up).
 
 Next:
 
 - richer patch/diff engine;
-- cancellation and interruption;
 - background command monitoring;
 - web fetch/search tools;
 - worktree-isolated execution;

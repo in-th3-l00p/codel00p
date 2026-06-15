@@ -136,16 +136,24 @@ fn spawn_turn(app: &App, prompt: String, tx: UnboundedSender<Msg>) {
     let bridge = UiBridge { tx: tx.clone() };
 
     tokio::spawn(async move {
-        let harness =
-            match build_agent_harness_with(&config, &options, &mcp_servers, &parent, Some(bridge))
-                .await
-            {
-                Ok(harness) => harness,
-                Err(error) => {
-                    let _ = tx.send(Msg::TurnFinished(Err(error)));
-                    return;
-                }
-            };
+        // TUI turn cancellation (Esc) is a follow-up; pass a never-cancelled signal.
+        let cancel = codel00p_harness::CancelSignal::new();
+        let harness = match build_agent_harness_with(
+            &config,
+            &options,
+            &mcp_servers,
+            &parent,
+            Some(bridge),
+            cancel,
+        )
+        .await
+        {
+            Ok(harness) => harness,
+            Err(error) => {
+                let _ = tx.send(Msg::TurnFinished(Err(error)));
+                return;
+            }
+        };
         let result = harness
             .run_turn_with_state(session_state, UserMessage::new(prompt))
             .await;

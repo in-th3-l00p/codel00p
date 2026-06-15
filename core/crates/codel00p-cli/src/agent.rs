@@ -14,7 +14,7 @@ use codel00p_gateway::{
     approvals::{ApprovalOutcome, ApprovalStore},
 };
 use codel00p_harness::{
-    AgentEventSink, AgentHarness, AgentRole, DelegatedTask, DelegationOutcome,
+    AgentEventSink, AgentHarness, AgentRole, CancelSignal, DelegatedTask, DelegationOutcome,
     ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
     MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope, ProcedureSkillExtractor, ProjectMemoryContext,

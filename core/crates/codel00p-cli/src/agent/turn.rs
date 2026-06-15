@@ -19,9 +19,25 @@ pub(super) fn run_agent_turn(
         let (session_state, previous_message_count) =
             prepare_session_state(&config, &options, session_mode)?;
 
-        let harness =
-            build_agent_harness(&config, &options, &mcp_servers, session_state.session_id())
-                .await?;
+        // Ctrl-C asks the turn to stop at the next boundary instead of killing the
+        // process, so the partial session is still persisted below.
+        let cancel = CancelSignal::new();
+        let watcher_signal = cancel.clone();
+        let watcher = tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                watcher_signal.cancel();
+            }
+        });
+
+        let harness = build_agent_harness_with(
+            &config,
+            &options,
+            &mcp_servers,
+            session_state.session_id(),
+            None,
+            cancel,
+        )
+        .await?;
         let outcome = harness
             .run_turn_with_state(session_state, UserMessage::new(options.prompt.clone()))
             .await
@@ -32,6 +48,7 @@ pub(super) fn run_agent_turn(
                     &options.model,
                 )
             })?;
+        watcher.abort();
 
         let mut output = String::new();
         if let Some(message) = &outcome.assistant_message {
@@ -57,6 +74,11 @@ pub(super) fn run_agent_turn(
             previous_message_count,
         )?;
 
+        if outcome.cancelled {
+            output
+                .push_str("Interrupted — partial progress saved. Resume with `agent continue`.\n");
+        }
+
         Ok(output)
     })
 }
@@ -69,7 +91,15 @@ pub(super) async fn build_agent_harness(
     mcp_servers: &[McpServerSpec],
     parent_session_id: &SessionId,
 ) -> CliResult<AgentHarness> {
-    build_agent_harness_with(config, options, mcp_servers, parent_session_id, None).await
+    build_agent_harness_with(
+        config,
+        options,
+        mcp_servers,
+        parent_session_id,
+        None,
+        CancelSignal::new(),
+    )
+    .await
 }
 
 /// Async bridge used by the TUI to receive harness output without blocking the
@@ -87,6 +117,7 @@ pub(crate) async fn build_agent_harness_with(
     mcp_servers: &[McpServerSpec],
     parent_session_id: &SessionId,
     ui_bridge: Option<UiBridge>,
+    cancel: CancelSignal,
 ) -> CliResult<AgentHarness> {
     // Plugins are loaded once and contribute to providers, tools, and hooks.
     let plugins = load_plugins(&options.workspace)?;
@@ -199,6 +230,7 @@ pub(crate) async fn build_agent_harness_with(
     if let Some(max_iterations) = options.max_iterations {
         builder = builder.max_iterations(max_iterations);
     }
+    builder = builder.cancel_signal(cancel);
 
     builder.build().map_err(|error| error.to_string())
 }

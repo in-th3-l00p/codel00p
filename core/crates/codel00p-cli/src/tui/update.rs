@@ -541,6 +541,7 @@ mod tests {
             tool_calls: Vec::new(),
             events: Vec::new(),
             session_state,
+            cancelled: false,
         };
         let effects = update(&mut app, Msg::TurnFinished(Ok(Box::new(outcome))));
         assert!(!app.turn.running);

@@ -206,4 +206,8 @@ pub struct TurnOutcome {
     pub tool_calls: Vec<ExecutedToolCall>,
     pub events: Vec<HarnessEvent>,
     pub session_state: SessionState,
+    /// Set when the turn stopped early because cancellation was requested. The
+    /// accumulated messages and tool results are still valid and persistable.
+    #[serde(default)]
+    pub cancelled: bool,
 }

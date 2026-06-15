@@ -59,6 +59,19 @@ impl AgentHarness {
         let budget = IterationBudget::new(self.max_iterations);
         while budget.consume() {
             let iteration = budget.used();
+            // Cooperative cancellation: stop at the iteration boundary (before any
+            // new inference) and return what we have so the session still persists.
+            if self.cancel.is_cancelled() {
+                return self
+                    .finish_cancelled(
+                        session_state,
+                        turn_id,
+                        executed_tool_calls,
+                        events,
+                        iteration.saturating_sub(1),
+                    )
+                    .await;
+            }
             self.run_lifecycle_hook(
                 "pre_inference",
                 TurnLifecycleContext::new(
@@ -194,7 +207,23 @@ impl AgentHarness {
                     tool_calls: executed_tool_calls,
                     events,
                     session_state,
+                    cancelled: false,
                 });
+            }
+
+            // The model wants to run tools. If cancellation was requested while we
+            // waited on inference, stop before mutating state with tool calls we
+            // will not execute, so a resume sees a consistent transcript.
+            if self.cancel.is_cancelled() {
+                return self
+                    .finish_cancelled(
+                        session_state,
+                        turn_id,
+                        executed_tool_calls,
+                        events,
+                        iteration,
+                    )
+                    .await;
             }
 
             session_state.push_assistant_tool_calls(response.tool_calls().to_vec());
@@ -442,6 +471,48 @@ impl AgentHarness {
 
         Err(HarnessError::IterationLimit {
             limit: self.max_iterations,
+        })
+    }
+
+    /// Finalizes a turn that stopped early because cancellation was requested.
+    /// Runs the `turn_completed` hook and emits `TurnCompleted` (so listeners see
+    /// the turn end like any other), then returns a `cancelled` outcome carrying
+    /// the messages and tool results gathered so far.
+    async fn finish_cancelled(
+        &self,
+        session_state: SessionState,
+        turn_id: TurnId,
+        executed_tool_calls: Vec<ExecutedToolCall>,
+        mut events: Vec<HarnessEvent>,
+        iterations: u32,
+    ) -> Result<TurnOutcome, HarnessError> {
+        self.run_lifecycle_hook(
+            "turn_completed",
+            TurnLifecycleContext::new(
+                session_state.session_id().clone(),
+                turn_id.clone(),
+                session_state.messages().len(),
+            ),
+            &mut events,
+        )
+        .await;
+        self.record_event(
+            &mut events,
+            HarnessEvent::TurnCompleted {
+                event_id: EventId::new(),
+                session_id: session_state.session_id().clone(),
+                turn_id,
+                iterations,
+            },
+        )
+        .await;
+
+        Ok(TurnOutcome {
+            assistant_message: None,
+            tool_calls: executed_tool_calls,
+            events,
+            session_state,
+            cancelled: true,
         })
     }
 }

@@ -25,6 +25,7 @@ pub struct AgentHarnessBuilder {
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
+    cancel: Option<CancelSignal>,
 }
 
 impl AgentHarnessBuilder {
@@ -138,6 +139,13 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Wires a cancellation signal the run loop polls at turn boundaries, so a
+    /// caller (e.g. a Ctrl-C handler) can stop a turn and keep partial progress.
+    pub fn cancel_signal(mut self, cancel: CancelSignal) -> Self {
+        self.cancel = Some(cancel);
+        self
+    }
+
     /// Streams assistant text to `token_sink` as it is generated. Without a sink
     /// the harness uses the non-streaming inference path.
     pub fn token_sink<T>(mut self, token_sink: T) -> Self
@@ -173,6 +181,7 @@ impl AgentHarnessBuilder {
             context_window: self.context_window,
             token_sink: self.token_sink,
             max_iterations: self.max_iterations.unwrap_or(4),
+            cancel: self.cancel.unwrap_or_default(),
         })
     }
 }

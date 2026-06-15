@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod cancel;
 pub mod commands;
 pub mod context;
 pub mod delegation;
@@ -23,6 +24,7 @@ pub mod turn;
 pub mod workspace;
 
 pub use agent::{AgentHarness, AgentHarnessBuilder};
+pub use cancel::CancelSignal;
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use delegation::{
     AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner,

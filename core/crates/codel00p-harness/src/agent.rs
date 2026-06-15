@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures::future::join_all;
 
 use crate::{
+    cancel::CancelSignal,
     errors::HarnessError,
     event_sink::AgentEventSink,
     events::HarnessEvent,
@@ -51,4 +52,5 @@ pub struct AgentHarness {
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,
+    cancel: CancelSignal,
 }
