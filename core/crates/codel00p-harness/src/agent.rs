@@ -20,6 +20,7 @@ use crate::{
     skills::{SkillProvider, SkillSelectionRequest},
     tool_registry::ToolRegistry,
     tool_result::ToolResult,
+    truncation::ToolOutputTruncation,
     turn::{ExecutedToolCall, HarnessInferenceRequest, ModelClient, TokenSink, TurnOutcome},
     workspace::Workspace,
 };
@@ -52,5 +53,6 @@ pub struct AgentHarness {
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,
+    tool_output_truncation: ToolOutputTruncation,
     cancel: CancelSignal,
 }

@@ -25,6 +25,7 @@ pub struct AgentHarnessBuilder {
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
+    max_tool_result_bytes: Option<usize>,
     cancel: Option<CancelSignal>,
 }
 
@@ -139,6 +140,14 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Caps the byte size of each tool result recorded for the model. Over-budget
+    /// results become a head+tail preview with the full output saved to a temp
+    /// file. `0` disables truncation. Default: 16 KiB.
+    pub fn max_tool_result_bytes(mut self, max_bytes: usize) -> Self {
+        self.max_tool_result_bytes = Some(max_bytes);
+        self
+    }
+
     /// Wires a cancellation signal the run loop polls at turn boundaries, so a
     /// caller (e.g. a Ctrl-C handler) can stop a turn and keep partial progress.
     pub fn cancel_signal(mut self, cancel: CancelSignal) -> Self {
@@ -181,6 +190,11 @@ impl AgentHarnessBuilder {
             context_window: self.context_window,
             token_sink: self.token_sink,
             max_iterations: self.max_iterations.unwrap_or(4),
+            tool_output_truncation: match self.max_tool_result_bytes {
+                Some(0) => ToolOutputTruncation::disabled(),
+                Some(bytes) => ToolOutputTruncation::new(bytes),
+                None => ToolOutputTruncation::new(16 * 1024),
+            },
             cancel: self.cancel.unwrap_or_default(),
         })
     }
