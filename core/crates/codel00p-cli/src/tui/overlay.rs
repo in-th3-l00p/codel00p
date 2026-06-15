@@ -3,8 +3,9 @@
 
 use codel00p_harness::PermissionRequest;
 use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRole, Project};
+use crossterm::event::KeyEvent;
 
-use super::picker::{Picker, PickerItem};
+use super::picker::{Picker, PickerItem, PickerOutcome};
 
 /// A selectable model, either a known provider/model pair or a free-text entry that
 /// lets any model id through (matching the CLI's unchecked `/model <id>`).
@@ -21,6 +22,65 @@ impl PickerItem for ModelChoice {
     }
     fn detail(&self) -> Option<String> {
         self.note.clone()
+    }
+}
+
+/// The model picker overlay: a `Picker<ModelChoice>` plus a transient status line
+/// that reports the live `list_models` fetch (loading / fell back to the catalog).
+#[derive(Clone, Debug)]
+pub(crate) struct ModelPicker {
+    pub(crate) picker: Picker<ModelChoice>,
+    pub(crate) status: Option<String>,
+}
+
+impl ModelPicker {
+    pub(crate) fn new(choices: Vec<ModelChoice>, status: Option<String>) -> Self {
+        Self {
+            picker: Picker::new(choices),
+            status,
+        }
+    }
+
+    /// Replaces the catalog rows with the live `list_models` result and clears the
+    /// loading status. Preserves the picker's current filter text.
+    pub(crate) fn set_choices(&mut self, choices: Vec<ModelChoice>, status: Option<String>) {
+        self.picker.set_items(choices);
+        self.status = status;
+    }
+
+    pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
+        self.picker.on_key(key)
+    }
+
+    pub(crate) fn selected_item(&self) -> Option<&ModelChoice> {
+        self.picker.selected_item()
+    }
+
+    /// The free-text model id typed into the filter, used when no catalog row is
+    /// highlighted (Enter on an empty filter result), mirroring `/model <id>`.
+    pub(crate) fn free_text(&self) -> &str {
+        self.picker.query()
+    }
+}
+
+/// A prior conversation shown in the session switcher overlay. Read-only — selecting
+/// one replays it and resets the live conversation to that session.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SessionSummary {
+    pub(crate) session_id: String,
+    pub(crate) source: String,
+    pub(crate) message_count: usize,
+}
+
+impl PickerItem for SessionSummary {
+    fn label(&self) -> String {
+        self.session_id.clone()
+    }
+    fn detail(&self) -> Option<String> {
+        Some(format!(
+            "{} · {} message(s)",
+            self.source, self.message_count
+        ))
     }
 }
 
@@ -161,6 +221,36 @@ impl EntityBrowser {
     }
 }
 
+/// The session switcher: a read-only list of prior conversations plus a status line
+/// (loading / error). Selecting a row resumes that session in place.
+#[derive(Clone, Debug)]
+pub(crate) struct SessionSwitcher {
+    pub(crate) sessions: Picker<SessionSummary>,
+    pub(crate) status: Option<String>,
+}
+
+impl SessionSwitcher {
+    pub(crate) fn new() -> Self {
+        Self {
+            sessions: Picker::new(Vec::new()),
+            status: Some("Loading…".to_string()),
+        }
+    }
+
+    pub(crate) fn set_sessions(&mut self, sessions: Vec<SessionSummary>, status: Option<String>) {
+        self.sessions.set_items(sessions);
+        self.status = status;
+    }
+
+    pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
+        self.sessions.on_key(key)
+    }
+
+    pub(crate) fn selected_item(&self) -> Option<&SessionSummary> {
+        self.sessions.selected_item()
+    }
+}
+
 // There is only ever one live `Overlay` (the open panel), so the size spread
 // between variants is irrelevant; boxing would just add indirection for no gain.
 #[allow(clippy::large_enum_variant)]
@@ -168,7 +258,8 @@ pub(crate) enum Overlay {
     None,
     Help,
     Permission(PermissionRequest),
-    Model(Picker<ModelChoice>),
+    Model(ModelPicker),
+    Sessions(SessionSwitcher),
     Entities(EntityBrowser),
 }
 

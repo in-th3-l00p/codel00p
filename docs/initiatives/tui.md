@@ -95,11 +95,16 @@ desktop app embed the TUI rather than reimplementing chat in React.
       (`ClerkDirectory` over the Clerk Backend API, 503 when unconfigured) +
       `OrgMember` protocol type + `CloudClient::list_org_members`; the entity
       browser now renders a read-only members picker instead of the placeholder.
-- [ ] Mouse support (click rows / wheel scroll), configurable themes, token/usage
-      meters and gauges in the status bar.
-- [ ] Source the model picker from a provider `list_models` call instead of the
-      hand-maintained catalog in `tui/app.rs`.
-- [ ] Session switcher overlay (resume a prior conversation from inside the TUI).
+- [ ] Mouse support (click rows / wheel scroll) and configurable themes.
+- [x] Token/usage meter in the status bar (shipped 2026-06-15): a message count +
+      estimated-token total recomputed from the session transcript (the harness does
+      not yet thread provider `Usage` through `TurnOutcome`, so it is approximate).
+- [x] Source the model picker from a provider `list_models` call instead of the
+      hand-maintained catalog (shipped 2026-06-15): F2 / `/model` shows the static
+      catalog instantly, fires an async `list_models`, and falls back to the catalog
+      on error/empty; free-text model ids still pass through.
+- [x] Session switcher overlay (shipped 2026-06-15): F5 / `/switch` lists prior
+      conversations from the session store and resumes the selected one in place.
 
 ### Phase 4 — Desktop embed (optional, only if pursued)
 - [ ] If desktop `/chat` should reuse this TUI, add the stdio JSON-RPC boundary

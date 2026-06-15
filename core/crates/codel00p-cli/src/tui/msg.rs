@@ -1,10 +1,14 @@
 //! Messages that drive the update loop and effects it produces. `Msg` is the only
 //! way state changes; `Effect` is the only way the loop touches the outside world.
 
-use codel00p_harness::{HarnessEvent, PermissionDecision, PermissionRequest, TurnOutcome};
+use codel00p_harness::{
+    HarnessEvent, PermissionDecision, PermissionRequest, SessionState, TurnOutcome,
+};
 use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, Project, Viewer};
 use crossterm::event::KeyEvent;
 use tokio::sync::oneshot;
+
+use super::overlay::{ModelChoice, SessionSummary};
 
 /// Inbound events: terminal input, streamed turn output, and async results.
 pub(crate) enum Msg {
@@ -27,6 +31,13 @@ pub(crate) enum Msg {
     CloudMcp(Result<Vec<McpServer>, String>),
     CloudMemory(Result<Vec<MemoryEntry>, String>),
     CloudUsers(Result<Vec<OrgMember>, String>),
+    /// Live provider model catalog for the model picker (falls back to the static
+    /// catalog on error / empty).
+    Models(Result<Vec<ModelChoice>, String>),
+    /// Prior sessions for the session switcher overlay.
+    SessionList(Result<Vec<SessionSummary>, String>),
+    /// A prior session was replayed and is ready to resume (state + message count).
+    SessionResumed(Result<(Box<SessionState>, usize), String>),
 }
 
 /// Side effects the event loop executes after an update.
@@ -42,6 +53,13 @@ pub(crate) enum Effect {
     Cloud(CloudFetch),
     /// Read local state and surface it as a notice.
     Local(LocalQuery),
+    /// Fetch the provider model catalog for the picker (blocking client, off the UI
+    /// task). Carries the provider whose models to list.
+    FetchModels(String),
+    /// List prior sessions for the switcher (blocking store read, off the UI task).
+    ListSessions,
+    /// Replay a prior session so it can be resumed inside the TUI.
+    ResumeSession(codel00p_harness::SessionId),
     /// Leave the TUI.
     Quit,
 }

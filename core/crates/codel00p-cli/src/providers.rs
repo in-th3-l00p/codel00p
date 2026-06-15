@@ -4,9 +4,42 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use codel00p_providers::{InferenceClient, ProviderPolicy, ProviderRegistry, default_registry};
+use codel00p_providers::{
+    InferenceClient, ModelCatalogRequest, ProviderPolicy, ProviderRegistry, default_registry,
+};
 
 use crate::{config::CliResult, settings};
+
+/// A model surfaced to the TUI model picker: the provider that owns it, its id, and
+/// an optional human label. The provider is carried so selecting a row can switch
+/// both provider and model in one step.
+pub(crate) struct CatalogModel {
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    pub(crate) note: Option<String>,
+}
+
+/// Lists a provider's models live via its catalog endpoint, for the TUI model
+/// picker. Builds a default-registry client (allow-all policy, credential from env)
+/// and normalizes each [`codel00p_providers::ProviderModel`] into a [`CatalogModel`].
+/// Errors (no credential, network, unsupported provider) propagate so the caller can
+/// fall back to the static catalog.
+pub(crate) async fn list_provider_models(provider: &str) -> CliResult<Vec<CatalogModel>> {
+    let client = build_provider_client_with(default_registry(), provider, None)?;
+    let request = ModelCatalogRequest::builder(provider).build();
+    let models = client
+        .list_models(request)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(models
+        .into_iter()
+        .map(|model| CatalogModel {
+            provider: provider.to_string(),
+            note: model.display_name.filter(|name| name != &model.id),
+            model: model.id,
+        })
+        .collect())
+}
 
 /// Build an inference client against a caller-supplied provider registry, so a
 /// plugin-extended provider set (see [`crate::plugins`]) can route inference the
