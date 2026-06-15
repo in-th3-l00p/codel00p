@@ -15,10 +15,11 @@ slice here.
 Latest release: **v0.2.0**. This session shipped the **real TUI Users tab** —
 `GET /org/members` (Clerk Backend API → `OrgMember` protocol type →
 `CloudClient::list_org_members` → entity-browser picker), replacing the
-"pending a backend endpoint" placeholder. Landed on branch
-`feat/tui-org-members-users-tab` (see plan
-`docs/superpowers/plans/2026-06-15-org-members-users-tab.md`); local core
-verification was not available in this shell. Suggested next slice: the
+"pending a backend endpoint" placeholder. Landed on `main` (see plan
+`docs/superpowers/plans/2026-06-15-org-members-users-tab.md`); verified green
+end to end (`cargo fmt --check`, `cargo test --workspace`, `cargo clippy
+--workspace --all-targets -D warnings`) after installing the Rust toolchain in
+this shell. Suggested next slice: the
 remaining cloud-backed TUI gap — **Clerk token re-mint** in `login.rs` for
 writable org switching from the Org tab — then resume the standing priorities
 below (provider route intelligence / memory).
