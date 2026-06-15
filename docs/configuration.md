@@ -112,6 +112,25 @@ API keys are written to `~/.codel00p/.env` (and loaded at startup), never to
 `config.toml`. Environment variables already set in the shell take precedence
 over the `.env` file.
 
+## Other command groups
+
+Beyond configuration, the `codel00p` binary dispatches these top-level command
+groups (run `codel00p <group> --help`, or see the linked docs):
+
+| Group | Purpose |
+| --- | --- |
+| `agent` | Run a turn or open the interactive chat / TUI (bare `codel00p` opens it) |
+| `memory` | Review project memory: `list/show/search/similar/stale/quality/approve/reject/archive/edit/merge/restore/audit` |
+| `session` | Inspect and resume durable sessions |
+| `skills` | Manage skills (`list/show/create/candidates/approve/reject/curate`) |
+| `plugins` | Enable/disable in-process plugins (see above) |
+| `cron` | Schedule and run recurring jobs, incl. a `daemon` |
+| `gateway` | Route platform messages (e.g. Slack) into agent sessions (`message`, `serve`) |
+| `mcp` | Run the codel00p MCP server / manage MCP connectors |
+| `cloud` | Sync memory and run stored agents against the team control plane |
+| `auth` | `login` / `logout` for the cloud (browser loopback flow) |
+| `update` / `version` | Self-update to the matching release / print the build |
+
 ## Example `config.toml`
 
 ```toml

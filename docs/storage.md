@@ -32,14 +32,18 @@ The current backends are:
 
 - `InMemoryStorage` for tests, harness development, and contract hardening.
 - `SqliteStorage` behind the `sqlite` feature for durable local project state.
+- `PostgresStorage` behind the `postgres` feature for the hosted cloud service —
+  deployed and verified durable in production (`codel00p-cloud` + a managed
+  Postgres database on Fly.io). This is the "cloud storage for organization-backed
+  memory, audit, and team state" backend; it requires no change to the domain
+  crates, which still depend only on `codel00p-storage`.
 
 Planned backends:
 
 - Redis for fast shared state, leases, queues, and ephemeral coordination.
-- Cloud storage for organization-backed memory, audit, and team state.
 
-Each backend should implement the same traits. Domain crates should continue to
-depend on `codel00p-storage`, not on backend-specific packages.
+Each backend implements the same traits. Domain crates depend on
+`codel00p-storage`, not on backend-specific packages.
 
 ## Service Pattern
 
@@ -49,7 +53,7 @@ Example:
 
 - `codel00p-session` stores `SessionMetadata` as documents.
 - `codel00p-session` stores transcript records as append-log entries.
-- future `codel00p-memory` should store approved memory entries as documents
-  and memory-review/audit history as append logs.
+- `codel00p-memory` stores memory entries as documents and memory-review/audit
+  history as append logs.
 
 This keeps storage replaceable while preserving strong domain APIs.

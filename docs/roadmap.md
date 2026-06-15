@@ -11,9 +11,10 @@ codel00p is building toward three combined capabilities:
   and audit history.
 
 The [Initiatives](initiatives/README.md) directory plans the Hermes-distinctive
-capabilities codel00p does not yet have (skills, self-improvement, plugins and
-hooks, scheduling, messaging gateway, sandboxed execution backends, programmatic
-tool calling, TUI) and maps each to the milestones below. Start with the
+capabilities and maps each to the milestones below. **Phase 1 of most has
+shipped** (plugins & hooks, skills, self-improvement loop, sub-agent delegation,
+scheduling/cron, messaging gateway, and the TUI); only sandboxed execution
+backends and programmatic tool calling are unstarted. Start with the
 [Hermes Gap Analysis](initiatives/hermes-gap-analysis.md).
 
 ## Milestone 1: Local Agent Foundation
@@ -225,7 +226,14 @@ Exit criteria:
 Goal: coordinate long-horizon work across focused agents without losing memory,
 policy, or auditability.
 
-Build:
+Implemented:
+
+- synchronous **sub-agent delegation** (`codel00p-harness` `delegation` module):
+  a `delegate_task` tool, typed agent roles, a real spawner with read-only
+  child tool sets, a concurrency semaphore, and parent/child session lineage.
+  See the [Sub-Agents & Delegation initiative](initiatives/subagents-delegation.md).
+
+Still to build:
 
 - research, implementation, review, and memory-extraction agents;
 - worktree isolation for mutating subagents;

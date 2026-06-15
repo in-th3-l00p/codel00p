@@ -93,9 +93,9 @@ primitives.
 
 Services must not call SQLite, Redis, cloud storage, or object stores directly.
 They should expose typed domain repositories and persist through
-`codel00p-storage`. The first backend is in-memory for contract tests. SQLite,
-Redis, and cloud storage should arrive as additional backends behind the same
-capability-based API.
+`codel00p-storage`. In-memory (contract tests), SQLite (durable local state),
+and Postgres (the hosted cloud service) backends ship today behind the same
+capability-based API; Redis may arrive later as another backend.
 
 ## Interfaces
 
@@ -186,15 +186,22 @@ is already integrated.
 The clean boundary is:
 
 - `memory` stores and retrieves project knowledge;
-- `harness` runs agent sessions;
+- `harness` runs agent sessions (tools, permissions, memory injection, sub-agent
+  delegation, skill injection, and the self-improvement learning loop);
 - `providers` routes inference;
 - `protocol` defines shared data contracts for sessions, turns, events, tools,
-  provider references, projects, and memory entries;
-- `storage` defines backend-neutral local and cloud persistence primitives;
+  provider references, projects, memory entries, and the cloud control plane;
+- `storage` defines backend-neutral persistence primitives (in-memory, SQLite,
+  Postgres);
 - `session` persists durable transcripts, boundary events, lineage, and replay
   records on top of storage;
+- `mcp` integrates external tools as an MCP client and server;
+- `skill` and `plugin` are the procedural-memory and extension seams;
+- `cron` schedules recurring jobs; `gateway` reaches the agent per conversation
+  (e.g. Slack);
 - `cli` and `desktop` expose user interfaces;
-- `sync` coordinates local/cloud knowledge;
-- `cloud` manages organizations, teams, policies, and shared state.
+- `cloud` manages organizations, teams, policies, and shared state (and is where
+  local/cloud knowledge sync lives today; a dedicated `sync` crate is not yet
+  split out).
 
 The final `codel00p` product integrates these modules.

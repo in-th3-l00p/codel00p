@@ -270,7 +270,10 @@ Exit criteria:
 
 ### Stage 7: Multi-agent work
 
-Status: planned.
+Status: started — synchronous sub-agent delegation shipped (a `delegate_task`
+tool with typed roles, a real spawner with read-only child tools, a concurrency
+limit, and parent/child session lineage; see the
+[Sub-Agents & Delegation initiative](initiatives/subagents-delegation.md)).
 
 Build:
 
@@ -289,11 +292,13 @@ Exit criteria:
 
 ### Stage 8: Production release
 
-Status: planned.
+Status: in progress — a hosted `codel00p-cloud` runs on Fly.io with managed
+Postgres (auto-deployed from `main`), and prebuilt release binaries, a curl
+installer, and an SHA-256-verified self-updater (`codel00p update` / `version`,
+v0.2.0) have shipped.
 
 Build:
 
-- installers and package distribution;
 - migrations and compatibility policy;
 - security review and sandboxing;
 - privacy controls;

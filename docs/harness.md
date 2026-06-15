@@ -121,33 +121,34 @@ after the final assistant message.
 core/crates/codel00p-harness/
   src/
     lib.rs
-    agent.rs
-    approvals.rs
-    context.rs
-    errors.rs
-    event_sink.rs
-    events.rs
-    session.rs
-    tool_registry.rs
-    tool_result.rs
-    tools.rs
-    turn.rs
-    workspace.rs
+    agent/            agent.rs        commands.rs
+    context.rs        delegation.rs   editing.rs
+    errors.rs         event_sink.rs   events.rs
+    git.rs            instructions.rs iteration_budget.rs
+    learning.rs       lifecycle.rs    memory.rs
+    permissions.rs    provider_adapter.rs
+    session.rs        skills.rs       tool_registry.rs
+    tool_result.rs    tools.rs        turn.rs        workspace.rs
 ```
 
-Responsibilities:
+Responsibilities (selected):
 
-- `agent.rs`: high-level `AgentHarness` facade and builder.
+- `agent.rs` / `agent/`: high-level `AgentHarness` facade and builder.
 - `session.rs`: session IDs, messages, and serializable session state.
-- `turn.rs`: turn execution loop and iteration budget.
-- `events.rs`: typed event stream.
+- `turn.rs` + `iteration_budget.rs`: turn execution loop and iteration budget.
+- `events.rs` / `event_sink.rs`: typed event stream and its sinks.
 - `context.rs`: context assembly and memory hook traits.
-- `tools.rs`: `Tool` trait and built-in read-only tools.
-- `tool_registry.rs`: deterministic tool registration and lookup.
-- `tool_result.rs`: normalized tool result shape.
-- `workspace.rs`: repository root boundary and path safety.
-- `approvals.rs`: approval types reserved for later editing tools.
-- `errors.rs`: typed harness errors.
+- `tools.rs` / `tool_registry.rs` / `tool_result.rs`: the `Tool` trait, built-in
+  tools, deterministic registration, and the normalized result shape.
+- `editing.rs`, `commands.rs`, `git.rs`: the workspace-write, shell, and git
+  tool families; `workspace.rs`: repository-root boundary and path safety.
+- `permissions.rs`: permission decisions over `PermissionScope`.
+- `memory.rs` / `instructions.rs`: memory injection and project instructions.
+- `delegation.rs`: sub-agent delegation (`delegate_task`).
+- `learning.rs` / `skills.rs`: the self-improvement loop (`propose_skill`,
+  `ProcedureSkillExtractor`) and skill injection.
+- `provider_adapter.rs`: the model-client boundary onto `codel00p-providers`.
+- `lifecycle.rs`: lifecycle hooks; `errors.rs`: typed harness errors.
 
 ## Initial Read-Only Tools
 

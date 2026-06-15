@@ -1,11 +1,19 @@
 # Initiatives: Hermes-Parity Capabilities
 
 This directory holds the planning record for a set of capabilities that Hermes
-Agent (NousResearch) ships and codel00p does not yet have. The
-[Product Roadmap](../product-roadmap.md) already names "Hermes-grade provider
-breadth" as a goal and already covers some of this ground (Milestone 7,
-Multi-Agent Work). These initiatives formalize the remaining, Hermes-distinctive
-gaps as concrete, phased epics that slot into that roadmap.
+Agent (NousResearch) ships. The [Product Roadmap](../product-roadmap.md) already
+names "Hermes-grade provider breadth" as a goal and already covers some of this
+ground (Milestone 7, Multi-Agent Work). These initiatives formalize the
+Hermes-distinctive gaps as concrete, phased epics that slot into that roadmap.
+
+**Status (2026-06-15):** Phase 1 of six of these initiatives has now shipped —
+plugins & hooks, skills, self-improvement loop, sub-agent delegation,
+scheduling/cron, and the messaging gateway each landed core crates on 2026-06-12
+(`codel00p-plugin`, `codel00p-skill`, `codel00p-cron`, `codel00p-gateway`, and
+the harness `delegation`/`learning` modules), and the TUI shipped Phase 2 plus a
+Phase 3 Users tab. Execution backends (#7) and programmatic tool calling (#8)
+remain unstarted. The Status column below and each epic's Scope checklist track
+the detail.
 
 Start with the [Hermes Gap Analysis](hermes-gap-analysis.md) for the full
 comparison and rationale. Each initiative below has its own plan with goal,
@@ -16,20 +24,22 @@ exit criteria.
 
 | # | Initiative | Tier | Maps to roadmap | Status |
 |---|------------|------|-----------------|--------|
-| 1 | [Plugins & Hooks](plugins-and-hooks.md) | Foundation | New (enables Stage 2/4 extensibility) | Planned |
-| 2 | [Skills System](skills-system.md) | Foundation | Extends Stage 3 (Memory) | Planned |
-| 3 | [Self-Improvement Loop](self-improvement-loop.md) | Differentiator | Extends Stage 3 (Memory) | Planned |
-| 4 | [Sub-Agents & Delegation](subagents-delegation.md) | Primitive | Stage 7 (Multi-Agent) | Planned |
-| 5 | [Scheduling / Cron](scheduling-cron.md) | Primitive | New | Planned |
-| 6 | [Messaging Gateway](messaging-gateway.md) | Reach | New (alongside Stage 6 interfaces) | Planned |
+| 1 | [Plugins & Hooks](plugins-and-hooks.md) | Foundation | New (enables Stage 2/4 extensibility) | Phase 1–2 shipped (`codel00p-plugin`) |
+| 2 | [Skills System](skills-system.md) | Foundation | Extends Stage 3 (Memory) | Phase 1 shipped (`codel00p-skill`) |
+| 3 | [Self-Improvement Loop](self-improvement-loop.md) | Differentiator | Extends Stage 3 (Memory) | Phase 1 shipped (harness `learning`) |
+| 4 | [Sub-Agents & Delegation](subagents-delegation.md) | Primitive | Stage 7 (Multi-Agent) | Phase 1 shipped (harness `delegation`) |
+| 5 | [Scheduling / Cron](scheduling-cron.md) | Primitive | New | Phase 1 shipped (`codel00p-cron`) |
+| 6 | [Messaging Gateway](messaging-gateway.md) | Reach | New (alongside Stage 6 interfaces) | Phase 1 shipped (`codel00p-gateway`) |
 | 7 | [Execution Backends & Sandboxing](execution-backends-sandboxing.md) | Reach | Stage 8 (security/sandboxing) | Planned |
 | 8 | [Programmatic Tool Calling](programmatic-tool-calling.md) | Parity | Stage 1 (Agent parity) | Planned |
-| 9 | [Terminal UI (TUI)](tui.md) | Interface | Stage 6 (Interfaces) | Planned |
+| 9 | [Terminal UI (TUI)](tui.md) | Interface | Stage 6 (Interfaces) | Phase 2 shipped, Phase 3 started (`codel00p-cli/src/tui`) |
 
 ## Sequencing
 
-The initiatives are not independent. Recommended order, by leverage and
-dependency:
+The initiatives are not independent. The original recommended order (below) is
+largely how Phase 1 actually landed — plugins, then skills + self-improvement,
+then sub-agents, then scheduling + gateway. It is kept as the rationale and the
+guide for the remaining phases:
 
 1. **Plugins & Hooks (#1)** first — it is the substrate. Today every tool and
    provider is compiled into the Rust workspace. Without an extension boundary,
