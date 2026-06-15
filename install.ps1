@@ -39,6 +39,9 @@ try {
     [Environment]::SetEnvironmentVariable("Path", "$userPath;$installDir", "User")
     Write-Host "Added $installDir to your user PATH. Restart your terminal to use it."
   }
+
+  Write-Host ""
+  Write-Host "To remove codel00p later, run: codel00p uninstall"
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }

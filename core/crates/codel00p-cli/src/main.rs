@@ -20,6 +20,7 @@ mod session;
 mod settings;
 mod skills;
 mod tui;
+mod uninstall;
 mod update;
 
 use config::{CliResult, parse_global_overrides, resolve_cli_config};
@@ -60,9 +61,10 @@ fn run(args: Vec<String>) -> CliResult<String> {
         None => ("agent", &[]),
     };
 
-    // `update` manages itself; every other command refreshes the update cache in the
+    // `update` manages itself, and `uninstall` is about to remove the binary, so
+    // neither nudges; every other command refreshes the update cache in the
     // background and nudges (once) if a newer release is already known.
-    if command != "update" {
+    if command != "update" && command != "uninstall" {
         update::spawn_background_check();
         if let Some(notice) = update::startup_notice() {
             eprintln!("{notice}\n");
@@ -78,6 +80,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "auth" => return run_auth(rest),
         "skills" => return skills::run(&workspace_start, rest),
         "update" => return update::run(rest),
+        "uninstall" => return uninstall::run(rest),
         _ => {}
     }
 
