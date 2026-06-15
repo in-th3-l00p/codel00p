@@ -11,6 +11,9 @@ pub enum MemoryError {
     #[error("invalid memory edit: {message}")]
     InvalidEdit { message: String },
 
+    #[error("invalid memory merge: {message}")]
+    InvalidMerge { message: String },
+
     #[error("memory already exists: {id}")]
     MemoryAlreadyExists { id: String },
 

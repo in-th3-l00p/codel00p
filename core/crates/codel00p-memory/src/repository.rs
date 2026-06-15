@@ -3,7 +3,7 @@
 use codel00p_storage::{InMemoryStorage, StorageScope};
 
 use crate::{
-    MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError, MemoryListFilter,
+    MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError, MemoryListFilter, MemoryMerge,
     MemoryQualityQuery, MemoryQuery, MemoryRecord, MemorySimilarityQuery, MemoryStalenessQuery,
     QualityMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
 };
@@ -17,6 +17,16 @@ pub trait MemoryRepository {
     fn review(&mut self, id: &str, decision: ReviewDecision) -> Result<MemoryRecord, MemoryError>;
 
     fn edit(&mut self, id: &str, edit: MemoryEdit) -> Result<MemoryRecord, MemoryError>;
+
+    /// Folds the `source` memory into the `target`: archives the source, carries
+    /// its tags onto the target, and records the merge on both audit logs.
+    /// Returns the updated target record.
+    fn merge(
+        &mut self,
+        source_id: &str,
+        target_id: &str,
+        merge: MemoryMerge,
+    ) -> Result<MemoryRecord, MemoryError>;
 
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError>;
 

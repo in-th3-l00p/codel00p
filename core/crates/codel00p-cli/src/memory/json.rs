@@ -59,6 +59,9 @@ pub(super) fn audit_event_json(event: &codel00p_memory::MemoryAuditEvent) -> Val
     if let Some(new_content) = event.new_content() {
         item["new_content"] = json!(new_content);
     }
+    if let Some(merged_into) = event.merged_into() {
+        item["merged_into"] = json!(merged_into);
+    }
     item
 }
 

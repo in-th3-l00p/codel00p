@@ -5,6 +5,8 @@ mod support;
 mod candidates_quality;
 #[path = "lifecycle/lifecycle_edit.rs"]
 mod lifecycle_edit;
+#[path = "lifecycle/lifecycle_merge.rs"]
+mod lifecycle_merge;
 #[path = "lifecycle/list.rs"]
 mod list;
 #[path = "lifecycle/retrieval.rs"]

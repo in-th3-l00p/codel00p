@@ -66,6 +66,37 @@ impl ReviewDecision {
     }
 }
 
+/// A request to fold a duplicate memory (the source) into a canonical one (the
+/// target). Mirrors [`ReviewDecision`]/[`MemoryEdit`]: the operation lives on the
+/// repository; this only carries who did it and why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryMerge {
+    actor: String,
+    reason: Option<String>,
+}
+
+impl MemoryMerge {
+    pub fn new(actor: impl Into<String>) -> Self {
+        Self {
+            actor: actor.into(),
+            reason: None,
+        }
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = non_empty_filter(reason.into());
+        self
+    }
+
+    pub fn actor(&self) -> &str {
+        &self.actor
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        self.reason.as_deref()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryEdit {
     actor: String,
@@ -118,6 +149,7 @@ pub enum MemoryAuditAction {
     Rejected,
     Archived,
     Edited,
+    Merged,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,6 +164,10 @@ pub struct MemoryAuditEvent {
     previous_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     new_content: Option<String>,
+    /// On a merge, the target this memory was folded into. Present only on the
+    /// source side of a merge; the target's event leaves it `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merged_into: Option<String>,
 }
 
 impl MemoryAuditEvent {
@@ -144,6 +180,7 @@ impl MemoryAuditEvent {
             reason: None,
             previous_content: None,
             new_content: None,
+            merged_into: None,
         }
     }
 
@@ -156,6 +193,51 @@ impl MemoryAuditEvent {
             reason: decision.reason().map(ToString::to_string),
             previous_content: None,
             new_content: None,
+            merged_into: None,
+        }
+    }
+
+    /// The audit event written to the **source** memory of a merge: it records
+    /// the target it was folded into and is paired with an [`Self::merged_from`]
+    /// event on that target.
+    pub(crate) fn merged(
+        memory_id: impl Into<String>,
+        merge: &MemoryMerge,
+        merged_into: impl Into<String>,
+    ) -> Self {
+        Self {
+            memory_id: memory_id.into(),
+            sequence: 0,
+            action: MemoryAuditAction::Merged,
+            actor: merge.actor().to_string(),
+            reason: merge.reason().map(ToString::to_string),
+            previous_content: None,
+            new_content: None,
+            merged_into: Some(merged_into.into()),
+        }
+    }
+
+    /// The audit event written to the **target** memory of a merge: it names the
+    /// absorbed source in its reason and leaves `merged_into` unset, marking it
+    /// as the receiving side.
+    pub(crate) fn merged_from(
+        memory_id: impl Into<String>,
+        merge: &MemoryMerge,
+        source_id: &str,
+    ) -> Self {
+        let reason = match merge.reason() {
+            Some(reason) => format!("absorbed {source_id}: {reason}"),
+            None => format!("absorbed {source_id}"),
+        };
+        Self {
+            memory_id: memory_id.into(),
+            sequence: 0,
+            action: MemoryAuditAction::Merged,
+            actor: merge.actor().to_string(),
+            reason: Some(reason),
+            previous_content: None,
+            new_content: None,
+            merged_into: None,
         }
     }
 
@@ -173,6 +255,7 @@ impl MemoryAuditEvent {
             reason: edit.reason().map(ToString::to_string),
             previous_content: Some(previous_content.into()),
             new_content: Some(new_content.into()),
+            merged_into: None,
         }
     }
 
@@ -202,6 +285,11 @@ impl MemoryAuditEvent {
 
     pub fn new_content(&self) -> Option<&str> {
         self.new_content.as_deref()
+    }
+
+    /// On a merge's source event, the target memory it was folded into.
+    pub fn merged_into(&self) -> Option<&str> {
+        self.merged_into.as_deref()
     }
 
     pub(crate) fn from_log_entry(entry: AppendLogEntry) -> Result<Self, MemoryError> {

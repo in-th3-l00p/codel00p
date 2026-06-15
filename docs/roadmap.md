@@ -114,7 +114,8 @@ Build:
 - duplicate and near-duplicate detection;
 - stale-memory detection;
 - sensitivity and visibility scopes;
-- merge/split workflows;
+- merge/split workflows; started with `memory merge` (archive the duplicate,
+  carry its tags onto the survivor, two-sided `merged` audit trail);
 - semantic retrieval behind deterministic filters;
 - memory quality scoring;
 - post-session memory recommendations;

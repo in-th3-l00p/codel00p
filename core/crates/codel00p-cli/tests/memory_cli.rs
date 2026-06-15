@@ -7,6 +7,8 @@ mod list_search;
 mod quality;
 #[path = "memory_cli/review_edit.rs"]
 mod review_edit;
+#[path = "memory_cli/review_merge.rs"]
+mod review_merge;
 #[path = "memory_cli/similar_stale.rs"]
 mod similar_stale;
 #[path = "memory_cli/validation.rs"]

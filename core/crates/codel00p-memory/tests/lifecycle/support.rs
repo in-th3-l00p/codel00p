@@ -2,8 +2,8 @@
 
 pub(crate) use codel00p_memory::{
     InMemoryMemoryStore, MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryError,
-    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
-    MemoryStalenessQuery, ReviewDecision, StorageBackedMemoryStore,
+    MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRepository,
+    MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision, StorageBackedMemoryStore,
 };
 pub(crate) use codel00p_protocol::{
     MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId,
