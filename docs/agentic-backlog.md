@@ -22,17 +22,50 @@ end to end (`cargo fmt --check`, `cargo test --workspace`, `cargo clippy
 --workspace --all-targets -D warnings`) after installing the Rust toolchain in
 this shell.
 
-Active follow-up slice: **TUI organization switching** on
+**New top priority (explicit request): Tool-Calling Parity** — see priority #1
+below and the [initiative](initiatives/tool-calling-parity.md). A research pass
+(Hermes, openclaw/OpenCode, Claude Code, OpenHands) plus an audit of the harness
+found the model never receives tool parameter schemas (`provider_adapter.rs`
+sends `{"type":"object"}` per tool). Next slice:
+**`2026-06-15-tool-schema-serialization.md`** — thread `Tool::input_schema()` +
+`description()` to providers. Then the rest of Phase 1 (arg validation, result
+truncation, `tool_choice`).
+
+Other active follow-up: **TUI organization switching** on
 `feat/tui-org-switch-login` (plan:
-`docs/superpowers/plans/2026-06-15-tui-org-switching.md`). This builds on the
-CLI org token re-mint primitive by adding a Clerk-backed `GET /orgs` route,
-surfacing those orgs in the TUI Org tab, and invoking `auth login --org` from
-the selected organization. After that, resume the standing priorities below
-(provider route intelligence / memory).
+`docs/superpowers/plans/2026-06-15-tui-org-switching.md`) — Clerk `GET /orgs`
+route + TUI Org tab switching via `auth login --org`.
 
 ## Active Priority
 
-### 1. Provider Route Intelligence
+### 1. Tool-Calling Parity
+
+Goal: bring tool calling up to Claude Code / OpenCode / Hermes / OpenHands level
+without losing codel00p's permission scopes and audit events. See the
+[Tool-Calling Parity initiative](initiatives/tool-calling-parity.md) for the full
+gap analysis and phased plan (research pass 2026-06-15).
+
+Why now (explicitly prioritized): an audit found the model never receives tool
+parameter schemas — `provider_adapter.rs` sends every tool as
+`{"type":"object"}` with a generic description, discarding the hand-written
+`Tool::input_schema()`/`description()`. That single gap caps tool-calling
+reliability below every mature agent. The floor must be fixed before the
+[programmatic `execute_code` capstone](initiatives/programmatic-tool-calling.md).
+
+Build (Phase 1 — floor; each an independent, offline-testable slice):
+
+- serialize real tool schemas + descriptions to providers (the #1 fix; slice
+  `2026-06-15-tool-schema-serialization.md`);
+- validate tool arguments against the schema before dispatch, returning a
+  structured, self-correctable error to the model;
+- tool-result truncation with persist-to-disk + preview to protect context;
+- `tool_choice` control (auto / required / specific / none) through the provider
+  contract.
+
+Phase 2 (surface/orchestration) and Phase 3 (SOTA: programmatic tool calling,
+JSON mode, streaming args) are tracked in the initiative.
+
+### 2. Provider Route Intelligence
 
 Goal: make provider routing policy-aware, auditable, and ready for team control.
 
@@ -76,7 +109,7 @@ agent runs to select presets by ID, and mirrored the preset catalog through
 TypeScript protocol/SDK packages for future cloud and desktop configuration
 surfaces.
 
-### 2. Memory 2.0
+### 3. Memory 2.0
 
 Goal: make project memory trusted, maintainable, and visibly sourced.
 
@@ -115,7 +148,7 @@ Build:
 Why next: memory is the product moat. Provider breadth matters, but durable
 reviewed knowledge is what makes codel00p distinct for teams.
 
-### 3. Agent Parity Hardening
+### 4. Agent Parity Hardening
 
 Goal: close the remaining gap with mature coding agents.
 
@@ -130,7 +163,7 @@ Build:
 - most-recent-session continue UX;
 - deterministic context manifests.
 
-### 4. MCP Certification
+### 5. MCP Certification
 
 Goal: make external integrations predictable for real teams.
 
@@ -142,7 +175,7 @@ Build:
 - large tool-set search and filtering;
 - connector policy templates.
 
-### 5. Team Cloud And Sync
+### 6. Team Cloud And Sync
 
 Goal: centralize project memory, provider policy, usage, permissions, and audit.
 
@@ -155,7 +188,7 @@ Build:
 - cloud storage backend behind `codel00p-storage`;
 - sync conflict representation and resolution.
 
-### 6. Desktop And Cloud Interfaces
+### 7. Desktop And Cloud Interfaces
 
 Goal: expose the agent, memory, and governance loop visually.
 
@@ -183,7 +216,7 @@ Still to build (desktop/web):
 - provider status and configuration views;
 - team activity views.
 
-### 7. Release & Self-Update (shipped — follow-ups)
+### 8. Release & Self-Update (shipped — follow-ups)
 
 Goal: let installed CLIs detect and install new releases instantly.
 

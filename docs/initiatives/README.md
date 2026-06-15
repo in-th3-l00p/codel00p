@@ -31,8 +31,9 @@ exit criteria.
 | 5 | [Scheduling / Cron](scheduling-cron.md) | Primitive | New | Phase 1 shipped (`codel00p-cron`) |
 | 6 | [Messaging Gateway](messaging-gateway.md) | Reach | New (alongside Stage 6 interfaces) | Phase 1 shipped (`codel00p-gateway`) |
 | 7 | [Execution Backends & Sandboxing](execution-backends-sandboxing.md) | Reach | Stage 8 (security/sandboxing) | Planned |
-| 8 | [Programmatic Tool Calling](programmatic-tool-calling.md) | Parity | Stage 1 (Agent parity) | Planned |
+| 8 | [Programmatic Tool Calling](programmatic-tool-calling.md) | Parity | Stage 1 (Agent parity) | Planned (capstone of #10) |
 | 9 | [Terminal UI (TUI)](tui.md) | Interface | Stage 6 (Interfaces) | Phase 2 shipped, Phase 3 started (`codel00p-cli/src/tui`) |
+| 10 | [Tool-Calling Parity](tool-calling-parity.md) | Parity | Stage 1 (Agent parity) | **Active** — Phase 1 next |
 
 ## Sequencing
 
