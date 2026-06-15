@@ -1,4 +1,4 @@
-use codel00p_memory::{MemoryEdit, MemoryRepository, ReviewDecision};
+use codel00p_memory::{MemoryEdit, MemoryMerge, MemoryRepository, ReviewDecision};
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
 
@@ -150,6 +150,60 @@ pub(super) fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<Strin
 
     let mut store = open_memory_store(&config)?;
     let record = store.edit(id, edit).map_err(|error| error.to_string())?;
+    if json_output {
+        return serde_json::to_string(&memory_record_json(&record))
+            .map_err(|error| error.to_string());
+    }
+
+    Ok(format!(
+        "{}\t{}\n",
+        record.entry().id(),
+        status_label(record.entry().status())
+    ))
+}
+
+pub(super) fn memory_merge(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let source_id = args
+        .first()
+        .ok_or_else(|| "missing source memory id".to_string())?;
+    let target_id = match args.get(1) {
+        Some(value) if !value.starts_with("--") => value,
+        _ => return Err("missing target memory id".to_string()),
+    };
+
+    let mut actor = None;
+    let mut reason = None;
+    let mut json_output = false;
+    let mut index = 2;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--actor" => {
+                actor = Some(required_value(args, index, "--actor")?);
+                index += 2;
+            }
+            "--reason" => {
+                reason = Some(required_value(args, index, "--reason")?);
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory merge option: {flag}")),
+        }
+    }
+
+    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+    let mut merge = MemoryMerge::new(actor);
+    if let Some(reason) = reason {
+        merge = merge.with_reason(reason);
+    }
+
+    let mut store = open_memory_store(&config)?;
+    let record = store
+        .merge(source_id, target_id, merge)
+        .map_err(|error| error.to_string())?;
     if json_output {
         return serde_json::to_string(&memory_record_json(&record))
             .map_err(|error| error.to_string());

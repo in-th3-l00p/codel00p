@@ -87,6 +87,12 @@ Build:
 - duplicate and near-duplicate detection; started with exact active duplicate
   candidate rejection, repository-level active memory similarity scoring, and
   CLI/MCP review access to near-duplicate scores;
+- merge/split workflows; started with a repository `merge(source, target)` that
+  archives the duplicate source, carries its tags onto the surviving target, and
+  writes a two-sided `merged` audit trail (the source records `merged_into`, the
+  target records the absorbed source), surfaced as `codel00p memory merge
+  <source> <target> --actor A [--reason R] [--json]` with `merged_into` in audit
+  JSON (CLI now; MCP merge tool and split are the next slices);
 - stale-memory detection; started with repository-level newer active-memory
   overlap scoring for approved memories and CLI/MCP stale review output;
 - visibility and sensitivity scopes; started with normal/sensitive memory

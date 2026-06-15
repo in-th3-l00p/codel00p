@@ -23,7 +23,7 @@ pub use records::{
     MemoryQuality, MemoryRecord, QualityMemory, RetrievedMemory, SimilarMemory, StaleMemory,
 };
 pub use repository::{InMemoryMemoryStore, MemoryRepository, StorageBackedMemoryStore};
-pub use review::{MemoryAuditAction, MemoryAuditEvent, MemoryEdit, ReviewDecision};
+pub use review::{MemoryAuditAction, MemoryAuditEvent, MemoryEdit, MemoryMerge, ReviewDecision};
 
 pub fn crate_name() -> &'static str {
     "codel00p-memory"

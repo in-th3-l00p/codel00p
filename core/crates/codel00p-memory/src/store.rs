@@ -5,7 +5,7 @@ use codel00p_storage::{AppendLogStore, DocumentStore, StorageDocument};
 
 use crate::{
     MemoryAuditAction, MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError,
-    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRepository,
+    MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRepository,
     MemorySimilarityQuery, MemoryStalenessQuery, QualityMemory, RetrievedMemory, ReviewDecision,
     SimilarMemory, StaleMemory, StorageBackedMemoryStore,
     records::{content_tokens, token_similarity_score},
@@ -76,6 +76,51 @@ where
         ))?;
 
         Ok(record)
+    }
+
+    fn merge(
+        &mut self,
+        source_id: &str,
+        target_id: &str,
+        merge: MemoryMerge,
+    ) -> Result<MemoryRecord, MemoryError> {
+        if source_id == target_id {
+            return Err(MemoryError::InvalidMerge {
+                message: "cannot merge a memory into itself".to_string(),
+            });
+        }
+
+        let source = self.get(source_id)?;
+        let target = self.get(target_id)?;
+
+        if source.entry().project().id() != target.entry().project().id() {
+            return Err(MemoryError::InvalidMerge {
+                message: "memories belong to different projects".to_string(),
+            });
+        }
+        if !is_active_memory_status(source.entry().status()) {
+            return Err(MemoryError::InvalidMerge {
+                message: "source memory is not active".to_string(),
+            });
+        }
+        if !is_active_memory_status(target.entry().status()) {
+            return Err(MemoryError::InvalidMerge {
+                message: "target memory is not active".to_string(),
+            });
+        }
+
+        // Carry the duplicate's tags onto the survivor, then archive the source.
+        let target_entry = union_tags(target.entry(), source.entry().tags());
+        let target_record = MemoryRecord::new(target_entry);
+        self.put_record(&target_record)?;
+
+        let archived_source = set_status(source.entry().clone(), MemoryStatus::Archived);
+        self.put_record(&MemoryRecord::new(archived_source))?;
+
+        self.append_audit(MemoryAuditEvent::merged(source_id, &merge, target_id))?;
+        self.append_audit(MemoryAuditEvent::merged_from(target_id, &merge, source_id))?;
+
+        Ok(target_record)
     }
 
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError> {
@@ -503,6 +548,33 @@ fn replace_content(entry: &MemoryEntry, content: String) -> MemoryEntry {
         updated = updated.with_tag(tag.clone());
     }
     updated
+}
+
+/// Rebuilds `target` with the union of its own tags and `extra_tags`, preserving
+/// the target's tag order and appending only tags it does not already carry.
+fn union_tags(target: &MemoryEntry, extra_tags: &[String]) -> MemoryEntry {
+    let mut entry = MemoryEntry::new(
+        target.id().to_string(),
+        target.project().clone(),
+        target.kind(),
+        target.content().to_string(),
+    )
+    .with_status(target.status())
+    .with_sensitivity(target.sensitivity());
+    if let Some(source) = target.source() {
+        entry = entry.with_source(source.clone());
+    }
+
+    let mut tags: Vec<String> = target.tags().to_vec();
+    for tag in extra_tags {
+        if !tags.iter().any(|existing| existing == tag) {
+            tags.push(tag.clone());
+        }
+    }
+    for tag in tags {
+        entry = entry.with_tag(tag);
+    }
+    entry
 }
 
 fn entry_content(entry: &MemoryEntry) -> &str {

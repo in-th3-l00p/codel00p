@@ -66,5 +66,6 @@ pub(super) fn audit_action_label(action: codel00p_memory::MemoryAuditAction) -> 
         codel00p_memory::MemoryAuditAction::Rejected => "rejected",
         codel00p_memory::MemoryAuditAction::Archived => "archived",
         codel00p_memory::MemoryAuditAction::Edited => "edited",
+        codel00p_memory::MemoryAuditAction::Merged => "merged",
     }
 }

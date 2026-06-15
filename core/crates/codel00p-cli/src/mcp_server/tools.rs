@@ -197,6 +197,9 @@ fn memory_audit(config: &CliConfig, arguments: &Value) -> Result<String, String>
             if let Some(new_content) = event.new_content() {
                 item["new_content"] = json!(new_content);
             }
+            if let Some(merged_into) = event.merged_into() {
+                item["merged_into"] = json!(merged_into);
+            }
             item
         })
         .collect::<Vec<_>>();
