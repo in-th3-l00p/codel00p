@@ -211,6 +211,101 @@ async fn apply_patch_rejects_missing_match_without_writing() {
     );
 }
 
+#[tokio::test]
+async fn apply_patch_chains_multiple_changes_to_the_same_file() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("config.toml"), "foo bar baz\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let result = registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({
+                "changes": [
+                    { "path": "config.toml", "find": "foo", "replace": "FOO" },
+                    { "path": "config.toml", "find": "bar", "replace": "BAR" }
+                ]
+            }),
+        )
+        .await
+        .expect("apply patch");
+
+    // Both edits land — the second change must see the result of the first
+    // rather than re-reading the original file (which would lose "FOO").
+    assert_eq!(
+        fs::read_to_string(dir.path().join("config.toml")).expect("read patched"),
+        "FOO BAR baz\n"
+    );
+    assert_eq!(
+        result.content()["changes"]
+            .as_array()
+            .expect("changes")
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn apply_patch_lets_a_later_change_match_an_earlier_replacement() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("notes.txt"), "alpha\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    // The second change's `find` only exists *after* the first change applies,
+    // proving the batch composes in order against the accumulating content.
+    registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({
+                "changes": [
+                    { "path": "notes.txt", "find": "alpha", "replace": "beta" },
+                    { "path": "notes.txt", "find": "beta", "replace": "gamma" }
+                ]
+            }),
+        )
+        .await
+        .expect("apply patch");
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("notes.txt")).expect("read patched"),
+        "gamma\n"
+    );
+}
+
+#[tokio::test]
+async fn apply_patch_batch_is_atomic_when_a_later_change_fails() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("data.txt"), "keep me\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let error = registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({
+                "changes": [
+                    { "path": "data.txt", "find": "keep me", "replace": "changed" },
+                    { "path": "data.txt", "find": "absent", "replace": "noop" }
+                ]
+            }),
+        )
+        .await
+        .expect_err("batch with a missing match should fail");
+
+    assert!(matches!(error, HarnessError::ToolFailed { name, .. } if name == "apply_patch"));
+    // The first change succeeded in memory but the batch failed before any write,
+    // so the file on disk is untouched.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("data.txt")).expect("read file"),
+        "keep me\n"
+    );
+}
+
 async fn patch_once(
     workspace: &Workspace,
     registry: &ToolRegistry,
