@@ -1,10 +1,50 @@
 use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ToolCall,
-    ToolDefinition, default_registry,
+    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ResponseFormat,
+    ToolCall, ToolDefinition, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
 use serde_json::json;
+
+#[tokio::test]
+async fn gemini_serializes_json_response_format_in_generation_config() {
+    let server = MockServer::start_async().await;
+    let generate = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1beta/models/gemini-2.5-flash:generateContent")
+                .body_includes(r#""responseMimeType":"application/json""#)
+                .body_includes(r#""responseSchema""#);
+            then.status(200).json_body(json!({
+                "candidates": [{
+                    "content": { "role": "model", "parts": [{"text": "{}"}] },
+                    "finishReason": "STOP"
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("gemini", Credential::api_key("test-key"))
+        .build();
+
+    client
+        .complete(
+            InferenceRequest::builder("gemini", "gemini-2.5-flash")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("give me json"))
+                .response_format(ResponseFormat::JsonSchema {
+                    name: "result".into(),
+                    schema: json!({ "type": "object" }),
+                })
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    generate.assert_async().await;
+}
 
 #[tokio::test]
 async fn gemini_posts_payload_and_normalizes_text_response() {

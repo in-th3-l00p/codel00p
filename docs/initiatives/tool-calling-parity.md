@@ -112,9 +112,13 @@ broader matrix; this initiative tracks the tool-calling slice of it.
 ### Phase 3 — Advanced (SOTA)
 - [ ] **Programmatic tool calling (`execute_code`)** — see
       [#8](programmatic-tool-calling.md); this initiative's capstone.
-- [ ] **JSON Mode / structured output** distinct from tool calling (Hermes
-      `<schema>` / Anthropic strict): schema-validated structured responses with a
-      recursive retry, for planning and structured edits.
+- [x] **JSON Mode / structured output** (shipped 2026-06-16): a provider-neutral
+      `ResponseFormat` (text / json_object / json_schema) on the request +
+      `AgentHarness` builder, serialized where natively supported — OpenAI-style
+      chat (incl. Azure/GitHub) `response_format` and Gemini
+      `generationConfig.responseMimeType`/`responseSchema`; omitted for Anthropic
+      / Bedrock / the Responses API. (Schema-validated recursive retry remains a
+      follow-up.)
 - [ ] **Streaming tool-call arguments** (incremental parse) where the transport
       supports it.
 

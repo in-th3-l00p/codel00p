@@ -80,6 +80,10 @@ impl ProviderModelClient {
             builder = builder.tool_choice(tool_choice.clone());
         }
 
+        if let Some(response_format) = request.response_format() {
+            builder = builder.response_format(response_format.clone());
+        }
+
         builder.build()
     }
 

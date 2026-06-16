@@ -22,7 +22,8 @@ use crate::{
     tool_result::ToolResult,
     truncation::ToolOutputTruncation,
     turn::{
-        ExecutedToolCall, HarnessInferenceRequest, ModelClient, TokenSink, ToolChoice, TurnOutcome,
+        ExecutedToolCall, HarnessInferenceRequest, ModelClient, ResponseFormat, TokenSink,
+        ToolChoice, TurnOutcome,
     },
     workspace::Workspace,
 };
@@ -57,5 +58,6 @@ pub struct AgentHarness {
     max_iterations: u32,
     tool_output_truncation: ToolOutputTruncation,
     tool_choice: Option<ToolChoice>,
+    response_format: Option<ResponseFormat>,
     cancel: CancelSignal,
 }

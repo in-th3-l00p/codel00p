@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use codel00p_protocol::ContextWindowState;
 pub use codel00p_protocol::ToolCall as ModelToolCall;
-pub use codel00p_providers::{TokenSink, ToolChoice};
+pub use codel00p_providers::{ResponseFormat, TokenSink, ToolChoice};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -46,6 +46,8 @@ pub struct HarnessInferenceRequest {
     tools: Vec<ToolSpec>,
     /// Optional control over whether/which tool the model must call.
     tool_choice: Option<ToolChoice>,
+    /// Optional structured-output request (JSON mode).
+    response_format: Option<ResponseFormat>,
     context_window: Option<ContextWindowState>,
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
@@ -60,6 +62,7 @@ impl HarnessInferenceRequest {
             tool_names: Vec::new(),
             tools: Vec::new(),
             tool_choice: None,
+            response_format: None,
             context_window: None,
             project_instructions: None,
             project_memory: None,
@@ -103,6 +106,11 @@ impl HarnessInferenceRequest {
         self
     }
 
+    pub fn with_response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
     pub fn session_state(&self) -> &SessionState {
         &self.session_state
     }
@@ -123,6 +131,11 @@ impl HarnessInferenceRequest {
     /// The configured tool-choice control, if any.
     pub fn tool_choice(&self) -> Option<&ToolChoice> {
         self.tool_choice.as_ref()
+    }
+
+    /// The configured structured-output format, if any.
+    pub fn response_format(&self) -> Option<&ResponseFormat> {
+        self.response_format.as_ref()
     }
 
     pub fn context_window(&self) -> Option<&ContextWindowState> {
