@@ -1,5 +1,10 @@
-//! Color palette for the agent TUI. A small, btop-inspired dark theme; kept as a
-//! struct so a future settings option can swap it without touching the views.
+//! Color palette for the agent TUI. A small, dark theme kept as a struct so a
+//! future settings option can swap it without touching the views.
+//!
+//! Colors come from the **256-color palette** (`Color::Indexed`), not 24-bit RGB,
+//! because common terminals (notably macOS Terminal.app) do not support truecolor
+//! and render RGB escapes as wrong/garish colors. Indexed colors render correctly
+//! across 256-color terminals and look consistent.
 
 use ratatui::style::{Color, Modifier, Style};
 
@@ -22,15 +27,17 @@ pub(crate) struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            accent: Color::Rgb(0x7a, 0xa2, 0xf7),
-            tool: Color::Rgb(0xe0, 0xaf, 0x68),
-            notice: Color::Rgb(0x7d, 0xcf, 0xff),
-            error: Color::Rgb(0xf7, 0x76, 0x8e),
-            muted: Color::Rgb(0x56, 0x5f, 0x89),
-            overlay_border: Color::Rgb(0x7a, 0xa2, 0xf7),
-            selection_bg: Color::Rgb(0x28, 0x34, 0x57),
-            input_bg: Color::Rgb(0x1f, 0x23, 0x35),
-            user_bg: Color::Rgb(0x1a, 0x1d, 0x2b),
+            // Foregrounds: soft, readable hues from the 256-palette.
+            accent: Color::Indexed(111), // soft blue (#87afff)
+            tool: Color::Indexed(179),   // gold (#d7af5f)
+            notice: Color::Indexed(116), // light cyan (#87d7d7)
+            error: Color::Indexed(210),  // soft red (#ff8787)
+            muted: Color::Indexed(245),  // mid grey (#8a8a8a)
+            overlay_border: Color::Indexed(111),
+            // Backgrounds: subtle dark greys, just elevated above a dark terminal.
+            selection_bg: Color::Indexed(238), // grey chip (#444444)
+            input_bg: Color::Indexed(237),     // composer fill (#3a3a3a)
+            user_bg: Color::Indexed(236),      // user message tint (#303030)
         }
     }
 }
