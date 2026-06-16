@@ -2,22 +2,13 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use super::model::{Screen, SessionsModel};
+use crate::dialog::{accent, muted, panel, selection};
 use crate::tui::picker::PickerItem;
-
-const ACCENT: Style = Style::new().add_modifier(Modifier::BOLD);
-
-fn selected() -> Style {
-    Style::new().add_modifier(Modifier::REVERSED)
-}
-
-fn muted() -> Style {
-    Style::new().add_modifier(Modifier::DIM)
-}
 
 pub(crate) fn draw(frame: &mut Frame, model: &SessionsModel) {
     let rows = Layout::default()
@@ -30,7 +21,7 @@ pub(crate) fn draw(frame: &mut Frame, model: &SessionsModel) {
         .split(frame.area());
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" codel00p sessions", ACCENT))),
+        Paragraph::new(Line::from(Span::styled(" codel00p sessions", accent()))),
         rows[0],
     );
 
@@ -49,16 +40,10 @@ pub(crate) fn draw(frame: &mut Frame, model: &SessionsModel) {
     );
 }
 
-fn block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {title} "))
-}
-
 fn draw_list(frame: &mut Frame, area: Rect, model: &SessionsModel) {
     if model.picker.is_empty() {
         frame.render_widget(
-            Paragraph::new(Span::styled("  (no sessions yet)", muted())).block(block("sessions")),
+            Paragraph::new(Span::styled("  (no sessions yet)", muted())).block(panel("sessions")),
             area,
         );
         return;
@@ -70,7 +55,7 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &SessionsModel) {
             let marker = if is_selected { "▸ " } else { "  " };
             let detail = row.detail().unwrap_or_default();
             let style = if is_selected {
-                selected()
+                selection()
             } else {
                 Style::new()
             };
@@ -80,7 +65,7 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &SessionsModel) {
             ))
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines).block(block("sessions")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("sessions")), area);
 }
 
 fn draw_detail(frame: &mut Frame, area: Rect, model: &SessionsModel) {
@@ -97,7 +82,7 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &SessionsModel) {
     frame.render_widget(
         Paragraph::new(lines)
             .scroll((model.scroll as u16, 0))
-            .block(block(&title)),
+            .block(panel(&title)),
         area,
     );
 }

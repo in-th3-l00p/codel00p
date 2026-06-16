@@ -4,20 +4,11 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use super::model::{CloudModel, DetailTab, Screen};
+use crate::dialog::{accent, muted, panel, selection};
 use crate::tui::picker::{Picker, PickerItem};
-
-const ACCENT: Style = Style::new().add_modifier(Modifier::BOLD);
-
-fn selected() -> Style {
-    Style::new().add_modifier(Modifier::REVERSED)
-}
-
-fn muted() -> Style {
-    Style::new().add_modifier(Modifier::DIM)
-}
 
 pub(crate) fn draw(frame: &mut Frame, model: &CloudModel) {
     let rows = Layout::default()
@@ -30,7 +21,7 @@ pub(crate) fn draw(frame: &mut Frame, model: &CloudModel) {
         .split(frame.area());
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" codel00p cloud", ACCENT))),
+        Paragraph::new(Line::from(Span::styled(" codel00p cloud", accent()))),
         rows[0],
     );
 
@@ -51,12 +42,6 @@ pub(crate) fn draw(frame: &mut Frame, model: &CloudModel) {
     );
 }
 
-fn block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {title} "))
-}
-
 fn draw_status(frame: &mut Frame, area: Rect, model: &CloudModel) {
     // Status panel grows with the viewer summary (+ a transient action line);
     // the rest is the project list.
@@ -73,9 +58,9 @@ fn draw_status(frame: &mut Frame, area: Rect, model: &CloudModel) {
         .map(|line| Line::from(line.clone()))
         .collect();
     if let Some(status) = &model.status {
-        lines.push(Line::from(Span::styled(status.clone(), ACCENT)));
+        lines.push(Line::from(Span::styled(status.clone(), accent())));
     }
-    frame.render_widget(Paragraph::new(lines).block(block("status")), panes[0]);
+    frame.render_widget(Paragraph::new(lines).block(panel("status")), panes[0]);
 
     draw_picker(
         frame,
@@ -99,7 +84,7 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &CloudModel) {
             spans.push(Span::raw("  "));
         }
         let style = if *tab == model.tab {
-            ACCENT.add_modifier(Modifier::UNDERLINED)
+            accent().add_modifier(Modifier::UNDERLINED)
         } else {
             muted()
         };
@@ -130,7 +115,7 @@ fn draw_picker<T: PickerItem>(
 ) {
     if picker.is_empty() {
         frame.render_widget(
-            Paragraph::new(Span::styled(format!("  {empty}"), muted())).block(block(title)),
+            Paragraph::new(Span::styled(format!("  {empty}"), muted())).block(panel(title)),
             area,
         );
         return;
@@ -140,7 +125,7 @@ fn draw_picker<T: PickerItem>(
         .map(|(row, is_selected)| {
             let marker = if is_selected { "▸ " } else { "  " };
             let style = if is_selected {
-                selected()
+                selection()
             } else {
                 Style::new()
             };
@@ -151,7 +136,7 @@ fn draw_picker<T: PickerItem>(
             Line::from(Span::styled(text, style))
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines).block(block(title)), area);
+    frame.render_widget(Paragraph::new(lines).block(panel(title)), area);
 }
 
 fn draw_unauthenticated(frame: &mut Frame, area: Rect, model: &CloudModel) {
@@ -163,7 +148,7 @@ fn draw_unauthenticated(frame: &mut Frame, area: Rect, model: &CloudModel) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "Run `codel00p auth login` to sign in.",
-        ACCENT,
+        accent(),
     )));
-    frame.render_widget(Paragraph::new(lines).block(block("not signed in")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("not signed in")), area);
 }

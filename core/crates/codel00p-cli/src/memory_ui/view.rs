@@ -2,22 +2,13 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
+use ratatui::widgets::{Paragraph, Tabs};
 
 use super::model::{MemoryModel, PendingAction, Screen, StatusFilter, kind_label, status_label};
+use crate::dialog::{accent, muted, panel, selection};
 use crate::tui::picker::PickerItem;
-
-const ACCENT: Style = Style::new().add_modifier(Modifier::BOLD);
-
-fn selected() -> Style {
-    Style::new().add_modifier(Modifier::REVERSED)
-}
-
-fn muted() -> Style {
-    Style::new().add_modifier(Modifier::DIM)
-}
 
 pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
     let area = frame.area();
@@ -31,7 +22,10 @@ pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
         .split(area);
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" codel00p memory review", ACCENT))),
+        Paragraph::new(Line::from(Span::styled(
+            " codel00p memory review",
+            accent(),
+        ))),
         rows[0],
     );
 
@@ -62,12 +56,6 @@ pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
     );
 }
 
-fn block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {title} "))
-}
-
 fn draw_list(frame: &mut Frame, area: Rect, model: &MemoryModel) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -83,14 +71,16 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &MemoryModel) {
         .position(|filter| *filter == model.filter)
         .unwrap_or(0);
     frame.render_widget(
-        Tabs::new(titles).select(active).highlight_style(selected()),
+        Tabs::new(titles)
+            .select(active)
+            .highlight_style(selection()),
         rows[0],
     );
 
     if model.picker.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled("  (no memory in this view)", muted()))
-                .block(block("memory")),
+                .block(panel("memory")),
             rows[1],
         );
         return;
@@ -103,7 +93,7 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &MemoryModel) {
             let marker = if is_selected { "▸ " } else { "  " };
             let detail = row.detail().unwrap_or_default();
             let style = if is_selected {
-                selected()
+                selection()
             } else {
                 Style::new()
             };
@@ -113,12 +103,12 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &MemoryModel) {
             ))
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines).block(block("memory")), rows[1]);
+    frame.render_widget(Paragraph::new(lines).block(panel("memory")), rows[1]);
 }
 
 fn draw_detail(frame: &mut Frame, area: Rect, model: &MemoryModel) {
     let Some(row) = &model.selected else {
-        frame.render_widget(Paragraph::new("").block(block("memory")), area);
+        frame.render_widget(Paragraph::new("").block(panel("memory")), area);
         return;
     };
     let mut lines = vec![
@@ -127,12 +117,12 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &MemoryModel) {
         kv("kind", kind_label(row.kind)),
         kv("tags", &row.tags.join(", ")),
         Line::from(""),
-        Line::from(Span::styled("content", ACCENT)),
+        Line::from(Span::styled("content", accent())),
         Line::from(format!("  {}", row.content)),
     ];
     if !model.detail_audit.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled("audit", ACCENT)));
+        lines.push(Line::from(Span::styled("audit", accent())));
         for event in &model.detail_audit {
             lines.push(Line::from(format!(
                 "  {}\t{}\t{}\t{}",
@@ -143,7 +133,7 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &MemoryModel) {
             )));
         }
     }
-    frame.render_widget(Paragraph::new(lines).block(block("record")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("record")), area);
 }
 
 fn draw_merge(frame: &mut Frame, area: Rect, model: &MemoryModel) {
@@ -152,13 +142,13 @@ fn draw_merge(frame: &mut Frame, area: Rect, model: &MemoryModel) {
         .as_ref()
         .map(|row| format!("Merge {} into:", row.id))
         .unwrap_or_else(|| "Merge into:".to_string());
-    let lines: Vec<Line> = std::iter::once(Line::from(Span::styled(header, ACCENT)))
+    let lines: Vec<Line> = std::iter::once(Line::from(Span::styled(header, accent())))
         .chain(std::iter::once(Line::from("")))
         .chain(model.merge_targets.visible().map(|(row, is_selected)| {
             let marker = if is_selected { "▸ " } else { "  " };
             let detail = row.detail().unwrap_or_default();
             let style = if is_selected {
-                selected()
+                selection()
             } else {
                 Style::new()
             };
@@ -168,20 +158,20 @@ fn draw_merge(frame: &mut Frame, area: Rect, model: &MemoryModel) {
             ))
         }))
         .collect();
-    frame.render_widget(Paragraph::new(lines).block(block("merge target")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("merge target")), area);
 }
 
 fn draw_restore(frame: &mut Frame, area: Rect, model: &MemoryModel) {
     let lines: Vec<Line> = std::iter::once(Line::from(Span::styled(
         "Restore content from audit entry:",
-        ACCENT,
+        accent(),
     )))
     .chain(std::iter::once(Line::from("")))
     .chain(model.restore_picker.visible().map(|(row, is_selected)| {
         let marker = if is_selected { "▸ " } else { "  " };
         let detail = row.detail().unwrap_or_default();
         let style = if is_selected {
-            selected()
+            selection()
         } else {
             Style::new()
         };
@@ -191,7 +181,7 @@ fn draw_restore(frame: &mut Frame, area: Rect, model: &MemoryModel) {
         ))
     }))
     .collect();
-    frame.render_widget(Paragraph::new(lines).block(block("restore")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("restore")), area);
 }
 
 fn draw_prompt(frame: &mut Frame, area: Rect, model: &MemoryModel) {
@@ -202,16 +192,16 @@ fn draw_prompt(frame: &mut Frame, area: Rect, model: &MemoryModel) {
         None => "input",
     };
     let body = vec![
-        Line::from(Span::styled(format!("Enter {title}:"), ACCENT)),
+        Line::from(Span::styled(format!("Enter {title}:"), accent())),
         Line::from(""),
         Line::from(format!("  {}", model.composer.text())),
     ];
-    frame.render_widget(Paragraph::new(body).block(block(title)), area);
+    frame.render_widget(Paragraph::new(body).block(panel(title)), area);
 }
 
 fn kv(key: &str, value: &str) -> Line<'static> {
     Line::from(vec![
-        Span::styled(format!("{key:<8}"), ACCENT),
+        Span::styled(format!("{key:<8}"), accent()),
         Span::raw(value.to_string()),
     ])
 }

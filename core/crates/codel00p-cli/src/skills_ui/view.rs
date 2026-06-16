@@ -2,22 +2,13 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
+use ratatui::widgets::{Paragraph, Tabs};
 
 use super::model::{Filter, Screen, SkillKind, SkillsModel};
+use crate::dialog::{accent, muted, panel, selection};
 use crate::tui::picker::PickerItem;
-
-const ACCENT: Style = Style::new().add_modifier(Modifier::BOLD);
-
-fn selected() -> Style {
-    Style::new().add_modifier(Modifier::REVERSED)
-}
-
-fn muted() -> Style {
-    Style::new().add_modifier(Modifier::DIM)
-}
 
 pub(crate) fn draw(frame: &mut Frame, model: &SkillsModel) {
     let rows = Layout::default()
@@ -30,7 +21,10 @@ pub(crate) fn draw(frame: &mut Frame, model: &SkillsModel) {
         .split(frame.area());
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" codel00p skills review", ACCENT))),
+        Paragraph::new(Line::from(Span::styled(
+            " codel00p skills review",
+            accent(),
+        ))),
         rows[0],
     );
 
@@ -63,12 +57,6 @@ fn detail_footer(model: &SkillsModel) -> &'static str {
     }
 }
 
-fn block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {title} "))
-}
-
 fn draw_list(frame: &mut Frame, area: Rect, model: &SkillsModel) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -84,14 +72,16 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &SkillsModel) {
         .position(|filter| *filter == model.filter)
         .unwrap_or(0);
     frame.render_widget(
-        Tabs::new(titles).select(active).highlight_style(selected()),
+        Tabs::new(titles)
+            .select(active)
+            .highlight_style(selection()),
         rows[0],
     );
 
     if model.picker.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled("  (no skills in this view)", muted()))
-                .block(block("skills")),
+                .block(panel("skills")),
             rows[1],
         );
         return;
@@ -104,7 +94,7 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &SkillsModel) {
             let marker = if is_selected { "▸ " } else { "  " };
             let detail = row.detail().unwrap_or_default();
             let style = if is_selected {
-                selected()
+                selection()
             } else {
                 Style::new()
             };
@@ -118,12 +108,12 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &SkillsModel) {
             ))
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines).block(block("skills")), rows[1]);
+    frame.render_widget(Paragraph::new(lines).block(panel("skills")), rows[1]);
 }
 
 fn draw_detail(frame: &mut Frame, area: Rect, model: &SkillsModel) {
     let Some(row) = &model.selected else {
-        frame.render_widget(Paragraph::new("").block(block("skill")), area);
+        frame.render_widget(Paragraph::new("").block(panel("skill")), area);
         return;
     };
     let kind = match row.kind {
@@ -157,21 +147,21 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &SkillsModel) {
     }
     lines.push(kv("path", &row.path));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("instructions", ACCENT)));
+    lines.push(Line::from(Span::styled("instructions", accent())));
     for line in row.body.lines() {
         lines.push(Line::from(format!("  {line}")));
     }
     frame.render_widget(
         Paragraph::new(lines)
             .scroll((model.scroll as u16, 0))
-            .block(block(&row.name)),
+            .block(panel(&row.name)),
         area,
     );
 }
 
 fn kv(key: &str, value: &str) -> Line<'static> {
     Line::from(vec![
-        Span::styled(format!("{key:<10}"), ACCENT),
+        Span::styled(format!("{key:<10}"), accent()),
         Span::raw(value.to_string()),
     ])
 }

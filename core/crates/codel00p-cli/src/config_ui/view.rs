@@ -2,21 +2,12 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use super::model::{ConfigModel, MENU_ITEMS, PERMISSION_MODES, ProvFocus, Screen, TOOL_SETS};
-
-const ACCENT: Style = Style::new().add_modifier(Modifier::BOLD);
-
-fn selected() -> Style {
-    Style::new().add_modifier(Modifier::REVERSED)
-}
-
-fn muted() -> Style {
-    Style::new().add_modifier(Modifier::DIM)
-}
+use crate::dialog::{accent, muted, panel, selection};
 
 pub(crate) fn draw(frame: &mut Frame, model: &ConfigModel) {
     let area = frame.area();
@@ -30,7 +21,10 @@ pub(crate) fn draw(frame: &mut Frame, model: &ConfigModel) {
         .split(area);
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" codel00p configuration", ACCENT))),
+        Paragraph::new(Line::from(Span::styled(
+            " codel00p configuration",
+            accent(),
+        ))),
         rows[0],
     );
 
@@ -51,12 +45,6 @@ pub(crate) fn draw(frame: &mut Frame, model: &ConfigModel) {
         Paragraph::new(Line::from(Span::styled(format!(" {footer}"), muted()))),
         rows[2],
     );
-}
-
-fn block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {title} "))
 }
 
 fn draw_menu(frame: &mut Frame, area: Rect, model: &ConfigModel) {
@@ -81,7 +69,7 @@ fn draw_menu(frame: &mut Frame, area: Rect, model: &ConfigModel) {
     let mut lines = Vec::new();
     for (index, item) in MENU_ITEMS.iter().enumerate() {
         let style = if index == model.menu_cursor {
-            selected()
+            selection()
         } else {
             Style::new()
         };
@@ -93,7 +81,7 @@ fn draw_menu(frame: &mut Frame, area: Rect, model: &ConfigModel) {
         };
         lines.push(Line::from(Span::styled(text, style)));
     }
-    frame.render_widget(Paragraph::new(lines).block(block("settings")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("settings")), area);
 }
 
 fn draw_providers(frame: &mut Frame, area: Rect, model: &ConfigModel) {
@@ -112,13 +100,13 @@ fn draw_providers(frame: &mut Frame, area: Rect, model: &ConfigModel) {
         } else {
             " "
         };
-        let style = if is_cursor { selected() } else { Style::new() };
+        let style = if is_cursor { selection() } else { Style::new() };
         list.push(Line::from(Span::styled(
             format!("{chosen} [{mark}] {}", row.display_name),
             style,
         )));
     }
-    frame.render_widget(Paragraph::new(list).block(block("provider")), columns[0]);
+    frame.render_widget(Paragraph::new(list).block(panel("provider")), columns[0]);
 
     // Fields for the selected provider.
     let key_display = if model.key_input.is_empty() {
@@ -128,18 +116,21 @@ fn draw_providers(frame: &mut Frame, area: Rect, model: &ConfigModel) {
     };
     let field = |label: &str, value: &str, focus: ProvFocus| {
         let style = if model.prov_focus == focus {
-            selected()
+            selection()
         } else {
             Style::new()
         };
         Line::from(vec![
-            Span::styled(format!("{label:<9}"), ACCENT),
+            Span::styled(format!("{label:<9}"), accent()),
             Span::styled(value.to_string(), style),
         ])
     };
     let provider_label = model.provider.as_deref().unwrap_or("(none selected)");
     let body = vec![
-        Line::from(Span::styled(format!("Selected: {provider_label}"), ACCENT)),
+        Line::from(Span::styled(
+            format!("Selected: {provider_label}"),
+            accent(),
+        )),
         Line::from(""),
         field("API key", &key_display, ProvFocus::Key),
         field("Model", &model.model_input, ProvFocus::Model),
@@ -150,7 +141,7 @@ fn draw_providers(frame: &mut Frame, area: Rect, model: &ConfigModel) {
             muted(),
         )),
     ];
-    frame.render_widget(Paragraph::new(body).block(block("details")), columns[1]);
+    frame.render_widget(Paragraph::new(body).block(panel("details")), columns[1]);
 }
 
 fn draw_tools(frame: &mut Frame, area: Rect, model: &ConfigModel) {
@@ -159,13 +150,13 @@ fn draw_tools(frame: &mut Frame, area: Rect, model: &ConfigModel) {
         let checked = model.tool_sets.iter().any(|s| s == set);
         let mark = if checked { "x" } else { " " };
         let style = if index == model.tools_cursor {
-            selected()
+            selection()
         } else {
             Style::new()
         };
         lines.push(Line::from(Span::styled(format!("  [{mark}] {set}"), style)));
     }
-    frame.render_widget(Paragraph::new(lines).block(block("tool sets")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("tool sets")), area);
 }
 
 fn draw_permissions(frame: &mut Frame, area: Rect, model: &ConfigModel) {
@@ -177,7 +168,7 @@ fn draw_permissions(frame: &mut Frame, area: Rect, model: &ConfigModel) {
             "( )"
         };
         let style = if index == model.perms_cursor {
-            selected()
+            selection()
         } else {
             Style::new()
         };
@@ -186,5 +177,5 @@ fn draw_permissions(frame: &mut Frame, area: Rect, model: &ConfigModel) {
             style,
         )));
     }
-    frame.render_widget(Paragraph::new(lines).block(block("permission mode")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("permission mode")), area);
 }

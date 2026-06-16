@@ -2,22 +2,13 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use super::model::{CreateStep, CronModel, Screen};
+use crate::dialog::{accent, muted, panel, selection};
 use crate::tui::picker::PickerItem;
-
-const ACCENT: Style = Style::new().add_modifier(Modifier::BOLD);
-
-fn selected() -> Style {
-    Style::new().add_modifier(Modifier::REVERSED)
-}
-
-fn muted() -> Style {
-    Style::new().add_modifier(Modifier::DIM)
-}
 
 pub(crate) fn draw(frame: &mut Frame, model: &CronModel) {
     let area = frame.area();
@@ -31,7 +22,7 @@ pub(crate) fn draw(frame: &mut Frame, model: &CronModel) {
         .split(area);
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" codel00p cron", ACCENT))),
+        Paragraph::new(Line::from(Span::styled(" codel00p cron", accent()))),
         rows[0],
     );
 
@@ -56,12 +47,6 @@ pub(crate) fn draw(frame: &mut Frame, model: &CronModel) {
     );
 }
 
-fn block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {title} "))
-}
-
 fn draw_list(frame: &mut Frame, area: Rect, model: &CronModel) {
     if model.picker.is_empty() {
         frame.render_widget(
@@ -69,7 +54,7 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &CronModel) {
                 "  (no scheduled jobs — press n to add one)",
                 muted(),
             ))
-            .block(block("jobs")),
+            .block(panel("jobs")),
             area,
         );
         return;
@@ -82,7 +67,7 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &CronModel) {
             let marker = if is_selected { "▸ " } else { "  " };
             let detail = row.detail().unwrap_or_default();
             let style = if is_selected {
-                selected()
+                selection()
             } else {
                 Style::new()
             };
@@ -92,12 +77,12 @@ fn draw_list(frame: &mut Frame, area: Rect, model: &CronModel) {
             ))
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines).block(block("jobs")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("jobs")), area);
 }
 
 fn draw_detail(frame: &mut Frame, area: Rect, model: &CronModel) {
     let Some(row) = &model.selected else {
-        frame.render_widget(Paragraph::new("").block(block("job")), area);
+        frame.render_widget(Paragraph::new("").block(panel("job")), area);
         return;
     };
     let detail = &row.detail;
@@ -126,15 +111,15 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &CronModel) {
     lines.push(Line::from(""));
     match &detail.command {
         Some(command) => {
-            lines.push(Line::from(Span::styled("command", ACCENT)));
+            lines.push(Line::from(Span::styled("command", accent())));
             lines.push(Line::from(format!("  codel00p {}", command.join(" "))));
         }
         None => {
-            lines.push(Line::from(Span::styled("prompt", ACCENT)));
+            lines.push(Line::from(Span::styled("prompt", accent())));
             lines.push(Line::from(format!("  {}", detail.prompt)));
         }
     }
-    frame.render_widget(Paragraph::new(lines).block(block("job")), area);
+    frame.render_widget(Paragraph::new(lines).block(panel("job")), area);
 }
 
 fn draw_create(frame: &mut Frame, area: Rect, model: &CronModel) {
@@ -145,7 +130,10 @@ fn draw_create(frame: &mut Frame, area: Rect, model: &CronModel) {
         ),
         CreateStep::Prompt => ("prompt", "what the agent should do on each run"),
     };
-    let mut body = vec![Line::from(Span::styled(format!("Enter {title}:"), ACCENT))];
+    let mut body = vec![Line::from(Span::styled(
+        format!("Enter {title}:"),
+        accent(),
+    ))];
     if model.create_step == CreateStep::Prompt {
         body.push(Line::from(Span::styled(
             format!("  schedule: {}", model.create_schedule),
@@ -156,12 +144,12 @@ fn draw_create(frame: &mut Frame, area: Rect, model: &CronModel) {
     body.push(Line::from(format!("  {}", model.composer.text())));
     body.push(Line::from(""));
     body.push(Line::from(Span::styled(format!("  {hint}"), muted())));
-    frame.render_widget(Paragraph::new(body).block(block(title)), area);
+    frame.render_widget(Paragraph::new(body).block(panel(title)), area);
 }
 
 fn kv(key: &str, value: &str) -> Line<'static> {
     Line::from(vec![
-        Span::styled(format!("{key:<10}"), ACCENT),
+        Span::styled(format!("{key:<10}"), accent()),
         Span::raw(value.to_string()),
     ])
 }
