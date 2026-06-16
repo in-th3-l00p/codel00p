@@ -2,74 +2,46 @@
 //!
 //! Bare `codel00p memory` opens this on a terminal; the scriptable subcommands
 //! (`list`, `approve`, ...) remain for non-TTY use. The pure model and rendering
-//! live in [`model`] and [`view`]; this module owns the terminal lifecycle, the
-//! blocking event loop, and the repository effects an update asks for.
+//! live in [`model`] and [`view`]; the terminal lifecycle and loop are shared via
+//! [`crate::dialog`], and the closure here performs the repository effects an
+//! update asks for.
 
 mod model;
 #[cfg(test)]
 mod tests;
 mod view;
 
-use std::io::{self, Stdout};
-
 use codel00p_memory::{
     MemoryEdit, MemoryListFilter, MemoryRecord, MemoryRepository, ReviewDecision,
 };
-use crossterm::event::{self, Event, KeyEventKind};
-use crossterm::execute;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
 
 use crate::config::{CliConfig, CliResult, open_memory_store};
 use model::{AuditRow, Flow, MemoryModel, MemoryRow, Mutation, Screen};
 
 type Store = codel00p_memory::StorageBackedMemoryStore<codel00p_storage::SqliteStorage>;
-type Tui = Terminal<CrosstermBackend<Stdout>>;
 
-/// Runs the review dialog, restoring the terminal on every exit path.
+/// Runs the review dialog. The terminal lifecycle and blocking loop come from
+/// [`crate::dialog`]; the `on_key` closure performs the repository effects.
 pub(crate) fn run(config: CliConfig) -> CliResult<String> {
     let mut store = open_memory_store(&config)?;
     let mut model = MemoryModel::new(crate::actor::infer_actor());
     reload(&store, &config, &mut model)?;
 
-    let mut terminal =
-        setup_terminal().map_err(|error| format!("terminal setup failed: {error}"))?;
-    let result = event_loop(&mut model, &mut terminal, &mut store, &config);
-    restore_terminal(&mut terminal);
-    result.map(|_| "Closed memory review.\n".to_string())
-}
-
-fn event_loop(
-    model: &mut MemoryModel,
-    terminal: &mut Tui,
-    store: &mut Store,
-    config: &CliConfig,
-) -> CliResult<()> {
-    loop {
-        terminal
-            .draw(|frame| view::draw(frame, model))
-            .map_err(|error| error.to_string())?;
-        let Event::Key(key) = event::read().map_err(|error| error.to_string())? else {
-            continue;
-        };
-        if key.kind != KeyEventKind::Press {
-            continue;
-        }
+    crate::dialog::run_blocking(&mut model, view::draw, |model, key| {
         match model.update(key) {
             Flow::Stay => {}
-            Flow::Quit => return Ok(()),
-            Flow::Reload => reload(store, config, model)?,
-            Flow::OpenDetail(id) => open_detail(store, model, &id),
+            Flow::Quit => return Ok(false),
+            Flow::Reload => reload(&store, &config, model)?,
+            Flow::OpenDetail(id) => open_detail(&store, model, &id),
             Flow::Mutate(mutation) => {
-                apply(store, model, mutation);
+                apply(&mut store, model, mutation);
                 model.screen = Screen::List;
-                reload(store, config, model)?;
+                reload(&store, &config, model)?;
             }
         }
-    }
+        Ok(true)
+    })?;
+    Ok("Closed memory review.\n".to_string())
 }
 
 /// Re-lists records for the current filter and feeds them to the model.
@@ -147,17 +119,4 @@ fn audit_action_label(action: codel00p_memory::MemoryAuditAction) -> &'static st
         Edited => "edited",
         Merged => "merged",
     }
-}
-
-fn setup_terminal() -> io::Result<Tui> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    Terminal::new(CrosstermBackend::new(stdout))
-}
-
-fn restore_terminal(terminal: &mut Tui) {
-    let _ = disable_raw_mode();
-    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-    let _ = terminal.show_cursor();
 }

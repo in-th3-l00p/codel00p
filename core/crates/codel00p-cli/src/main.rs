@@ -10,6 +10,7 @@ mod config_ui;
 mod connector_permissions;
 mod credentials;
 mod cron;
+mod dialog;
 mod error_help;
 mod gateway;
 mod help;
