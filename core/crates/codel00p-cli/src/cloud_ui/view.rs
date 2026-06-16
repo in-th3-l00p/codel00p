@@ -4,7 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Clear, Paragraph};
 
 use super::model::{CloudModel, DetailTab, Screen};
 use crate::dialog::{accent, muted, panel, selection};
@@ -32,21 +32,25 @@ pub(crate) fn draw(frame: &mut Frame, model: &CloudModel) {
     }
 
     let footer = match model.screen {
-        Screen::Status => "↑/↓ move · type to filter · ↵ open · p push · l pull · Esc quit",
-        Screen::Detail => "Tab/←/→ switch · ↑/↓ move · type to filter · Esc back",
-        Screen::Unauthenticated => "Esc quit",
+        Screen::Status => "↑/↓ move · ↵ open · p push · l pull · ? help · Esc quit",
+        Screen::Detail => "Tab/←/→ switch · ↑/↓ move · type to filter · ? help · Esc back",
+        Screen::Unauthenticated => "? help · Esc quit",
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(format!(" {footer}"), muted()))),
         rows[2],
     );
+
+    if model.show_help {
+        draw_help(frame, model);
+    }
 }
 
 fn draw_status(frame: &mut Frame, area: Rect, model: &CloudModel) {
-    // Status panel grows with the viewer summary (+ a transient action line);
-    // the rest is the project list.
+    // Status panel grows with the viewer summary, an active-project line, and a
+    // transient action line; the rest is the project list.
     let status_height =
-        (model.viewer_lines.len() as u16 + 2) + if model.status.is_some() { 1 } else { 0 };
+        (model.viewer_lines.len() as u16 + 2) + 1 + if model.status.is_some() { 1 } else { 0 };
     let panes = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(status_height), Constraint::Min(1)])
@@ -57,6 +61,17 @@ fn draw_status(frame: &mut Frame, area: Rect, model: &CloudModel) {
         .iter()
         .map(|line| Line::from(line.clone()))
         .collect();
+    let active = match &model.active_project {
+        Some(project) => Line::from(vec![
+            Span::styled("active project: ", muted()),
+            Span::styled(project.name.clone(), accent()),
+        ]),
+        None => Line::from(Span::styled(
+            "active project: (none — ↵ to select one)",
+            muted(),
+        )),
+    };
+    lines.push(active);
     if let Some(status) = &model.status {
         lines.push(Line::from(Span::styled(status.clone(), accent())));
     }
@@ -137,6 +152,64 @@ fn draw_picker<T: PickerItem>(
         })
         .collect();
     frame.render_widget(Paragraph::new(lines).block(panel(title)), area);
+}
+
+/// Renders the centered `?` help overlay, listing this dialog's keys for the
+/// current screen. Drawn over everything (via [`Clear`]); any key dismisses it.
+fn draw_help(frame: &mut Frame, model: &CloudModel) {
+    let bindings: &[(&str, &str)] = match model.screen {
+        Screen::Status => &[
+            ("↑/↓", "move through projects"),
+            ("type", "filter projects"),
+            ("↵", "open project (sets the active push/pull target)"),
+            ("p", "push approved local memory to the active project"),
+            ("l", "pull approved cloud memory from the active project"),
+            ("?", "toggle this help"),
+            ("Esc", "quit"),
+        ],
+        Screen::Detail => &[
+            ("Tab/←/→", "switch agents / MCP / memory"),
+            ("↑/↓", "move through the list"),
+            ("type", "filter the list"),
+            ("?", "toggle this help"),
+            ("Esc", "back to projects"),
+        ],
+        Screen::Unauthenticated => &[("?", "toggle this help"), ("Esc", "quit")],
+    };
+
+    let lines: Vec<Line> = bindings
+        .iter()
+        .map(|(keys, description)| {
+            Line::from(vec![
+                Span::styled(format!("  {keys:<9}"), accent()),
+                Span::styled(format!("— {description}"), muted()),
+            ])
+        })
+        .collect();
+
+    let area = centered_rect(70, 60, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(Paragraph::new(lines).block(panel("help")), area);
+}
+
+/// A centered rectangle covering `percent_x` × `percent_y` of `area`.
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
 }
 
 fn draw_unauthenticated(frame: &mut Frame, area: Rect, model: &CloudModel) {
