@@ -7,8 +7,21 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use super::model::{CreateStep, CronModel, Screen};
-use crate::dialog::{accent, muted, panel, selection};
+use crate::dialog::{accent, error, muted, panel, render_help, selection};
 use crate::tui::picker::PickerItem;
+
+/// The keybindings listed in the `?` help overlay, mirroring the live handlers.
+const HELP: &[(&str, &str)] = &[
+    ("↑/↓", "move selection"),
+    ("type", "filter the job list"),
+    ("↵", "open the selected job"),
+    ("n", "new scheduled job"),
+    ("e / d", "enable / disable (detail)"),
+    ("R", "run the job now (detail)"),
+    ("x", "delete the job — asks to confirm (detail)"),
+    ("?", "toggle this help"),
+    ("Esc", "back / quit"),
+];
 
 pub(crate) fn draw(frame: &mut Frame, model: &CronModel) {
     let area = frame.area();
@@ -32,19 +45,31 @@ pub(crate) fn draw(frame: &mut Frame, model: &CronModel) {
         Screen::Create => draw_create(frame, rows[1], model),
     }
 
-    let footer = match model.screen {
-        Screen::List => "↑/↓ move · type to filter · ↵ open · n new · Esc quit",
-        Screen::Detail => "e enable · d disable · R run now · x delete · Esc back",
+    let hint = match model.screen {
+        Screen::List => "↑/↓ move · type to filter · ↵ open · n new · ? help · Esc quit",
+        Screen::Detail => {
+            "e enable · d disable · R run now · x delete (confirms) · ? help · Esc back"
+        }
         Screen::Create => "type · ↵ next · Esc cancel",
     };
+    // A pending delete confirmation (or any status) replaces the hint; the confirm
+    // prompt is error-styled so it stands out.
     let footer = match &model.status {
-        Some(status) => format!(" {status}"),
-        None => format!(" {footer}"),
+        Some(status) => {
+            let style = if model.pending_delete.is_some() || model.status_is_error {
+                error()
+            } else {
+                muted()
+            };
+            Span::styled(format!(" {status}"), style)
+        }
+        None => Span::styled(format!(" {hint}"), muted()),
     };
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(footer, muted()))),
-        rows[2],
-    );
+    frame.render_widget(Paragraph::new(Line::from(footer)), rows[2]);
+
+    if model.show_help {
+        render_help(frame, HELP);
+    }
 }
 
 fn draw_list(frame: &mut Frame, area: Rect, model: &CronModel) {

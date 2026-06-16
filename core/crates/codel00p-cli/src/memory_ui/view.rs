@@ -7,8 +7,24 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Tabs};
 
 use super::model::{MemoryModel, PendingAction, Screen, StatusFilter, kind_label, status_label};
-use crate::dialog::{accent, muted, panel, selection};
+use crate::dialog::{accent, muted, panel, render_help, selection};
 use crate::tui::picker::PickerItem;
+
+/// The keybindings listed in the `?` help overlay, mirroring the live handlers.
+const HELP: &[(&str, &str)] = &[
+    ("↑/↓", "move selection"),
+    ("type", "filter the list"),
+    ("Tab", "cycle the status filter"),
+    ("↵", "open the selected record"),
+    ("a", "approve (detail)"),
+    ("r", "reject — prompts for a reason (detail)"),
+    ("x", "archive — prompts for a reason (detail)"),
+    ("e", "edit the content (detail)"),
+    ("m", "merge into another record (detail)"),
+    ("u", "restore prior content (detail)"),
+    ("?", "toggle this help"),
+    ("Esc", "back / quit"),
+];
 
 pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
     let area = frame.area();
@@ -38,9 +54,9 @@ pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
     }
 
     let footer = match model.screen {
-        Screen::List => "↑/↓ move · type to filter · Tab status · ↵ open · Esc quit",
+        Screen::List => "↑/↓ move · type to filter · Tab status · ↵ open · ? help · Esc quit",
         Screen::Detail => {
-            "a approve · r reject · x archive · e edit · m merge · u restore · Esc back"
+            "a approve · r reject · x archive · e edit · m merge · u restore · ? help · Esc back"
         }
         Screen::Prompt => "type · ↵ confirm · Esc cancel",
         Screen::SelectMerge => "↑/↓ move · type to filter · ↵ merge into · Esc cancel",
@@ -54,6 +70,10 @@ pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
         Paragraph::new(Line::from(Span::styled(footer, muted()))),
         rows[2],
     );
+
+    if model.show_help {
+        render_help(frame, HELP);
+    }
 }
 
 fn draw_list(frame: &mut Frame, area: Rect, model: &MemoryModel) {

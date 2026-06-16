@@ -7,8 +7,18 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use super::model::{Screen, SessionsModel};
-use crate::dialog::{accent, muted, panel, selection};
+use crate::dialog::{accent, muted, panel, render_help, selection};
 use crate::tui::picker::PickerItem;
+
+/// The keybindings listed in the `?` help overlay, mirroring the live handlers.
+const HELP: &[(&str, &str)] = &[
+    ("↑/↓", "move selection / scroll transcript"),
+    ("type", "filter the session list"),
+    ("↵", "open the selected session"),
+    ("r", "resume the session in chat"),
+    ("?", "toggle this help"),
+    ("Esc", "back / quit"),
+];
 
 pub(crate) fn draw(frame: &mut Frame, model: &SessionsModel) {
     let rows = Layout::default()
@@ -31,13 +41,17 @@ pub(crate) fn draw(frame: &mut Frame, model: &SessionsModel) {
     }
 
     let footer = match model.screen {
-        Screen::List => "↑/↓ move · type to filter · ↵ open · r resume · Esc quit",
-        Screen::Detail => "↑/↓ scroll · r resume · Esc back",
+        Screen::List => "↑/↓ move · type to filter · ↵ open · r resume · ? help · Esc quit",
+        Screen::Detail => "↑/↓ scroll · r resume · ? help · Esc back",
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(format!(" {footer}"), muted()))),
         rows[2],
     );
+
+    if model.show_help {
+        render_help(frame, HELP);
+    }
 }
 
 fn draw_list(frame: &mut Frame, area: Rect, model: &SessionsModel) {

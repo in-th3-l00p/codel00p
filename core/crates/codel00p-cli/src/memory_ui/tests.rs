@@ -53,6 +53,33 @@ fn enter_opens_detail_for_selected_row() {
 }
 
 #[test]
+fn question_mark_toggles_help_and_swallows_keys() {
+    let mut model = model_with_rows();
+    assert!(!model.show_help);
+
+    assert_eq!(model.update(key(KeyCode::Char('?'))), Flow::Stay);
+    assert!(model.show_help);
+
+    // Enter would normally open detail; while help is up it just closes the overlay.
+    assert_eq!(model.update(key(KeyCode::Enter)), Flow::Stay);
+    assert!(!model.show_help);
+    assert_eq!(model.screen, Screen::List);
+}
+
+#[test]
+fn question_mark_is_typed_into_a_prompt_not_treated_as_help() {
+    let mut model = model_with_rows();
+    model.show_detail(row("mem-1", "x"), Vec::new());
+    model.update(key(KeyCode::Char('r'))); // open the reason prompt
+    assert_eq!(model.screen, Screen::Prompt);
+
+    // On the text-entry prompt, `?` is a literal character, not a help toggle.
+    model.update(key(KeyCode::Char('?')));
+    assert!(!model.show_help);
+    assert_eq!(model.composer.text(), "?");
+}
+
+#[test]
 fn approve_from_detail_is_immediate() {
     let mut model = model_with_rows();
     model.show_detail(row("mem-1", "Run cargo from core."), Vec::new());

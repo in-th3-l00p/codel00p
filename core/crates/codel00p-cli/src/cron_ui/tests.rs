@@ -72,15 +72,51 @@ fn enable_disable_and_run_are_immediate_from_detail() {
 }
 
 #[test]
-fn delete_from_detail_mutates() {
+fn delete_from_detail_requires_confirmation() {
     let mut model = model_with_rows();
     model.show_detail(row("cron-1"));
+
+    // `x` arms a confirmation rather than deleting immediately.
+    assert_eq!(model.update(key(KeyCode::Char('x'))), Flow::Stay);
+    assert_eq!(model.pending_delete.as_deref(), Some("cron-1"));
+    assert!(model.status.is_some());
+
+    // `y` confirms and emits the delete mutation.
     assert_eq!(
-        model.update(key(KeyCode::Char('x'))),
+        model.update(key(KeyCode::Char('y'))),
         Flow::Mutate(Mutation::Delete {
             id: "cron-1".to_string(),
         })
     );
+    assert!(model.pending_delete.is_none());
+}
+
+#[test]
+fn delete_confirmation_cancels_on_any_other_key() {
+    let mut model = model_with_rows();
+    model.show_detail(row("cron-1"));
+    model.update(key(KeyCode::Char('x')));
+    assert_eq!(model.pending_delete.as_deref(), Some("cron-1"));
+
+    // Any non-`y` key cancels the delete and leaves the job intact.
+    assert_eq!(model.update(key(KeyCode::Char('n'))), Flow::Stay);
+    assert!(model.pending_delete.is_none());
+}
+
+#[test]
+fn question_mark_toggles_help_and_swallows_keys() {
+    let mut model = model_with_rows();
+    assert!(!model.show_help);
+
+    // `?` opens the overlay without acting on the underlying screen.
+    assert_eq!(model.update(key(KeyCode::Char('?'))), Flow::Stay);
+    assert!(model.show_help);
+
+    // While shown, any key (here Enter, which would otherwise open detail) just
+    // closes the overlay and does nothing else.
+    assert_eq!(model.update(key(KeyCode::Enter)), Flow::Stay);
+    assert!(!model.show_help);
+    assert_eq!(model.screen, Screen::List);
 }
 
 #[test]

@@ -100,6 +100,8 @@ pub(crate) struct ConfigModel {
     pub(crate) project_scope: bool,
     pub(crate) workspace_start: PathBuf,
     pub(crate) dirty: bool,
+    /// When `true`, the `?` help overlay is shown and swallows all keys.
+    pub(crate) show_help: bool,
 }
 
 impl ConfigModel {
@@ -175,6 +177,7 @@ impl ConfigModel {
             project_scope: false,
             workspace_start: workspace_start.to_path_buf(),
             dirty: false,
+            show_help: false,
         }
     }
 
@@ -182,6 +185,19 @@ impl ConfigModel {
     pub(crate) fn update(&mut self, key: KeyEvent) -> Flow {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Flow::Quit;
+        }
+        // While the help overlay is up, any key (incl. Esc) just closes it and the
+        // underlying screen does not act.
+        if self.show_help {
+            self.show_help = false;
+            return Flow::Continue;
+        }
+        // `?` toggles help — but not while editing a provider field, where it is a
+        // legitimate character (e.g. in a base URL).
+        let editing_field = self.screen == Screen::Providers && self.prov_focus != ProvFocus::List;
+        if key.code == KeyCode::Char('?') && !editing_field {
+            self.show_help = true;
+            return Flow::Continue;
         }
         match self.screen {
             Screen::Menu => self.update_menu(key),

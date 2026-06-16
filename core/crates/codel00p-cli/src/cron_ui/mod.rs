@@ -56,7 +56,7 @@ fn reload(store: &JobStore, model: &mut CronModel) {
 fn open_detail(store: &JobStore, model: &mut CronModel, id: &str) {
     match store.get(id) {
         Ok(job) => model.show_detail(row_from_job(&job)),
-        Err(error) => model.set_status(error.to_string()),
+        Err(error) => model.set_error(error.to_string()),
     }
 }
 
@@ -72,17 +72,17 @@ fn run_now(
     let job = match store.get(id) {
         Ok(job) => job,
         Err(error) => {
-            model.set_status(error.to_string());
+            model.set_error(error.to_string());
             return;
         }
     };
     if !job.enabled {
-        model.set_status(format!("{id} is disabled; enable it first."));
+        model.set_error(format!("{id} is disabled; enable it first."));
         return;
     }
     match crate::cron::execute_job(config.clone(), defaults, &job) {
         Ok(_) => model.set_status(format!("Ran {id}.")),
-        Err(error) => model.set_status(format!("{id}: {error}")),
+        Err(error) => model.set_error(format!("{id}: {error}")),
     }
 }
 
@@ -109,7 +109,7 @@ fn apply(store: &JobStore, model: &mut CronModel, mutation: Mutation) {
     };
     match outcome {
         Ok(message) => model.set_status(message),
-        Err(error) => model.set_status(error.to_string()),
+        Err(error) => model.set_error(error.to_string()),
     }
 }
 

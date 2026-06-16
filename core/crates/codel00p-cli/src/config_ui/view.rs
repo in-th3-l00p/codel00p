@@ -7,7 +7,19 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use super::model::{ConfigModel, MENU_ITEMS, PERMISSION_MODES, ProvFocus, Screen, TOOL_SETS};
-use crate::dialog::{accent, muted, panel, selection};
+use crate::dialog::{accent, muted, panel, render_help, selection};
+
+/// The keybindings listed in the `?` help overlay, mirroring the live handlers.
+const HELP: &[(&str, &str)] = &[
+    ("↑/↓", "move selection"),
+    ("↵", "open section / select / accept"),
+    ("Tab", "move between provider fields"),
+    ("Space", "toggle a tool set"),
+    ("s", "save (menu)"),
+    ("q", "quit (menu)"),
+    ("?", "toggle this help"),
+    ("Esc", "back / quit"),
+];
 
 pub(crate) fn draw(frame: &mut Frame, model: &ConfigModel) {
     let area = frame.area();
@@ -36,15 +48,19 @@ pub(crate) fn draw(frame: &mut Frame, model: &ConfigModel) {
     }
 
     let footer = match model.screen {
-        Screen::Menu => "↑/↓ move · ↵ open · s save · q quit",
-        Screen::Providers => "↑/↓ pick · ↵ select/accept · Tab fields · Esc back",
-        Screen::Tools => "↑/↓ move · Space toggle · Esc back",
-        Screen::Permissions => "↑/↓ move · ↵ choose · Esc back",
+        Screen::Menu => "↑/↓ move · ↵ open · s save · q quit · ? help",
+        Screen::Providers => "↑/↓ pick · ↵ select/accept · Tab fields · ? help · Esc back",
+        Screen::Tools => "↑/↓ move · Space toggle · ? help · Esc back",
+        Screen::Permissions => "↑/↓ move · ↵ choose · ? help · Esc back",
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(format!(" {footer}"), muted()))),
         rows[2],
     );
+
+    if model.show_help {
+        render_help(frame, HELP);
+    }
 }
 
 fn draw_menu(frame: &mut Frame, area: Rect, model: &ConfigModel) {
