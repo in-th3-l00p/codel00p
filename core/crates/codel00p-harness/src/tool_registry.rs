@@ -12,6 +12,7 @@ use crate::{
     errors::HarnessError,
     find::{FindFilesTool, GrepTool},
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
+    repo_map::RepoMapTool,
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool, ToolSpec},
     web::web_tools,
@@ -48,6 +49,7 @@ impl ToolRegistry {
             .with_tool(SearchTextTool)
             .with_tool(FindFilesTool)
             .with_tool(GrepTool)
+            .with_tool(RepoMapTool)
     }
 
     pub fn editing_defaults() -> Self {

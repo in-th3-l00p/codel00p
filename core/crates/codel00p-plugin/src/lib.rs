@@ -408,6 +408,7 @@ mod tests {
                 "grep",
                 "list_files",
                 "read_file",
+                "repo_map",
                 "search_text"
             ]
         );

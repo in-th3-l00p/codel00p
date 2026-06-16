@@ -162,6 +162,17 @@ The first safe tool set:
 - `grep`: regular-expression content search with optional `glob` file filter,
   case-insensitivity, surrounding `context_lines`, and `offset`/`limit` paging;
   skips build/VCS directories by default.
+- `repo_map`: ranked, compact map of code symbols (functions, types, classes)
+  across the workspace, ordered by how often each symbol is referenced
+  elsewhere; multi-language heuristic (Rust, Python, JS/TS, Go, Java, Ruby,
+  C/C++). For orienting in an unfamiliar codebase without reading whole files.
+
+When the advertised tool set is large (e.g. many MCP tools), the registry can
+hide tools behind progressive disclosure: only the core tools plus `tool_search`
+(keyword search over hidden tools) and `tool_describe` (load a hidden tool's
+full schema) are advertised, and a deferred tool stays callable by name once
+discovered. See `ToolRegistry::advertised_specs` / `with_deferred_registry` /
+`with_progressive_disclosure`.
 
 `run_command` should not ship in the first harness milestone. It creates a much
 larger security and determinism surface than file reading/searching.

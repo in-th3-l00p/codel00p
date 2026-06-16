@@ -159,10 +159,10 @@ async fn deferred_tool_executes_normally_once_known() {
 
 #[test]
 fn progressive_disclosure_threshold_keeps_small_sets_visible() {
-    // 5 read-only tools, threshold 10 → nothing deferred.
+    // 6 read-only tools, threshold 10 → nothing deferred.
     let registry = ToolRegistry::read_only_defaults().with_progressive_disclosure(10, &[]);
     assert!(registry.deferred_names().is_empty());
-    assert_eq!(registry.advertised_specs().len(), 5);
+    assert_eq!(registry.advertised_specs().len(), 6);
 }
 
 #[test]

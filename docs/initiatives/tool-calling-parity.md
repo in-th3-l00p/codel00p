@@ -96,9 +96,15 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       `AgentHarness` builder setter (PR #16).
 
 ### Phase 2 — Surface & orchestration parity
-- [ ] **MCP tool search / progressive disclosure**: advertise only names +
-      one-line descriptions for large MCP tool sets, with a `tool_search` /
-      `tool_describe` mechanism that loads full schemas on demand.
+- [x] **MCP tool search / progressive disclosure** (shipped 2026-06-16):
+      `ToolRegistry` now supports *deferred* tools — registered and executable
+      but withheld from the prompt. `advertised_specs()` (used by the turn)
+      returns the core tools plus synthetic `tool_search` (ranked keyword search
+      over hidden tools) and `tool_describe` (loads a hidden tool's full schema),
+      which the registry answers from its own catalog. A deferred tool stays
+      callable by name once discovered. The CLI folds the combined MCP tool set
+      in as deferred past a 15-tool threshold; small setups are unchanged.
+      Mirrors Anthropic's code-execution-with-MCP disclosure.
 - [x] **Default sub-agent spawner** (shipped 2026-06-16): `HarnessSubAgentSpawner`
       runs each `delegate_task` as an isolated child `AgentHarness` turn — fresh
       session, the child's own (leaf) tool set, its own permission ceiling; the
@@ -110,8 +116,13 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       ignore-aware). These give the model the find-by-name and search-by-regex
       capabilities every mature coding agent ships, beyond the substring
       `search_text`.
-- [ ] **Repo-map / semantic code-search tool** (tree-sitter ranked symbols,
-      Aider-style) for navigation beyond `search_text` / `grep`.
+- [x] **Repo-map / semantic code-search tool** (shipped 2026-06-16): `repo_map`
+      extracts code symbols (functions, types, classes) across the workspace
+      with a dependency-light multi-language heuristic (Rust, Python, JS/TS, Go,
+      Java, Ruby, C/C++) and ranks them Aider-style by cross-repo reference
+      frequency (a cheap PageRank proxy), bounded by `max_files` /
+      `max_symbols_per_file` and scopable by `path` / `glob`. (A tree-sitter
+      backend for exact parsing remains a possible follow-up.)
 - [ ] **Token-efficient tool results**: pagination/filter params and a
       concise/detailed `response_format` on the heavy tools.
 

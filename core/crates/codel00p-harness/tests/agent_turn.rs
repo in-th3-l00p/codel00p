@@ -60,6 +60,7 @@ async fn run_turn_returns_final_assistant_message_without_tools() {
             "grep",
             "list_files",
             "read_file",
+            "repo_map",
             "search_text"
         ]
     );

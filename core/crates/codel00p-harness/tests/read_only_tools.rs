@@ -15,6 +15,7 @@ async fn read_only_defaults_expose_expected_tools() {
             "grep",
             "list_files",
             "read_file",
+            "repo_map",
             "search_text"
         ]
     );

@@ -91,6 +91,23 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                         {
                             "type": "function",
                             "function": {
+                                "name": "repo_map",
+                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "glob": { "type": "string" },
+                                        "include_ignored": { "type": "boolean" },
+                                        "max_files": { "type": "integer", "minimum": 1, "maximum": 500 },
+                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
                                 "name": "search_text",
                                 "description": "Search UTF-8 files inside the workspace root. Page through results with `offset` (matches to skip) and `limit` (max matches to return).",
                                 "parameters": {
@@ -237,6 +254,23 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                         {
                             "type": "function",
                             "function": {
+                                "name": "repo_map",
+                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "glob": { "type": "string" },
+                                        "include_ignored": { "type": "boolean" },
+                                        "max_files": { "type": "integer", "minimum": 1, "maximum": 500 },
+                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
                                 "name": "search_text",
                                 "description": "Search UTF-8 files inside the workspace root. Page through results with `offset` (matches to skip) and `limit` (max matches to return).",
                                 "parameters": {
@@ -361,6 +395,23 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                         "path": { "type": "string" },
                                         "offset": { "type": "integer" },
                                         "limit": { "type": "integer" }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "repo_map",
+                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "glob": { "type": "string" },
+                                        "include_ignored": { "type": "boolean" },
+                                        "max_files": { "type": "integer", "minimum": 1, "maximum": 500 },
+                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 }
                                     }
                                 }
                             }

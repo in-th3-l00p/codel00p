@@ -16,6 +16,7 @@ pub mod lifecycle;
 pub mod memory;
 pub mod permissions;
 pub mod provider_adapter;
+pub mod repo_map;
 pub mod session;
 pub mod skills;
 pub mod subagent;
@@ -25,6 +26,7 @@ pub mod tools;
 pub mod truncation;
 pub mod turn;
 mod validation;
+mod walk;
 pub mod web;
 pub mod workspace;
 
@@ -57,6 +59,7 @@ pub use permissions::{
     PermissionRequest, PermissionScope,
 };
 pub use provider_adapter::ProviderModelClient;
+pub use repo_map::RepoMapTool;
 pub use session::{
     SessionCompactionRecord, SessionId, SessionMessage, SessionState, TurnId, UserMessage,
 };
