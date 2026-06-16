@@ -3,14 +3,16 @@ use codel00p_session::{SessionRecord, SessionStore};
 use serde_json::json;
 
 use crate::config::{CliConfig, CliResult, open_session_store, parse_session_id, single_id};
+use crate::settings::AgentSettings;
 
-pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
+pub fn run(config: CliConfig, agent_defaults: AgentSettings, args: &[String]) -> CliResult<String> {
     let Some((command, rest)) = args.split_first() else {
         // Bare `codel00p sessions` on a terminal opens the browser dialog; pipes
-        // and CI keep the scriptable behavior so output is never corrupted.
+        // and CI keep the scriptable behavior so output is never corrupted. The
+        // browser's resume action launches chat, so it needs the agent defaults.
         use std::io::IsTerminal;
         return if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() {
-            crate::sessions_ui::run(config)
+            crate::sessions_ui::run(config, &agent_defaults)
         } else {
             Err("missing session command".to_string())
         };
