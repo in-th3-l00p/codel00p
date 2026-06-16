@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use async_trait::async_trait;
 use codel00p_protocol::PermissionScope;
@@ -164,7 +168,10 @@ impl Tool for ApplyPatchTool {
          exactly when possible, otherwise falls back to whitespace-, line-ending-, \
          and indentation-tolerant matching while preserving the rest of the file \
          byte-for-byte. By default a `find` that occurs more than once is rejected; \
-         set `replace_all` to true to replace every occurrence."
+         set `replace_all` to true to replace every occurrence. Multiple changes are \
+         applied as one atomic batch: nothing is written unless every change matches, \
+         and several changes targeting the same file are applied in order, each seeing \
+         the result of the previous one."
     }
 
     fn input_schema(&self) -> Value {
@@ -212,7 +219,11 @@ impl Tool for ApplyPatchTool {
             });
         }
 
-        let mut planned = Vec::new();
+        // Apply every change in memory before touching disk so the batch is atomic
+        // (no partial writes on a later mismatch) and so multiple changes to the
+        // same file compose: each change sees the result of the previous one.
+        let mut contents: BTreeMap<PathBuf, String> = BTreeMap::new();
+        let mut summaries = Vec::new();
         for change in changes {
             let path = required_string(self.name(), change, "path")?;
             let find = required_string(self.name(), change, "find")?;
@@ -229,28 +240,24 @@ impl Tool for ApplyPatchTool {
             }
 
             let destination = existing_file(workspace, self.name(), path)?;
-            let original = fs::read_to_string(&destination)?;
+            let current = match contents.get(&destination) {
+                Some(existing) => existing.clone(),
+                None => fs::read_to_string(&destination)?,
+            };
 
-            let outcome = apply_change(&original, find, replace, replace_all)
+            let outcome = apply_change(&current, find, replace, replace_all)
                 .map_err(|message| tool_failed(self.name(), format!("{path}: {message}")))?;
-            planned.push((
-                path.to_string(),
-                destination,
-                outcome.patched,
-                outcome.replacements,
-                outcome.strategy,
-            ));
-        }
-
-        let mut summaries = Vec::new();
-        for (path, destination, patched, replacements, strategy) in planned {
-            fs::write(&destination, &patched)?;
             summaries.push(json!({
                 "path": path,
-                "replacements": replacements,
-                "bytes_written": patched.len(),
-                "strategy": strategy,
+                "replacements": outcome.replacements,
+                "bytes_written": outcome.patched.len(),
+                "strategy": outcome.strategy,
             }));
+            contents.insert(destination, outcome.patched);
+        }
+
+        for (destination, patched) in &contents {
+            fs::write(destination, patched)?;
         }
 
         Ok(ToolResult::json(json!({
