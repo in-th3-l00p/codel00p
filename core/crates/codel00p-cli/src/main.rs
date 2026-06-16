@@ -4,6 +4,7 @@ mod actor;
 mod agent;
 mod cloud;
 mod cloud_client;
+mod cloud_ui;
 mod config;
 mod config_cmd;
 mod config_ui;

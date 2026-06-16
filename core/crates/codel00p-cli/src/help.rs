@@ -151,10 +151,14 @@ Clear the cloud credentials stored in ~/.codel00p/credentials.toml.
 ";
 
 const CLOUD_HELP: &str = "\
-Usage: codel00p cloud <command> [options]
+Usage: codel00p cloud [command] [options]
 
-Sync project memory with the codel00p cloud service. The org comes from the
-session token; the cloud project is selected with --project.
+Bare `codel00p cloud` on a terminal opens an interactive dialog: it shows your
+signed-in status, lets you browse the org's projects (and a project's agents,
+MCP servers, and memory), and offers push/pull as actions. The org comes from
+the session token; sign in first with `codel00p auth login`.
+
+For scripting (non-terminal use), the subcommands stay byte-identical:
 
 Connection options (or env CODEL00P_API_URL / CODEL00P_TOKEN / CODEL00P_CLOUD_PROJECT):
   --api-url <url>    Base URL of the codel00p-cloud service
