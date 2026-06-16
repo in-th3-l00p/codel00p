@@ -92,14 +92,14 @@ Current foundation:
 - permission policy and remembered MCP connector decisions;
 - streamable protocol events;
 - context compaction primitives;
-- memory extraction and approved-memory injection.
+- memory extraction and approved-memory injection;
+- a tolerant, atomic multi-edit `apply_patch` engine;
+- cancellation and interruption;
+- background command monitoring;
+- web fetch/search tools.
 
 Next work:
 
-- replace exact-string `apply_patch` with a richer patch/diff engine;
-- add cancellation and interruption;
-- add background command monitoring;
-- add web fetch/search tools;
 - add worktree-isolated execution;
 - add PR preparation workflow;
 - improve most-recent-session continue UX;
