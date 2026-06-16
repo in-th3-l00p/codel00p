@@ -113,7 +113,7 @@ fn command_help_prints_without_project_flags() {
         ),
         (
             &["memory", "--help"][..],
-            "Usage: codel00p [global options] memory <command>",
+            "Usage: codel00p [global options] memory [command]",
         ),
         (
             &["session", "--help"][..],
