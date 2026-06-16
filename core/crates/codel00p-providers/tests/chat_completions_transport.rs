@@ -1,10 +1,51 @@
 use codel00p_providers::{
-    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ToolCall,
-    ToolChoice, ToolDefinition, default_registry,
+    ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ResponseFormat,
+    ToolCall, ToolChoice, ToolDefinition, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
 use serde_json::json;
+
+#[tokio::test]
+async fn chat_completions_serializes_json_schema_response_format() {
+    let server = MockServer::start_async().await;
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/chat/completions")
+                .body_includes(r#""response_format""#)
+                .body_includes(r#""type":"json_schema""#)
+                .body_includes(r#""strict":true"#);
+            then.status(200).json_body(json!({
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": { "role": "assistant", "content": "{}" }
+                }]
+            }));
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .build();
+
+    client
+        .complete(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("give me json"))
+                .response_format(ResponseFormat::JsonSchema {
+                    name: "result".into(),
+                    schema: json!({ "type": "object" }),
+                })
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+}
 
 #[tokio::test]
 async fn chat_completions_posts_openai_compatible_payload_and_normalizes_response() {

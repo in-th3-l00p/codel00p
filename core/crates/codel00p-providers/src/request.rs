@@ -79,6 +79,7 @@ pub struct InferenceRequest {
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolDefinition>,
     pub tool_choice: Option<ToolChoice>,
+    pub response_format: Option<ResponseFormat>,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
     pub base_url: Option<String>,
@@ -100,6 +101,7 @@ impl InferenceRequest {
                 messages: Vec::new(),
                 tools: Vec::new(),
                 tool_choice: None,
+                response_format: None,
                 temperature: None,
                 max_output_tokens: None,
                 base_url: None,
@@ -218,6 +220,54 @@ impl ToolChoice {
     }
 }
 
+/// Requests a structured (JSON) response, distinct from tool calling — for
+/// planning output, structured edits, etc. Natively supported by OpenAI-style
+/// chat completions (incl. Azure/GitHub) and Gemini; ignored by providers
+/// without a native structured-output knob (Anthropic, Bedrock, the OpenAI
+/// Responses API), where a forced single tool call is the idiomatic alternative.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseFormat {
+    /// Plain text (the default; serialized as nothing).
+    Text,
+    /// Any valid JSON object.
+    JsonObject,
+    /// A JSON object conforming to `schema` (provider-enforced where supported).
+    JsonSchema { name: String, schema: Value },
+}
+
+impl ResponseFormat {
+    /// OpenAI-compatible `response_format` value, or `None` for plain text.
+    pub fn openai_value(&self) -> Option<Value> {
+        match self {
+            ResponseFormat::Text => None,
+            ResponseFormat::JsonObject => Some(json!({ "type": "json_object" })),
+            ResponseFormat::JsonSchema { name, schema } => Some(json!({
+                "type": "json_schema",
+                "json_schema": { "name": name, "strict": true, "schema": schema }
+            })),
+        }
+    }
+
+    /// Gemini `responseMimeType`, or `None` for plain text.
+    pub fn gemini_mime_type(&self) -> Option<&'static str> {
+        match self {
+            ResponseFormat::Text => None,
+            ResponseFormat::JsonObject | ResponseFormat::JsonSchema { .. } => {
+                Some("application/json")
+            }
+        }
+    }
+
+    /// Gemini `responseSchema`, present only for [`ResponseFormat::JsonSchema`].
+    pub fn gemini_schema(&self) -> Option<&Value> {
+        match self {
+            ResponseFormat::JsonSchema { schema, .. } => Some(schema),
+            _ => None,
+        }
+    }
+}
+
 /// Builder for [`InferenceRequest`].
 #[derive(Debug, Clone)]
 pub struct InferenceRequestBuilder {
@@ -239,6 +289,12 @@ impl InferenceRequestBuilder {
     /// default (auto) applies.
     pub fn tool_choice(mut self, choice: ToolChoice) -> Self {
         self.request.tool_choice = Some(choice);
+        self
+    }
+
+    /// Requests a structured (JSON) response where the provider supports it.
+    pub fn response_format(mut self, format: ResponseFormat) -> Self {
+        self.request.response_format = Some(format);
         self
     }
 
@@ -361,5 +417,44 @@ mod tests {
         );
         // Bedrock has no "none"; the transport omits tools instead.
         assert_eq!(ToolChoice::None.bedrock_value(), None);
+    }
+
+    #[test]
+    fn response_format_openai_values() {
+        assert_eq!(ResponseFormat::Text.openai_value(), None);
+        assert_eq!(
+            ResponseFormat::JsonObject.openai_value(),
+            Some(json!({ "type": "json_object" }))
+        );
+        let schema = json!({ "type": "object", "properties": { "ok": { "type": "boolean" } } });
+        assert_eq!(
+            ResponseFormat::JsonSchema {
+                name: "result".into(),
+                schema: schema.clone()
+            }
+            .openai_value(),
+            Some(json!({
+                "type": "json_schema",
+                "json_schema": { "name": "result", "strict": true, "schema": schema }
+            }))
+        );
+    }
+
+    #[test]
+    fn response_format_gemini_values() {
+        assert_eq!(ResponseFormat::Text.gemini_mime_type(), None);
+        assert_eq!(ResponseFormat::Text.gemini_schema(), None);
+        assert_eq!(
+            ResponseFormat::JsonObject.gemini_mime_type(),
+            Some("application/json")
+        );
+        assert_eq!(ResponseFormat::JsonObject.gemini_schema(), None);
+        let schema = json!({ "type": "object" });
+        let format = ResponseFormat::JsonSchema {
+            name: "r".into(),
+            schema: schema.clone(),
+        };
+        assert_eq!(format.gemini_mime_type(), Some("application/json"));
+        assert_eq!(format.gemini_schema(), Some(&schema));
     }
 }

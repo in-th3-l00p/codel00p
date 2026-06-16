@@ -270,6 +270,8 @@ pub(crate) struct ChatCompletionsRequest {
     tools: Vec<ChatCompletionsTool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -299,6 +301,10 @@ impl ChatCompletionsRequest {
                     .map(|choice| choice.openai_value())
             })
             .flatten();
+        let response_format = request
+            .response_format
+            .as_ref()
+            .and_then(|format| format.openai_value());
         Self {
             model: Some(request.model),
             messages: request
@@ -315,6 +321,7 @@ impl ChatCompletionsRequest {
                 .map(ChatCompletionsTool::from)
                 .collect(),
             tool_choice,
+            response_format,
             stream: false,
             stream_options: None,
         }

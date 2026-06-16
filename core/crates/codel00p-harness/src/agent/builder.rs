@@ -27,6 +27,7 @@ pub struct AgentHarnessBuilder {
     max_iterations: Option<u32>,
     max_tool_result_bytes: Option<usize>,
     tool_choice: Option<ToolChoice>,
+    response_format: Option<ResponseFormat>,
     cancel: Option<CancelSignal>,
 }
 
@@ -170,6 +171,13 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Requests a structured (JSON) response each turn where the provider
+    /// supports it (JSON mode), distinct from tool calling.
+    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
     /// Wires a cancellation signal the run loop polls at turn boundaries, so a
     /// caller (e.g. a Ctrl-C handler) can stop a turn and keep partial progress.
     pub fn cancel_signal(mut self, cancel: CancelSignal) -> Self {
@@ -218,6 +226,7 @@ impl AgentHarnessBuilder {
                 None => ToolOutputTruncation::new(16 * 1024),
             },
             tool_choice: self.tool_choice,
+            response_format: self.response_format,
             cancel: self.cancel.unwrap_or_default(),
         })
     }

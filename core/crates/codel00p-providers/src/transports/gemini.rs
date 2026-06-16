@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     ChatMessage, Credential, InferenceRequest, InferenceResponse, MessageRole, ProviderError,
-    TokenSink, ToolCall, ToolDefinition, Usage, transports::sse::stream_sse,
+    ResponseFormat, TokenSink, ToolCall, ToolDefinition, Usage, transports::sse::stream_sse,
 };
 
 pub(crate) struct GeminiTransport {
@@ -189,6 +189,7 @@ impl GeminiRequest {
             generation_config: GeminiGenerationConfig::from_options(
                 request.temperature,
                 request.max_output_tokens,
+                request.response_format.as_ref(),
             ),
             tools: GeminiTool::from_tools(request.tools),
             tool_config,
@@ -218,16 +219,36 @@ struct GeminiGenerationConfig {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_schema: Option<Value>,
 }
 
 impl GeminiGenerationConfig {
-    fn from_options(temperature: Option<f32>, max_output_tokens: Option<u32>) -> Option<Self> {
-        if temperature.is_none() && max_output_tokens.is_none() {
+    fn from_options(
+        temperature: Option<f32>,
+        max_output_tokens: Option<u32>,
+        response_format: Option<&ResponseFormat>,
+    ) -> Option<Self> {
+        let response_mime_type = response_format
+            .and_then(|format| format.gemini_mime_type())
+            .map(str::to_string);
+        let response_schema = response_format
+            .and_then(|format| format.gemini_schema())
+            .cloned();
+        if temperature.is_none()
+            && max_output_tokens.is_none()
+            && response_mime_type.is_none()
+            && response_schema.is_none()
+        {
             None
         } else {
             Some(Self {
                 temperature,
                 max_output_tokens,
+                response_mime_type,
+                response_schema,
             })
         }
     }
