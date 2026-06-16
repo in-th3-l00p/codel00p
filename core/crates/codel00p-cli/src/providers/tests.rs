@@ -1,6 +1,121 @@
-use codel00p_providers::{ChatMessage, InferenceRequest, default_registry};
+use std::collections::HashMap;
+use std::path::Path;
 
-use super::build_provider_client_with;
+use codel00p_providers::{
+    ChatMessage, InferenceRequest, ProviderProfile, ProviderRegistry, default_registry,
+};
+
+use super::{
+    CredentialStore, build_provider_client_with, render_provider_menu, render_setup_summary,
+    resolve_model_choice, resolve_preset_id, resolve_provider_id,
+};
+use crate::config::CliResult;
+
+/// An in-memory credential store for menu-rendering tests.
+struct FakeStore(HashMap<String, String>);
+
+impl FakeStore {
+    fn with(var: &str) -> Self {
+        let mut map = HashMap::new();
+        map.insert(var.to_string(), "secret".to_string());
+        Self(map)
+    }
+}
+
+impl CredentialStore for FakeStore {
+    fn get(&self, var: &str) -> Option<String> {
+        self.0.get(var).cloned()
+    }
+    fn set(&self, _var: &str, _value: &str) -> CliResult<()> {
+        Ok(())
+    }
+    fn remove(&self, _var: &str) -> CliResult<bool> {
+        Ok(false)
+    }
+}
+
+fn sorted_profiles(registry: &ProviderRegistry) -> Vec<&ProviderProfile> {
+    let mut profiles: Vec<&ProviderProfile> = registry.profiles().collect();
+    profiles.sort_by_key(|profile| profile.id);
+    profiles
+}
+
+#[test]
+fn resolve_provider_id_accepts_index_id_and_rejects_unknown() {
+    let registry = default_registry();
+    let profiles = sorted_profiles(&registry);
+
+    // A 1-based index maps to that menu row.
+    assert_eq!(
+        resolve_provider_id("1", &profiles, &registry),
+        Some(profiles[0].id)
+    );
+    // A canonical id resolves to itself.
+    assert_eq!(
+        resolve_provider_id("  openai ", &profiles, &registry),
+        Some("openai")
+    );
+    // Out-of-range and unknown both fail.
+    assert_eq!(resolve_provider_id("0", &profiles, &registry), None);
+    assert_eq!(resolve_provider_id("999", &profiles, &registry), None);
+    assert_eq!(resolve_provider_id("nope", &profiles, &registry), None);
+}
+
+#[test]
+fn resolve_model_choice_handles_index_text_and_blank() {
+    let models = vec!["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
+    assert_eq!(resolve_model_choice("2", &models), Some("beta".to_string()));
+    assert_eq!(
+        resolve_model_choice(" custom/model ", &models),
+        Some("custom/model".to_string())
+    );
+    assert_eq!(resolve_model_choice("   ", &models), None);
+    // An out-of-range number is treated as a free-text id, not an index.
+    assert_eq!(resolve_model_choice("99", &models), Some("99".to_string()));
+}
+
+#[test]
+fn resolve_preset_id_accepts_index_and_id() {
+    // The first preset is `allow_all`.
+    assert_eq!(resolve_preset_id("1"), Some("allow_all".to_string()));
+    assert_eq!(
+        resolve_preset_id("allow_all"),
+        Some("allow_all".to_string())
+    );
+    assert_eq!(resolve_preset_id(""), None);
+    assert_eq!(resolve_preset_id("not-a-preset"), None);
+}
+
+#[test]
+fn render_provider_menu_marks_configured_and_default() {
+    let registry = default_registry();
+    let profiles = sorted_profiles(&registry);
+    let openai_var = registry.resolve("openai").expect("openai profile").env_vars[0];
+    let store = FakeStore::with(openai_var);
+
+    let menu = render_provider_menu(&profiles, &store, Some("openai"));
+
+    assert!(menu.contains("openai"));
+    assert!(menu.contains("[x]")); // openai has a key
+    assert!(menu.contains("[ ]")); // some other provider does not
+    assert!(menu.contains("(current default)"));
+}
+
+#[test]
+fn render_setup_summary_includes_only_set_fields() {
+    let summary = render_setup_summary(
+        "openai",
+        Some("gpt-5"),
+        None,
+        None,
+        Path::new("/tmp/config.toml"),
+    );
+    assert!(summary.contains("provider: openai"));
+    assert!(summary.contains("model:    gpt-5"));
+    assert!(summary.contains("saved to: /tmp/config.toml"));
+    assert!(!summary.contains("base_url"));
+    assert!(!summary.contains("preset"));
+}
 
 fn provider_env_vars(provider: &str) -> Vec<&'static str> {
     default_registry()

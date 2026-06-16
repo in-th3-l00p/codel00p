@@ -1,7 +1,9 @@
 # Configuration
 
 codel00p reads configuration from TOML files so commands run without repeating
-flags. After a one-time `codel00p config setup`, most commands need no arguments.
+flags. The first time you run any command, codel00p walks you through an
+interactive setup; afterwards, `codel00p config` reopens that dialog to change
+anything.
 
 ## Files
 
@@ -32,11 +34,31 @@ invocation. The user config directory is never treated as a project layer.
 
 ## Getting started
 
+On an interactive terminal, just run codel00p — the first command opens the
+**configuration dialog** (and `codel00p config` reopens it later):
+
 ```bash
-codel00p config setup                       # guided: provider, key, model
-# or, explicitly:
+codel00p config                  # full-screen dialog: Providers · Tools · Permissions
+codel00p config providers        # the same dialog, opened on the Providers section
+```
+
+The dialog is a full-screen, arrow-key UI:
+
+- **Providers** — pick a provider, enter its API key (stored in `~/.codel00p/.env`),
+  and set the model and base URL (`↵` selects a provider, `Tab` moves between fields);
+- **Tools** — toggle the agent tool sets (`read`, `edit`, `command`, `git`, `web`,
+  `delegate`, `learn`, `all`) with `Space`;
+- **Permissions** — choose `allow`, `ask`, or `deny`;
+- `s` saves, `q` quits without saving.
+
+Everything is scriptable too — pipes, CI, and non-TTY shells fall back to the
+line-based commands below (and to `codel00p config providers setup`, a guided
+question-by-question wizard):
+
+```bash
 codel00p providers use openrouter --model openai/gpt-4o-mini
 codel00p providers set-key openrouter       # prompts for the key
+codel00p config set agent.permission_mode ask
 codel00p agent chat                         # no flags needed
 ```
 
@@ -102,6 +124,7 @@ run.
 
 | Command | Description |
 | --- | --- |
+| `providers setup` | Guided wizard: pick a provider, store its key, choose a model (fetched live), optionally a base URL/preset, and save |
 | `providers list` | List providers and credential status (default) |
 | `providers use <id> [--model <m>] [--base-url <url>] [--preset <id>] [--project]` | Set the default provider/model |
 | `providers set-key <id> [<key>]` | Store an API key in `~/.codel00p/.env` (prompts if omitted) |

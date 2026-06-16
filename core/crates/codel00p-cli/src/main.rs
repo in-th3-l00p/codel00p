@@ -5,6 +5,7 @@ mod cloud;
 mod cloud_client;
 mod config;
 mod config_cmd;
+mod config_ui;
 mod connector_permissions;
 mod credentials;
 mod cron;
@@ -84,6 +85,13 @@ fn run(args: Vec<String>) -> CliResult<String> {
         _ => {}
     }
 
+    // First-run onboarding: with nothing configured yet, walk an interactive user
+    // through setup before running their command. Non-interactive shells skip it.
+    if interactive() && needs_setup(&workspace_start) {
+        let summary = config_ui::run(&workspace_start, config_ui::Section::Menu)?;
+        eprint!("{summary}");
+    }
+
     let resolved = settings::load_layered(&workspace_start)?;
     let agent_defaults = resolved.merged.agent.clone();
     let config = resolve_cli_config(&resolved, overrides);
@@ -104,10 +112,39 @@ fn run(args: Vec<String>) -> CliResult<String> {
 /// `providers` and `plugins` capability registries.
 fn run_config(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     match args.split_first() {
-        Some((sub, rest)) if sub == "providers" => providers::run(workspace_start, rest),
+        // `config providers` with no subcommand opens the dialog at the Providers
+        // section; with a subcommand it stays the scriptable CLI.
+        Some((sub, rest)) if sub == "providers" => {
+            if rest.is_empty() && interactive() {
+                config_ui::run(workspace_start, config_ui::Section::Providers)
+            } else {
+                providers::run(workspace_start, rest)
+            }
+        }
         Some((sub, rest)) if sub == "plugins" => plugins::run(workspace_start, rest),
+        // Bare `config` opens the full configuration dialog when interactive.
+        None if interactive() => config_ui::run(workspace_start, config_ui::Section::Menu),
         _ => config_cmd::run(workspace_start, args),
     }
+}
+
+/// Whether both stdin and stdout are a terminal, so an interactive dialog is safe
+/// (pipes, CI, and `--json`-style automation fall back to the scriptable paths).
+fn interactive() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
+}
+
+/// The first-run condition: no provider has been configured yet.
+fn needs_setup(workspace_start: &Path) -> bool {
+    settings::load_layered(workspace_start)
+        .ok()
+        .and_then(|resolved| {
+            settings::effective_value(&resolved.merged, "agent.provider")
+                .ok()
+                .flatten()
+        })
+        .is_none()
 }
 
 /// `auth` groups cloud sign-in and sign-out.
