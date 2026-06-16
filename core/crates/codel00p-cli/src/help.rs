@@ -452,9 +452,14 @@ Options:
 ";
 
 const MEMORY_HELP: &str = "\
-Usage: codel00p [global options] memory <command>
+Usage: codel00p [global options] memory [command]
 
-Commands:
+With no command on a terminal, opens the review dialog: browse by status
+(Tab to switch Candidate/Approved/...), Enter a record to see its detail and
+audit trail, then a approve · r reject · x archive · e edit (reason/content
+typed inline). Esc quits.
+
+For scripting (and pipes/CI), the subcommands stay:
   similar  Score active near-duplicate memory; use --json for JSON output
   stale    List approved memory likely superseded by newer active memory
   quality  List active memory with low advisory quality scores
@@ -463,10 +468,14 @@ Commands:
   show     Show one memory record; use --json for JSON output
   audit    Show memory audit history; use --json for JSON output
   edit     Edit memory content; use --json for JSON output
+  merge    Merge a duplicate into a survivor; use --json for JSON output
   restore  Restore content from an edit audit sequence; use --json for JSON output
   approve  Approve candidate memory; use --json for JSON output
   reject   Reject candidate memory; use --json for JSON output
   archive  Archive memory; use --json for JSON output
+
+--actor is now optional on every review command: when omitted it is inferred
+(cloud login email, else git user.name, else $USER).
 ";
 
 const SESSION_LIST_HELP: &str = "\

@@ -23,9 +23,8 @@ impl Composer {
         self.cursor
     }
 
-    /// Replaces the buffer and parks the cursor at the end. Used by tests and any
-    /// programmatic seeding of the composer.
-    #[cfg(test)]
+    /// Replaces the buffer and parks the cursor at the end. Used to seed the
+    /// composer programmatically (e.g. pre-filling an edit with current content).
     pub(crate) fn set_text(&mut self, text: impl Into<String>) {
         self.text = text.into();
         self.cursor = self.char_count();

@@ -1,5 +1,6 @@
 use std::{env, path::Path, process::ExitCode};
 
+mod actor;
 mod agent;
 mod cloud;
 mod cloud_client;
@@ -15,6 +16,7 @@ mod help;
 mod login;
 mod mcp_server;
 mod memory;
+mod memory_ui;
 mod plugins;
 mod providers;
 mod session;

@@ -80,7 +80,7 @@ pub(super) fn memory_review(
         }
     }
 
-    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+    let actor = actor.unwrap_or_else(crate::actor::infer_actor);
     let decision = match command {
         ReviewCommand::Approve => ReviewDecision::approve(actor),
         ReviewCommand::Reject => ReviewDecision::reject(
@@ -141,7 +141,7 @@ pub(super) fn memory_edit(config: CliConfig, args: &[String]) -> CliResult<Strin
         }
     }
 
-    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+    let actor = actor.unwrap_or_else(crate::actor::infer_actor);
     let content = content.ok_or_else(|| "missing required --content".to_string())?;
     let mut edit = MemoryEdit::replace_content(actor, content);
     if let Some(reason) = reason {
@@ -194,7 +194,7 @@ pub(super) fn memory_merge(config: CliConfig, args: &[String]) -> CliResult<Stri
         }
     }
 
-    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+    let actor = actor.unwrap_or_else(crate::actor::infer_actor);
     let mut merge = MemoryMerge::new(actor);
     if let Some(reason) = reason {
         merge = merge.with_reason(reason);
@@ -253,7 +253,7 @@ pub(super) fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<St
     }
 
     let sequence = sequence.ok_or_else(|| "missing required --sequence".to_string())?;
-    let actor = actor.ok_or_else(|| "missing required --actor".to_string())?;
+    let actor = actor.unwrap_or_else(crate::actor::infer_actor);
 
     let mut store = open_memory_store(&config)?;
     let audit = store.audit_log(id).map_err(|error| error.to_string())?;
