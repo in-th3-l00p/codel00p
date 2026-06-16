@@ -17,10 +17,47 @@ use crossterm::terminal::{
 use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::style::Style;
+use ratatui::text::Span;
+use ratatui::widgets::{Block, Borders};
 
 use crate::config::CliResult;
+use crate::tui::theme::Theme;
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
+
+/// Bold accent text, sourced from the shared chat [`Theme`] so the dialogs match
+/// the agent TUI.
+pub(crate) fn accent() -> Style {
+    Theme::default().accent()
+}
+
+/// Dimmed, low-emphasis text (footers, hints, empty states).
+pub(crate) fn muted() -> Style {
+    Theme::default().muted()
+}
+
+/// Highlight for the focused/selected row in a list.
+pub(crate) fn selection() -> Style {
+    Theme::default().selection()
+}
+
+/// Error-colored foreground. Part of the shared dialog palette; no dialog
+/// surfaces an error state yet, so it is wired up here for the upcoming polish
+/// slices rather than left to be re-derived per dialog.
+#[allow(dead_code)]
+pub(crate) fn error() -> Style {
+    Style::default().fg(Theme::default().error)
+}
+
+/// A bordered panel with the theme's overlay-border color and an accent-styled
+/// `" {title} "`.
+pub(crate) fn panel(title: &str) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Theme::default().overlay_border))
+        .title(Span::styled(format!(" {title} "), accent()))
+}
 
 /// Runs a blocking, full-screen Elm loop over `model`, restoring the terminal on
 /// every exit path (errors and the key handler returning `Ok(false)` included).
