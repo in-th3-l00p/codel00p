@@ -12,11 +12,13 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::picker::{Picker, PickerItem, PickerOutcome};
 
-/// Whether a row is an active skill or a candidate awaiting review.
+/// Whether a row is an active skill, a candidate awaiting review, or a disabled
+/// (archived) skill that can be restored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SkillKind {
     Active,
     Candidate,
+    Disabled,
 }
 
 /// A skill (active or candidate) projected for the list picker.
@@ -48,6 +50,7 @@ impl PickerItem for SkillRow {
     fn detail(&self) -> Option<String> {
         let usage = match self.kind {
             SkillKind::Candidate => "candidate".to_string(),
+            SkillKind::Disabled => "disabled".to_string(),
             SkillKind::Active if self.usage == 0 => "unused".to_string(),
             SkillKind::Active => format!("used {}x", self.usage),
         };
@@ -60,16 +63,23 @@ impl PickerItem for SkillRow {
 pub(crate) enum Filter {
     Active,
     Candidates,
+    Disabled,
     All,
 }
 
 impl Filter {
-    pub(crate) const ORDER: [Filter; 3] = [Filter::Active, Filter::Candidates, Filter::All];
+    pub(crate) const ORDER: [Filter; 4] = [
+        Filter::Active,
+        Filter::Candidates,
+        Filter::Disabled,
+        Filter::All,
+    ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             Filter::Active => "Active",
             Filter::Candidates => "Candidates",
+            Filter::Disabled => "Disabled",
             Filter::All => "All",
         }
     }
@@ -79,6 +89,7 @@ impl Filter {
         match self {
             Filter::Active => kind == SkillKind::Active,
             Filter::Candidates => kind == SkillKind::Candidate,
+            Filter::Disabled => kind == SkillKind::Disabled,
             Filter::All => true,
         }
     }
@@ -103,6 +114,8 @@ pub(crate) enum Mutation {
     Reject { name: String, root: PathBuf },
     /// Disable an active skill (archived, reversible).
     Disable { name: String, root: PathBuf },
+    /// Restore a disabled (archived) skill back into the active set.
+    Restore { name: String, root: PathBuf },
 }
 
 /// The screen currently shown.
@@ -128,6 +141,10 @@ pub(crate) struct SkillsModel {
     pub(crate) selected: Option<SkillRow>,
     pub(crate) scroll: usize,
     pub(crate) status: Option<String>,
+    /// Whether the `?` help overlay is shown; while shown, any key closes it.
+    pub(crate) show_help: bool,
+    /// When set, a disable is awaiting `y` confirmation for this `(name, root)`.
+    pub(crate) pending_disable: Option<(String, PathBuf)>,
     /// All rows across kinds; the picker shows the subset matching `filter`.
     all_rows: Vec<SkillRow>,
 }
@@ -141,6 +158,8 @@ impl SkillsModel {
             selected: None,
             scroll: 0,
             status: None,
+            show_help: false,
+            pending_disable: None,
             all_rows: Vec::new(),
         }
     }
@@ -171,10 +190,43 @@ impl SkillsModel {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Flow::Quit;
         }
+        // While the help overlay is open, any key (including Esc) just closes it.
+        if self.show_help {
+            self.show_help = false;
+            return Flow::Stay;
+        }
+        // A pending disable confirmation intercepts the next key: `y` applies,
+        // anything else cancels.
+        if let Some((name, root)) = self.pending_disable.take() {
+            return self.resolve_disable(key, name, root);
+        }
+        if key.code == KeyCode::Char('?') {
+            self.show_help = true;
+            return Flow::Stay;
+        }
         match self.screen {
             Screen::List => self.update_list(key),
             Screen::Detail => self.update_detail(key),
         }
+    }
+
+    /// Resolves a pending disable: `y` confirms (mutates), any other key cancels.
+    fn resolve_disable(&mut self, key: KeyEvent, name: String, root: PathBuf) -> Flow {
+        if key.code == KeyCode::Char('y') {
+            Flow::Mutate(Mutation::Disable { name, root })
+        } else {
+            self.set_status(format!("Cancelled disabling {name}."));
+            Flow::Stay
+        }
+    }
+
+    /// Begins a disable confirmation for the given row.
+    fn request_disable(&mut self, name: String, root: PathBuf) -> Flow {
+        self.set_status(format!(
+            "Press y to confirm disabling {name}, any other key to cancel."
+        ));
+        self.pending_disable = Some((name, root));
+        Flow::Stay
     }
 
     fn update_list(&mut self, key: KeyEvent) -> Flow {
@@ -197,10 +249,24 @@ impl SkillsModel {
                 name: row.name.clone(),
                 root: row.root.clone(),
             }),
-            KeyCode::Char('d') => self.act(SkillKind::Active, |row| Mutation::Disable {
-                name: row.name.clone(),
-                root: row.root.clone(),
-            }),
+            KeyCode::Char('u') | KeyCode::Char('e') => {
+                self.act(SkillKind::Disabled, |row| Mutation::Restore {
+                    name: row.name.clone(),
+                    root: row.root.clone(),
+                })
+            }
+            // Disable is confirmed, not immediate: it arms `pending_disable`.
+            KeyCode::Char('d') => match self.picker.selected_item() {
+                Some(row) if row.kind == SkillKind::Active => {
+                    let (name, root) = (row.name.clone(), row.root.clone());
+                    self.request_disable(name, root)
+                }
+                Some(_) => {
+                    self.set_status("Disable applies to active skills only.");
+                    Flow::Stay
+                }
+                None => Flow::Stay,
+            },
             _ => match self.picker.on_key(key) {
                 PickerOutcome::Selected => match self.picker.selected_item().cloned() {
                     Some(row) => {
@@ -250,7 +316,10 @@ impl SkillsModel {
                 })
             }
             KeyCode::Char('d') if row.kind == SkillKind::Active => {
-                Flow::Mutate(Mutation::Disable {
+                self.request_disable(row.name, row.root)
+            }
+            KeyCode::Char('u') | KeyCode::Char('e') if row.kind == SkillKind::Disabled => {
+                Flow::Mutate(Mutation::Restore {
                     name: row.name,
                     root: row.root,
                 })
@@ -268,6 +337,7 @@ impl SkillsModel {
                 self.set_status(match kind {
                     SkillKind::Candidate => "Approve/reject applies to candidates only.",
                     SkillKind::Active => "Disable applies to active skills only.",
+                    SkillKind::Disabled => "Restore applies to disabled skills only.",
                 });
                 Flow::Stay
             }

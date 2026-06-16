@@ -14,8 +14,8 @@ mod view;
 use std::path::{Path, PathBuf};
 
 use codel00p_skill::{
-    Skill, SkillSource, approve_candidate, archive_skill, load_candidates, load_skills, load_usage,
-    reject_candidate,
+    Skill, SkillSource, approve_candidate, archive_skill, load_archived, load_candidates,
+    load_skills, load_usage, reject_candidate, restore_skill,
 };
 
 use crate::config::CliResult;
@@ -69,6 +69,9 @@ fn load_rows(workspace_start: &Path) -> Vec<SkillRow> {
         for candidate in load_candidates(dir) {
             rows.push(candidate_row(&candidate, dir.clone()));
         }
+        for disabled in load_archived(dir) {
+            rows.push(disabled_row(&disabled, dir.clone()));
+        }
     }
 
     rows.sort_by(|a, b| a.name.cmp(&b.name));
@@ -107,6 +110,22 @@ fn candidate_row(skill: &Skill, root: PathBuf) -> SkillRow {
     }
 }
 
+fn disabled_row(skill: &Skill, root: PathBuf) -> SkillRow {
+    SkillRow {
+        name: skill.name.clone(),
+        kind: SkillKind::Disabled,
+        source: skill.source.label().to_string(),
+        created_by: skill.created_by.clone(),
+        usage: 0,
+        description: skill.description.clone(),
+        body: skill.body.clone(),
+        version: skill.version.clone(),
+        triggers: skill.triggers.clone(),
+        path: skill.path.display().to_string(),
+        root,
+    }
+}
+
 /// Applies a review effect, recording success or the error in the status line.
 fn apply(model: &mut SkillsModel, mutation: Mutation) {
     let outcome = match &mutation {
@@ -118,6 +137,9 @@ fn apply(model: &mut SkillsModel, mutation: Mutation) {
         }
         Mutation::Disable { name, root } => {
             archive_skill(root, name).map(|_| format!("Disabled {name} (archived, reversible)."))
+        }
+        Mutation::Restore { name, root } => {
+            restore_skill(root, name).map(|_| format!("Restored {name}. It is now active."))
         }
     };
     match outcome {
