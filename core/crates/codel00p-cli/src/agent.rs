@@ -70,7 +70,7 @@ pub(crate) use chat::{
     fresh_chat_session_id, load_chat_session_state,
 };
 pub use command::run;
-pub(crate) use command::{run_gateway_message, run_scheduled_job};
+pub(crate) use command::{resume_chat, run_gateway_message, run_scheduled_job};
 pub(crate) use mcp::{McpServerSpec, load_mcp_servers_from_workspace};
 pub(crate) use options::{AgentRunOptions, CliPermissionMode};
 pub(crate) use permissions::CliPermissionPolicy;

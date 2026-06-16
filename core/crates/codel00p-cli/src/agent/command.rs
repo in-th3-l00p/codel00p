@@ -254,6 +254,21 @@ fn agent_continue(
     run_agent_turn(config, options, AgentSessionMode::Resume)
 }
 
+/// Continue an existing session in the interactive chat, exactly as
+/// `agent chat --session-id <id>` would. Used by the sessions browser's resume
+/// action so it reuses the one chat-launch path instead of reimplementing it.
+pub(crate) fn resume_chat(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    session_id: &str,
+) -> CliResult<String> {
+    agent_chat(
+        config,
+        defaults,
+        &["--session-id".to_string(), session_id.to_string()],
+    )
+}
+
 fn agent_chat(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> CliResult<String> {
     let options = parse_agent_chat_options(defaults, args)?;
     // The full-screen TUI is the primary interface on an interactive terminal.

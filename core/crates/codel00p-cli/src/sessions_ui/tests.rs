@@ -31,6 +31,25 @@ fn enter_opens_detail_for_selected_session() {
 }
 
 #[test]
+fn r_on_list_resumes_selected_session() {
+    let mut model = model_with_rows();
+    assert_eq!(
+        model.update(key(KeyCode::Char('r'))),
+        Flow::Resume("session-1".to_string())
+    );
+}
+
+#[test]
+fn r_in_detail_resumes_open_session() {
+    let mut model = model_with_rows();
+    model.show_detail(row("session-2"), vec!["a".into()]);
+    assert_eq!(
+        model.update(key(KeyCode::Char('r'))),
+        Flow::Resume("session-2".to_string())
+    );
+}
+
+#[test]
 fn esc_on_list_quits() {
     let mut model = model_with_rows();
     assert_eq!(model.update(key(KeyCode::Esc)), Flow::Quit);

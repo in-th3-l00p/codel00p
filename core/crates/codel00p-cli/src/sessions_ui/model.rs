@@ -40,6 +40,9 @@ pub(crate) enum Screen {
 pub(crate) enum Flow {
     Stay,
     OpenDetail(String),
+    /// Continue the given session in the chat TUI; the driver exits the loop and
+    /// the caller launches chat on this session id.
+    Resume(String),
     Quit,
 }
 
@@ -85,6 +88,14 @@ impl SessionsModel {
     }
 
     fn update_list(&mut self, key: KeyEvent) -> Flow {
+        // `r` resumes the selected session in the chat TUI. Checked before the
+        // picker so it is not swallowed as a filter keystroke.
+        if key.code == KeyCode::Char('r')
+            && key.modifiers.is_empty()
+            && let Some(row) = self.picker.selected_item()
+        {
+            return Flow::Resume(row.id.clone());
+        }
         match self.picker.on_key(key) {
             PickerOutcome::Selected => match self.picker.selected_item().cloned() {
                 Some(row) => Flow::OpenDetail(row.id),
@@ -97,6 +108,11 @@ impl SessionsModel {
 
     fn update_detail(&mut self, key: KeyEvent) -> Flow {
         match key.code {
+            KeyCode::Char('r') if key.modifiers.is_empty() => {
+                if let Some(row) = self.selected.as_ref() {
+                    return Flow::Resume(row.id.clone());
+                }
+            }
             KeyCode::Esc => {
                 self.screen = Screen::List;
                 self.transcript.clear();

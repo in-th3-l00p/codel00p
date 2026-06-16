@@ -107,7 +107,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "mcp" => mcp_server::run(config, rest),
         "memory" => memory::run(config, rest),
         "cloud" => cloud::run(config, rest),
-        "session" | "sessions" => session::run(config, rest),
+        "session" | "sessions" => session::run(config, agent_defaults, rest),
         _ => Err(format!("unknown command: {command}")),
     }
 }

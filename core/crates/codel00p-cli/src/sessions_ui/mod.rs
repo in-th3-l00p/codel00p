@@ -13,25 +13,42 @@ mod view;
 use codel00p_session::{PersistedSessionRecord, SessionRecord, SessionStore};
 
 use crate::config::{CliConfig, CliResult, open_session_store, parse_session_id};
+use crate::settings::AgentSettings;
 use model::{Flow, SessionRow, SessionsModel};
 
 type Store = codel00p_session::StorageBackedSessionStore<codel00p_storage::SqliteStorage>;
 
 /// Runs the sessions browser. Lifecycle and loop come from [`crate::dialog`].
-pub(crate) fn run(config: CliConfig) -> CliResult<String> {
+///
+/// Selecting *resume* (`r`) closes the browser and continues that session in the
+/// chat TUI, reusing the same launch path as `agent chat --session-id <id>`;
+/// `agent_defaults` supplies the provider/model the chat needs.
+pub(crate) fn run(config: CliConfig, agent_defaults: &AgentSettings) -> CliResult<String> {
     let store = open_session_store(&config)?;
     let mut model = SessionsModel::new();
     model.set_rows(load_rows(&store)?);
 
+    // The synchronous dialog loop restores the terminal on exit; the resume id is
+    // captured here so chat is launched *after* the browser has fully torn down.
+    let mut resume: Option<String> = None;
     crate::dialog::run_blocking(&mut model, view::draw, |model, key| {
         match model.update(key) {
             Flow::Stay => {}
             Flow::Quit => return Ok(false),
             Flow::OpenDetail(id) => open_detail(&store, model, &id),
+            Flow::Resume(id) => {
+                resume = Some(id);
+                return Ok(false);
+            }
         }
         Ok(true)
     })?;
-    Ok("Closed sessions.\n".to_string())
+
+    drop(store);
+    match resume {
+        Some(id) => crate::agent::resume_chat(config, agent_defaults, &id),
+        None => Ok("Closed sessions.\n".to_string()),
+    }
 }
 
 /// Lists sessions with message/event counts, most-recent-first (undated last).

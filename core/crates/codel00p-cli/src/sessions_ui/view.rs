@@ -40,8 +40,8 @@ pub(crate) fn draw(frame: &mut Frame, model: &SessionsModel) {
     }
 
     let footer = match model.screen {
-        Screen::List => "↑/↓ move · type to filter · ↵ open · Esc quit",
-        Screen::Detail => "↑/↓ scroll · Esc back",
+        Screen::List => "↑/↓ move · type to filter · ↵ open · r resume · Esc quit",
+        Screen::Detail => "↑/↓ scroll · r resume · Esc back",
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(format!(" {footer}"), muted()))),
