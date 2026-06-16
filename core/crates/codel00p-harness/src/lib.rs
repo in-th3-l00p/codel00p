@@ -17,6 +17,7 @@ pub mod permissions;
 pub mod provider_adapter;
 pub mod session;
 pub mod skills;
+pub mod subagent;
 pub mod tool_registry;
 pub mod tool_result;
 pub mod tools;
@@ -60,6 +61,7 @@ pub use session::{
 pub use skills::{
     SkillContext, SkillPrompt, SkillPromptAssembler, SkillProvider, SkillSelectionRequest,
 };
+pub use subagent::HarnessSubAgentSpawner;
 pub use tool_registry::ToolRegistry;
 pub use tool_result::ToolResult;
 pub use tools::{Tool, ToolSpec};
