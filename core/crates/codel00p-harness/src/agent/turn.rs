@@ -186,6 +186,25 @@ impl AgentHarness {
                 )
                 .await;
 
+                self.extract_capability_candidate(
+                    session_state.session_id().clone(),
+                    turn_id.clone(),
+                    latest_user_message(&session_state),
+                    assistant_message.clone(),
+                    executed_tool_calls
+                        .iter()
+                        .map(
+                            |call: &ExecutedToolCall| crate::capability::CapabilityCandidateCall {
+                                name: call.name.clone(),
+                                input: call.input.clone(),
+                                output: call.result.content().clone(),
+                            },
+                        )
+                        .collect(),
+                    &mut events,
+                )
+                .await;
+
                 self.run_lifecycle_hook(
                     "turn_completed",
                     TurnLifecycleContext::new(
@@ -469,6 +488,7 @@ impl AgentHarness {
                     executed_tool_calls.push(ExecutedToolCall {
                         id: tool_call.id().to_string(),
                         name: tool_call.name().to_string(),
+                        input: tool_call.input().clone(),
                         result,
                     });
                 }

@@ -164,6 +164,13 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       candidates to a review sink, and approved capabilities register as
       first-class tools. Proven end-to-end against a live OpenRouter model. The
       toolset now *compounds*. See [#11](capability-synthesis.md).
+- [x] **Capability synthesis — Slice 2** (shipped 2026-06-16): the loop closes
+      itself. A `CapabilityExtractor` auto-proposes a capability after each turn
+      (deterministic `PipelineCapabilityExtractor`, or LLM-assisted
+      `ModelCapabilityExtractor` that *generalizes* a pipeline into a
+      parameterized capability), and `verify_capability` gates promotion by
+      replaying the capability on a fresh workspace. Both the auto-extraction and
+      the LLM generalization+verification are proven against a live model.
 - [ ] **Streaming tool-call arguments** (incremental parse) where the transport
       supports it.
 

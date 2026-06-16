@@ -219,6 +219,66 @@ impl AgentHarness {
         }
     }
 
+    /// Auto-extract a capability from the completed turn and queue it for review.
+    /// Closes the capability-synthesis loop: a successful pipeline can become a
+    /// reusable tool without the agent explicitly calling `propose_capability`.
+    pub(super) async fn extract_capability_candidate(
+        &self,
+        session_id: SessionId,
+        turn_id: TurnId,
+        goal: String,
+        assistant_message: Option<String>,
+        calls: Vec<crate::capability::CapabilityCandidateCall>,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        let (Some(extractor), Some(sink)) =
+            (&self.capability_extractor, &self.capability_proposal_sink)
+        else {
+            return;
+        };
+
+        let candidate = match extractor
+            .extract(crate::capability::CapabilityExtractionRequest {
+                goal,
+                assistant_message,
+                calls,
+            })
+            .await
+        {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                self.record_event(
+                    events,
+                    HarnessEvent::LifecycleHookFailed {
+                        event_id: EventId::new(),
+                        session_id,
+                        turn_id,
+                        hook: "capability_extraction".to_string(),
+                        message: error.to_string(),
+                    },
+                )
+                .await;
+                return;
+            }
+        };
+
+        if let Some(capability) = candidate
+            && let Err(error) = sink.propose(capability).await
+        {
+            self.record_event(
+                events,
+                HarnessEvent::LifecycleHookFailed {
+                    event_id: EventId::new(),
+                    session_id,
+                    turn_id,
+                    hook: "capability_proposal".to_string(),
+                    message: error.to_string(),
+                },
+            )
+            .await;
+        }
+    }
+
     pub(super) async fn record_event(&self, events: &mut Vec<HarnessEvent>, event: HarnessEvent) {
         if let Some(event_sink) = &self.event_sink {
             event_sink.emit(&event).await;

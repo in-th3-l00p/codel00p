@@ -53,16 +53,35 @@ model discovers a synthesized `scaffold_module` capability and accomplishes a
 two-file scaffold in a single governed tool call
 (`tests/capability_turn.rs`, gated on `CODEL00P_PROVIDER_OPENROUTER_API_KEY`).
 
+## Shipped — Slice 2 (2026-06-16): auto-extraction + verification
+
+The loop now closes itself, and promotion is gated on a working replay.
+
+- **Auto-extraction** (`CapabilityExtractor`): after each completed turn the
+  harness runs an extractor over the executed tool calls and auto-proposes a
+  capability to the same review sink — no explicit `propose_capability` needed.
+  Wired via builder `.capability_extractor()` + `.capability_proposals()`, fired
+  from the turn alongside skill extraction. (`ExecutedToolCall` now also carries
+  the tool `input`, so extractors and audits see what was run.)
+  - `PipelineCapabilityExtractor` — deterministic, no extra inference: freezes a
+    fully-successful multi-step `run_pipeline` verbatim into a candidate named
+    after the goal.
+  - `ModelCapabilityExtractor` — LLM-assisted "tools that write tools": asks the
+    model to *generalize* a concrete successful pipeline into a parameterized
+    capability (lifting literals into `{{params.*}}`), returning JSON it parses
+    and validates. Proven live: a real model turned a hard-coded `widget`
+    scaffold into a `{{params}}`-driven capability that then passed verification.
+- **Verification gate** (`verify_capability`): replays a capability once on a
+  fresh temp workspace with sample params and requires every step to complete —
+  so a promoted capability is *trusted to run*, not merely well-formed. A denied
+  or erroring step fails verification.
+
 ## Next slices
 
-- **Auto-extraction**: detect a repeated successful pipeline from completed turns
-  (extend `ProcedureSkillExtractor`) and auto-propose it as a capability —
-  closing the loop without the agent explicitly calling `propose_capability`.
-- **Verification gate**: before promotion, replay the capability on a throwaday
-  worktree and require build/test to pass, so a promoted capability is trusted,
-  not merely plausible (pairs with transactional turns / execution backends #7).
 - **Org propagation**: share approved capabilities across the fleet via reviewed
-  team memory, with usage tracking and a curator that retires stale ones
-  (mirrors the skills curator).
+  team memory, with usage tracking and a curator that retires stale ones.
 - **Composition**: let capabilities call other approved capabilities (bounded
   depth) so higher-order capabilities emerge.
+- **Richer verification**: seed fixtures + run a build/test command (pairs with
+  transactional turns / execution backends #7) for capabilities that mutate
+  existing files.

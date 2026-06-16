@@ -53,6 +53,8 @@ pub struct AgentHarness {
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     skill_extractor: Option<Arc<dyn SkillExtractor>>,
     skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
+    capability_extractor: Option<Arc<dyn crate::capability::CapabilityExtractor>>,
+    capability_proposal_sink: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
     context_window: Option<ContextWindowState>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,

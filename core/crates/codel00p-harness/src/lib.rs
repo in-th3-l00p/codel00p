@@ -38,8 +38,10 @@ pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use background::BackgroundProcesses;
 pub use cancel::CancelSignal;
 pub use capability::{
-    Capability, CapabilityProposalSink, CapabilityTool, FileCapabilityProposalSink,
-    ProposeCapabilityTool, capability_tools, load_capabilities,
+    Capability, CapabilityCandidateCall, CapabilityExtractionRequest, CapabilityExtractor,
+    CapabilityProposalSink, CapabilityTool, FileCapabilityProposalSink, ModelCapabilityExtractor,
+    PipelineCapabilityExtractor, ProposeCapabilityTool, VerificationOutcome, capability_tools,
+    load_capabilities, verify_capability,
 };
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool};

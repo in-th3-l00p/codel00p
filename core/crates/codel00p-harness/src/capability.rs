@@ -334,6 +334,260 @@ impl Tool for ProposeCapabilityTool {
     }
 }
 
+// ===========================================================================
+// Auto-extraction: capabilities that propose themselves from completed turns.
+// ===========================================================================
+
+/// One executed tool call from a completed turn, as a capability extractor sees
+/// it: the tool name, the arguments the model passed, and the result content.
+#[derive(Clone, Debug)]
+pub struct CapabilityCandidateCall {
+    pub name: String,
+    pub input: Value,
+    pub output: Value,
+}
+
+/// What a [`CapabilityExtractor`] inspects at turn end to decide whether the work
+/// is worth freezing into a reusable capability.
+#[derive(Clone, Debug)]
+pub struct CapabilityExtractionRequest {
+    pub goal: String,
+    pub assistant_message: Option<String>,
+    pub calls: Vec<CapabilityCandidateCall>,
+}
+
+/// Proposes a capability from a completed turn, or `None` if the work was not
+/// capability-worthy. Returning a candidate sends it to the review queue.
+#[async_trait]
+pub trait CapabilityExtractor: Send + Sync {
+    async fn extract(
+        &self,
+        request: CapabilityExtractionRequest,
+    ) -> Result<Option<Capability>, HarnessError>;
+}
+
+/// Did a `run_pipeline` result indicate every step succeeded?
+fn pipeline_succeeded(output: &Value) -> bool {
+    let total = output.get("total").and_then(Value::as_u64).unwrap_or(0);
+    let completed = output.get("completed").and_then(Value::as_u64).unwrap_or(0);
+    let stopped = output
+        .get("stopped_early")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    total > 0 && completed == total && !stopped
+}
+
+/// The steps of the most recent fully-successful `run_pipeline` call this turn.
+fn successful_pipeline_steps(calls: &[CapabilityCandidateCall]) -> Option<Vec<Value>> {
+    calls
+        .iter()
+        .rev()
+        .find(|call| call.name == "run_pipeline" && pipeline_succeeded(&call.output))
+        .and_then(|call| call.input.get("steps").and_then(Value::as_array).cloned())
+}
+
+/// A tool-name slug usable as a capability name: lowercase, `_`-separated,
+/// starting with a letter.
+fn capability_slug(goal: &str) -> String {
+    let mut out = String::new();
+    let mut prev_us = false;
+    for ch in goal.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+            prev_us = false;
+        } else if !prev_us && !out.is_empty() {
+            out.push('_');
+            prev_us = true;
+        }
+        if out.len() >= 48 {
+            break;
+        }
+    }
+    let trimmed = out.trim_matches('_').to_string();
+    match trimmed.chars().next() {
+        Some(c) if c.is_ascii_lowercase() => trimmed,
+        Some(_) => format!("cap_{trimmed}"),
+        None => String::new(),
+    }
+}
+
+fn first_line(text: &str) -> String {
+    let line = text.trim().lines().next().unwrap_or("").trim();
+    if line.chars().count() > 120 {
+        format!("{}…", line.chars().take(119).collect::<String>())
+    } else {
+        line.to_string()
+    }
+}
+
+/// Deterministic extractor: when a turn ran a fully-successful multi-step
+/// `run_pipeline`, freeze that pipeline verbatim into a (zero-parameter)
+/// capability candidate named after the goal. No extra inference; it captures
+/// the exact successful program for a human (or the model extractor) to
+/// generalize and approve.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PipelineCapabilityExtractor;
+
+#[async_trait]
+impl CapabilityExtractor for PipelineCapabilityExtractor {
+    async fn extract(
+        &self,
+        request: CapabilityExtractionRequest,
+    ) -> Result<Option<Capability>, HarnessError> {
+        if request
+            .assistant_message
+            .as_deref()
+            .map(str::trim)
+            .filter(|message| !message.is_empty())
+            .is_none()
+        {
+            return Ok(None);
+        }
+        let Some(steps) = successful_pipeline_steps(&request.calls) else {
+            return Ok(None);
+        };
+        if steps.len() < 2 {
+            return Ok(None);
+        }
+        let name = capability_slug(&request.goal);
+        if name.is_empty() {
+            return Ok(None);
+        }
+
+        let capability = Capability {
+            name,
+            description: first_line(&request.goal),
+            parameters: empty_object_schema(),
+            steps,
+        };
+        // Only propose if it is structurally valid.
+        if capability.validate().is_err() {
+            return Ok(None);
+        }
+        Ok(Some(capability))
+    }
+}
+
+/// LLM-assisted extractor: asks a model to *generalize* a successful pipeline
+/// into a parameterized, reusable capability (a name, a description, a parameter
+/// schema, and templated steps referencing `{{params.<name>}}`). This is the
+/// "tools that write tools" path; the model lifts concrete literals into
+/// parameters so the capability is reusable, not a one-off freeze. Any failure
+/// (no candidate pipeline, bad JSON, invalid shape) yields `None` so extraction
+/// never disrupts the turn.
+pub struct ModelCapabilityExtractor {
+    model_client: Arc<dyn crate::turn::ModelClient>,
+}
+
+impl ModelCapabilityExtractor {
+    pub fn new(model_client: Arc<dyn crate::turn::ModelClient>) -> Self {
+        Self { model_client }
+    }
+}
+
+#[async_trait]
+impl CapabilityExtractor for ModelCapabilityExtractor {
+    async fn extract(
+        &self,
+        request: CapabilityExtractionRequest,
+    ) -> Result<Option<Capability>, HarnessError> {
+        let Some(steps) = successful_pipeline_steps(&request.calls) else {
+            return Ok(None);
+        };
+        let steps_json = serde_json::to_string_pretty(&steps).unwrap_or_default();
+        let prompt = format!(
+            "You turn a successful tool pipeline into a reusable, parameterized \
+             capability for a coding agent.\n\nThe user's request was:\n{goal}\n\nThe \
+             agent ran this pipeline successfully (steps as JSON):\n{steps_json}\n\n\
+             Generalize it into a capability by lifting concrete literals (file \
+             names, identifiers, messages) into named parameters. Reply with ONLY a \
+             JSON object of this exact shape:\n{{\n  \"name\": \
+             \"snake_case_tool_name\",\n  \"description\": \"one line, what it does\",\n  \
+             \"parameters\": {{ \"type\": \"object\", \"required\": [...], \
+             \"properties\": {{ \"<param>\": {{ \"type\": \"string\" }} }} }},\n  \
+             \"steps\": [ {{ \"tool\": \"...\", \"input\": {{ ... }} }} ]\n}}\nIn \
+             step inputs, reference a parameter as {{{{params.<name>}}}} and an \
+             earlier step's output as {{{{steps.N.field}}}}. Keep the same tools \
+             and order as the pipeline above. Output JSON only, no prose.",
+            goal = request.goal,
+        );
+
+        let mut session = crate::session::SessionState::new(
+            crate::session::SessionId::from_static("capability-extraction"),
+        );
+        session.push_user(crate::session::UserMessage::new(prompt));
+        let inference = crate::turn::HarnessInferenceRequest::new(session)
+            .with_response_format(crate::turn::ResponseFormat::JsonObject);
+
+        let response = self.model_client.infer(inference).await?;
+        let Some(message) = response.assistant_message() else {
+            return Ok(None);
+        };
+        let Some(capability) = parse_capability_json(message) else {
+            return Ok(None);
+        };
+        if capability.validate().is_err() {
+            return Ok(None);
+        }
+        Ok(Some(capability))
+    }
+}
+
+/// Parse a `Capability` out of a model reply, tolerating ```json fences and
+/// surrounding prose by extracting the outermost JSON object.
+fn parse_capability_json(message: &str) -> Option<Capability> {
+    let start = message.find('{')?;
+    let end = message.rfind('}')?;
+    if end < start {
+        return None;
+    }
+    serde_json::from_str::<Capability>(&message[start..=end]).ok()
+}
+
+// ===========================================================================
+// Verification gate: replay a capability on a throwaway workspace before trust.
+// ===========================================================================
+
+/// The result of verifying a capability by replaying it.
+#[derive(Clone, Debug)]
+pub struct VerificationOutcome {
+    pub ok: bool,
+    pub completed: usize,
+    pub total: usize,
+    pub report: Value,
+}
+
+/// Smoke-test a capability by running it once on a **fresh temporary workspace**
+/// with `sample_params`, through `sub_tools` + `policy`. A capability that
+/// completes every step verifies; one whose steps error or are denied does not.
+///
+/// This is a promotion gate: it proves a synthesized capability actually runs
+/// before it is trusted, rather than merely being well-formed. It runs on an
+/// empty workspace, so it best fits self-contained (e.g. scaffolding)
+/// capabilities; capabilities that depend on pre-existing files should be
+/// verified against a seeded fixture by the caller.
+pub async fn verify_capability(
+    capability: &Capability,
+    sub_tools: ToolRegistry,
+    policy: Arc<dyn PermissionPolicy>,
+    sample_params: Value,
+) -> Result<VerificationOutcome, HarnessError> {
+    let dir = tempfile::tempdir().map_err(HarnessError::from)?;
+    let workspace = Workspace::new(dir.path())?;
+    let engine = PipelineEngine::new(Arc::new(sub_tools), policy);
+    let tool = CapabilityTool::new(capability.clone(), engine)?;
+    let result = tool.execute(&workspace, sample_params).await?;
+    let content = result.content();
+    let completed = content["completed"].as_u64().unwrap_or(0) as usize;
+    let total = content["total"].as_u64().unwrap_or(0) as usize;
+    Ok(VerificationOutcome {
+        ok: content["ok"].as_bool().unwrap_or(false),
+        completed,
+        total,
+        report: content.clone(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -553,5 +807,129 @@ mod tests {
         assert_eq!(result.content()["ok"], false);
         // The denied write never happened.
         assert!(!dir.path().join("src/widget.rs").exists());
+    }
+
+    // --- auto-extraction ---
+
+    /// A successful run_pipeline call as the extractor would see it.
+    fn successful_pipeline_call(steps: Value) -> CapabilityCandidateCall {
+        let total = steps.as_array().map(|s| s.len()).unwrap_or(0);
+        CapabilityCandidateCall {
+            name: "run_pipeline".to_string(),
+            input: json!({ "steps": steps }),
+            output: json!({ "completed": total, "total": total, "stopped_early": false }),
+        }
+    }
+
+    #[tokio::test]
+    async fn pipeline_extractor_freezes_a_successful_pipeline() {
+        let steps = json!([
+            { "tool": "create_file", "input": { "path": "src/a.rs", "content": "x" } },
+            { "tool": "create_file", "input": { "path": "tests/a.rs", "content": "y" } }
+        ]);
+        let request = CapabilityExtractionRequest {
+            goal: "Scaffold a module".to_string(),
+            assistant_message: Some("done".to_string()),
+            calls: vec![successful_pipeline_call(steps.clone())],
+        };
+        let candidate = PipelineCapabilityExtractor
+            .extract(request)
+            .await
+            .unwrap()
+            .expect("a candidate");
+        assert_eq!(candidate.name, "scaffold_a_module");
+        assert_eq!(candidate.steps, steps.as_array().unwrap().clone());
+    }
+
+    #[tokio::test]
+    async fn pipeline_extractor_skips_when_no_successful_pipeline() {
+        // A failed pipeline yields no candidate.
+        let request = CapabilityExtractionRequest {
+            goal: "Do a thing".to_string(),
+            assistant_message: Some("done".to_string()),
+            calls: vec![CapabilityCandidateCall {
+                name: "run_pipeline".to_string(),
+                input: json!({ "steps": [{ "tool": "create_file" }, { "tool": "create_file" }] }),
+                output: json!({ "completed": 1, "total": 2, "stopped_early": true }),
+            }],
+        };
+        assert!(
+            PipelineCapabilityExtractor
+                .extract(request)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_extractor_skips_thin_or_unfinished_turns() {
+        // No assistant message → not finished.
+        let single = json!([{ "tool": "create_file", "input": { "path": "a", "content": "b" } }]);
+        let unfinished = CapabilityExtractionRequest {
+            goal: "x".to_string(),
+            assistant_message: None,
+            calls: vec![successful_pipeline_call(single.clone())],
+        };
+        assert!(
+            PipelineCapabilityExtractor
+                .extract(unfinished)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        // Single-step pipeline is not worth freezing.
+        let thin = CapabilityExtractionRequest {
+            goal: "x".to_string(),
+            assistant_message: Some("done".to_string()),
+            calls: vec![successful_pipeline_call(single)],
+        };
+        assert!(
+            PipelineCapabilityExtractor
+                .extract(thin)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn parse_capability_json_tolerates_fences_and_prose() {
+        let reply = "Here you go:\n```json\n{\"name\":\"x\",\"description\":\"d\",\
+            \"parameters\":{\"type\":\"object\"},\"steps\":[{\"tool\":\"read_file\"}]}\n```\nDone.";
+        let cap = parse_capability_json(reply).expect("parsed");
+        assert_eq!(cap.name, "x");
+        assert_eq!(cap.steps.len(), 1);
+    }
+
+    // --- verification gate ---
+
+    #[tokio::test]
+    async fn verify_capability_passes_for_a_runnable_capability() {
+        let outcome = verify_capability(
+            &scaffold_capability(),
+            ToolRegistry::editing_defaults(),
+            Arc::new(AllowAllPermissionPolicy),
+            json!({ "name": "verified" }),
+        )
+        .await
+        .unwrap();
+        assert!(outcome.ok);
+        assert_eq!(outcome.completed, 2);
+        assert_eq!(outcome.total, 2);
+    }
+
+    #[tokio::test]
+    async fn verify_capability_fails_when_a_step_is_denied() {
+        let outcome = verify_capability(
+            &scaffold_capability(),
+            ToolRegistry::editing_defaults(),
+            Arc::new(DenyCreate),
+            json!({ "name": "verified" }),
+        )
+        .await
+        .unwrap();
+        assert!(!outcome.ok);
+        assert_eq!(outcome.completed, 0);
     }
 }

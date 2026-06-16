@@ -3,6 +3,7 @@ use codel00p_protocol::ContextWindowState;
 pub use codel00p_protocol::ToolCall as ModelToolCall;
 pub use codel00p_providers::{ResponseFormat, TokenSink, ToolChoice};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
     errors::HarnessError, events::HarnessEvent, instructions::ProjectInstructions,
@@ -234,6 +235,11 @@ impl HarnessInferenceResponse {
 pub struct ExecutedToolCall {
     pub id: String,
     pub name: String,
+    /// The arguments the model passed to the tool, retained so post-turn
+    /// consumers (auditing, capability extraction) see what was run — not just
+    /// the tool name and its result.
+    #[serde(default)]
+    pub input: Value,
     pub result: ToolResult,
 }
 

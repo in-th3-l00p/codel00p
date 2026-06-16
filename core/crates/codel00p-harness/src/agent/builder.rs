@@ -32,6 +32,7 @@ pub struct AgentHarnessBuilder {
     programmatic_tooling: bool,
     capabilities: Vec<crate::capability::Capability>,
     capability_proposals: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
+    capability_extractor: Option<Arc<dyn crate::capability::CapabilityExtractor>>,
 }
 
 impl AgentHarnessBuilder {
@@ -208,12 +209,25 @@ impl AgentHarnessBuilder {
     }
 
     /// Adds the `propose_capability` tool, letting the agent submit a pipeline to
-    /// `sink` (a review queue) to be frozen into a future capability.
+    /// `sink` (a review queue) to be frozen into a future capability. The same
+    /// sink also receives any auto-extracted proposals.
     pub fn capability_proposals(
         mut self,
         sink: Arc<dyn crate::capability::CapabilityProposalSink>,
     ) -> Self {
         self.capability_proposals = Some(sink);
+        self
+    }
+
+    /// Sets an extractor that runs after each completed turn to auto-propose a
+    /// capability from the work (closing the synthesis loop without the agent
+    /// explicitly calling `propose_capability`). Proposals go to the
+    /// `capability_proposals` sink, so set that too.
+    pub fn capability_extractor(
+        mut self,
+        extractor: Arc<dyn crate::capability::CapabilityExtractor>,
+    ) -> Self {
+        self.capability_extractor = Some(extractor);
         self
     }
 
@@ -261,10 +275,14 @@ impl AgentHarnessBuilder {
             )?;
             tools = tools.with_registry(capabilities);
         }
-        if let Some(sink) = self.capability_proposals {
+        // The proposal sink backs both the `propose_capability` tool and the
+        // post-turn auto-extractor, so explicit and automatic proposals land in
+        // the same review queue.
+        let capability_proposal_sink = self.capability_proposals;
+        if let Some(sink) = &capability_proposal_sink {
             tools = tools.with_tool(crate::capability::ProposeCapabilityTool::new(
                 Arc::new(base),
-                sink,
+                sink.clone(),
             ));
         }
 
@@ -279,6 +297,8 @@ impl AgentHarnessBuilder {
             skill_provider: self.skill_provider,
             turn_memory_extractor: self.turn_memory_extractor,
             memory_candidate_sink: self.memory_candidate_sink,
+            capability_extractor: self.capability_extractor,
+            capability_proposal_sink,
             skill_extractor: self.skill_extractor,
             skill_proposal_sink: self.skill_proposal_sink,
             context_window: self.context_window,
