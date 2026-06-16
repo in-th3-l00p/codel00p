@@ -1,6 +1,27 @@
 use super::support::*;
 
 #[test]
+fn memory_approve_infers_actor_when_omitted() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_candidate(
+        &db_path,
+        "mem-workflow",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+    );
+
+    // No --actor: it is inferred (login email / git user.name / $USER), so the
+    // command succeeds instead of erroring "missing required --actor".
+    let approve = run_codel00p(&db_path, &["memory", "approve", "mem-workflow", "--json"]);
+    assert!(approve.status.success(), "stderr: {}", stderr(&approve));
+    let record: serde_json::Value = serde_json::from_str(&stdout(&approve)).expect("approve json");
+    assert_eq!(record["id"], "mem-workflow");
+    assert_eq!(record["status"], "approved");
+}
+
+#[test]
 fn memory_show_and_audit_print_stable_details() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

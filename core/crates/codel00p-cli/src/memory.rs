@@ -15,7 +15,14 @@ use review::ReviewCommand;
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     let Some((command, rest)) = args.split_first() else {
-        return Err("missing memory command".to_string());
+        // Bare `codel00p memory` on a terminal opens the review dialog; pipes and
+        // CI keep the scriptable behavior so output is never corrupted.
+        use std::io::IsTerminal;
+        return if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() {
+            crate::memory_ui::run(config)
+        } else {
+            Err("missing memory command".to_string())
+        };
     };
 
     match command.as_str() {
