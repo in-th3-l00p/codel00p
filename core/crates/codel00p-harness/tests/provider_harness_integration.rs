@@ -38,11 +38,15 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                             "type": "function",
                             "function": {
                                 "name": "read_file",
-                                "description": "Read a UTF-8 file inside the workspace root.",
+                                "description": "Read a UTF-8 file inside the workspace root. Optionally read a line window with `offset` (1-based start line) and `limit` (max lines) to avoid loading a huge file into context.",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["path"],
-                                    "properties": { "path": { "type": "string" } }
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer" },
+                                        "limit": { "type": "integer" }
+                                    }
                                 }
                             }
                         },
@@ -50,13 +54,15 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                             "type": "function",
                             "function": {
                                 "name": "search_text",
-                                "description": "Search UTF-8 files inside the workspace root.",
+                                "description": "Search UTF-8 files inside the workspace root. Page through results with `offset` (matches to skip) and `limit` (max matches to return).",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["query"],
                                     "properties": {
                                         "query": { "type": "string" },
-                                        "path": { "type": "string" }
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer" },
+                                        "limit": { "type": "integer" }
                                     }
                                 }
                             }
@@ -140,11 +146,15 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "read_file",
-                                "description": "Read a UTF-8 file inside the workspace root.",
+                                "description": "Read a UTF-8 file inside the workspace root. Optionally read a line window with `offset` (1-based start line) and `limit` (max lines) to avoid loading a huge file into context.",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["path"],
-                                    "properties": { "path": { "type": "string" } }
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer" },
+                                        "limit": { "type": "integer" }
+                                    }
                                 }
                             }
                         },
@@ -152,13 +162,15 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "search_text",
-                                "description": "Search UTF-8 files inside the workspace root.",
+                                "description": "Search UTF-8 files inside the workspace root. Page through results with `offset` (matches to skip) and `limit` (max matches to return).",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["query"],
                                     "properties": {
                                         "query": { "type": "string" },
-                                        "path": { "type": "string" }
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer" },
+                                        "limit": { "type": "integer" }
                                     }
                                 }
                             }
@@ -227,11 +239,15 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "read_file",
-                                "description": "Read a UTF-8 file inside the workspace root.",
+                                "description": "Read a UTF-8 file inside the workspace root. Optionally read a line window with `offset` (1-based start line) and `limit` (max lines) to avoid loading a huge file into context.",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["path"],
-                                    "properties": { "path": { "type": "string" } }
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer" },
+                                        "limit": { "type": "integer" }
+                                    }
                                 }
                             }
                         },
@@ -239,13 +255,15 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "search_text",
-                                "description": "Search UTF-8 files inside the workspace root.",
+                                "description": "Search UTF-8 files inside the workspace root. Page through results with `offset` (matches to skip) and `limit` (max matches to return).",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["query"],
                                     "properties": {
                                         "query": { "type": "string" },
-                                        "path": { "type": "string" }
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer" },
+                                        "limit": { "type": "integer" }
                                     }
                                 }
                             }
