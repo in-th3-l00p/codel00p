@@ -26,6 +26,44 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                         {
                             "type": "function",
                             "function": {
+                                "name": "find_files",
+                                "description": "Find files inside the workspace by glob pattern. `*` matches any run of characters except `/`, `**` matches across directories, and `?` matches a single character. A pattern with no `/` matches against the file name anywhere in the tree (e.g. `*.rs` finds every Rust file); a pattern with `/` matches against the path relative to `path` (e.g. `src/**/*.rs`). Build and VCS directories are skipped unless `include_ignored` is true. Results are sorted; use `limit` to cap them.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["pattern"],
+                                    "properties": {
+                                        "pattern": { "type": "string" },
+                                        "path": { "type": "string" },
+                                        "include_ignored": { "type": "boolean" },
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 5000 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "grep",
+                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["pattern"],
+                                    "properties": {
+                                        "pattern": { "type": "string" },
+                                        "path": { "type": "string" },
+                                        "glob": { "type": "string" },
+                                        "case_insensitive": { "type": "boolean" },
+                                        "context_lines": { "type": "integer", "minimum": 0, "maximum": 20 },
+                                        "include_ignored": { "type": "boolean" },
+                                        "offset": { "type": "integer", "minimum": 0 },
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
                                 "name": "list_files",
                                 "description": "List files inside the workspace root.",
                                 "parameters": {
@@ -134,6 +172,44 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                         {
                             "type": "function",
                             "function": {
+                                "name": "find_files",
+                                "description": "Find files inside the workspace by glob pattern. `*` matches any run of characters except `/`, `**` matches across directories, and `?` matches a single character. A pattern with no `/` matches against the file name anywhere in the tree (e.g. `*.rs` finds every Rust file); a pattern with `/` matches against the path relative to `path` (e.g. `src/**/*.rs`). Build and VCS directories are skipped unless `include_ignored` is true. Results are sorted; use `limit` to cap them.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["pattern"],
+                                    "properties": {
+                                        "pattern": { "type": "string" },
+                                        "path": { "type": "string" },
+                                        "include_ignored": { "type": "boolean" },
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 5000 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "grep",
+                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["pattern"],
+                                    "properties": {
+                                        "pattern": { "type": "string" },
+                                        "path": { "type": "string" },
+                                        "glob": { "type": "string" },
+                                        "case_insensitive": { "type": "boolean" },
+                                        "context_lines": { "type": "integer", "minimum": 0, "maximum": 20 },
+                                        "include_ignored": { "type": "boolean" },
+                                        "offset": { "type": "integer", "minimum": 0 },
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
                                 "name": "list_files",
                                 "description": "List files inside the workspace root.",
                                 "parameters": {
@@ -224,6 +300,44 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                         }
                     ],
                     "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "find_files",
+                                "description": "Find files inside the workspace by glob pattern. `*` matches any run of characters except `/`, `**` matches across directories, and `?` matches a single character. A pattern with no `/` matches against the file name anywhere in the tree (e.g. `*.rs` finds every Rust file); a pattern with `/` matches against the path relative to `path` (e.g. `src/**/*.rs`). Build and VCS directories are skipped unless `include_ignored` is true. Results are sorted; use `limit` to cap them.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["pattern"],
+                                    "properties": {
+                                        "pattern": { "type": "string" },
+                                        "path": { "type": "string" },
+                                        "include_ignored": { "type": "boolean" },
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 5000 }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "grep",
+                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`.",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": ["pattern"],
+                                    "properties": {
+                                        "pattern": { "type": "string" },
+                                        "path": { "type": "string" },
+                                        "glob": { "type": "string" },
+                                        "case_insensitive": { "type": "boolean" },
+                                        "context_lines": { "type": "integer", "minimum": 0, "maximum": 20 },
+                                        "include_ignored": { "type": "boolean" },
+                                        "offset": { "type": "integer", "minimum": 0 },
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                                    }
+                                }
+                            }
+                        },
                         {
                             "type": "function",
                             "function": {

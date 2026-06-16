@@ -10,7 +10,13 @@ async fn read_only_defaults_expose_expected_tools() {
 
     assert_eq!(
         registry.names(),
-        vec!["list_files", "read_file", "search_text"]
+        vec![
+            "find_files",
+            "grep",
+            "list_files",
+            "read_file",
+            "search_text"
+        ]
     );
 }
 

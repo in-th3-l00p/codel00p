@@ -7,6 +7,7 @@ use crate::{
     commands::RunCommandTool,
     editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
     errors::HarnessError,
+    find::{FindFilesTool, GrepTool},
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool, ToolSpec},
@@ -29,6 +30,8 @@ impl ToolRegistry {
             .with_tool(ListFilesTool)
             .with_tool(ReadFileTool)
             .with_tool(SearchTextTool)
+            .with_tool(FindFilesTool)
+            .with_tool(GrepTool)
     }
 
     pub fn editing_defaults() -> Self {

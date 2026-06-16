@@ -7,6 +7,7 @@ pub mod editing;
 pub mod errors;
 pub mod event_sink;
 pub mod events;
+pub mod find;
 pub mod git;
 pub mod instructions;
 pub mod iteration_budget;
@@ -37,6 +38,7 @@ pub use delegation::{
 pub use errors::HarnessError;
 pub use event_sink::AgentEventSink;
 pub use events::HarnessEvent;
+pub use find::{FindFilesTool, GrepTool};
 pub use instructions::{ProjectInstruction, ProjectInstructionLoader, ProjectInstructions};
 pub use iteration_budget::IterationBudget;
 pub use learning::{

@@ -403,7 +403,13 @@ mod tests {
         let tools = registry.apply_to_tool_registry(ToolRegistry::read_only_defaults());
         assert_eq!(
             tools.names(),
-            vec!["list_files", "read_file", "search_text"]
+            vec![
+                "find_files",
+                "grep",
+                "list_files",
+                "read_file",
+                "search_text"
+            ]
         );
     }
 

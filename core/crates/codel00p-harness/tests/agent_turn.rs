@@ -55,7 +55,13 @@ async fn run_turn_returns_final_assistant_message_without_tools() {
     assert_eq!(model.requests().len(), 1);
     assert_eq!(
         model.requests()[0].tool_names(),
-        &["list_files", "read_file", "search_text"]
+        &[
+            "find_files",
+            "grep",
+            "list_files",
+            "read_file",
+            "search_text"
+        ]
     );
     assert_eq!(
         model.requests()[0].workspace_root(),

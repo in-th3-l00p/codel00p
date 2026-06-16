@@ -156,7 +156,12 @@ The first safe tool set:
 
 - `list_files`: list files under the workspace root.
 - `read_file`: read a UTF-8 file under the workspace root.
-- `search_text`: search text under the workspace root.
+- `search_text`: substring search of text under the workspace root.
+- `find_files`: find files by glob pattern (`*`, `**`, `?`); skips build/VCS
+  directories by default.
+- `grep`: regular-expression content search with optional `glob` file filter,
+  case-insensitivity, surrounding `context_lines`, and `offset`/`limit` paging;
+  skips build/VCS directories by default.
 
 `run_command` should not ship in the first harness milestone. It creates a much
 larger security and determinism surface than file reading/searching.

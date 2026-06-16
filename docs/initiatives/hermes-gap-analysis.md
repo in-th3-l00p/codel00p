@@ -42,7 +42,7 @@ legible. Remaining phases are tracked in each linked epic.
 | Execution backends / sandboxing | Local, Docker, SSH, Daytona, Singularity, Modal | Local workspace boundary only; no container/remote isolation | [#7](execution-backends-sandboxing.md) |
 | Programmatic tool calling | `execute_code` collapses multi-step tool pipelines into one inference | One tool call per loop iteration | [#8](programmatic-tool-calling.md) |
 | Terminal UI | React + Ink TUI over JSON-RPC | Was: CLI prints only. ✅ ratatui TUI (streaming transcript, tool timeline, inline approvals, model picker, org entity browser incl. Users tab) | [#9](tui.md) |
-| Built-in tool breadth | 60+ tools (web search/browse, image gen, vision, TTS) | read/edit/command/git/MCP; web tools still in backlog | Folded into [#1](plugins-and-hooks.md) + existing backlog |
+| Built-in tool breadth | 60+ tools (web search/browse, image gen, vision, TTS) | read/edit/command/git/MCP/web; ✅ glob `find_files` + regex `grep` navigation (2026-06-16); image gen/vision/TTS still in backlog | Folded into [#1](plugins-and-hooks.md) + existing backlog |
 | Personality / context files | `SOUL.md` + per-project context files | Project instructions from `CODEL00P.md`/`AGENTS.md`/`CLAUDE.md` (partial) | Folded into [#2](skills-system.md) |
 
 ## What codel00p already does better (preserve)

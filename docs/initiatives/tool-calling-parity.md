@@ -104,8 +104,14 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       session, the child's own (leaf) tool set, its own permission ceiling; the
       parent sees only the child's final summary (pairs with
       [#4](subagents-delegation.md)).
+- [x] **File-navigation tools** (shipped 2026-06-16): `find_files` (glob: `*`,
+      `**`, `?`; ignore-aware) and `grep` (regex content search with `glob`
+      filter, case-insensitivity, `context_lines`, and `offset`/`limit` paging;
+      ignore-aware). These give the model the find-by-name and search-by-regex
+      capabilities every mature coding agent ships, beyond the substring
+      `search_text`.
 - [ ] **Repo-map / semantic code-search tool** (tree-sitter ranked symbols,
-      Aider-style) for navigation beyond `search_text`.
+      Aider-style) for navigation beyond `search_text` / `grep`.
 - [ ] **Token-efficient tool results**: pagination/filter params and a
       concise/detailed `response_format` on the heavy tools.
 
