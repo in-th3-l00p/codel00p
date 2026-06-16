@@ -25,6 +25,7 @@ mod session;
 mod sessions_ui;
 mod settings;
 mod skills;
+mod skills_ui;
 mod tui;
 mod uninstall;
 mod update;
