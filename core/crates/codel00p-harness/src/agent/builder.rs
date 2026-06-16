@@ -39,6 +39,13 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Set an already type-erased model client (e.g. shared with a parent agent
+    /// when spawning sub-agents).
+    pub fn model_client_arc(mut self, model_client: Arc<dyn ModelClient>) -> Self {
+        self.model_client = Some(model_client);
+        self
+    }
+
     pub fn workspace(mut self, workspace: Workspace) -> Self {
         self.workspace = Some(workspace);
         self
@@ -54,6 +61,13 @@ impl AgentHarnessBuilder {
         T: PermissionPolicy + 'static,
     {
         self.permission_policy = Some(Arc::new(permission_policy));
+        self
+    }
+
+    /// Set an already type-erased permission policy (e.g. the parent's ceiling
+    /// applied to a spawned sub-agent).
+    pub fn permission_policy_arc(mut self, permission_policy: Arc<dyn PermissionPolicy>) -> Self {
+        self.permission_policy = Some(permission_policy);
         self
     }
 

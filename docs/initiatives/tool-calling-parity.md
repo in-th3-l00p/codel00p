@@ -99,9 +99,11 @@ broader matrix; this initiative tracks the tool-calling slice of it.
 - [ ] **MCP tool search / progressive disclosure**: advertise only names +
       one-line descriptions for large MCP tool sets, with a `tool_search` /
       `tool_describe` mechanism that loads full schemas on demand.
-- [ ] **Default sub-agent spawner** so `delegate_task` works out of the box —
-      isolated context window, per-agent tool scoping, parent sees only the final
-      result (pairs with [#4](subagents-delegation.md)).
+- [x] **Default sub-agent spawner** (shipped 2026-06-16): `HarnessSubAgentSpawner`
+      runs each `delegate_task` as an isolated child `AgentHarness` turn — fresh
+      session, the child's own (leaf) tool set, its own permission ceiling; the
+      parent sees only the child's final summary (pairs with
+      [#4](subagents-delegation.md)).
 - [ ] **Repo-map / semantic code-search tool** (tree-sitter ranked symbols,
       Aider-style) for navigation beyond `search_text`.
 - [ ] **Token-efficient tool results**: pagination/filter params and a
