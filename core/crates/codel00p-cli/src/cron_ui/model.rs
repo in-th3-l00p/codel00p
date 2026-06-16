@@ -90,6 +90,13 @@ pub(crate) struct CronModel {
     pub(crate) create_step: CreateStep,
     pub(crate) create_schedule: String,
     pub(crate) status: Option<String>,
+    /// When `true`, the current [`status`](Self::status) reports a failure and is
+    /// rendered with [`crate::dialog::error`].
+    pub(crate) status_is_error: bool,
+    /// When `true`, the `?` help overlay is shown and swallows all keys.
+    pub(crate) show_help: bool,
+    /// The job id awaiting a `y` confirmation before deletion, if any.
+    pub(crate) pending_delete: Option<String>,
 }
 
 impl Default for CronModel {
@@ -102,6 +109,9 @@ impl Default for CronModel {
             create_step: CreateStep::Schedule,
             create_schedule: String::new(),
             status: None,
+            status_is_error: false,
+            show_help: false,
+            pending_delete: None,
         }
     }
 }
@@ -125,14 +135,45 @@ impl CronModel {
     /// Sets a transient status line (e.g. after a successful mutation).
     pub(crate) fn set_status(&mut self, message: impl Into<String>) {
         self.status = Some(message.into());
+        self.status_is_error = false;
+    }
+
+    /// Sets a transient failure status, rendered with [`crate::dialog::error`].
+    pub(crate) fn set_error(&mut self, message: impl Into<String>) {
+        self.status = Some(message.into());
+        self.status_is_error = true;
     }
 
     pub(crate) fn update(&mut self, key: KeyEvent) -> Flow {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Flow::Quit;
         }
+        // While the help overlay is up, any key (incl. Esc) just closes it and the
+        // underlying screen does not act.
+        if self.show_help {
+            self.show_help = false;
+            return Flow::Stay;
+        }
+        // `?` toggles help — but not on the text-entry create screen, where it is a
+        // legitimate character in a schedule/prompt.
+        if key.code == KeyCode::Char('?') && self.screen != Screen::Create {
+            self.show_help = true;
+            return Flow::Stay;
+        }
+        // A pending delete confirmation captures the next key: `y` applies, anything
+        // else cancels. Handled before clearing status so the prompt is consistent.
+        if let Some(id) = self.pending_delete.take() {
+            self.status = None;
+            self.status_is_error = false;
+            if matches!(key.code, KeyCode::Char('y')) {
+                return Flow::Mutate(Mutation::Delete { id });
+            }
+            self.set_status("Delete cancelled.");
+            return Flow::Stay;
+        }
         // Any keypress clears a stale status message before acting.
         self.status = None;
+        self.status_is_error = false;
         match self.screen {
             Screen::List => self.update_list(key),
             Screen::Detail => self.update_detail(key),
@@ -175,7 +216,11 @@ impl CronModel {
                 enabled: false,
             }),
             KeyCode::Char('R') => Flow::RunNow(row.id),
-            KeyCode::Char('x') => Flow::Mutate(Mutation::Delete { id: row.id }),
+            KeyCode::Char('x') => {
+                self.pending_delete = Some(row.id);
+                self.set_status("Delete this job? Press y to confirm, any other key to cancel.");
+                Flow::Stay
+            }
             _ => Flow::Stay,
         }
     }

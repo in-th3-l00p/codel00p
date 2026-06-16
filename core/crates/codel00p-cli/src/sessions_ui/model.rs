@@ -52,6 +52,8 @@ pub(crate) struct SessionsModel {
     pub(crate) selected: Option<SessionRow>,
     pub(crate) transcript: Vec<String>,
     pub(crate) scroll: usize,
+    /// When `true`, the `?` help overlay is shown and swallows all keys.
+    pub(crate) show_help: bool,
 }
 
 impl SessionsModel {
@@ -62,6 +64,7 @@ impl SessionsModel {
             selected: None,
             transcript: Vec::new(),
             scroll: 0,
+            show_help: false,
         }
     }
 
@@ -80,6 +83,16 @@ impl SessionsModel {
     pub(crate) fn update(&mut self, key: KeyEvent) -> Flow {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Flow::Quit;
+        }
+        // While the help overlay is up, any key (incl. Esc) just closes it and the
+        // underlying screen does not act.
+        if self.show_help {
+            self.show_help = false;
+            return Flow::Stay;
+        }
+        if key.code == KeyCode::Char('?') {
+            self.show_help = true;
+            return Flow::Stay;
         }
         match self.screen {
             Screen::List => self.update_list(key),

@@ -17,9 +17,10 @@ use crossterm::terminal::{
 use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
-use ratatui::text::Span;
-use ratatui::widgets::{Block, Borders};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::config::CliResult;
 use crate::tui::theme::Theme;
@@ -42,10 +43,8 @@ pub(crate) fn selection() -> Style {
     Theme::default().selection()
 }
 
-/// Error-colored foreground. Part of the shared dialog palette; no dialog
-/// surfaces an error state yet, so it is wired up here for the upcoming polish
-/// slices rather than left to be re-derived per dialog.
-#[allow(dead_code)]
+/// Error-colored foreground, used for failure status text and the
+/// confirm-before-destructive-action prompts across the dialogs.
 pub(crate) fn error() -> Style {
     Style::default().fg(Theme::default().error)
 }
@@ -57,6 +56,50 @@ pub(crate) fn panel(title: &str) -> Block<'static> {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Theme::default().overlay_border))
         .title(Span::styled(format!(" {title} "), accent()))
+}
+
+/// A centered rectangle covering `percent_x`/`percent_y` of `area`. Shared so the
+/// `?` help overlay geometry is uniform across every dialog.
+pub(crate) fn centered(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
+}
+
+/// Renders the shared `?` help overlay: a centered `panel("help")` listing
+/// `(key, description)` bindings, with the key in [`accent`] and the description
+/// in [`muted`]. Implemented once so every dialog's overlay looks identical.
+pub(crate) fn render_help(frame: &mut Frame, bindings: &[(&str, &str)]) {
+    let area = centered(60, 60, frame.area());
+    let width = bindings
+        .iter()
+        .map(|(key, _)| key.chars().count())
+        .max()
+        .unwrap_or(0);
+    let lines: Vec<Line> = bindings
+        .iter()
+        .map(|(key, description)| {
+            Line::from(vec![
+                Span::styled(format!("  {key:<width$}", width = width), accent()),
+                Span::styled(format!("  —  {description}"), muted()),
+            ])
+        })
+        .collect();
+    frame.render_widget(Clear, area);
+    frame.render_widget(Paragraph::new(lines).block(panel("help")), area);
 }
 
 /// Runs a blocking, full-screen Elm loop over `model`, restoring the terminal on

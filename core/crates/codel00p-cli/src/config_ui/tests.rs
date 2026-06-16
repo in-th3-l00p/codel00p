@@ -107,6 +107,22 @@ fn tab_cycles_provider_fields_and_edits_model() {
 }
 
 #[test]
+fn question_mark_toggles_help_and_swallows_keys() {
+    let (mut m, _dir) = model(Section::Menu);
+    assert!(!m.show_help);
+
+    // `?` opens the overlay without navigating.
+    assert_eq!(m.update(key(KeyCode::Char('?'))), Flow::Continue);
+    assert!(m.show_help);
+    assert_eq!(m.menu_cursor, 0);
+
+    // Down would normally move the cursor; while help is up it just closes it.
+    assert_eq!(m.update(key(KeyCode::Down)), Flow::Continue);
+    assert!(!m.show_help);
+    assert_eq!(m.menu_cursor, 0);
+}
+
+#[test]
 fn save_and_quit_flows() {
     let (mut m, _dir) = model(Section::Menu);
     assert_eq!(m.update(key(KeyCode::Char('s'))), Flow::Save);

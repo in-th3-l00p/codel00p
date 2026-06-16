@@ -56,6 +56,20 @@ fn esc_on_list_quits() {
 }
 
 #[test]
+fn question_mark_toggles_help_and_swallows_keys() {
+    let mut model = model_with_rows();
+    assert!(!model.show_help);
+
+    assert_eq!(model.update(key(KeyCode::Char('?'))), Flow::Stay);
+    assert!(model.show_help);
+
+    // Enter would normally open detail; while help is up it just closes the overlay.
+    assert_eq!(model.update(key(KeyCode::Enter)), Flow::Stay);
+    assert!(!model.show_help);
+    assert_eq!(model.screen, Screen::List);
+}
+
+#[test]
 fn detail_scrolls_and_esc_returns_to_list() {
     let mut model = model_with_rows();
     model.show_detail(row("session-1"), vec!["a".into(), "b".into(), "c".into()]);

@@ -170,6 +170,8 @@ pub(crate) struct MemoryModel {
     pub(crate) composer: Composer,
     pub(crate) actor: String,
     pub(crate) status: Option<String>,
+    /// When `true`, the `?` help overlay is shown and swallows all keys.
+    pub(crate) show_help: bool,
     /// Target records for the merge picker, loaded by the driver on demand.
     pub(crate) merge_targets: Picker<MemoryRow>,
     /// Restorable audit entries for the restore picker, built from the audit.
@@ -188,6 +190,7 @@ impl MemoryModel {
             composer: Composer::default(),
             actor,
             status: None,
+            show_help: false,
             merge_targets: Picker::new(Vec::new()),
             restore_picker: Picker::new(Vec::new()),
         }
@@ -243,6 +246,19 @@ impl MemoryModel {
     pub(crate) fn update(&mut self, key: KeyEvent) -> Flow {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Flow::Quit;
+        }
+        // While the help overlay is up, any key (incl. Esc) just closes it and the
+        // underlying screen does not act.
+        if self.show_help {
+            self.show_help = false;
+            return Flow::Stay;
+        }
+        // `?` toggles help — but not on the text-entry prompt, where it is a
+        // legitimate character in a reason/edit (the prompt already serves as the
+        // confirm step for the destructive reject/archive actions).
+        if key.code == KeyCode::Char('?') && self.screen != Screen::Prompt {
+            self.show_help = true;
+            return Flow::Stay;
         }
         match self.screen {
             Screen::List => self.update_list(key),
