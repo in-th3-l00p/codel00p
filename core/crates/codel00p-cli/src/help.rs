@@ -256,16 +256,20 @@ Commands:
 ";
 
 const SKILLS_HELP: &str = "\
-Usage: codel00p skills <command>
+Usage: codel00p skills [command]
+
+Bare `codel00p skills` on a terminal opens an interactive review dialog: browse
+active skills and agent-proposed candidates, read a skill's SKILL.md, then
+approve/reject candidates or disable an active skill.
 
 Skills are procedural memory: a SKILL.md (front matter + Markdown instructions)
 in ~/.codel00p/skills (user) or ./.codel00p/skills (project). Project skills
 override user skills with the same name. With `--tool-set learn`, an agent can
-propose skills it learns; proposals wait in the review queue below and are not
-used until approved.
+propose skills it learns; proposals wait in the review queue and are not used
+until approved.
 
-Commands:
-  list                          List active skills (default)
+For scripting (these run unchanged when stdin/stdout are not a terminal):
+  list                          List active skills
   show <name>                   Show a skill's metadata and instructions
   create <name> [--project]     Scaffold a new skill (user config, or project)
   candidates                    List agent-proposed skills awaiting review

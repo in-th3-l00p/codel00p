@@ -24,7 +24,17 @@ const DEFAULT_CURATE_MIN_AGE_SECS: u64 = 7 * 86_400;
 pub fn run(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     let (command, rest) = match args.split_first() {
         Some((command, rest)) => (command.as_str(), rest),
-        None => ("list", &[][..]),
+        None => {
+            // Bare `codel00p skills` on a terminal opens the review dialog; pipes
+            // and CI keep the scriptable `list` behavior so output is never
+            // corrupted.
+            use std::io::IsTerminal;
+            return if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() {
+                crate::skills_ui::run(workspace_start)
+            } else {
+                skills_list(workspace_start)
+            };
+        }
     };
     match command {
         "list" => skills_list(workspace_start),
