@@ -64,7 +64,7 @@ pub use skills::{
     SkillContext, SkillPrompt, SkillPromptAssembler, SkillProvider, SkillSelectionRequest,
 };
 pub use subagent::HarnessSubAgentSpawner;
-pub use tool_registry::ToolRegistry;
+pub use tool_registry::{TOOL_DESCRIBE, TOOL_SEARCH, ToolRegistry};
 pub use tool_result::ToolResult;
 pub use tools::{Tool, ToolSpec};
 pub use turn::{

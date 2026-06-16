@@ -86,7 +86,7 @@ impl AgentHarness {
             let mut request = HarnessInferenceRequest::new(session_state.clone())
                 .with_runtime_context(
                     self.workspace.root().display().to_string(),
-                    self.tools.specs(),
+                    self.tools.advertised_specs(),
                 );
             if let Some(tool_choice) = &self.tool_choice {
                 request = request.with_tool_choice(tool_choice.clone());
