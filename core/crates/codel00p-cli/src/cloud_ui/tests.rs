@@ -44,10 +44,64 @@ fn esc_on_status_quits() {
 }
 
 #[test]
-fn p_pushes_and_l_pulls_from_status() {
+fn push_pull_without_active_project_prompt_to_select() {
+    // With no project opened yet, push/pull stay (no Flow) and set a clear,
+    // non-error status telling the user to select a project first.
     let mut model = signed_in();
-    assert_eq!(model.update(key(KeyCode::Char('p'))), Flow::Push);
-    assert_eq!(model.update(key(KeyCode::Char('l'))), Flow::Pull);
+    assert_eq!(model.update(key(KeyCode::Char('p'))), Flow::Stay);
+    assert!(
+        model
+            .status
+            .as_deref()
+            .is_some_and(|s| s.contains("Select a project"))
+    );
+
+    model.status = None;
+    assert_eq!(model.update(key(KeyCode::Char('l'))), Flow::Stay);
+    assert!(
+        model
+            .status
+            .as_deref()
+            .is_some_and(|s| s.contains("Select a project"))
+    );
+}
+
+#[test]
+fn seeded_active_project_targets_push_pull_without_opening() {
+    // A preconfigured active project (e.g. from CODEL00P_CLOUD_PROJECT) lets
+    // push/pull target it before the user opens anything.
+    let mut model = signed_in();
+    model.set_active_project(project("proj_2", "beta"));
+    assert_eq!(model.active_project_id(), Some("proj_2"));
+    assert_eq!(
+        model.update(key(KeyCode::Char('p'))),
+        Flow::Push("proj_2".to_string())
+    );
+}
+
+#[test]
+fn opening_a_project_targets_push_pull_at_its_id() {
+    // Opening a project sets it as the active push/pull target, even after
+    // returning to the status screen.
+    let mut model = signed_in();
+    model.show_detail(
+        project("proj_2", "beta"),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert_eq!(model.active_project_id(), Some("proj_2"));
+
+    model.update(key(KeyCode::Esc));
+    assert_eq!(model.screen, Screen::Status);
+    assert_eq!(
+        model.update(key(KeyCode::Char('p'))),
+        Flow::Push("proj_2".to_string())
+    );
+    assert_eq!(
+        model.update(key(KeyCode::Char('l'))),
+        Flow::Pull("proj_2".to_string())
+    );
 }
 
 #[test]
@@ -121,4 +175,37 @@ fn set_status_records_action_result() {
     let mut model = signed_in();
     model.set_status("Pushed 3 memories.");
     assert_eq!(model.status.as_deref(), Some("Pushed 3 memories."));
+}
+
+#[test]
+fn question_mark_toggles_help_and_any_key_closes_it() {
+    let mut model = signed_in();
+    assert!(!model.show_help);
+
+    // `?` opens the overlay.
+    assert_eq!(model.update(key(KeyCode::Char('?'))), Flow::Stay);
+    assert!(model.show_help);
+
+    // While shown, any key (here Esc) closes it without quitting or acting.
+    assert_eq!(model.update(key(KeyCode::Esc)), Flow::Stay);
+    assert!(!model.show_help);
+    assert_eq!(model.screen, Screen::Status);
+}
+
+#[test]
+fn help_swallows_action_keys_while_open() {
+    // A key that would normally push (p) just closes the help overlay instead.
+    let mut model = signed_in();
+    model.show_help = true;
+    assert_eq!(model.update(key(KeyCode::Char('p'))), Flow::Stay);
+    assert!(!model.show_help);
+    assert!(model.status.is_none());
+}
+
+#[test]
+fn ctrl_c_still_quits_even_with_help_open() {
+    let mut model = signed_in();
+    model.show_help = true;
+    let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    assert_eq!(model.update(ctrl_c), Flow::Quit);
 }

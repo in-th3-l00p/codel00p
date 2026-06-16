@@ -91,10 +91,10 @@ pub(crate) enum Flow {
     Stay,
     /// Fetch the project's entities and open the detail screen.
     OpenProject(String),
-    /// Push local memory to the active cloud project.
-    Push,
-    /// Pull approved cloud memory into the local store.
-    Pull,
+    /// Push local memory to the given cloud project id.
+    Push(String),
+    /// Pull approved cloud memory from the given cloud project id.
+    Pull(String),
     Quit,
 }
 
@@ -105,12 +105,18 @@ pub(crate) struct CloudModel {
     pub(crate) projects: Picker<ProjectRow>,
     /// The project whose entities the detail screen shows.
     pub(crate) selected_project: Option<ProjectRow>,
+    /// The active project for this session: chosen by opening a project, it is the
+    /// target of push/pull. Set independently of the detail screen so it survives
+    /// returning to the project list.
+    pub(crate) active_project: Option<ProjectRow>,
     pub(crate) tab: DetailTab,
     pub(crate) agents: Picker<EntityRow>,
     pub(crate) mcp: Picker<EntityRow>,
     pub(crate) memory: Picker<EntityRow>,
     /// A transient action/result line shown under the project list.
     pub(crate) status: Option<String>,
+    /// Whether the `?` help overlay is shown. While shown, any key closes it.
+    pub(crate) show_help: bool,
 }
 
 impl CloudModel {
@@ -121,11 +127,13 @@ impl CloudModel {
             viewer_lines,
             projects: Picker::new(projects),
             selected_project: None,
+            active_project: None,
             tab: DetailTab::Agents,
             agents: Picker::new(Vec::new()),
             mcp: Picker::new(Vec::new()),
             memory: Picker::new(Vec::new()),
             status: None,
+            show_help: false,
         }
     }
 
@@ -136,11 +144,13 @@ impl CloudModel {
             viewer_lines: vec![message],
             projects: Picker::new(Vec::new()),
             selected_project: None,
+            active_project: None,
             tab: DetailTab::Agents,
             agents: Picker::new(Vec::new()),
             mcp: Picker::new(Vec::new()),
             memory: Picker::new(Vec::new()),
             status: None,
+            show_help: false,
         }
     }
 
@@ -152,6 +162,9 @@ impl CloudModel {
         mcp: Vec<EntityRow>,
         memory: Vec<EntityRow>,
     ) {
+        // Opening a project also makes it the active push/pull target for the
+        // session, so it survives returning to the project list.
+        self.active_project = Some(project.clone());
         self.selected_project = Some(project);
         self.agents.set_items(agents);
         self.mcp.set_items(mcp);
@@ -163,6 +176,17 @@ impl CloudModel {
     /// Records the result of an action (push/pull) on the status line.
     pub(crate) fn set_status(&mut self, status: impl Into<String>) {
         self.status = Some(status.into());
+    }
+
+    /// The id of the active push/pull target, set by opening a project.
+    pub(crate) fn active_project_id(&self) -> Option<&str> {
+        self.active_project.as_ref().map(|row| row.id.as_str())
+    }
+
+    /// Seeds the active push/pull target (e.g. from a preconfigured
+    /// `CODEL00P_CLOUD_PROJECT`) so push/pull work before the user opens anything.
+    pub(crate) fn set_active_project(&mut self, project: ProjectRow) {
+        self.active_project = Some(project);
     }
 
     /// The picker backing the active detail tab.
@@ -177,6 +201,16 @@ impl CloudModel {
     pub(crate) fn update(&mut self, key: KeyEvent) -> Flow {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Flow::Quit;
+        }
+        // While the help overlay is shown, any key (including Esc) closes it and
+        // is otherwise swallowed.
+        if self.show_help {
+            self.show_help = false;
+            return Flow::Stay;
+        }
+        if key.code == KeyCode::Char('?') {
+            self.show_help = true;
+            return Flow::Stay;
         }
         match self.screen {
             Screen::Status => self.update_status(key),
@@ -193,9 +227,9 @@ impl CloudModel {
         // stay reachable from the list.
         match key.code {
             KeyCode::Char('p') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Flow::Push;
+                return self.push_or_prompt();
             }
-            KeyCode::Char('l') => return Flow::Pull,
+            KeyCode::Char('l') => return self.pull_or_prompt(),
             _ => {}
         }
         match self.projects.on_key(key) {
@@ -205,6 +239,28 @@ impl CloudModel {
             },
             PickerOutcome::Cancelled => Flow::Quit,
             PickerOutcome::Pending => Flow::Stay,
+        }
+    }
+
+    /// Pushes to the active project, or notes that one must be selected first.
+    fn push_or_prompt(&mut self) -> Flow {
+        match self.active_project_id() {
+            Some(id) => Flow::Push(id.to_string()),
+            None => {
+                self.set_status("Select a project first (↵ to open one), then push.");
+                Flow::Stay
+            }
+        }
+    }
+
+    /// Pulls from the active project, or notes that one must be selected first.
+    fn pull_or_prompt(&mut self) -> Flow {
+        match self.active_project_id() {
+            Some(id) => Flow::Pull(id.to_string()),
+            None => {
+                self.set_status("Select a project first (↵ to open one), then pull.");
+                Flow::Stay
+            }
         }
     }
 

@@ -35,8 +35,8 @@ pub(crate) fn run(config: CliConfig) -> CliResult<String> {
             Flow::Stay => {}
             Flow::Quit => return Ok(false),
             Flow::OpenProject(id) => open_project(&connection.client, model, &id),
-            Flow::Push => run_action(model, push_action(&connection, &config)),
-            Flow::Pull => run_action(model, pull_action(&connection, &config)),
+            Flow::Push(id) => run_action(model, push_summary(&connection.client, &id, &config)),
+            Flow::Pull(id) => run_action(model, pull_summary(&connection.client, &id, &config)),
         }
         Ok(true)
     })?;
@@ -67,7 +67,7 @@ fn build_signed_in_model(connection: &ResolvedConnection) -> CloudModel {
             vec!["viewer: (unavailable)".to_string()]
         }
     };
-    let projects = match connection.client.list_projects() {
+    let projects: Vec<ProjectRow> = match connection.client.list_projects() {
         Ok(projects) => projects.iter().map(project_row).collect(),
         Err(error) => {
             errors.push(error);
@@ -75,7 +75,18 @@ fn build_signed_in_model(connection: &ResolvedConnection) -> CloudModel {
         }
     };
 
+    // A preconfigured `CODEL00P_CLOUD_PROJECT` seeds the active push/pull target
+    // when it matches a listed project, so push/pull work before the user opens
+    // anything; otherwise the user picks one in the dialog.
+    let active_project = connection
+        .project
+        .as_deref()
+        .and_then(|id| projects.iter().find(|row| row.id == id).cloned());
+
     let mut model = CloudModel::signed_in(viewer_lines, projects);
+    if let Some(project) = active_project {
+        model.set_active_project(project);
+    }
     if let Some(error) = errors.first() {
         model.set_status(error.clone());
     }
@@ -130,24 +141,6 @@ fn run_action(model: &mut CloudModel, result: CliResult<String>) {
         Ok(message) => model.set_status(message),
         Err(error) => model.set_status(error),
     }
-}
-
-fn push_action(connection: &ResolvedConnection, config: &CliConfig) -> CliResult<String> {
-    let project = active_project(connection)?;
-    push_summary(&connection.client, &project, config)
-}
-
-fn pull_action(connection: &ResolvedConnection, config: &CliConfig) -> CliResult<String> {
-    let project = active_project(connection)?;
-    pull_summary(&connection.client, &project, config)
-}
-
-/// The active cloud project for push/pull: `CODEL00P_CLOUD_PROJECT` (or stored).
-fn active_project(connection: &ResolvedConnection) -> CliResult<String> {
-    connection.project.clone().ok_or_else(|| {
-        "set CODEL00P_CLOUD_PROJECT to push or pull (or use `codel00p cloud push/pull --project`)"
-            .to_string()
-    })
 }
 
 fn viewer_lines(viewer: &Viewer) -> Vec<String> {
