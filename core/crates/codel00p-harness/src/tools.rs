@@ -121,7 +121,9 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Read a UTF-8 file inside the workspace root."
+        "Read a UTF-8 file inside the workspace root. Optionally read a line window \
+         with `offset` (1-based start line) and `limit` (max lines) to avoid \
+         loading a huge file into context."
     }
 
     fn input_schema(&self) -> Value {
@@ -129,7 +131,9 @@ impl Tool for ReadFileTool {
             "type": "object",
             "required": ["path"],
             "properties": {
-                "path": { "type": "string" }
+                "path": { "type": "string" },
+                "offset": { "type": "integer" },
+                "limit": { "type": "integer" }
             }
         })
     }
@@ -150,9 +154,33 @@ impl Tool for ReadFileTool {
         let path = required_string(self.name(), &input, "path")?;
         let content = workspace.read_utf8(path)?;
 
+        let offset = optional_u64(&input, "offset");
+        let limit = optional_u64(&input, "limit");
+
+        // Without a window, return the whole file (unchanged behavior).
+        if offset.is_none() && limit.is_none() {
+            return Ok(ToolResult::json(json!({
+                "path": path,
+                "content": content,
+            })));
+        }
+
+        let lines: Vec<&str> = content.lines().collect();
+        let total_lines = lines.len();
+        let start = (offset.unwrap_or(1).max(1) as usize)
+            .saturating_sub(1)
+            .min(total_lines);
+        let count = limit.map(|l| l as usize).unwrap_or(total_lines - start);
+        let end = start.saturating_add(count).min(total_lines);
+        let window = lines[start..end].join("\n");
+
         Ok(ToolResult::json(json!({
             "path": path,
-            "content": content,
+            "content": window,
+            "start_line": start + 1,
+            "line_count": end - start,
+            "total_lines": total_lines,
+            "has_more": end < total_lines,
         })))
     }
 }
@@ -166,7 +194,8 @@ impl Tool for SearchTextTool {
     }
 
     fn description(&self) -> &str {
-        "Search UTF-8 files inside the workspace root."
+        "Search UTF-8 files inside the workspace root. Page through results with \
+         `offset` (matches to skip) and `limit` (max matches to return)."
     }
 
     fn input_schema(&self) -> Value {
@@ -175,7 +204,9 @@ impl Tool for SearchTextTool {
             "required": ["query"],
             "properties": {
                 "query": { "type": "string" },
-                "path": { "type": "string" }
+                "path": { "type": "string" },
+                "offset": { "type": "integer" },
+                "limit": { "type": "integer" }
             }
         })
     }
@@ -195,39 +226,60 @@ impl Tool for SearchTextTool {
     ) -> Result<ToolResult, HarnessError> {
         let query = required_string(self.name(), &input, "query")?;
         let path = optional_string(&input, "path").unwrap_or(".");
+        let offset = optional_u64(&input, "offset");
+        let limit = optional_u64(&input, "limit");
         let root = workspace.resolve(path)?;
         let mut files = Vec::new();
         collect_files(workspace.root(), &root, &mut files)?;
         files.sort();
 
-        let mut matches = Vec::new();
-        for relative in files {
-            if matches.len() >= MAX_SEARCH_MATCHES {
-                break;
-            }
+        // The window of matches the caller wants, plus one extra to detect
+        // `has_more` without scanning everything. A bare search keeps the legacy
+        // cap and output shape.
+        let skip = offset.unwrap_or(0) as usize;
+        let want = limit.map(|l| l as usize).unwrap_or(MAX_SEARCH_MATCHES);
+        let scan_cap = skip
+            .saturating_add(want)
+            .saturating_add(1)
+            .min(MAX_SEARCH_MATCHES);
 
+        let mut all = Vec::new();
+        'outer: for relative in files {
             let absolute = workspace.resolve(&relative)?;
             let Ok(content) = fs::read_to_string(absolute) else {
                 continue;
             };
-
             for (index, line) in content.lines().enumerate() {
                 if line.contains(query) {
-                    matches.push(json!({
+                    all.push(json!({
                         "path": relative,
                         "line": index + 1,
                         "snippet": line,
                     }));
-
-                    if matches.len() >= MAX_SEARCH_MATCHES {
-                        break;
+                    if all.len() >= scan_cap {
+                        break 'outer;
                     }
                 }
             }
         }
 
-        Ok(ToolResult::json(json!({ "matches": matches })))
+        if offset.is_none() && limit.is_none() {
+            return Ok(ToolResult::json(json!({ "matches": all })));
+        }
+
+        let has_more = all.len() > skip + want;
+        let window: Vec<Value> = all.into_iter().skip(skip).take(want).collect();
+        Ok(ToolResult::json(json!({
+            "matches": window,
+            "offset": skip,
+            "has_more": has_more,
+        })))
     }
+}
+
+/// Reads an optional non-negative integer field from tool input.
+fn optional_u64(input: &Value, field: &str) -> Option<u64> {
+    input.get(field).and_then(Value::as_u64)
 }
 
 fn collect_files(root: &Path, current: &Path, files: &mut Vec<String>) -> Result<(), HarnessError> {
