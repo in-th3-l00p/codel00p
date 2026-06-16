@@ -230,6 +230,13 @@ pub(crate) async fn build_agent_harness_with(
     if let Some(max_iterations) = options.max_iterations {
         builder = builder.max_iterations(max_iterations);
     }
+    if options
+        .tool_sets
+        .iter()
+        .any(|set| matches!(set, AgentToolSet::Pipeline | AgentToolSet::All))
+    {
+        builder = builder.programmatic_tooling(true);
+    }
     builder = builder.cancel_signal(cancel);
 
     builder.build().map_err(|error| error.to_string())

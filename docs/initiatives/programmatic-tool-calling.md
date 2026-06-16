@@ -1,5 +1,14 @@
 # Initiative 8: Programmatic Tool Calling (`execute_code`)
 
+> **Status (2026-06-16):** the governed, no-sandbox half shipped as the
+> `run_pipeline` tool — see [Tool-Calling Parity Phase 3](tool-calling-parity.md).
+> The model declares an ordered list of `{ tool, input, id? }` steps with
+> `{{...}}` data-passing, and the harness runs them in one inference; **each step
+> goes through the harness's own `ToolRegistry` + `PermissionPolicy`**, so a
+> denied step never runs. What remains below is the *arbitrary code* form
+> (`execute_code`), which still depends on an isolating execution backend
+> ([#7](execution-backends-sandboxing.md)).
+
 ## Goal
 
 Let the model collapse a multi-step tool pipeline into a single executed code

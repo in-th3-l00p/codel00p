@@ -29,6 +29,7 @@ pub struct AgentHarnessBuilder {
     tool_choice: Option<ToolChoice>,
     response_format: Option<ResponseFormat>,
     cancel: Option<CancelSignal>,
+    programmatic_tooling: bool,
 }
 
 impl AgentHarnessBuilder {
@@ -185,6 +186,17 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Adds the `run_pipeline` tool (programmatic tool calling): the model can
+    /// run a declared multi-step tool pipeline in one inference. Each step is
+    /// dispatched through this harness's own tool registry and permission policy,
+    /// so governance is identical to a direct tool call — only orchestration
+    /// moves into the pipeline. The pipeline calls the tool set as configured at
+    /// build time (minus `run_pipeline` itself, so pipelines do not nest).
+    pub fn programmatic_tooling(mut self, enabled: bool) -> Self {
+        self.programmatic_tooling = enabled;
+        self
+    }
+
     /// Streams assistant text to `token_sink` as it is generated. Without a sink
     /// the harness uses the non-streaming inference path.
     pub fn token_sink<T>(mut self, token_sink: T) -> Self
@@ -196,19 +208,34 @@ impl AgentHarnessBuilder {
     }
 
     pub fn build(self) -> Result<AgentHarness, HarnessError> {
+        let model_client = self
+            .model_client
+            .ok_or_else(|| HarnessError::Configuration {
+                message: "model client is required".to_string(),
+            })?;
+        let workspace = self.workspace.ok_or_else(|| HarnessError::Configuration {
+            message: "workspace is required".to_string(),
+        })?;
+        let permission_policy = self
+            .permission_policy
+            .unwrap_or_else(|| Arc::new(AllowAllPermissionPolicy));
+
+        // Programmatic tool calling: the pipeline tool dispatches sub-steps
+        // through a snapshot of the tool set taken *before* the pipeline tool is
+        // added, so a pipeline cannot recursively invoke another pipeline, and
+        // through this harness's own permission policy so every step stays gated.
+        let mut tools = self.tools.unwrap_or_default();
+        if self.programmatic_tooling {
+            let pipeline =
+                crate::pipeline::pipeline_tools(tools.clone(), permission_policy.clone());
+            tools = tools.with_registry(pipeline);
+        }
+
         Ok(AgentHarness {
-            model_client: self
-                .model_client
-                .ok_or_else(|| HarnessError::Configuration {
-                    message: "model client is required".to_string(),
-                })?,
-            workspace: self.workspace.ok_or_else(|| HarnessError::Configuration {
-                message: "workspace is required".to_string(),
-            })?,
-            tools: self.tools.unwrap_or_default(),
-            permission_policy: self
-                .permission_policy
-                .unwrap_or_else(|| Arc::new(AllowAllPermissionPolicy)),
+            model_client,
+            workspace,
+            tools,
+            permission_policy,
             event_sink: self.event_sink,
             lifecycle_hooks: self.lifecycle_hooks,
             project_memory_provider: self.project_memory_provider,

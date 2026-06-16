@@ -45,6 +45,7 @@ pub(crate) enum AgentToolSet {
     Web,
     Delegate,
     Learn,
+    Pipeline,
     All,
 }
 
@@ -251,6 +252,7 @@ pub(super) fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
         "web" => Ok(AgentToolSet::Web),
         "delegate" | "delegation" => Ok(AgentToolSet::Delegate),
         "learn" | "learning" => Ok(AgentToolSet::Learn),
+        "pipeline" | "programmatic" => Ok(AgentToolSet::Pipeline),
         "all" => Ok(AgentToolSet::All),
         _ => Err(format!("unknown tool set: {value}")),
     }

@@ -167,6 +167,13 @@ The first safe tool set:
   elsewhere; multi-language heuristic (Rust, Python, JS/TS, Go, Java, Ruby,
   C/C++). For orienting in an unfamiliar codebase without reading whole files.
 
+With programmatic tooling enabled (builder `programmatic_tooling(true)` or the
+CLI `pipeline` tool set), a `run_pipeline` tool lets the model run a declared
+multi-step tool pipeline in one inference, forwarding earlier step outputs into
+later steps via `{{steps.N.field}}` / `{{id.field}}` templates. Each step is
+dispatched through the harness's own registry and permission policy, so a denied
+step does not run — only orchestration moves into the pipeline, never authority.
+
 When the advertised tool set is large (e.g. many MCP tools), the registry can
 hide tools behind progressive disclosure: only the core tools plus `tool_search`
 (keyword search over hidden tools) and `tool_describe` (load a hidden tool's

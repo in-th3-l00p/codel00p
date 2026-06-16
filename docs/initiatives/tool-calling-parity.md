@@ -127,8 +127,17 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       concise/detailed `response_format` on the heavy tools.
 
 ### Phase 3 — Advanced (SOTA)
-- [ ] **Programmatic tool calling (`execute_code`)** — see
-      [#8](programmatic-tool-calling.md); this initiative's capstone.
+- [x] **Programmatic tool calling (`run_pipeline`)** (shipped 2026-06-16): the
+      governed, no-sandbox form of [#8](programmatic-tool-calling.md). The model
+      declares an ordered list of `{ tool, input, id? }` steps and the harness
+      runs them in one inference, forwarding earlier outputs into later steps via
+      `{{steps.N.field}}` / `{{id.field}}` templates. **Every step is dispatched
+      through the harness's own `ToolRegistry` and `PermissionPolicy`**, so a
+      denied step does not run and authority never moves into the pipeline — only
+      orchestration does. Opt in with the builder's `programmatic_tooling(true)`
+      or the CLI `pipeline` tool set. Arbitrary in-process *code* execution
+      (Hermes `execute_code`) still waits on an isolating execution backend
+      ([#7](execution-backends-sandboxing.md)).
 - [x] **JSON Mode / structured output** (shipped 2026-06-16): a provider-neutral
       `ResponseFormat` (text / json_object / json_schema) on the request +
       `AgentHarness` builder, serialized where natively supported — OpenAI-style
