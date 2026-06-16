@@ -269,6 +269,15 @@ pub fn archive_root(skills_dir: &Path) -> PathBuf {
     skills_dir.join(ARCHIVE_DIR)
 }
 
+/// Load the skills archived (disabled) under a skills root.
+///
+/// Mirrors [`load_candidates`]: archived skills live under `<root>/.archive` and
+/// are never loaded as active skills, but listing them lets a reviewer see and
+/// [`restore_skill`] them without leaving the dialog.
+pub fn load_archived(skills_dir: &Path) -> Vec<Skill> {
+    scan_dir(&archive_root(skills_dir), SkillSource::User)
+}
+
 /// Reversibly archive an active skill, moving it out of the loaded set.
 pub fn archive_skill(skills_dir: &Path, name: &str) -> Result<PathBuf, SkillError> {
     validate_name(name)?;

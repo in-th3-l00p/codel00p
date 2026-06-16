@@ -37,9 +37,11 @@ fn tab_cycles_filter_without_a_store_reload() {
     assert_eq!(model.update(key(KeyCode::Tab)), Flow::Stay);
     assert_eq!(model.filter, Filter::Candidates);
     assert_eq!(model.update(key(KeyCode::Tab)), Flow::Stay);
+    assert_eq!(model.filter, Filter::Disabled);
+    assert_eq!(model.update(key(KeyCode::Tab)), Flow::Stay);
     assert_eq!(model.filter, Filter::All);
     assert_eq!(model.update(key(KeyCode::BackTab)), Flow::Stay);
-    assert_eq!(model.filter, Filter::Candidates);
+    assert_eq!(model.filter, Filter::Disabled);
 }
 
 #[test]
@@ -102,15 +104,89 @@ fn reject_from_detail_targets_the_candidate() {
 }
 
 #[test]
-fn disable_targets_an_active_skill() {
+fn disable_asks_to_confirm_then_applies_on_y() {
     let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    // First `d` arms the confirmation; it does NOT mutate yet.
+    assert_eq!(model.update(key(KeyCode::Char('d'))), Flow::Stay);
+    assert!(model.pending_disable.is_some());
+    assert!(
+        model
+            .status
+            .as_deref()
+            .unwrap_or_default()
+            .contains("confirm disabling")
+    );
+    // `y` confirms and emits the disable mutation.
     assert_eq!(
-        model.update(key(KeyCode::Char('d'))),
+        model.update(key(KeyCode::Char('y'))),
         Flow::Mutate(Mutation::Disable {
             name: "alpha".to_string(),
             root: PathBuf::from("/skills"),
         })
     );
+    assert!(model.pending_disable.is_none());
+}
+
+#[test]
+fn disable_confirmation_cancels_on_any_other_key() {
+    let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    model.update(key(KeyCode::Char('d')));
+    assert!(model.pending_disable.is_some());
+    // Any non-`y` key cancels without mutating.
+    assert_eq!(model.update(key(KeyCode::Char('n'))), Flow::Stay);
+    assert!(model.pending_disable.is_none());
+    assert!(
+        model
+            .status
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Cancelled")
+    );
+}
+
+#[test]
+fn restore_targets_a_disabled_skill() {
+    let mut model = model_with(vec![row("gamma", SkillKind::Disabled)]);
+    model.update(key(KeyCode::Tab)); // Active -> Candidates
+    model.update(key(KeyCode::Tab)); // Candidates -> Disabled
+    assert_eq!(model.filter, Filter::Disabled);
+    assert_eq!(
+        model.update(key(KeyCode::Char('u'))),
+        Flow::Mutate(Mutation::Restore {
+            name: "gamma".to_string(),
+            root: PathBuf::from("/skills"),
+        })
+    );
+}
+
+#[test]
+fn restore_on_an_active_skill_is_a_no_op_with_a_hint() {
+    let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    assert_eq!(model.update(key(KeyCode::Char('u'))), Flow::Stay);
+    assert!(model.status.is_some());
+}
+
+#[test]
+fn help_toggles_open_and_any_key_closes_it() {
+    let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    assert!(!model.show_help);
+    assert_eq!(model.update(key(KeyCode::Char('?'))), Flow::Stay);
+    assert!(model.show_help);
+    // Any key (even Esc) closes it without quitting or acting.
+    assert_eq!(model.update(key(KeyCode::Esc)), Flow::Stay);
+    assert!(!model.show_help);
+    // The Esc was consumed by closing help, so the model is still on the list.
+    assert_eq!(model.screen, Screen::List);
+}
+
+#[test]
+fn help_swallows_the_first_key_so_disable_does_not_fire() {
+    let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    model.update(key(KeyCode::Char('?')));
+    // `d` only closes help; no disable confirmation is armed.
+    assert_eq!(model.update(key(KeyCode::Char('d'))), Flow::Stay);
+    assert!(!model.show_help);
+    assert!(model.pending_disable.is_none());
 }
 
 #[test]

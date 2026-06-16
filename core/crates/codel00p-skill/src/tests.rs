@@ -225,6 +225,31 @@ fn archiving_and_restoring_a_skill() {
 }
 
 #[test]
+fn load_archived_lists_disabled_skills() {
+    let dir = tempdir().expect("tempdir");
+    let root = dir.path();
+    write_skill(
+        root,
+        "stale",
+        "---\nname: stale\ndescription: d\ncreated_by: agent\n---\nbody\n",
+    );
+
+    // Nothing archived yet.
+    assert!(load_archived(root).is_empty());
+
+    archive_skill(root, "stale").expect("archive");
+    let archived = load_archived(root);
+    assert_eq!(archived.len(), 1);
+    assert_eq!(archived[0].name, "stale");
+    // Archived skills are not part of the active set.
+    assert!(load_skills(&[(SkillSource::User, root.to_path_buf())]).is_empty());
+
+    // Restoring removes it from the archive listing.
+    restore_skill(root, "stale").expect("restore");
+    assert!(load_archived(root).is_empty());
+}
+
+#[test]
 fn curatable_only_targets_unused_old_agent_skills() {
     let dir = tempdir().expect("tempdir");
     let root = dir.path();

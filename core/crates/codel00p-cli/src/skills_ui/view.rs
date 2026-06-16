@@ -4,11 +4,26 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Tabs};
+use ratatui::widgets::{Clear, Paragraph, Tabs};
 
 use super::model::{Filter, Screen, SkillKind, SkillsModel};
 use crate::dialog::{accent, muted, panel, selection};
 use crate::tui::picker::PickerItem;
+
+/// The keys this dialog responds to, shown in the `?` help overlay.
+const HELP_KEYS: &[(&str, &str)] = &[
+    ("↑/↓", "move selection / scroll detail"),
+    ("type", "filter the list"),
+    ("Tab / ⇧Tab", "cycle Active / Candidates / Disabled / All"),
+    ("↵", "open the selected skill"),
+    ("a", "approve a candidate (immediate)"),
+    ("r", "reject a candidate (archived, reversible)"),
+    ("d", "disable an active skill (asks to confirm)"),
+    ("y", "confirm a pending disable"),
+    ("u / e", "restore a disabled skill (immediate)"),
+    ("?", "toggle this help"),
+    ("Esc", "back / quit"),
+];
 
 pub(crate) fn draw(frame: &mut Frame, model: &SkillsModel) {
     let rows = Layout::default()
@@ -35,7 +50,7 @@ pub(crate) fn draw(frame: &mut Frame, model: &SkillsModel) {
 
     let footer = match model.screen {
         Screen::List => {
-            "↑/↓ move · type to filter · Tab view · ↵ open · a approve · r reject · d disable · Esc quit"
+            "↑/↓ move · type to filter · Tab view · ↵ open · a approve · r reject · d disable · u restore · ? help · Esc quit"
         }
         Screen::Detail => detail_footer(model),
     };
@@ -47,14 +62,54 @@ pub(crate) fn draw(frame: &mut Frame, model: &SkillsModel) {
         Paragraph::new(Line::from(Span::styled(footer, muted()))),
         rows[2],
     );
+
+    if model.show_help {
+        draw_help(frame);
+    }
 }
 
 fn detail_footer(model: &SkillsModel) -> &'static str {
     match model.selected.as_ref().map(|row| row.kind) {
-        Some(SkillKind::Candidate) => "↑/↓ scroll · a approve · r reject · Esc back",
-        Some(SkillKind::Active) => "↑/↓ scroll · d disable · Esc back",
-        None => "↑/↓ scroll · Esc back",
+        Some(SkillKind::Candidate) => "↑/↓ scroll · a approve · r reject · ? help · Esc back",
+        Some(SkillKind::Active) => "↑/↓ scroll · d disable · ? help · Esc back",
+        Some(SkillKind::Disabled) => "↑/↓ scroll · u restore · ? help · Esc back",
+        None => "↑/↓ scroll · ? help · Esc back",
     }
+}
+
+/// Renders the centered `?` help overlay listing this dialog's keys.
+fn draw_help(frame: &mut Frame) {
+    let area = centered_rect(60, 60, frame.area());
+    frame.render_widget(Clear, area);
+    let lines: Vec<Line> = HELP_KEYS
+        .iter()
+        .map(|(keys, description)| {
+            Line::from(vec![
+                Span::styled(format!("  {keys:<14}"), accent()),
+                Span::styled((*description).to_string(), muted()),
+            ])
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines).block(panel("help")), area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
 }
 
 fn draw_list(frame: &mut Frame, area: Rect, model: &SkillsModel) {
@@ -119,6 +174,7 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &SkillsModel) {
     let kind = match row.kind {
         SkillKind::Active => "active",
         SkillKind::Candidate => "candidate",
+        SkillKind::Disabled => "disabled",
     };
     let mut lines = vec![
         kv("name", &row.name),
