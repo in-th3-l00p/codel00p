@@ -21,6 +21,7 @@ mod memory_ui;
 mod plugins;
 mod providers;
 mod session;
+mod sessions_ui;
 mod settings;
 mod skills;
 mod tui;
@@ -106,7 +107,7 @@ fn run(args: Vec<String>) -> CliResult<String> {
         "mcp" => mcp_server::run(config, rest),
         "memory" => memory::run(config, rest),
         "cloud" => cloud::run(config, rest),
-        "session" => session::run(config, rest),
+        "session" | "sessions" => session::run(config, rest),
         _ => Err(format!("unknown command: {command}")),
     }
 }
