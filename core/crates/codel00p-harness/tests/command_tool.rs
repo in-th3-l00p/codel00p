@@ -8,9 +8,26 @@ use tempfile::tempdir;
 async fn command_defaults_expose_shell_scoped_run_command_tool() {
     let registry = ToolRegistry::command_defaults();
 
-    assert_eq!(registry.names(), vec!["run_command"]);
+    assert_eq!(
+        registry.names(),
+        vec![
+            "process_kill",
+            "process_list",
+            "process_output",
+            "run_command"
+        ]
+    );
     assert_eq!(
         registry.permission_scope("run_command", &json!({})),
+        PermissionScope::Shell
+    );
+    // The polling tools are read-only; killing is shell-scoped.
+    assert_eq!(
+        registry.permission_scope("process_output", &json!({})),
+        PermissionScope::ReadOnly
+    );
+    assert_eq!(
+        registry.permission_scope("process_kill", &json!({})),
         PermissionScope::Shell
     );
 }

@@ -123,6 +123,18 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       frequency (a cheap PageRank proxy), bounded by `max_files` /
       `max_symbols_per_file` and scopable by `path` / `glob`. (A tree-sitter
       backend for exact parsing remains a possible follow-up.)
+- [x] **Background command execution** (shipped 2026-06-16): `run_command`
+      gains `background: true`, returning a `process_id` for a long-running
+      process instead of blocking, plus `process_output` (incremental
+      stdout/stderr since last read), `process_list`, and `process_kill`. Output
+      is drained continuously into byte-capped buffers; the four command tools
+      share one process store. The background-shell capability mature agents use
+      for dev servers / watchers.
+- [x] **Working-plan tool** (shipped 2026-06-16): `update_plan` keeps a
+      structured to-do list (steps with `pending` / `in_progress` / `completed`,
+      one in-progress at a time) in a `PlanStore` a UI can read — the planning
+      aid of Claude Code's `TodoWrite` / Codex's `update_plan`. Always advertised
+      by the CLI agent.
 - [ ] **Token-efficient tool results**: pagination/filter params and a
       concise/detailed `response_format` on the heavy tools.
 

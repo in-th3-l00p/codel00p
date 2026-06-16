@@ -7,11 +7,13 @@ use codel00p_protocol::PermissionScope;
 use serde_json::{Value, json};
 
 use crate::{
-    commands::RunCommandTool,
+    background::BackgroundProcesses,
+    commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool},
     editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
     errors::HarnessError,
     find::{FindFilesTool, GrepTool},
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
+    planning::{PlanStore, UpdatePlanTool},
     repo_map::RepoMapTool,
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool, ToolSpec},
@@ -61,7 +63,14 @@ impl ToolRegistry {
     }
 
     pub fn command_defaults() -> Self {
-        Self::new().with_tool(RunCommandTool)
+        // All four command tools share one process store so `process_output` /
+        // `process_list` / `process_kill` see what `run_command` spawned.
+        let processes = BackgroundProcesses::new();
+        Self::new()
+            .with_tool(RunCommandTool::new(processes.clone()))
+            .with_tool(ProcessOutputTool::new(processes.clone()))
+            .with_tool(ProcessListTool::new(processes.clone()))
+            .with_tool(ProcessKillTool::new(processes))
     }
 
     pub fn git_defaults() -> Self {
@@ -75,6 +84,11 @@ impl ToolRegistry {
     /// Web tools (`web_fetch`, `web_search`) gated behind `PermissionScope::Network`.
     pub fn web_defaults() -> Self {
         Self::new().with_registry(web_tools())
+    }
+
+    /// The planning tool (`update_plan`), backed by a fresh in-memory plan store.
+    pub fn planning_defaults() -> Self {
+        Self::new().with_tool(UpdatePlanTool::new(PlanStore::new()))
     }
 
     pub fn with_tool<T>(mut self, tool: T) -> Self

@@ -13,7 +13,10 @@ pub(super) async fn build_tool_registry(
     tool_sets: &[AgentToolSet],
     mcp_servers: &[McpServerSpec],
 ) -> CliResult<ToolRegistry> {
-    let mut registry = ToolRegistry::read_only_defaults();
+    // Every agent gets the planning tool, like the navigation defaults — it is
+    // workspace-read-only and useful regardless of which other tool sets are on.
+    let mut registry =
+        ToolRegistry::read_only_defaults().with_registry(ToolRegistry::planning_defaults());
     for tool_set in tool_sets {
         registry = match tool_set {
             AgentToolSet::Read => registry,

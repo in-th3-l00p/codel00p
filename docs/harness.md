@@ -167,6 +167,17 @@ The first safe tool set:
   elsewhere; multi-language heuristic (Rust, Python, JS/TS, Go, Java, Ruby,
   C/C++). For orienting in an unfamiliar codebase without reading whole files.
 
+The command tools support long-running work: `run_command` with `background:
+true` spawns a process (dev server, watcher) and returns a `process_id` instead
+of blocking; `process_output` reads incremental stdout/stderr since the last
+read, `process_list` shows running processes, and `process_kill` stops one. The
+four command tools share one process store.
+
+`update_plan` is a structured to-do list the agent maintains across a turn
+(steps with `pending` / `in_progress` / `completed` status, one in-progress at a
+time), kept in a `PlanStore` a UI can read — the planning aid Claude Code's
+`TodoWrite` / Codex's `update_plan` provide.
+
 With programmatic tooling enabled (builder `programmatic_tooling(true)` or the
 CLI `pipeline` tool set), a `run_pipeline` tool lets the model run a declared
 multi-step tool pipeline in one inference, forwarding earlier step outputs into
