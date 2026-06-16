@@ -192,14 +192,17 @@ Messages run as restricted (read-only) agent turns for now.
 ";
 
 const CRON_HELP: &str = "\
-Usage: codel00p cron <command>
+Usage: codel00p cron [command]
 
-Define jobs that run a prompt on a schedule. Jobs are saved under
-~/.codel00p/cron. Schedules are duration intervals: 30m, 2h, 1d, 1w (optionally
-prefixed with `every`).
+With no command on a terminal, opens the cron dialog: browse scheduled jobs,
+Enter one to see its full config, then e enable · d disable · R run now ·
+x delete. Press n to add a job (schedule then prompt, typed inline). Esc quits.
 
-Commands:
-  list                          List scheduled jobs (default)
+Jobs are saved under ~/.codel00p/cron. Schedules are duration intervals: 30m,
+2h, 1d, 1w (optionally prefixed with `every`).
+
+For scripting (and pipes/CI), the subcommands stay:
+  list                          List scheduled jobs (default off a terminal)
   add <schedule> <prompt>       Add an agent job (--workspace/--provider/--model)
   add-command <schedule> <cmd>  Add a maintenance job that runs `codel00p <cmd>`
                                 (e.g. add-command 1d skills curate --apply)

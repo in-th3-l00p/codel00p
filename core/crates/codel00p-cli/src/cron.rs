@@ -35,7 +35,16 @@ fn store() -> JobStore {
 pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliResult<String> {
     let (command, rest) = match args.split_first() {
         Some((command, rest)) => (command.as_str(), rest),
-        None => ("list", &[][..]),
+        None => {
+            // Bare `codel00p cron` on a terminal opens the dialog; pipes and CI
+            // keep the scriptable `list` default so output is never corrupted.
+            use std::io::IsTerminal;
+            return if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() {
+                crate::cron_ui::run(config, defaults)
+            } else {
+                cron_list()
+            };
+        }
     };
     match command {
         "list" => cron_list(),
@@ -93,8 +102,13 @@ fn cron_run(config: CliConfig, defaults: &AgentSettings, args: &[String]) -> Cli
 }
 
 /// Run a job: a command job runs a `codel00p` subcommand in a subprocess; an
-/// agent job runs its prompt as a restricted agent turn.
-fn execute_job(config: CliConfig, defaults: &AgentSettings, job: &CronJob) -> CliResult<String> {
+/// agent job runs its prompt as a restricted agent turn. Shared with the cron
+/// dialog's "run now" action so both paths execute jobs identically.
+pub(crate) fn execute_job(
+    config: CliConfig,
+    defaults: &AgentSettings,
+    job: &CronJob,
+) -> CliResult<String> {
     match &job.command {
         Some(command) => run_command_job(command),
         None => crate::agent::run_scheduled_job(config, defaults, job),
