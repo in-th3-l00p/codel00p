@@ -265,6 +265,89 @@ impl SessionSwitcher {
     }
 }
 
+/// An action reachable from the command palette. Each maps to an existing handler.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CommandAction {
+    Model,
+    Sessions,
+    NewConversation,
+    Browse,
+    Users,
+    SwitchOrg,
+    History,
+    Tools,
+    Help,
+    Quit,
+}
+
+/// One row in the command palette: a label, a short hint, and the action it runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CommandItem {
+    pub(crate) label: String,
+    pub(crate) hint: &'static str,
+    pub(crate) action: CommandAction,
+}
+
+impl PickerItem for CommandItem {
+    fn label(&self) -> String {
+        self.label.clone()
+    }
+    fn detail(&self) -> Option<String> {
+        Some(self.hint.to_string())
+    }
+}
+
+/// The VSCode-style command palette: a fuzzy-filterable list of every CLI action,
+/// so users do not have to remember the individual F-key surfaces.
+#[derive(Clone, Debug)]
+pub(crate) struct CommandPalette {
+    pub(crate) picker: Picker<CommandItem>,
+}
+
+impl CommandPalette {
+    pub(crate) fn new() -> Self {
+        Self {
+            picker: Picker::new(command_items()),
+        }
+    }
+
+    pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
+        self.picker.on_key(key)
+    }
+
+    pub(crate) fn selected_item(&self) -> Option<&CommandItem> {
+        self.picker.selected_item()
+    }
+}
+
+/// The full command catalog, in display order.
+pub(crate) fn command_items() -> Vec<CommandItem> {
+    use CommandAction::*;
+    [
+        ("Switch model", "pick a provider / model", Model),
+        ("Switch session", "resume a prior conversation", Sessions),
+        ("New conversation", "start a fresh chat", NewConversation),
+        (
+            "Browse organization",
+            "projects · agents · MCP · memory",
+            Browse,
+        ),
+        ("Browse users", "organization members", Users),
+        ("Switch organization", "re-auth into another org", SwitchOrg),
+        ("Show history", "this conversation's messages", History),
+        ("Show tools", "enabled tool sets", Tools),
+        ("Help", "keys and commands", Help),
+        ("Quit", "exit codel00p", Quit),
+    ]
+    .into_iter()
+    .map(|(label, hint, action)| CommandItem {
+        label: label.to_string(),
+        hint,
+        action,
+    })
+    .collect()
+}
+
 // There is only ever one live `Overlay` (the open panel), so the size spread
 // between variants is irrelevant; boxing would just add indirection for no gain.
 #[allow(clippy::large_enum_variant)]
@@ -275,6 +358,7 @@ pub(crate) enum Overlay {
     Model(ModelPicker),
     Sessions(SessionSwitcher),
     Entities(EntityBrowser),
+    Command(CommandPalette),
 }
 
 impl Overlay {

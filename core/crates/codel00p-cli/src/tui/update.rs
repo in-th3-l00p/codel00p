@@ -7,7 +7,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
-use super::overlay::{EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher};
+use super::overlay::{
+    CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
+};
 use super::picker::PickerOutcome;
 
 pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
@@ -172,6 +174,11 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return vec![Effect::Quit];
     }
+    // Ctrl-P opens the command palette from anywhere — the unified launcher for
+    // every action, so users do not have to remember the individual F-keys.
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('p') {
+        return open_command_palette(app);
+    }
     if app.overlay.is_open() {
         handle_overlay_key(app, key)
     } else {
@@ -254,7 +261,43 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
             }
         },
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
+        Overlay::Command(mut palette) => match palette.on_key(key) {
+            PickerOutcome::Selected => match palette.selected_item() {
+                Some(item) => run_command(app, item.action),
+                None => Vec::new(),
+            },
+            PickerOutcome::Cancelled => Vec::new(),
+            PickerOutcome::Pending => {
+                app.overlay = Overlay::Command(palette);
+                Vec::new()
+            }
+        },
         Overlay::None => Vec::new(),
+    }
+}
+
+/// Opens the command palette overlay (the unified launcher).
+fn open_command_palette(app: &mut App) -> Vec<Effect> {
+    app.overlay = Overlay::Command(CommandPalette::new());
+    Vec::new()
+}
+
+/// Dispatches a palette selection to the existing action handlers.
+fn run_command(app: &mut App, action: CommandAction) -> Vec<Effect> {
+    match action {
+        CommandAction::Model => open_model_picker(app),
+        CommandAction::Sessions => open_sessions(app),
+        CommandAction::NewConversation => handle_slash(app, "reset"),
+        CommandAction::Browse => open_entities(app, EntityTab::Projects),
+        CommandAction::Users => open_entities(app, EntityTab::Users),
+        CommandAction::SwitchOrg => open_entities(app, EntityTab::Org),
+        CommandAction::History => handle_slash(app, "history"),
+        CommandAction::Tools => handle_slash(app, "tools"),
+        CommandAction::Help => {
+            app.overlay = Overlay::Help;
+            Vec::new()
+        }
+        CommandAction::Quit => vec![Effect::Quit],
     }
 }
 
@@ -1052,5 +1095,36 @@ mod tests {
         update(&mut app, key(KeyCode::Enter));
         assert!(app.scroll.follow);
         assert_eq!(app.scroll.offset_from_bottom, 0);
+    }
+
+    fn ctrl(code: KeyCode) -> Msg {
+        Msg::Key(KeyEvent::new(code, KeyModifiers::CONTROL))
+    }
+
+    #[test]
+    fn ctrl_p_opens_the_command_palette() {
+        let mut app = test_app();
+        update(&mut app, ctrl(KeyCode::Char('p')));
+        assert!(matches!(app.overlay, Overlay::Command(_)));
+    }
+
+    #[test]
+    fn selecting_a_command_runs_its_action() {
+        let mut app = test_app();
+        update(&mut app, ctrl(KeyCode::Char('p')));
+        // The first palette row is "Switch model"; Enter runs it.
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::Model(_)));
+        assert!(matches!(effects.as_slice(), [Effect::FetchModels(_)]));
+    }
+
+    #[test]
+    fn command_palette_filters_and_quit_runs() {
+        let mut app = test_app();
+        update(&mut app, ctrl(KeyCode::Char('p')));
+        // Filter down to "Quit" and run it.
+        type_str(&mut app, "quit");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(effects.as_slice(), [Effect::Quit]));
     }
 }

@@ -78,6 +78,11 @@ Recently shipped:
   spinner cycles thinking/tool **verbs** (`pondering` → `reading`…); the empty
   composer shows rotating placeholder hints and the empty transcript a welcome
   banner — modeled on the Hermes `ui-tui` chat.
+- **Codex-style minimal chat + command palette**: removed the conversation/input
+  borders — the transcript is transparent and the composer is a filled background
+  block with a `›` prompt; message text is white, with user messages set apart by a
+  subtle full-width background tint. A **`Ctrl+P` command palette** (VSCode-style)
+  is now the single launcher for every action, replacing the scattered F-key UIs.
 
 Next:
 

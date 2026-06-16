@@ -16,31 +16,32 @@ use super::theme::Theme;
 const SPINNER: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
 /// The composer box grows with its content up to this many text rows, then scrolls.
 const MAX_INPUT_ROWS: u16 = 6;
-/// The role accent bar drawn down the left of a message block.
-const BAR: &str = "▌";
+/// The composer prompt marker.
+const PROMPT: &str = "› ";
 
 pub(crate) fn render(app: &mut App, frame: &mut Frame) {
     let area = frame.area();
-    // Size the composer to its wrapped content (1..=MAX_INPUT_ROWS) so long input
-    // grows and wraps instead of overflowing off the right edge.
-    let input_inner_w = area.width.saturating_sub(2).max(1) as usize;
+    // Size the composer (a borderless filled block) to its wrapped content, so long
+    // input grows and wraps instead of overflowing off the right edge.
+    let input_inner_w = composer_text_width(area.width);
     let input_rows = composer_rows(app.composer.text(), app.composer.cursor(), input_inner_w)
         .clamp(1, MAX_INPUT_ROWS as usize) as u16;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Min(3),
-            Constraint::Length(input_rows + 2),
-            Constraint::Length(1),
+            Constraint::Length(1),          // header
+            Constraint::Min(3),             // transcript (transparent)
+            Constraint::Length(1),          // spacer
+            Constraint::Length(input_rows), // composer (filled background)
+            Constraint::Length(1),          // status
         ])
         .split(area);
 
     draw_header(app, frame, chunks[0]);
     draw_conversation(app, frame, chunks[1]);
-    draw_input(app, frame, chunks[2]);
-    draw_status(app, frame, chunks[3]);
+    draw_input(app, frame, chunks[3]);
+    draw_status(app, frame, chunks[4]);
 
     match &app.overlay {
         Overlay::None => {}
@@ -49,7 +50,13 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Model(picker) => draw_model_picker(app, frame, picker),
         Overlay::Sessions(switcher) => draw_sessions(app, frame, switcher),
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
+        Overlay::Command(palette) => draw_command(app, frame, palette),
     }
+}
+
+/// Width available for composer text after the `›` prompt and a right margin.
+fn composer_text_width(area_width: u16) -> usize {
+    area_width.saturating_sub(3).max(1) as usize
 }
 
 fn draw_header(app: &App, frame: &mut Frame, area: Rect) {
@@ -74,12 +81,19 @@ fn draw_header(app: &App, frame: &mut Frame, area: Rect) {
 
 fn draw_conversation(app: &mut App, frame: &mut Frame, area: Rect) {
     let theme = app.theme.clone();
-    let content_width = area.width.saturating_sub(2) as usize;
-    let viewport_rows = area.height.saturating_sub(2);
+    // No border: the transcript is transparent. A 1-column left/right margin gives
+    // the text and the user-message background blocks some breathing room.
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y,
+        width: area.width.saturating_sub(2),
+        height: area.height,
+    };
+    let content_width = inner.width as usize;
+    let viewport_rows = inner.height;
 
     // Pre-wrap every block to the content width so each rendered `Line` is exactly
-    // one visual row. The scroll math is then exact (the old bug counted logical
-    // lines but rendered wrapped rows, so the newest content got clipped).
+    // one visual row, keeping the scroll math exact.
     let mut lines: Vec<Line> = Vec::new();
     for block in &app.conversation.blocks {
         lines.extend(block_lines(block, &theme, content_width));
@@ -100,30 +114,30 @@ fn draw_conversation(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let scroll_y = max_offset - app.scroll.offset_from_bottom;
 
-    let title = if app.scroll.follow {
-        " conversation ".to_string()
-    } else {
-        format!(
-            " conversation · ↑{} · PgDn for latest ",
-            app.scroll.offset_from_bottom
-        )
-    };
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.panel_border))
-        .title(title);
-    frame.render_widget(
-        Paragraph::new(lines).block(block).scroll((scroll_y, 0)),
-        area,
-    );
+    frame.render_widget(Paragraph::new(lines).scroll((scroll_y, 0)), inner);
+
+    // A subtle "scrolled up" hint in the top-right when not following.
+    if !app.scroll.follow {
+        let hint = format!(" ↑{} · PgDn for latest ", app.scroll.offset_from_bottom);
+        let hint_w = hint.chars().count() as u16;
+        if hint_w < inner.width {
+            let hint_area = Rect {
+                x: inner.x + inner.width - hint_w,
+                y: inner.y,
+                width: hint_w,
+                height: 1,
+            };
+            frame.render_widget(Paragraph::new(Span::styled(hint, theme.muted())), hint_area);
+        }
+    }
 }
 
-/// Renders one transcript block into styled, pre-wrapped rows. User and assistant
-/// messages get a bold role header and a colored left accent bar; tools render as a
-/// compact glyph line; notices/errors get a colored gutter glyph.
+/// Renders one transcript block into styled, pre-wrapped rows. Text stays white;
+/// user messages get a subtle full-width background to set them apart from the
+/// transparent assistant output. Tools/notices render as compact colored lines.
 fn block_lines(block: &ChatBlock, theme: &Theme, width: usize) -> Vec<Line<'static>> {
     match block {
-        ChatBlock::User(text) => role_block(theme.user, "You", text, width),
+        ChatBlock::User(text) => user_block(theme, text, width),
         ChatBlock::Assistant(text) => assistant_block(theme, text, width),
         ChatBlock::Notice(text) => note_block(theme.notice, "·", text, width),
         ChatBlock::Error(text) => note_block(theme.error, "!", text, width),
@@ -131,21 +145,46 @@ fn block_lines(block: &ChatBlock, theme: &Theme, width: usize) -> Vec<Line<'stat
     }
 }
 
-/// The assistant message: a bold role header, then the body rendered as Markdown
-/// (code blocks, lists, headings, inline styles), then a spacer.
+/// The assistant message: the body rendered as Markdown (code blocks, lists,
+/// headings, inline styles) on a transparent background, then a spacer.
 fn assistant_block(theme: &Theme, text: &str, width: usize) -> Vec<Line<'static>> {
-    let header = Style::default().fg(theme.assistant);
-    let mut out = vec![Line::from(vec![
-        Span::styled(format!("{BAR} "), header),
-        Span::styled("codel00p", header.add_modifier(Modifier::BOLD)),
-    ])];
-    out.extend(super::markdown::render_markdown(
-        text,
-        theme,
-        width.saturating_sub(2).max(1),
-    ));
+    let mut out = super::markdown::render_markdown(text, theme, width);
     out.push(Line::from(""));
     out
+}
+
+/// The user message: white text on a subtle full-width background block, with a
+/// dim `›` prompt marker, then a transparent spacer.
+fn user_block(theme: &Theme, text: &str, width: usize) -> Vec<Line<'static>> {
+    let bg = Style::default().bg(theme.user_bg);
+    let prompt = Style::default().bg(theme.user_bg).fg(theme.muted);
+    let mut out = Vec::new();
+    for (i, row) in wrap_text(text, width.saturating_sub(2).max(1))
+        .into_iter()
+        .enumerate()
+    {
+        let lead = if i == 0 { "› " } else { "  " };
+        let spans = vec![
+            Span::styled(lead.to_string(), prompt),
+            Span::styled(row, bg),
+        ];
+        out.push(pad_to_width(spans, width, theme.user_bg));
+    }
+    out.push(Line::from(""));
+    out
+}
+
+/// Pads a line's spans with a trailing run of background-styled spaces so the row's
+/// background fills the full content width (the transcript itself is transparent).
+fn pad_to_width(mut spans: Vec<Span<'static>>, width: usize, bg: Color) -> Line<'static> {
+    let used: usize = spans.iter().map(|span| span.content.chars().count()).sum();
+    if used < width {
+        spans.push(Span::styled(
+            " ".repeat(width - used),
+            Style::default().bg(bg),
+        ));
+    }
+    Line::from(spans)
 }
 
 /// The empty-transcript welcome: a compact brand line and a tagline.
@@ -159,28 +198,10 @@ fn welcome_lines(theme: &Theme, _width: usize) -> Vec<Line<'static>> {
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "  Type a message and press Enter · F1 for keys · /help for commands",
+            "  Type a message and press Enter · Ctrl+P for the command menu",
             theme.muted(),
         )),
     ]
-}
-
-/// A user/assistant message: a bold role label, then the wrapped body under a
-/// colored accent bar, then a blank spacer.
-fn role_block(color: Color, label: &str, text: &str, width: usize) -> Vec<Line<'static>> {
-    let bar = Style::default().fg(color);
-    let mut out = vec![Line::from(vec![
-        Span::styled(format!("{BAR} "), bar),
-        Span::styled(label.to_string(), bar.add_modifier(Modifier::BOLD)),
-    ])];
-    for row in wrap_text(text, width.saturating_sub(2).max(1)) {
-        out.push(Line::from(vec![
-            Span::styled(format!("{BAR} "), bar),
-            Span::raw(row),
-        ]));
-    }
-    out.push(Line::from(""));
-    out
 }
 
 /// A notice/error line: a colored gutter glyph and wrapped text, then a spacer.
@@ -302,41 +323,58 @@ fn composer_rows(text: &str, cursor: usize, width: usize) -> usize {
 
 fn draw_input(app: &App, frame: &mut Frame, area: Rect) {
     let theme = &app.theme;
-    let inner_w = area.width.saturating_sub(2).max(1) as usize;
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.accent))
-        .title(" message · Enter ↵ send · Alt+Enter newline · F1 help ");
-    let inner = block.inner(area);
+    let bg = Style::default().bg(theme.input_bg);
+    let prompt_style = bg.fg(theme.accent);
+    let text_w = composer_text_width(area.width);
+    let prompt_cols = PROMPT.chars().count() as u16;
 
-    // Show a rotating placeholder while the composer is empty.
+    let fill = area.width as usize;
+
+    // Empty composer: a dim placeholder. Each row is padded so `input_bg` fills the
+    // full block width (not just the text).
     if app.composer.is_empty() && !app.overlay.is_open() {
         let hint = super::flavor::placeholder(&app.session_label());
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(hint, theme.muted()))).block(block),
-            area,
+        let line = pad_to_width(
+            vec![
+                Span::styled(PROMPT, prompt_style),
+                Span::styled(hint, bg.fg(theme.muted)),
+            ],
+            fill,
+            theme.input_bg,
         );
-        frame.set_cursor_position(Position::new(inner.x, inner.y));
+        frame.render_widget(Paragraph::new(line).style(bg), area);
+        frame.set_cursor_position(Position::new(area.x + prompt_cols, area.y));
         return;
     }
 
-    let lines: Vec<Line> = char_wrap_lines(app.composer.text(), inner_w)
+    // Each wrapped row gets the prompt (first row) or matching indent, padded to the
+    // full width so the background block is a solid bar.
+    let rows = char_wrap_lines(app.composer.text(), text_w);
+    let lines: Vec<Line> = rows
         .into_iter()
-        .map(Line::from)
+        .enumerate()
+        .map(|(i, row)| {
+            let lead = if i == 0 { PROMPT } else { "  " };
+            pad_to_width(
+                vec![Span::styled(lead, prompt_style), Span::styled(row, bg)],
+                fill,
+                theme.input_bg,
+            )
+        })
         .collect();
 
     // Keep the cursor row visible when the input is taller than the (capped) box.
     let (cursor_row, cursor_col) =
-        char_cursor_rowcol(app.composer.text(), inner_w, app.composer.cursor());
-    let input_scroll = cursor_row.saturating_sub(inner.height.saturating_sub(1));
+        char_cursor_rowcol(app.composer.text(), text_w, app.composer.cursor());
+    let input_scroll = cursor_row.saturating_sub(area.height.saturating_sub(1));
     frame.render_widget(
-        Paragraph::new(lines).block(block).scroll((input_scroll, 0)),
+        Paragraph::new(lines).style(bg).scroll((input_scroll, 0)),
         area,
     );
 
-    if !app.overlay.is_open() && inner.height > 0 {
-        let x = inner.x + cursor_col.min(inner.width.saturating_sub(1));
-        let y = inner.y + cursor_row.saturating_sub(input_scroll);
+    if !app.overlay.is_open() && area.height > 0 {
+        let x = area.x + prompt_cols + cursor_col.min(area.width.saturating_sub(prompt_cols + 1));
+        let y = area.y + cursor_row.saturating_sub(input_scroll);
         frame.set_cursor_position(Position::new(x, y));
     }
 }
@@ -374,10 +412,7 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
         Span::styled(format!("  {turn}"), Style::default().fg(theme.tool)),
         Span::styled(format!("   {}", usage_label(app)), theme.muted()),
         Span::styled(format!("   org: {org}"), theme.muted()),
-        Span::styled(
-            "    F2 model · F3 entities · F5 sessions · /help",
-            theme.muted(),
-        ),
+        Span::styled("    Ctrl+P menu · Enter send", theme.muted()),
     ]);
     frame.render_widget(Paragraph::new(line), area);
 }
@@ -410,16 +445,16 @@ fn draw_help(app: &App, frame: &mut Frame) {
     let lines = vec![
         Line::from(Span::styled("codel00p agent — keys", app.theme.accent())),
         Line::from(""),
+        Line::from(Span::styled(
+            "  Ctrl+P       command menu — every action in one place",
+            app.theme.accent(),
+        )),
         Line::from("  Enter        send the message"),
         Line::from("  Alt+Enter    newline in the composer"),
         Line::from("  ←/→ Home/End move/edit the cursor"),
         Line::from("  PgUp/PgDn    scroll the transcript · wheel scrolls too"),
         Line::from("  F1           this help"),
-        Line::from("  F2  /model   switch model"),
-        Line::from("  F3  /entities browse projects · agents · MCP · memory"),
-        Line::from("  F4  /org      switch organization"),
-        Line::from("  F5  /switch   resume a prior conversation"),
-        Line::from("  /agents      jump to the agents tab"),
+        Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
         Line::from("  /sessions /memory /history /tools /reset"),
         Line::from("  Esc          close overlay · clear input · quit"),
         Line::from("  Ctrl-C       quit"),
@@ -615,6 +650,31 @@ fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
     );
 }
 
+/// Draws the command palette: a filterable list of every CLI action.
+fn draw_command(app: &App, frame: &mut Frame, palette: &super::overlay::CommandPalette) {
+    let area = centered_rect(60, 60, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" command palette ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  type to filter · Enter to run · Esc to close",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+    draw_picker(frame, rows[1], &app.theme, &palette.picker, "Commands");
+}
+
 fn draw_picker<T: PickerItem>(
     frame: &mut Frame,
     area: Rect,
@@ -731,16 +791,40 @@ mod tests {
     }
 
     #[test]
-    fn user_and_assistant_blocks_are_visually_labeled() {
+    fn user_and_assistant_messages_both_render() {
         let mut app = test_app();
         app.conversation.push_user("hi there");
         app.conversation.finalize_assistant("hello back");
         let rendered = render_to_string(&mut app, 60, 20);
-        // The "You" role header only comes from the user block.
-        assert!(rendered.contains("You"));
+        // The user message carries the `›` prompt marker; both texts appear.
+        assert!(rendered.contains('›'));
         assert!(rendered.contains("hi there"));
         assert!(rendered.contains("hello back"));
-        assert!(rendered.contains(BAR), "role accent bar should be drawn");
+    }
+
+    #[test]
+    fn user_message_has_a_background_tint() {
+        let mut app = test_app();
+        app.conversation.push_user("tinted");
+        let user_bg = app.theme.user_bg;
+        let backend = TestBackend::new(40, 12);
+        let mut terminal = Terminal::new(backend).expect("terminal");
+        terminal
+            .draw(|frame| render(&mut app, frame))
+            .expect("draw");
+        let buffer = terminal.backend().buffer().clone();
+        let tinted = buffer.content().iter().any(|cell| cell.bg == user_bg);
+        assert!(tinted, "user message should have a background tint");
+    }
+
+    #[test]
+    fn command_palette_renders_actions() {
+        use crate::tui::overlay::{CommandPalette, Overlay};
+        let mut app = test_app();
+        app.overlay = Overlay::Command(CommandPalette::new());
+        let rendered = render_to_string(&mut app, 80, 24);
+        assert!(rendered.contains("command palette"));
+        assert!(rendered.contains("Switch model"));
     }
 
     #[test]
@@ -813,7 +897,7 @@ mod tests {
         app.overlay = Overlay::Help;
         let rendered = render_to_string(&mut app, 80, 24);
         assert!(rendered.contains("help"));
-        assert!(rendered.contains("switch model"));
+        assert!(rendered.contains("command menu"));
     }
 
     #[test]
