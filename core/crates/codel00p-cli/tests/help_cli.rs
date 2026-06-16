@@ -117,7 +117,7 @@ fn command_help_prints_without_project_flags() {
         ),
         (
             &["session", "--help"][..],
-            "Usage: codel00p [global options] session <command>",
+            "Usage: codel00p [global options] sessions [command]",
         ),
         (
             &["config", "--help"][..],

@@ -11,7 +11,7 @@ pub fn help_for(args: &[String]) -> Option<&'static str> {
             "gateway" => Some(GATEWAY_HELP),
             "mcp" => Some(MCP_HELP),
             "memory" => Some(MEMORY_HELP),
-            "session" => Some(SESSION_HELP),
+            "session" | "sessions" => Some(SESSION_HELP),
             "cloud" => Some(CLOUD_HELP),
             "update" => Some(UPDATE_HELP),
             "uninstall" => Some(UNINSTALL_HELP),
@@ -486,9 +486,12 @@ message count, and event count.
 ";
 
 const SESSION_HELP: &str = "\
-Usage: codel00p [global options] session <command>
+Usage: codel00p [global options] sessions [command]
 
-Commands:
+With no command on a terminal, opens the sessions browser: pick a conversation
+(type to filter), Enter to read its transcript (↑/↓ to scroll), Esc to go back.
+
+For scripting (and pipes/CI), the subcommands stay:
   list     List persisted conversations; use --json for JSON output
   show     Show persisted session records
 ";

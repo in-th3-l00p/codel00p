@@ -6,7 +6,14 @@ use crate::config::{CliConfig, CliResult, open_session_store, parse_session_id, 
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
     let Some((command, rest)) = args.split_first() else {
-        return Err("missing session command".to_string());
+        // Bare `codel00p sessions` on a terminal opens the browser dialog; pipes
+        // and CI keep the scriptable behavior so output is never corrupted.
+        use std::io::IsTerminal;
+        return if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() {
+            crate::sessions_ui::run(config)
+        } else {
+            Err("missing session command".to_string())
+        };
     };
 
     match command.as_str() {
@@ -147,7 +154,7 @@ pub(crate) fn session_message_summary(message: &SessionMessage) -> String {
     String::new()
 }
 
-fn agent_event_label(event: &AgentEvent) -> &'static str {
+pub(crate) fn agent_event_label(event: &AgentEvent) -> &'static str {
     match event {
         AgentEvent::SessionStarted { .. } => "session_started",
         AgentEvent::TurnStarted { .. } => "turn_started",
