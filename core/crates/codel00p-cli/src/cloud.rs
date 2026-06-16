@@ -13,7 +13,13 @@ use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
 use crate::providers::build_provider_client_with;
 
 pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
+    // Bare `codel00p cloud` on a terminal opens the interactive dialog; piped or
+    // scripted invocations keep the byte-identical subcommand behavior.
     let Some((command, rest)) = args.split_first() else {
+        use std::io::IsTerminal;
+        if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+            return crate::cloud_ui::run(config);
+        }
         return Err("missing cloud command".to_string());
     };
 
@@ -317,6 +323,29 @@ fn env_value(key: &str) -> Option<String> {
     env::var(key).ok().filter(|value| !value.trim().is_empty())
 }
 
+/// A cloud connection resolved for the interactive dialog (no CLI flags): env vars
+/// first, then credentials stored by `codel00p auth login`. `project` may be unset.
+pub(crate) struct ResolvedConnection {
+    pub(crate) client: CloudClient,
+    pub(crate) project: Option<String>,
+}
+
+/// Resolves the cloud connection for the dialog. Returns `Err` when the user is not
+/// signed in (no API URL / token, or the client fails to build) so the dialog can
+/// show a sign-in hint instead of erroring out.
+pub(crate) fn resolve_connection() -> CliResult<ResolvedConnection> {
+    let stored = crate::credentials::load();
+    let api_url = env_value("CODEL00P_API_URL")
+        .or(stored.api_url)
+        .ok_or_else(|| "not signed in".to_string())?;
+    let token = env_value("CODEL00P_TOKEN")
+        .or(stored.token)
+        .ok_or_else(|| "not signed in".to_string())?;
+    let project = env_value("CODEL00P_CLOUD_PROJECT");
+    let client = CloudClient::new(&api_url, &token)?;
+    Ok(ResolvedConnection { client, project })
+}
+
 fn cloud_status(args: &[String]) -> CliResult<String> {
     let (connection, rest) = parse_connection(args)?;
     let json_output = parse_only_json(&rest, "cloud status")?;
@@ -377,14 +406,32 @@ fn cloud_push(config: CliConfig, args: &[String]) -> CliResult<String> {
     }
 
     let project = connection.project()?.to_string();
+    let candidates = collect_push_candidates(&config, status, limit)?;
+
+    if dry_run {
+        return report_push(json_output, &candidates, &[], true);
+    }
+
+    let client = connection.client()?;
+    let pushed = push_candidates(&client, &project, &candidates)?;
+    report_push(json_output, &candidates, &pushed, false)
+}
+
+/// Collects the local memory rows eligible for pushing (status-filtered, optionally
+/// capped) as `(local_id, candidate)` pairs. Shared by the `push` subcommand and the
+/// `cloud` dialog.
+fn collect_push_candidates(
+    config: &CliConfig,
+    status: MemoryStatus,
+    limit: Option<usize>,
+) -> CliResult<Vec<(String, NewMemoryCandidate)>> {
     let mut filter = MemoryListFilter::new(config.project.clone()).with_status(status);
     if let Some(limit) = limit {
         filter = filter.with_limit(limit);
     }
-
-    let store = open_memory_store(&config)?;
+    let store = open_memory_store(config)?;
     let records = store.list(filter).map_err(|error| error.to_string())?;
-    let candidates: Vec<(String, NewMemoryCandidate)> = records
+    Ok(records
         .iter()
         .map(|record| {
             (
@@ -392,19 +439,34 @@ fn cloud_push(config: CliConfig, args: &[String]) -> CliResult<String> {
                 candidate_from_entry(record.entry()),
             )
         })
-        .collect();
+        .collect())
+}
 
-    if dry_run {
-        return report_push(json_output, &candidates, &[], true);
-    }
-
-    let client = connection.client()?;
+/// Pushes each candidate to the project review queue, returning the
+/// `(local_id, remote_entry)` pairs that landed.
+fn push_candidates(
+    client: &CloudClient,
+    project: &str,
+    candidates: &[(String, NewMemoryCandidate)],
+) -> CliResult<Vec<(String, MemoryEntry)>> {
     let mut pushed = Vec::new();
-    for (local_id, candidate) in &candidates {
-        let remote = client.push_candidate(&project, candidate)?;
+    for (local_id, candidate) in candidates {
+        let remote = client.push_candidate(project, candidate)?;
         pushed.push((local_id.clone(), remote));
     }
-    report_push(json_output, &candidates, &pushed, false)
+    Ok(pushed)
+}
+
+/// Pushes approved local memory to `project` for the dialog, returning a one-line
+/// summary of how many entries landed.
+pub(crate) fn push_summary(
+    client: &CloudClient,
+    project: &str,
+    config: &CliConfig,
+) -> CliResult<String> {
+    let candidates = collect_push_candidates(config, MemoryStatus::Approved, None)?;
+    let pushed = push_candidates(client, project, &candidates)?;
+    Ok(format!("Pushed {} memories.", pushed.len()))
 }
 
 fn cloud_pull(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -429,14 +491,39 @@ fn cloud_pull(config: CliConfig, args: &[String]) -> CliResult<String> {
 
     let project = connection.project()?.to_string();
     let client = connection.client()?;
-    let remote = client.list_memory(&project, Some("approved"))?;
+    let (imported, skipped) = pull_into_store(&client, &project, &config, &actor)?;
 
-    let mut store = open_memory_store(&config)?;
+    if json_output {
+        return serde_json::to_string(&json!({
+            "imported": imported,
+            "skipped": skipped,
+        }))
+        .map_err(|error| error.to_string());
+    }
+
+    Ok(format!(
+        "imported {} approved memories, skipped {}\n",
+        imported.len(),
+        skipped.len()
+    ))
+}
+
+/// Imports approved cloud memory from `project` into the local store, returning
+/// `(imported_ids, skipped_ids)`. Idempotent: anything already imported (or a
+/// duplicate of existing local content) is skipped. Shared by the `pull`
+/// subcommand and the `cloud` dialog.
+fn pull_into_store(
+    client: &CloudClient,
+    project: &str,
+    config: &CliConfig,
+    actor: &str,
+) -> CliResult<(Vec<String>, Vec<String>)> {
+    let remote = client.list_memory(project, Some("approved"))?;
+    let mut store = open_memory_store(config)?;
     let mut imported = Vec::new();
     let mut skipped = Vec::new();
     for entry in &remote {
         let local_id = format!("cloud-{}", entry.id());
-        // Idempotent: skip anything already imported.
         if store.get(&local_id).is_ok() {
             skipped.push(local_id);
             continue;
@@ -456,29 +543,29 @@ fn cloud_pull(config: CliConfig, args: &[String]) -> CliResult<String> {
             input = input.with_tag(tag);
         }
 
-        // A rejected import (e.g. a duplicate of existing local content) is
-        // skipped rather than failing the whole pull.
         match store.create_candidate(input) {
             Ok(_) => {
                 store
-                    .review(&local_id, ReviewDecision::approve(&actor))
+                    .review(&local_id, ReviewDecision::approve(actor))
                     .map_err(|error| error.to_string())?;
                 imported.push(local_id);
             }
             Err(_) => skipped.push(local_id),
         }
     }
+    Ok((imported, skipped))
+}
 
-    if json_output {
-        return serde_json::to_string(&json!({
-            "imported": imported,
-            "skipped": skipped,
-        }))
-        .map_err(|error| error.to_string());
-    }
-
+/// Pulls approved cloud memory into the local store for the dialog, returning a
+/// one-line summary.
+pub(crate) fn pull_summary(
+    client: &CloudClient,
+    project: &str,
+    config: &CliConfig,
+) -> CliResult<String> {
+    let (imported, skipped) = pull_into_store(client, project, config, "cloud-sync")?;
     Ok(format!(
-        "imported {} approved memories, skipped {}\n",
+        "Imported {} memories, skipped {}.",
         imported.len(),
         skipped.len()
     ))
