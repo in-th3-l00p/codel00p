@@ -225,15 +225,21 @@ Editing tools:
 - `create_file`: create a new UTF-8 file under the workspace root;
 - `update_file`: replace an existing UTF-8 file under the workspace root;
 - `delete_file`: delete an existing file under the workspace root;
-- `apply_patch`: apply exact string replacements to existing files.
+- `apply_patch`: apply a batch of `find`/`replace` changes to existing files.
 
 All editing tools declare `PermissionScope::WorkspaceWrite`. The agent loop
 requests permission before execution and records denied writes as structured
 tool results without mutating the workspace.
 
-The first `apply_patch` implementation intentionally uses exact replacements
-instead of a full unified-diff parser. That keeps patch behavior deterministic
-and testable while leaving room for a richer patch format later.
+`apply_patch` takes a `changes` array rather than a unified-diff parser, which
+keeps patch behavior deterministic and testable. Each change matches its `find`
+text exactly when possible, then falls back to line-ending-, trailing-whitespace-,
+and indentation-tolerant matching while preserving the rest of the file
+byte-for-byte; a `find` occurring more than once is rejected unless `replace_all`
+is set. The whole batch is applied **atomically and in memory before any write**:
+nothing is written unless every change matches, and multiple changes targeting
+the same file are applied in order, each seeing the result of the previous one
+(a proper multi-edit).
 
 ## Command Execution
 
