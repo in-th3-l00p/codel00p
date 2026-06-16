@@ -39,12 +39,18 @@ pub(crate) fn draw(frame: &mut Frame, model: &MemoryModel) {
         Screen::List => draw_list(frame, rows[1], model),
         Screen::Detail => draw_detail(frame, rows[1], model),
         Screen::Prompt => draw_prompt(frame, rows[1], model),
+        Screen::SelectMerge => draw_merge(frame, rows[1], model),
+        Screen::SelectRestore => draw_restore(frame, rows[1], model),
     }
 
     let footer = match model.screen {
         Screen::List => "↑/↓ move · type to filter · Tab status · ↵ open · Esc quit",
-        Screen::Detail => "a approve · r reject · x archive · e edit · Esc back",
+        Screen::Detail => {
+            "a approve · r reject · x archive · e edit · m merge · u restore · Esc back"
+        }
         Screen::Prompt => "type · ↵ confirm · Esc cancel",
+        Screen::SelectMerge => "↑/↓ move · type to filter · ↵ merge into · Esc cancel",
+        Screen::SelectRestore => "↑/↓ move · ↵ restore · Esc cancel",
     };
     let footer = match &model.status {
         Some(status) => format!(" {status}"),
@@ -138,6 +144,54 @@ fn draw_detail(frame: &mut Frame, area: Rect, model: &MemoryModel) {
         }
     }
     frame.render_widget(Paragraph::new(lines).block(block("record")), area);
+}
+
+fn draw_merge(frame: &mut Frame, area: Rect, model: &MemoryModel) {
+    let header = model
+        .selected
+        .as_ref()
+        .map(|row| format!("Merge {} into:", row.id))
+        .unwrap_or_else(|| "Merge into:".to_string());
+    let lines: Vec<Line> = std::iter::once(Line::from(Span::styled(header, ACCENT)))
+        .chain(std::iter::once(Line::from("")))
+        .chain(model.merge_targets.visible().map(|(row, is_selected)| {
+            let marker = if is_selected { "▸ " } else { "  " };
+            let detail = row.detail().unwrap_or_default();
+            let style = if is_selected {
+                selected()
+            } else {
+                Style::new()
+            };
+            Line::from(Span::styled(
+                format!("{marker}{}  [{detail}]", truncate(&row.label(), 80)),
+                style,
+            ))
+        }))
+        .collect();
+    frame.render_widget(Paragraph::new(lines).block(block("merge target")), area);
+}
+
+fn draw_restore(frame: &mut Frame, area: Rect, model: &MemoryModel) {
+    let lines: Vec<Line> = std::iter::once(Line::from(Span::styled(
+        "Restore content from audit entry:",
+        ACCENT,
+    )))
+    .chain(std::iter::once(Line::from("")))
+    .chain(model.restore_picker.visible().map(|(row, is_selected)| {
+        let marker = if is_selected { "▸ " } else { "  " };
+        let detail = row.detail().unwrap_or_default();
+        let style = if is_selected {
+            selected()
+        } else {
+            Style::new()
+        };
+        Line::from(Span::styled(
+            format!("{marker}[{detail}]  {}", truncate(&row.label(), 70)),
+            style,
+        ))
+    }))
+    .collect();
+    frame.render_widget(Paragraph::new(lines).block(block("restore")), area);
 }
 
 fn draw_prompt(frame: &mut Frame, area: Rect, model: &MemoryModel) {

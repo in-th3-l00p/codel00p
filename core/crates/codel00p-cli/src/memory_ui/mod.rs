@@ -12,8 +12,9 @@ mod tests;
 mod view;
 
 use codel00p_memory::{
-    MemoryEdit, MemoryListFilter, MemoryRecord, MemoryRepository, ReviewDecision,
+    MemoryEdit, MemoryListFilter, MemoryMerge, MemoryRecord, MemoryRepository, ReviewDecision,
 };
+use codel00p_protocol::MemoryStatus;
 
 use crate::config::{CliConfig, CliResult, open_memory_store};
 use model::{AuditRow, Flow, MemoryModel, MemoryRow, Mutation, Screen};
@@ -33,6 +34,7 @@ pub(crate) fn run(config: CliConfig) -> CliResult<String> {
             Flow::Quit => return Ok(false),
             Flow::Reload => reload(&store, &config, model)?,
             Flow::OpenDetail(id) => open_detail(&store, model, &id),
+            Flow::LoadMergeTargets(source) => load_merge_targets(&store, &config, model, &source)?,
             Flow::Mutate(mutation) => {
                 apply(&mut store, model, mutation);
                 model.screen = Screen::List;
@@ -68,11 +70,34 @@ fn open_detail(store: &Store, model: &mut MemoryModel, id: &str) {
                 action: audit_action_label(event.action()).to_string(),
                 actor: event.actor().to_string(),
                 reason: event.reason().map(str::to_string),
+                previous_content: event.previous_content().map(str::to_string),
             })
             .collect(),
         Err(_) => Vec::new(),
     };
     model.show_detail(row, audit);
+}
+
+/// Loads the active records (approved/candidate) other than `source` and hands
+/// them to the model as merge targets.
+fn load_merge_targets(
+    store: &Store,
+    config: &CliConfig,
+    model: &mut MemoryModel,
+    source: &str,
+) -> CliResult<()> {
+    let mut targets = Vec::new();
+    for status in [MemoryStatus::Candidate, MemoryStatus::Approved] {
+        let filter = MemoryListFilter::new(config.project.clone()).with_status(status);
+        let records = store.list(filter).map_err(|error| error.to_string())?;
+        for record in &records {
+            if record.entry().id() != source {
+                targets.push(row_from_record(record));
+            }
+        }
+    }
+    model.show_merge_picker(targets);
+    Ok(())
 }
 
 /// Applies a review effect, recording success or the error in the status line.
@@ -87,6 +112,8 @@ fn apply(store: &mut Store, model: &mut MemoryModel, mutation: Mutation) {
         Mutation::Edit { id, content } => {
             store.edit(id, MemoryEdit::replace_content(actor, content))
         }
+        Mutation::Merge { source, target } => store.merge(source, target, MemoryMerge::new(actor)),
+        Mutation::Restore { id, sequence } => restore(store, &actor, id, *sequence),
     };
     match outcome {
         Ok(record) => model.set_status(format!(
@@ -96,6 +123,28 @@ fn apply(store: &mut Store, model: &mut MemoryModel, mutation: Mutation) {
         )),
         Err(error) => model.set_status(error.to_string()),
     }
+}
+
+/// Restores a record to the `previous_content` recorded at `sequence`, mirroring
+/// the `memory restore` subcommand: find the audit entry, then `edit` back to it.
+fn restore(
+    store: &mut Store,
+    actor: &str,
+    id: &str,
+    sequence: u64,
+) -> Result<MemoryRecord, codel00p_memory::MemoryError> {
+    let audit = store.audit_log(id)?;
+    let previous_content = audit
+        .iter()
+        .find(|event| event.sequence() == sequence)
+        .and_then(|event| event.previous_content())
+        .ok_or_else(|| codel00p_memory::MemoryError::InvalidEdit {
+            message: format!("audit sequence {sequence} has no previous content"),
+        })?
+        .to_string();
+    let edit = MemoryEdit::replace_content(actor.to_string(), previous_content)
+        .with_reason(format!("restore audit sequence {sequence}"));
+    store.edit(id, edit)
 }
 
 fn row_from_record(record: &MemoryRecord) -> MemoryRow {

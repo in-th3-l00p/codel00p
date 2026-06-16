@@ -42,6 +42,27 @@ pub(crate) struct AuditRow {
     pub(crate) action: String,
     pub(crate) actor: String,
     pub(crate) reason: Option<String>,
+    /// The content this event replaced, if any. Only rows with a value here are
+    /// restorable (`u` on the detail screen).
+    pub(crate) previous_content: Option<String>,
+}
+
+/// A restorable audit entry, projected for the restore picker. Built purely from
+/// the audit rows that carry a `previous_content`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RestoreRow {
+    pub(crate) sequence: u64,
+    pub(crate) action: String,
+    pub(crate) previous_content: String,
+}
+
+impl PickerItem for RestoreRow {
+    fn label(&self) -> String {
+        self.previous_content.clone()
+    }
+    fn detail(&self) -> Option<String> {
+        Some(format!("#{} · {}", self.sequence, self.action))
+    }
 }
 
 /// The status the list is filtered to. `All` shows every status.
@@ -110,6 +131,8 @@ pub(crate) enum Mutation {
     Reject { id: String, reason: String },
     Archive { id: String, reason: String },
     Edit { id: String, content: String },
+    Merge { source: String, target: String },
+    Restore { id: String, sequence: u64 },
 }
 
 /// The screen currently shown.
@@ -118,6 +141,10 @@ pub(crate) enum Screen {
     List,
     Detail,
     Prompt,
+    /// Pick a target active record to merge the current record into.
+    SelectMerge,
+    /// Pick a restorable audit entry to roll the content back to.
+    SelectRestore,
 }
 
 /// What the driver should do after an update.
@@ -126,6 +153,9 @@ pub(crate) enum Flow {
     Stay,
     Reload,
     OpenDetail(String),
+    /// Ask the driver to load the active records (other than this source) and
+    /// hand them back via [`MemoryModel::show_merge_picker`].
+    LoadMergeTargets(String),
     Mutate(Mutation),
     Quit,
 }
@@ -140,6 +170,10 @@ pub(crate) struct MemoryModel {
     pub(crate) composer: Composer,
     pub(crate) actor: String,
     pub(crate) status: Option<String>,
+    /// Target records for the merge picker, loaded by the driver on demand.
+    pub(crate) merge_targets: Picker<MemoryRow>,
+    /// Restorable audit entries for the restore picker, built from the audit.
+    pub(crate) restore_picker: Picker<RestoreRow>,
 }
 
 impl MemoryModel {
@@ -154,6 +188,8 @@ impl MemoryModel {
             composer: Composer::default(),
             actor,
             status: None,
+            merge_targets: Picker::new(Vec::new()),
+            restore_picker: Picker::new(Vec::new()),
         }
     }
 
@@ -169,6 +205,36 @@ impl MemoryModel {
         self.screen = Screen::Detail;
     }
 
+    /// Opens the merge target picker with the driver-loaded candidate records.
+    /// If none are available, stays on the detail screen with a status note.
+    pub(crate) fn show_merge_picker(&mut self, targets: Vec<MemoryRow>) {
+        if targets.is_empty() {
+            self.set_status("No other active records to merge into.");
+            self.screen = Screen::Detail;
+            return;
+        }
+        self.merge_targets = Picker::new(targets);
+        self.screen = Screen::SelectMerge;
+    }
+
+    /// The restorable audit entries: those carrying a `previous_content`, newest
+    /// first so the most recent prior content is offered at the top.
+    fn restorable_rows(&self) -> Vec<RestoreRow> {
+        let mut rows: Vec<RestoreRow> = self
+            .detail_audit
+            .iter()
+            .filter_map(|event| {
+                event.previous_content.as_ref().map(|content| RestoreRow {
+                    sequence: event.sequence,
+                    action: event.action.clone(),
+                    previous_content: content.clone(),
+                })
+            })
+            .collect();
+        rows.sort_by_key(|row| std::cmp::Reverse(row.sequence));
+        rows
+    }
+
     /// Sets a transient status line (e.g. after a successful mutation).
     pub(crate) fn set_status(&mut self, message: impl Into<String>) {
         self.status = Some(message.into());
@@ -182,6 +248,8 @@ impl MemoryModel {
             Screen::List => self.update_list(key),
             Screen::Detail => self.update_detail(key),
             Screen::Prompt => self.update_prompt(key),
+            Screen::SelectMerge => self.update_select_merge(key),
+            Screen::SelectRestore => self.update_select_restore(key),
         }
     }
 
@@ -220,7 +288,67 @@ impl MemoryModel {
             KeyCode::Char('r') => self.open_prompt(PendingAction::Reject, String::new()),
             KeyCode::Char('x') => self.open_prompt(PendingAction::Archive, String::new()),
             KeyCode::Char('e') => self.open_prompt(PendingAction::Edit, row.content),
+            KeyCode::Char('m') => {
+                self.status = None;
+                Flow::LoadMergeTargets(row.id)
+            }
+            KeyCode::Char('u') => self.open_restore_picker(),
             _ => Flow::Stay,
+        }
+    }
+
+    /// Builds the restore picker from the loaded audit. With no restorable entry
+    /// it stays on detail and notes why.
+    fn open_restore_picker(&mut self) -> Flow {
+        let rows = self.restorable_rows();
+        if rows.is_empty() {
+            self.set_status("No prior content to restore for this record.");
+            return Flow::Stay;
+        }
+        self.restore_picker = Picker::new(rows);
+        self.screen = Screen::SelectRestore;
+        Flow::Stay
+    }
+
+    fn update_select_merge(&mut self, key: KeyEvent) -> Flow {
+        let Some(source) = self.selected.clone() else {
+            self.screen = Screen::List;
+            return Flow::Stay;
+        };
+        match self.merge_targets.on_key(key) {
+            PickerOutcome::Selected => match self.merge_targets.selected_item().cloned() {
+                Some(target) => Flow::Mutate(Mutation::Merge {
+                    source: source.id,
+                    target: target.id,
+                }),
+                None => Flow::Stay,
+            },
+            PickerOutcome::Cancelled => {
+                self.screen = Screen::Detail;
+                Flow::Stay
+            }
+            PickerOutcome::Pending => Flow::Stay,
+        }
+    }
+
+    fn update_select_restore(&mut self, key: KeyEvent) -> Flow {
+        let Some(row) = self.selected.clone() else {
+            self.screen = Screen::List;
+            return Flow::Stay;
+        };
+        match self.restore_picker.on_key(key) {
+            PickerOutcome::Selected => match self.restore_picker.selected_item() {
+                Some(entry) => Flow::Mutate(Mutation::Restore {
+                    id: row.id,
+                    sequence: entry.sequence,
+                }),
+                None => Flow::Stay,
+            },
+            PickerOutcome::Cancelled => {
+                self.screen = Screen::Detail;
+                Flow::Stay
+            }
+            PickerOutcome::Pending => Flow::Stay,
         }
     }
 
