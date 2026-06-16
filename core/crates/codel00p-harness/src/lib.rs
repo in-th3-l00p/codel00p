@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod background;
 pub mod cancel;
+pub mod capability;
 pub mod commands;
 pub mod context;
 pub mod delegation;
@@ -36,6 +37,10 @@ pub mod workspace;
 pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use background::BackgroundProcesses;
 pub use cancel::CancelSignal;
+pub use capability::{
+    Capability, CapabilityProposalSink, CapabilityTool, FileCapabilityProposalSink,
+    ProposeCapabilityTool, capability_tools, load_capabilities,
+};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool};
 pub use delegation::{
@@ -63,7 +68,9 @@ pub use permissions::{
     AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope,
 };
-pub use pipeline::{RunPipelineTool, pipeline_tools};
+pub use pipeline::{
+    PipelineEngine, PipelineRun, PipelineStep, RunPipelineTool, parse_steps, pipeline_tools,
+};
 pub use planning::{PlanItem, PlanStatus, PlanStore, UpdatePlanTool};
 pub use provider_adapter::ProviderModelClient;
 pub use repo_map::RepoMapTool;

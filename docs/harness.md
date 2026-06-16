@@ -185,6 +185,19 @@ later steps via `{{steps.N.field}}` / `{{id.field}}` templates. Each step is
 dispatched through the harness's own registry and permission policy, so a denied
 step does not run — only orchestration moves into the pipeline, never authority.
 
+**Capability synthesis** turns a useful pipeline into a permanent, named tool. A
+`Capability` (`capability.rs`) is a frozen, parameterized `run_pipeline` program:
+its step inputs reference `{{params.<name>}}`, and calling the capability seeds
+those params and runs the pipeline through the same `PipelineEngine` — so a
+synthesized capability is executable, minimally scoped (its permission scope is
+the max of its steps), and governed step-by-step exactly like a direct call. The
+agent submits candidates with `propose_capability` to a `CapabilityProposalSink`
+(a review queue, mirroring reviewed memory); approved capabilities are loaded
+with `load_capabilities` and registered with `capabilities(...)` /
+`capability_tools(...)`. This is the flywheel: every solved task can mint a
+reviewed, reusable, org-shareable tool, advertised cheaply via progressive
+disclosure.
+
 When the advertised tool set is large (e.g. many MCP tools), the registry can
 hide tools behind progressive disclosure: only the core tools plus `tool_search`
 (keyword search over hidden tools) and `tool_describe` (load a hidden tool's

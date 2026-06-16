@@ -157,6 +157,13 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       `generationConfig.responseMimeType`/`responseSchema`; omitted for Anthropic
       / Bedrock / the Responses API. (Schema-validated recursive retry remains a
       follow-up.)
+- [x] **Capability synthesis — Slice 1** (shipped 2026-06-16): freeze a governed
+      `run_pipeline` into a named, parameterized, reviewed tool. `Capability` +
+      `CapabilityTool` run the frozen steps through the shared `PipelineEngine`
+      (so every step stays permission-gated), `propose_capability` queues
+      candidates to a review sink, and approved capabilities register as
+      first-class tools. Proven end-to-end against a live OpenRouter model. The
+      toolset now *compounds*. See [#11](capability-synthesis.md).
 - [ ] **Streaming tool-call arguments** (incremental parse) where the transport
       supports it.
 

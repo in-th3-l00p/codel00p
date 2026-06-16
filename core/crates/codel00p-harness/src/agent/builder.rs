@@ -30,6 +30,8 @@ pub struct AgentHarnessBuilder {
     response_format: Option<ResponseFormat>,
     cancel: Option<CancelSignal>,
     programmatic_tooling: bool,
+    capabilities: Vec<crate::capability::Capability>,
+    capability_proposals: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
 }
 
 impl AgentHarnessBuilder {
@@ -197,6 +199,24 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Register approved synthesized capabilities as callable tools. Each runs
+    /// its frozen pipeline through this harness's tool set and permission policy,
+    /// so a capability is governed exactly like the direct tool calls it wraps.
+    pub fn capabilities(mut self, capabilities: Vec<crate::capability::Capability>) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    /// Adds the `propose_capability` tool, letting the agent submit a pipeline to
+    /// `sink` (a review queue) to be frozen into a future capability.
+    pub fn capability_proposals(
+        mut self,
+        sink: Arc<dyn crate::capability::CapabilityProposalSink>,
+    ) -> Self {
+        self.capability_proposals = Some(sink);
+        self
+    }
+
     /// Streams assistant text to `token_sink` as it is generated. Without a sink
     /// the harness uses the non-streaming inference path.
     pub fn token_sink<T>(mut self, token_sink: T) -> Self
@@ -220,15 +240,32 @@ impl AgentHarnessBuilder {
             .permission_policy
             .unwrap_or_else(|| Arc::new(AllowAllPermissionPolicy));
 
-        // Programmatic tool calling: the pipeline tool dispatches sub-steps
-        // through a snapshot of the tool set taken *before* the pipeline tool is
-        // added, so a pipeline cannot recursively invoke another pipeline, and
-        // through this harness's own permission policy so every step stays gated.
+        // Programmatic tooling (run_pipeline) and synthesized capabilities both
+        // dispatch their sub-steps through a snapshot of the tool set taken
+        // *before* any of them are added — so they call the primitive tools, not
+        // each other (no recursion) — and through this harness's own permission
+        // policy, so every sub-step stays individually gated.
         let mut tools = self.tools.unwrap_or_default();
+        let base = tools.clone();
         if self.programmatic_tooling {
-            let pipeline =
-                crate::pipeline::pipeline_tools(tools.clone(), permission_policy.clone());
-            tools = tools.with_registry(pipeline);
+            tools = tools.with_registry(crate::pipeline::pipeline_tools(
+                base.clone(),
+                permission_policy.clone(),
+            ));
+        }
+        if !self.capabilities.is_empty() {
+            let capabilities = crate::capability::capability_tools(
+                base.clone(),
+                permission_policy.clone(),
+                self.capabilities,
+            )?;
+            tools = tools.with_registry(capabilities);
+        }
+        if let Some(sink) = self.capability_proposals {
+            tools = tools.with_tool(crate::capability::ProposeCapabilityTool::new(
+                Arc::new(base),
+                sink,
+            ));
         }
 
         Ok(AgentHarness {

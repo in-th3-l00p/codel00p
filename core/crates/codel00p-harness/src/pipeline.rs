@@ -38,138 +38,94 @@ const MAX_STEPS: usize = 32;
 /// `sub_tools` should not itself contain `run_pipeline`, so a pipeline cannot
 /// recursively invoke another pipeline.
 pub fn pipeline_tools(sub_tools: ToolRegistry, policy: Arc<dyn PermissionPolicy>) -> ToolRegistry {
-    ToolRegistry::new().with_tool(RunPipelineTool::new(Arc::new(sub_tools), policy))
+    let engine = PipelineEngine::new(Arc::new(sub_tools), policy);
+    ToolRegistry::new().with_tool(RunPipelineTool::new(engine))
 }
 
-/// Programmatic tool calling: run a declared sequence of governed tool calls in
-/// one inference, passing earlier results into later steps.
-pub struct RunPipelineTool {
+/// A single declared pipeline step: a tool name, its (template) input, and an
+/// optional id later steps can reference by.
+#[derive(Clone)]
+pub struct PipelineStep {
+    pub id: Option<String>,
+    pub tool: String,
+    pub input: Value,
+}
+
+/// Parse and validate a `steps` array (used by `run_pipeline` and by frozen
+/// capabilities). `tool_name` only labels validation errors.
+pub fn parse_steps(tool_name: &str, steps: &[Value]) -> Result<Vec<PipelineStep>, HarnessError> {
+    let invalid = |message: String| HarnessError::InvalidToolInput {
+        name: tool_name.to_string(),
+        message,
+    };
+    if steps.is_empty() {
+        return Err(invalid("`steps` must not be empty".to_string()));
+    }
+    if steps.len() > MAX_STEPS {
+        return Err(invalid(format!(
+            "pipeline has {} steps; the maximum is {MAX_STEPS}",
+            steps.len()
+        )));
+    }
+    steps
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let tool = required_string(tool_name, value, "tool")?.to_string();
+            let id = value.get("id").and_then(Value::as_str).map(str::to_string);
+            let input = value.get("input").cloned().unwrap_or_else(|| json!({}));
+            if !input.is_object() {
+                return Err(invalid(format!("step {index}: `input` must be an object")));
+            }
+            Ok(PipelineStep { id, tool, input })
+        })
+        .collect()
+}
+
+/// The result of running a pipeline.
+pub struct PipelineRun {
+    pub reports: Vec<Value>,
+    pub completed: usize,
+    pub total: usize,
+    pub stopped_early: bool,
+}
+
+/// Executes a sequence of [`PipelineStep`]s against a tool registry, gating every
+/// step through a [`PermissionPolicy`] and threading earlier outputs into later
+/// steps via `{{...}}` references. Shared by `run_pipeline` and frozen
+/// capabilities so both get identical governance and data-passing.
+#[derive(Clone)]
+pub struct PipelineEngine {
     sub_tools: Arc<ToolRegistry>,
     policy: Arc<dyn PermissionPolicy>,
 }
 
-impl RunPipelineTool {
+impl PipelineEngine {
     pub fn new(sub_tools: Arc<ToolRegistry>, policy: Arc<dyn PermissionPolicy>) -> Self {
         Self { sub_tools, policy }
     }
 
-    /// Parse and validate the `steps` array out of the tool input.
-    fn parse_steps(&self, input: &Value) -> Result<Vec<Step>, HarnessError> {
-        let steps = input
-            .get("steps")
-            .and_then(Value::as_array)
-            .ok_or_else(|| self.invalid("missing array field `steps`"))?;
-        if steps.is_empty() {
-            return Err(self.invalid("`steps` must not be empty"));
-        }
-        if steps.len() > MAX_STEPS {
-            return Err(self.invalid(format!(
-                "pipeline has {} steps; the maximum is {MAX_STEPS}",
-                steps.len()
-            )));
-        }
-
-        steps
-            .iter()
-            .enumerate()
-            .map(|(index, value)| {
-                let tool = required_string(self.name(), value, "tool")?.to_string();
-                let id = value.get("id").and_then(Value::as_str).map(str::to_string);
-                let input = value.get("input").cloned().unwrap_or_else(|| json!({}));
-                if !input.is_object() {
-                    return Err(self.invalid(format!("step {index}: `input` must be an object")));
-                }
-                Ok(Step { id, tool, input })
-            })
-            .collect()
+    /// The highest permission scope among the steps, so an outer gate is never
+    /// weaker than what the pipeline can do.
+    pub fn max_scope(&self, steps: &[PipelineStep]) -> PermissionScope {
+        max_step_scope(&self.sub_tools, steps)
     }
 
-    fn invalid(&self, message: impl Into<String>) -> HarnessError {
-        HarnessError::InvalidToolInput {
-            name: self.name().to_string(),
-            message: message.into(),
-        }
-    }
-}
-
-struct Step {
-    id: Option<String>,
-    tool: String,
-    input: Value,
-}
-
-#[async_trait]
-impl Tool for RunPipelineTool {
-    fn name(&self) -> &str {
-        "run_pipeline"
-    }
-
-    fn description(&self) -> &str {
-        "Run several tool calls as one governed pipeline in a single step, instead \
-         of one model round-trip per call. `steps` is an ordered list of \
-         { tool, input, id? }. A later step can reference an earlier step's output \
-         with a `{{...}}` template inside any string input value — by index \
-         (`{{steps.0.content}}`) or by a step's `id` (`{{readme.content}}`). A \
-         template that is the entire string resolves to the referenced JSON value \
-         (so you can forward arrays/objects); embedded templates are stringified. \
-         Every step is permission-checked and dispatched exactly like a direct \
-         tool call. By default the pipeline stops at the first failing step; set \
-         `stop_on_error` to false to run the rest anyway."
-    }
-
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "required": ["steps"],
-            "properties": {
-                "steps": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["tool"],
-                        "properties": {
-                            "tool": { "type": "string" },
-                            "input": { "type": "object" },
-                            "id": { "type": "string" }
-                        }
-                    }
-                },
-                "stop_on_error": { "type": "boolean" }
-            }
-        })
-    }
-
-    /// The pipeline's own scope is the highest scope among its declared steps, so
-    /// the outer permission gate is never weaker than what the pipeline can do.
-    /// Each step is *also* gated individually at execution time.
-    fn permission_scope(&self, input: &Value) -> PermissionScope {
-        let Ok(steps) = self.parse_steps(input) else {
-            return PermissionScope::ReadOnly;
-        };
-        steps
-            .iter()
-            .map(|step| self.sub_tools.permission_scope(&step.tool, &step.input))
-            .max_by_key(|scope| scope_rank(*scope))
-            .unwrap_or(PermissionScope::ReadOnly)
-    }
-
-    async fn execute(
+    /// Run the pipeline. `initial_context` seeds the `{{...}}` reference scope
+    /// (e.g. capability `params`); `id_prefix` labels per-step permission
+    /// requests for audit.
+    pub async fn run(
         &self,
         workspace: &Workspace,
-        input: Value,
-    ) -> Result<ToolResult, HarnessError> {
-        let steps = self.parse_steps(&input)?;
-        let stop_on_error = input
-            .get("stop_on_error")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
-
-        // Accumulated context for `{{...}}` references: outputs by index under
-        // `steps`, and by `id` at the top level.
-        let mut context = Map::new();
+        steps: &[PipelineStep],
+        stop_on_error: bool,
+        id_prefix: &str,
+        initial_context: Map<String, Value>,
+    ) -> Result<PipelineRun, HarnessError> {
+        let mut context = initial_context;
         context.insert("steps".to_string(), Value::Array(Vec::new()));
 
-        let mut step_reports = Vec::new();
+        let mut reports = Vec::new();
         let mut completed = 0usize;
         let mut stopped_early = false;
 
@@ -178,7 +134,7 @@ impl Tool for RunPipelineTool {
 
             let scope = self.sub_tools.permission_scope(&step.tool, &resolved_input);
             let request = PermissionRequest::new(
-                format!("pipeline-step-{index}"),
+                format!("{id_prefix}-step-{index}"),
                 SessionId::from_static("pipeline"),
                 TurnId::from_static("pipeline"),
                 &step.tool,
@@ -235,7 +191,7 @@ impl Tool for RunPipelineTool {
             if let Some(error) = error {
                 report.insert("error".to_string(), error);
             }
-            step_reports.push(Value::Object(report));
+            reports.push(Value::Object(report));
 
             if ok {
                 completed += 1;
@@ -245,13 +201,123 @@ impl Tool for RunPipelineTool {
             }
         }
 
+        Ok(PipelineRun {
+            reports,
+            total: steps.len(),
+            completed,
+            stopped_early,
+        })
+    }
+}
+
+/// Programmatic tool calling: run a declared sequence of governed tool calls in
+/// one inference, passing earlier results into later steps.
+pub struct RunPipelineTool {
+    engine: PipelineEngine,
+}
+
+impl RunPipelineTool {
+    pub fn new(engine: PipelineEngine) -> Self {
+        Self { engine }
+    }
+
+    fn steps(&self, input: &Value) -> Result<Vec<PipelineStep>, HarnessError> {
+        let steps = input
+            .get("steps")
+            .and_then(Value::as_array)
+            .ok_or_else(|| HarnessError::InvalidToolInput {
+                name: self.name().to_string(),
+                message: "missing array field `steps`".to_string(),
+            })?;
+        parse_steps(self.name(), steps)
+    }
+}
+
+#[async_trait]
+impl Tool for RunPipelineTool {
+    fn name(&self) -> &str {
+        "run_pipeline"
+    }
+
+    fn description(&self) -> &str {
+        "Run several tool calls as one governed pipeline in a single step, instead \
+         of one model round-trip per call. `steps` is an ordered list of \
+         { tool, input, id? }. A later step can reference an earlier step's output \
+         with a `{{...}}` template inside any string input value — by index \
+         (`{{steps.0.content}}`) or by a step's `id` (`{{readme.content}}`). A \
+         template that is the entire string resolves to the referenced JSON value \
+         (so you can forward arrays/objects); embedded templates are stringified. \
+         Every step is permission-checked and dispatched exactly like a direct \
+         tool call. By default the pipeline stops at the first failing step; set \
+         `stop_on_error` to false to run the rest anyway."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "required": ["steps"],
+            "properties": {
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["tool"],
+                        "properties": {
+                            "tool": { "type": "string" },
+                            "input": { "type": "object" },
+                            "id": { "type": "string" }
+                        }
+                    }
+                },
+                "stop_on_error": { "type": "boolean" }
+            }
+        })
+    }
+
+    /// The pipeline's own scope is the highest scope among its declared steps, so
+    /// the outer permission gate is never weaker than what the pipeline can do.
+    /// Each step is *also* gated individually at execution time.
+    fn permission_scope(&self, input: &Value) -> PermissionScope {
+        match self.steps(input) {
+            Ok(steps) => self.engine.max_scope(&steps),
+            Err(_) => PermissionScope::ReadOnly,
+        }
+    }
+
+    async fn execute(
+        &self,
+        workspace: &Workspace,
+        input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        let steps = self.steps(&input)?;
+        let stop_on_error = input
+            .get("stop_on_error")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+
+        let run = self
+            .engine
+            .run(workspace, &steps, stop_on_error, "pipeline", Map::new())
+            .await?;
+
         Ok(ToolResult::json(json!({
-            "steps": step_reports,
-            "completed": completed,
-            "total": steps.len(),
-            "stopped_early": stopped_early,
+            "steps": run.reports,
+            "completed": run.completed,
+            "total": run.total,
+            "stopped_early": run.stopped_early,
         })))
     }
+}
+
+/// The highest permission scope among `steps`, looked up in `sub_tools`. Used to
+/// give a pipeline (or a frozen capability) an outer gate at least as strong as
+/// any step it runs.
+pub fn max_step_scope(sub_tools: &ToolRegistry, steps: &[PipelineStep]) -> PermissionScope {
+    steps
+        .iter()
+        .map(|step| sub_tools.permission_scope(&step.tool, &step.input))
+        .max_by_key(|scope| scope_rank(*scope))
+        .unwrap_or(PermissionScope::ReadOnly)
 }
 
 /// Severity ranking used to pick a pipeline's effective permission scope.
@@ -266,7 +332,8 @@ fn scope_rank(scope: PermissionScope) -> u8 {
     }
 }
 
-fn scope_label(scope: PermissionScope) -> &'static str {
+/// The snake_case label for a permission scope.
+pub fn scope_label(scope: PermissionScope) -> &'static str {
     match scope {
         PermissionScope::ReadOnly => "read_only",
         PermissionScope::MemoryWrite => "memory_write",
@@ -404,7 +471,7 @@ mod tests {
     fn tool(policy: Arc<dyn PermissionPolicy>) -> RunPipelineTool {
         let sub =
             ToolRegistry::read_only_defaults().with_registry(ToolRegistry::editing_defaults());
-        RunPipelineTool::new(Arc::new(sub), policy)
+        RunPipelineTool::new(PipelineEngine::new(Arc::new(sub), policy))
     }
 
     #[tokio::test]
