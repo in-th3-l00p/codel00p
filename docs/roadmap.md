@@ -86,14 +86,14 @@ Recently shipped:
   subtle full-width background tint. A **`Ctrl+P` command palette** (VSCode-style)
   is now the single launcher for every action, replacing the scattered F-key UIs.
 
+Recently shipped: ~~richer patch/diff engine~~ (atomic multi-edit `apply_patch`),
+~~background command monitoring~~, ~~web fetch/search tools~~, ~~PR preparation
+workflow~~ (`prepare_pr`, PR #36), ~~deterministic context manifests~~
+(`ContextManifest` event, PR #38).
+
 Next:
 
-- richer patch/diff engine;
-- background command monitoring;
-- web fetch/search tools;
-- worktree-isolated execution;
-- PR preparation workflow;
-- deterministic context manifests.
+- worktree-isolated execution (in progress).
 
 Exit criteria:
 
@@ -134,9 +134,13 @@ Build:
 - duplicate and near-duplicate detection;
 - stale-memory detection;
 - sensitivity and visibility scopes;
-- merge/split workflows; started with `memory merge` (archive the duplicate,
-  carry its tags onto the survivor, two-sided `merged` audit trail);
-- semantic retrieval behind deterministic filters;
+- ~~merge/split workflows~~ — `memory merge` (archive the duplicate, carry tags
+  onto the survivor, two-sided `merged` audit) and `memory split` (new candidate
+  from part of a source, two-sided `split` audit), both over repository/CLI/MCP
+  (PR #37);
+- ~~semantic retrieval behind deterministic filters~~ — `memory retrieve` ranks
+  approved memory by the existing Jaccard scorer behind kind/tag/sensitivity/limit
+  filters, offline, deterministic ties (PR #39);
 - memory quality scoring;
 - post-session memory recommendations;
 - imports from docs, issues, PRs, and existing project notes.

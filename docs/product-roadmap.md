@@ -100,10 +100,11 @@ Current foundation:
 
 Next work:
 
-- add worktree-isolated execution;
-- add PR preparation workflow;
-- improve most-recent-session continue UX;
-- add deterministic context manifests for debugging.
+- add worktree-isolated execution (in progress);
+- ~~add PR preparation workflow~~ (`prepare_pr`, PR #36);
+- ~~improve most-recent-session continue UX~~ (`agent continue`);
+- ~~add deterministic context manifests for debugging~~ (`ContextManifest`
+  event, PR #38).
 
 Exit criteria:
 
@@ -187,8 +188,10 @@ Next work:
 - source evidence links beyond session replay references;
 - near-duplicate detection;
 - visibility scopes and richer sensitivity policy;
-- merge/split workflows;
-- semantic retrieval behind deterministic filters;
+- ~~merge/split workflows~~ (`memory merge` + `memory split` over
+  repository/CLI/MCP, PR #37);
+- ~~semantic retrieval behind deterministic filters~~ (`memory retrieve`, ranked
+  by the existing Jaccard scorer, offline, PR #39);
 - memory quality scoring;
 - memory recommendations after agent work;
 - import from docs, issues, PRs, and existing project notes.
