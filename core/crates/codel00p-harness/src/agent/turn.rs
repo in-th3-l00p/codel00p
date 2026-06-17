@@ -127,6 +127,47 @@ impl AgentHarness {
                 }
             }
 
+            // Emit a deterministic context manifest capturing exactly what
+            // went into this inference request — instruction files, injected
+            // memory ids, advertised tools, and selected skills.  One event
+            // per inference build so the manifest always reflects the actual
+            // inputs of the call that follows it.
+            {
+                let instruction_sources = request
+                    .project_instructions()
+                    .map(|pi| pi.sources().iter().map(|s| s.to_string()).collect())
+                    .unwrap_or_default();
+                let injected_memory_ids = request
+                    .project_memory()
+                    .map(|pm| {
+                        pm.items()
+                            .iter()
+                            .map(|item| item.id().to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let advertised_tools = request.tool_names().iter().map(|n| n.to_string()).collect();
+                let skill_names = request
+                    .skills()
+                    .map(|sc| sc.skills().iter().map(|s| s.name().to_string()).collect())
+                    .unwrap_or_default();
+                let message_count = request.session_state().messages().len();
+                self.record_event(
+                    &mut events,
+                    HarnessEvent::context_manifest(
+                        EventId::new(),
+                        session_state.session_id().clone(),
+                        turn_id.clone(),
+                        instruction_sources,
+                        injected_memory_ids,
+                        advertised_tools,
+                        skill_names,
+                        message_count,
+                    ),
+                )
+                .await;
+            }
+
             let response = match &self.token_sink {
                 Some(sink) => {
                     self.model_client
