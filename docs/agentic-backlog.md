@@ -6,51 +6,54 @@ leverage, not by final product importance.
 The larger Hermes-parity capabilities are tracked as phased epics under
 [Initiatives](initiatives/README.md). **Phase 1 of most has now shipped**
 (plugins & hooks, skills, self-improvement loop, sub-agent delegation,
-scheduling/cron, messaging gateway — the 2026-06-12 wave — plus the TUI); only
-execution backends and programmatic tool calling are unstarted. As each
-initiative's next phase begins, break it into dated slice plans under
+scheduling/cron, messaging gateway — the 2026-06-12 wave — plus the TUI), and the
+2026-06-16 wave **completed Tool-Calling Parity (#10)** across all three phases
+(which also delivered programmatic tool calling, #8) and opened **Capability
+Synthesis (#11)**; only **execution backends & sandboxing (#7)** is unstarted. As
+each initiative's next phase begins, break it into dated slice plans under
 `superpowers/plans/` and surface the active slice here.
 
-## Session marker (2026-06-15)
+## Session marker (2026-06-17)
 
-Latest release: **v0.3.0**. This session shipped the **real TUI Users tab** —
-`GET /org/members` (Clerk Backend API → `OrgMember` protocol type →
-`CloudClient::list_org_members` → entity-browser picker), replacing the
-"pending a backend endpoint" placeholder. Landed on `main` (see plan
-`docs/superpowers/plans/2026-06-15-org-members-users-tab.md`); verified green
-end to end (`cargo fmt --check`, `cargo test --workspace`, `cargo clippy
---workspace --all-targets -D warnings`) after installing the Rust toolchain in
-this shell.
+Latest release: **v0.3.0**. The 2026-06-16 wave effectively **completed
+Tool-Calling Parity (#10)**: Phase 1 (schema serialization, arg validation,
+result truncation, `tool_choice`), Phase 2 (progressive disclosure
+`tool_search`/`tool_describe`, default sub-agent spawner, `find_files`/`grep`,
+`repo_map`, background command execution, the `update_plan` working-plan tool),
+and Phase 3 (`run_pipeline` programmatic tool calling, JSON mode /
+`ResponseFormat`) all landed on `main` — along with a new initiative,
+**Capability Synthesis (#11)** slices 1–2 (freeze a governed pipeline into a
+reviewed tool; auto-extraction + verification gate), and the tolerant atomic
+multi-edit `apply_patch` engine.
 
-**New top priority (explicit request): Tool-Calling Parity** — see priority #1
-below and the [initiative](initiatives/tool-calling-parity.md). A research pass
-(Hermes, openclaw/OpenCode, Claude Code, OpenHands) plus an audit of the harness
-found the model never receives tool parameter schemas (`provider_adapter.rs`
-sends `{"type":"object"}` per tool). Next slice:
-**`2026-06-15-tool-schema-serialization.md`** — thread `Tool::input_schema()` +
-`description()` to providers. Then the rest of Phase 1 (arg validation, result
-truncation, `tool_choice`).
+Only two small tool-calling tails remain: **token-efficient tool results**
+(Phase 2) and **streaming tool-call arguments** (Phase 3).
 
-Other active follow-up: **TUI organization switching** on
-`feat/tui-org-switch-login` (plan:
-`docs/superpowers/plans/2026-06-15-tui-org-switching.md`) — Clerk `GET /orgs`
-route + TUI Org tab switching via `auth login --org`.
+**Next priority:** with #10 done, the active frontier moves to **Provider Route
+Intelligence (#2)**, **Memory 2.0 (#3)** (MCP merge tool + split workflow,
+semantic retrieval, post-session recommendations, imports), and **Agent Parity
+Hardening (#4)** (worktree-isolated execution, PR-prep workflow, deterministic
+context manifests). The two unstarted frontiers for the longer horizon are
+**Execution Backends & Sandboxing (#7)** — the blocker for true `execute_code` —
+and Capability Synthesis's next slices (org propagation, composition).
+
+Active follow-up: **TUI writable org switching** — Clerk token re-mint primitive
+shipped; the current slice wires the Org tab to a real organization picker and
+`auth login --org` (see [TUI initiative](initiatives/tui.md) Phase 3).
 
 ## Active Priority
 
-### 1. Tool-Calling Parity
+### 1. Tool-Calling Parity — SHIPPED (two tails remain)
 
 Goal: bring tool calling up to Claude Code / OpenCode / Hermes / OpenHands level
 without losing codel00p's permission scopes and audit events. See the
 [Tool-Calling Parity initiative](initiatives/tool-calling-parity.md) for the full
 gap analysis and phased plan (research pass 2026-06-15).
 
-Why now (explicitly prioritized): an audit found the model never receives tool
-parameter schemas — `provider_adapter.rs` sends every tool as
-`{"type":"object"}` with a generic description, discarding the hand-written
-`Tool::input_schema()`/`description()`. That single gap caps tool-calling
-reliability below every mature agent. The floor must be fixed before the
-[programmatic `execute_code` capstone](initiatives/programmatic-tool-calling.md).
+The audit that opened this priority found the model never received tool parameter
+schemas — `provider_adapter.rs` sent every tool as `{"type":"object"}`, discarding
+the hand-written `Tool::input_schema()`/`description()`. That floor, plus the
+surface/orchestration and SOTA layers on top of it, are now built.
 
 **Phase 1 (floor) — SHIPPED 2026-06-15**, all green on `main`:
 
@@ -60,11 +63,25 @@ reliability below every mature agent. The floor must be fixed before the
 - ~~`tool_choice` control (auto / required / specific / none) across every
   transport~~ (PR #16).
 
-**Next: Phase 2 (surface/orchestration)** — MCP tool search / progressive
-disclosure, a default sub-agent spawner so `delegate_task` works out of the box,
-and a repo-map / semantic code-search tool. Phase 3 (SOTA: programmatic
-`execute_code`, JSON mode, streaming args) follows. See the
-[initiative](initiatives/tool-calling-parity.md).
+**Phase 2 (surface/orchestration) — SHIPPED 2026-06-16:**
+
+- ~~MCP tool search / progressive disclosure (`tool_search` / `tool_describe`)~~;
+- ~~default sub-agent spawner so `delegate_task` works out of the box~~;
+- ~~`find_files` (glob) and `grep` (regex) navigation~~;
+- ~~`repo_map` ranked code-symbol map~~;
+- ~~background command execution + the `update_plan` working-plan tool~~.
+
+**Phase 3 (SOTA) — SHIPPED 2026-06-16:**
+
+- ~~programmatic tool calling (`run_pipeline`)~~;
+- ~~JSON mode / structured output (`ResponseFormat`)~~;
+- ~~capability synthesis slices 1–2~~ — now its own initiative,
+  [#11](initiatives/capability-synthesis.md).
+
+**Remaining tails:** token-efficient tool results (pagination/filter +
+concise/detailed `response_format` on the heavy tools) and streaming tool-call
+arguments. Arbitrary in-process `execute_code` still waits on
+[Execution Backends (#7)](initiatives/execution-backends-sandboxing.md).
 
 ### 2. Provider Route Intelligence
 
@@ -203,7 +220,8 @@ Next TUI slices (each independently shippable/testable):
   type + `CloudClient::list_org_members` → real Users tab~~ **shipped
   2026-06-15** (`feat/tui-org-members-users-tab`);
 - Clerk token re-mint in `login.rs` → **writable org switching** from the Org tab
-  (in progress on `feat/tui-org-switch-login`);
+  (token re-mint primitive shipped; current slice wires the Org tab picker +
+  `auth login --org`);
 - model picker sourced from a provider `list_models` call (today: static catalog
   in `tui/app.rs`);
 - TUI mouse support, configurable themes, token/usage meters; session switcher.
