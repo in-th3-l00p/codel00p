@@ -13,8 +13,10 @@ codel00p is building toward three combined capabilities:
 The [Initiatives](initiatives/README.md) directory plans the Hermes-distinctive
 capabilities and maps each to the milestones below. **Phase 1 of most has
 shipped** (plugins & hooks, skills, self-improvement loop, sub-agent delegation,
-scheduling/cron, messaging gateway, and the TUI); only sandboxed execution
-backends and programmatic tool calling are unstarted. Start with the
+scheduling/cron, messaging gateway, and the TUI), and the 2026-06-16 wave
+completed Tool-Calling Parity (#10) — which delivered programmatic tool calling
+(#8) — and opened Capability Synthesis (#11); only sandboxed execution backends
+(#7) remain unstarted. Start with the
 [Hermes Gap Analysis](initiatives/hermes-gap-analysis.md).
 
 ## Milestone 1: Local Agent Foundation
