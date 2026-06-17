@@ -280,12 +280,17 @@ Started:
   with a managed Postgres database, auto-deployed from `main` via GitHub Actions
   and fronted by the `codel00p` Vercel web app;
 - **prebuilt release binaries and a curl installer** for distribution;
+- **desktop release installers** for macOS, Linux, and Windows, published from
+  the same `v*` tag workflow as the CLI and mirrored on the web docs at
+  `/docs/desktop`;
 - a **self-updater**: `codel00p update` pulls the matching release asset, verifies
   its SHA-256, and replaces the running binary; a throttled daily background check
   nudges users (CLI line + TUI header chip); `codel00p version` reports the build.
   Released binaries are tag-stamped via `build.rs` + `CODEL00P_RELEASE_VERSION`
-  (release.yml). **Release process**: bump `core/crates/codel00p-cli/Cargo.toml`
-  version, commit, push a `vX.Y.Z` tag — verified end to end (v0.1.0 → v0.2.0).
+  (release.yml). **Release process**: bump changed package versions
+  (`core/crates/codel00p-cli/Cargo.toml` for CLI,
+  `apps/desktop/package.json` for desktop), commit, push a `vX.Y.Z` tag —
+  verified end to end for CLI (v0.1.0 → v0.2.0).
 
 Still to build:
 
@@ -294,7 +299,6 @@ Still to build:
 - security review and sandboxing;
 - privacy controls;
 - eval suite for agent, provider, memory, and MCP behavior;
-- a docs site;
 - release channels (stable/beta).
 
 Exit criteria:

@@ -78,5 +78,23 @@ local sessions for now.
 ```bash
 pnpm dev:desktop      # run the app (electron-vite dev)
 pnpm --filter @codel00p/desktop build      # build main/preload/renderer
+pnpm --filter @codel00p/desktop dist       # build a local packaged app
 pnpm --filter @codel00p/desktop typecheck  # tsc --noEmit
 ```
+
+## Releases
+
+Desktop installers are published by the same `v*` tag workflow that ships the
+CLI. `.github/workflows/release.yml` builds Electron Builder installers for
+macOS, Linux, and Windows, then normalizes them to stable GitHub Release asset
+names:
+
+- `codel00p-desktop-aarch64-apple-darwin.dmg`
+- `codel00p-desktop-x86_64-apple-darwin.dmg`
+- `codel00p-desktop-x86_64-unknown-linux-gnu.AppImage`
+- `codel00p-desktop-aarch64-unknown-linux-gnu.AppImage`
+- `codel00p-desktop-x86_64-pc-windows-msvc.exe`
+
+Each asset gets a `.sha256` sidecar. When desktop changes ship, bump
+`apps/desktop/package.json`, commit, and push the `vX.Y.Z` tag used for the
+release.

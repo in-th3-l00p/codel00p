@@ -98,6 +98,17 @@ cd codel00p/core
 cargo build --release --bin codel00p
 ```
 
+Desktop installers are published on the same tagged releases as the CLI:
+
+- `codel00p-desktop-aarch64-apple-darwin.dmg`
+- `codel00p-desktop-x86_64-apple-darwin.dmg`
+- `codel00p-desktop-x86_64-unknown-linux-gnu.AppImage`
+- `codel00p-desktop-aarch64-unknown-linux-gnu.AppImage`
+- `codel00p-desktop-x86_64-pc-windows-msvc.exe`
+
+Each desktop asset includes a `.sha256` checksum sidecar. The docs site mirrors
+these links under `/docs/desktop`.
+
 ## Uninstall
 
 The CLI removes itself. It shows what will be deleted and asks for confirmation

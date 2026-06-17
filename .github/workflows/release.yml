@@ -1,8 +1,9 @@
 name: release
 
-# Build the codel00p CLI for every supported platform and attach the binaries
-# to a GitHub Release when a v* tag is pushed. Native runners are used for each
-# target so the bundled C SQLite compiles without cross-toolchain setup.
+# Build the codel00p CLI and desktop app for every supported platform and attach
+# the artifacts to a GitHub Release when a v* tag is pushed. Native runners are
+# used where needed so bundled native dependencies build without cross-toolchain
+# setup.
 
 on:
   push:
@@ -18,7 +19,7 @@ env:
 
 jobs:
   build:
-    name: build ${{ matrix.target }}
+    name: build cli ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -83,9 +84,79 @@ jobs:
             codel00p-${{ matrix.target }}.*
           retention-days: 5
 
+  build-desktop:
+    name: build desktop ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            electron_platform: mac
+            electron_arch: arm64
+          - target: x86_64-apple-darwin
+            os: macos-14
+            electron_platform: mac
+            electron_arch: x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            electron_platform: linux
+            electron_arch: x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+            electron_platform: linux
+            electron_arch: arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            electron_platform: win
+            electron_arch: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop app
+        run: pnpm --filter @codel00p/desktop build
+
+      - name: Package desktop installer
+        run: pnpm --filter @codel00p/desktop exec electron-builder --publish never --${{ matrix.electron_platform }} --${{ matrix.electron_arch }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Normalize artifacts
+        shell: bash
+        run: |
+          node tools/scripts/desktop-release-assets.mjs normalize \
+            --source apps/desktop/dist \
+            --output desktop-dist \
+            --target ${{ matrix.target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: codel00p-desktop-${{ matrix.target }}
+          path: desktop-dist/*
+          retention-days: 5
+
   release:
     name: publish release
-    needs: build
+    needs:
+      - build
+      - build-desktop
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts

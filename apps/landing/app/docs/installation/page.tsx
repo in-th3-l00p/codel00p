@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DocHeader, H2, P, Code, Ic, Ul, Note } from "@/components/docs/prose";
 import { InstallTabs } from "@/components/docs/install-tabs";
@@ -34,6 +35,20 @@ export default function InstallationPage() {
           Linux (x86-64 and arm64), and Windows (x86-64) on each tagged release.
         </p>
       </Note>
+
+      <H2>Desktop app</H2>
+      <P>
+        Prefer a graphical control center? The Electron desktop app ships from
+        the same tagged GitHub Releases as the CLI. Download the installer for
+        your platform from the{" "}
+        <Link
+          href="/docs/desktop"
+          className="text-foreground underline decoration-brand/50 underline-offset-4 hover:decoration-brand"
+        >
+          desktop app page
+        </Link>
+        .
+      </P>
 
       <H2>Uninstall</H2>
       <P>

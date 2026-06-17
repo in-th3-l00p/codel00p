@@ -14,6 +14,7 @@ export const docsNav: DocSection[] = [
     label: "Getting started",
     items: [
       { title: "Installation", href: "/docs/installation" },
+      { title: "Desktop app", href: "/docs/desktop" },
       { title: "Quick start", href: "/docs/quick-start" },
     ],
   },
