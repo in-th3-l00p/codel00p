@@ -81,20 +81,28 @@ impl BackgroundProcesses {
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
-        let entry = Arc::new(ProcessEntry {
-            label,
-            stdout: Arc::new(Mutex::new(StreamBuffer::default())),
-            stderr: Arc::new(Mutex::new(StreamBuffer::default())),
-            child: Mutex::new(child),
-            finished: Mutex::new(None),
-        });
+        let stdout_buffer = Arc::new(Mutex::new(StreamBuffer::default()));
+        let stderr_buffer = Arc::new(Mutex::new(StreamBuffer::default()));
 
+        // Keep the reader-thread handles so finalizing an exited process can join
+        // them, guaranteeing every byte the child wrote has landed in the buffers
+        // before we ever report `exited` to a consumer of `output`.
+        let mut readers = Vec::new();
         if let Some(stdout) = stdout {
-            spawn_reader(stdout, entry.stdout.clone());
+            readers.push(spawn_reader(stdout, stdout_buffer.clone()));
         }
         if let Some(stderr) = stderr {
-            spawn_reader(stderr, entry.stderr.clone());
+            readers.push(spawn_reader(stderr, stderr_buffer.clone()));
         }
+
+        let entry = Arc::new(ProcessEntry {
+            label,
+            stdout: stdout_buffer,
+            stderr: stderr_buffer,
+            child: Mutex::new(child),
+            finished: Mutex::new(None),
+            readers: Mutex::new(readers),
+        });
 
         let id = format!("proc-{}", self.inner.next_id.fetch_add(1, Ordering::SeqCst));
         self.inner
@@ -144,6 +152,9 @@ impl BackgroundProcesses {
             let _ = child.kill();
             let _ = child.wait();
         }
+        // The child is gone, so its pipe write ends are closed; join the readers
+        // so a post-kill `output` read sees everything it managed to write.
+        entry.drain_readers();
         let mut finished = entry.finished.lock().expect("finished lock");
         if finished.is_none() {
             *finished = Some(ExitInfo {
@@ -170,22 +181,45 @@ struct ProcessEntry {
     stderr: Arc<Mutex<StreamBuffer>>,
     child: Mutex<Child>,
     finished: Mutex<Option<ExitInfo>>,
+    readers: Mutex<Vec<thread::JoinHandle<()>>>,
 }
 
 impl ProcessEntry {
     /// Poll the child; if it has exited, record the exit info. Returns the
     /// current status.
+    ///
+    /// On the transition to exited we join the reader threads. Once the child
+    /// has exited its stdout/stderr pipe write ends are closed, so each reader
+    /// is guaranteed to hit EOF and terminate promptly; joining them before we
+    /// publish the `exited` status makes the contract "exited ⇒ all output is in
+    /// the buffers" real for every consumer of `output`, eliminating the race
+    /// where `try_wait` observes exit before the readers copied the final bytes.
     fn refresh_status(&self) -> ProcessStatus {
         let mut finished = self.finished.lock().expect("finished lock");
         if finished.is_none()
             && let Ok(Some(status)) = self.child.lock().expect("child lock").try_wait()
         {
+            self.drain_readers();
             *finished = Some(ExitInfo {
                 code: status.code(),
                 killed: false,
             });
         }
         self.status_from(&finished)
+    }
+
+    /// Join the reader threads, draining each pipe to EOF. Safe to call more than
+    /// once: after the first call the handle vector is empty.
+    fn drain_readers(&self) {
+        let handles: Vec<_> = self
+            .readers
+            .lock()
+            .expect("readers lock")
+            .drain(..)
+            .collect();
+        for handle in handles {
+            let _ = handle.join();
+        }
     }
 
     fn status_from(&self, finished: &Option<ExitInfo>) -> ProcessStatus {
@@ -266,8 +300,12 @@ pub struct ProcessInfo {
     pub status: ProcessStatus,
 }
 
-/// Spawn a thread that drains `reader` into `buffer` until EOF.
-fn spawn_reader<R: Read + Send + 'static>(mut reader: R, buffer: Arc<Mutex<StreamBuffer>>) {
+/// Spawn a thread that drains `reader` into `buffer` until EOF, returning its
+/// join handle so the process can wait for the pipe to fully drain on exit.
+fn spawn_reader<R: Read + Send + 'static>(
+    mut reader: R,
+    buffer: Arc<Mutex<StreamBuffer>>,
+) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let mut chunk = [0u8; 8192];
         loop {
@@ -276,5 +314,5 @@ fn spawn_reader<R: Read + Send + 'static>(mut reader: R, buffer: Arc<Mutex<Strea
                 Ok(n) => buffer.lock().expect("stream buffer").append(&chunk[..n]),
             }
         }
-    });
+    })
 }
