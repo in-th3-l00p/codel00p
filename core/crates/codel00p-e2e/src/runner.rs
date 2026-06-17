@@ -220,6 +220,14 @@ impl CodelRunner {
         let db_path = self.memory_db();
         let mut command = Command::new(codel00p_binary());
         command
+            // Run inside the isolated workspace tempdir so project-config
+            // discovery (which walks up from the cwd looking for
+            // `.codel00p/config.toml`) cannot reach the developer's real
+            // `~/.codel00p` and leak settings into a "hermetic" run. With
+            // `CODEL00P_HOME` pointed at a tempdir, the user-config-dir
+            // exclusion no longer covers `~/.codel00p`, so isolating the cwd is
+            // what actually keeps config-sensitive commands hermetic.
+            .current_dir(self.workspace.path())
             .env("CODEL00P_HOME", self.home.path())
             .env("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token")
             .arg("--memory-db")
@@ -256,6 +264,35 @@ impl CodelRunner {
                 .arg(&self.permission_mode);
         }
 
+        let output = command.output().expect("spawn codel00p binary");
+        RunResult::new(output)
+    }
+
+    /// Spawns the binary with *exactly* the given args — no injected global flags
+    /// (`--memory-db`, `--organization-id`, …) and no provider wiring — inside the
+    /// isolated `CODEL00P_HOME`.
+    ///
+    /// Required for surfaces that parse the raw argv positionally *before* the
+    /// global-flag parser runs: `version` / `--version` are detected via
+    /// `args.first()`, and `--help` / `<command> --help` match the exact argv
+    /// slice. The runner's standard [`CodelRunner::run`] prepends the four global
+    /// flags, which would shift those positions and make `version`/`help` fall
+    /// through to "unknown command". Use this for those black-box surfaces; use
+    /// [`CodelRunner::run`] for everything that goes through the global-flag
+    /// parser (config, providers, skills, cron, cloud, update, …).
+    #[must_use]
+    pub fn run_plain(&self, args: &[&str]) -> RunResult {
+        let mut command = Command::new(codel00p_binary());
+        command
+            // Same isolation rationale as `run`: keep project-config discovery
+            // off the developer's real `~/.codel00p`.
+            .current_dir(self.workspace.path())
+            .env("CODEL00P_HOME", self.home.path())
+            .env("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token");
+        for (key, value) in &self.extra_env {
+            command.env(key, value);
+        }
+        command.args(args);
         let output = command.output().expect("spawn codel00p binary");
         RunResult::new(output)
     }
