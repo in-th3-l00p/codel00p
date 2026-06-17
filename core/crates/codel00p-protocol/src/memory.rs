@@ -78,6 +78,15 @@ impl MemorySource {
         }
     }
 
+    /// Construct a source for a file import with no session/turn context.
+    pub fn import(uri: impl Into<String>) -> Self {
+        Self {
+            session_id: SessionId::from_static(""),
+            turn_id: TurnId::from_static(""),
+            uri: Some(uri.into()),
+        }
+    }
+
     pub fn with_uri(mut self, uri: impl Into<String>) -> Self {
         let uri = uri.into();
         self.uri = if uri.trim().is_empty() {
@@ -98,6 +107,12 @@ impl MemorySource {
 
     pub fn uri(&self) -> Option<&str> {
         self.uri.as_deref()
+    }
+
+    /// Returns true if this source was created via [`MemorySource::import`]
+    /// (session_id and turn_id are empty sentinels, uri is set).
+    pub fn is_import(&self) -> bool {
+        self.session_id.as_str().is_empty() && self.uri.is_some()
     }
 }
 
@@ -184,5 +199,28 @@ impl MemoryEntry {
 
     pub fn source(&self) -> Option<&MemorySource> {
         self.source.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_source_import_carries_uri_and_is_detectable() {
+        let source = MemorySource::import("/abs/path/file.md");
+        assert!(source.is_import());
+        assert_eq!(source.uri(), Some("/abs/path/file.md"));
+        assert!(source.session_id().as_str().is_empty());
+        assert!(source.turn_id().as_str().is_empty());
+    }
+
+    #[test]
+    fn memory_source_turn_is_not_import() {
+        let source = MemorySource::turn(
+            crate::SessionId::from_static("s-1"),
+            crate::TurnId::from_static("t-1"),
+        );
+        assert!(!source.is_import());
     }
 }
