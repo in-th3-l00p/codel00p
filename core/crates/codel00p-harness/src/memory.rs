@@ -139,6 +139,248 @@ impl TurnMemoryExtractor for ExplicitTurnMemoryExtractor {
     }
 }
 
+// ===========================================================================
+// Post-session memory recommendations (Memory 2.0): after a productive turn,
+// automatically *recommend* memory candidates into the same review queue that
+// explicit `remember:` directives flow into — never auto-approved. This mirrors
+// the capability auto-extractor: a deterministic recommender is the must-have,
+// with an optional LLM-assisted variant gated behind integration env vars.
+// ===========================================================================
+
+/// One executed tool call as a [`MemoryRecommender`] sees it: the tool name and
+/// an optional short result snippet. (We keep this lighter than the capability
+/// extractor's call record — a recommendation only needs to know *what* the
+/// agent did, not replay it.)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecommendationToolCall {
+    name: String,
+    result_snippet: Option<String>,
+}
+
+impl RecommendationToolCall {
+    pub fn new(name: impl Into<String>, result_snippet: Option<String>) -> Self {
+        Self {
+            name: name.into(),
+            result_snippet,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn result_snippet(&self) -> Option<&str> {
+        self.result_snippet.as_deref()
+    }
+}
+
+/// What a [`MemoryRecommender`] inspects at turn end to decide whether the work
+/// produced a durable, memorable fact worth proposing for review. Modeled on
+/// `CapabilityExtractionRequest`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TurnMemoryRecommendationRequest {
+    session_id: SessionId,
+    turn_id: TurnId,
+    goal: String,
+    assistant_message: Option<String>,
+    tool_calls: Vec<RecommendationToolCall>,
+}
+
+impl TurnMemoryRecommendationRequest {
+    pub fn new(
+        session_id: SessionId,
+        turn_id: TurnId,
+        goal: String,
+        assistant_message: Option<String>,
+        tool_calls: Vec<(String, Option<String>)>,
+    ) -> Self {
+        Self {
+            session_id,
+            turn_id,
+            goal,
+            assistant_message,
+            tool_calls: tool_calls
+                .into_iter()
+                .map(|(name, snippet)| RecommendationToolCall::new(name, snippet))
+                .collect(),
+        }
+    }
+
+    pub fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    pub fn turn_id(&self) -> &TurnId {
+        &self.turn_id
+    }
+
+    pub fn goal(&self) -> &str {
+        &self.goal
+    }
+
+    pub fn assistant_message(&self) -> Option<&str> {
+        self.assistant_message.as_deref()
+    }
+
+    pub fn tool_calls(&self) -> &[RecommendationToolCall] {
+        &self.tool_calls
+    }
+}
+
+/// Recommends 0..N memory candidates from a completed turn. Returning candidates
+/// queues them for human review — it never approves anything. A no-op (empty
+/// `Vec`) is the right answer for read-only or trivial turns.
+#[async_trait]
+pub trait MemoryRecommender: Send + Sync {
+    async fn recommend(
+        &self,
+        request: TurnMemoryRecommendationRequest,
+    ) -> Result<Vec<MemoryCandidateInput>, HarnessError>;
+}
+
+/// Tool names that mutate the workspace (or commit it). A turn is "productive"
+/// when it ran at least `min_mutations` of these *and* produced a final answer.
+const MUTATING_TOOLS: &[&str] = &[
+    "create_file",
+    "update_file",
+    "delete_file",
+    "apply_patch",
+    "git_commit",
+];
+
+fn is_mutating_tool(name: &str) -> bool {
+    MUTATING_TOOLS.contains(&name)
+}
+
+/// Deterministic, fully offline recommender. After a *productive* turn — at
+/// least `min_mutations` workspace-mutating tool calls plus a final assistant
+/// answer — it emits a single candidate summarizing what was done: the goal plus
+/// the distinct mutating tools used, tagged `auto-recommended`, sourced to the
+/// turn. Read-only or unfinished turns recommend nothing.
+///
+/// IDs follow the explicit extractor's `memory-candidate-{session}-{turn}-{i}`
+/// scheme so the queue is consistent regardless of how a candidate arrived.
+#[derive(Clone, Debug)]
+pub struct DeterministicMemoryRecommender {
+    project: ProjectRef,
+    tags: Vec<String>,
+    min_mutations: usize,
+    kind: MemoryKind,
+}
+
+impl DeterministicMemoryRecommender {
+    pub fn new(project: ProjectRef) -> Self {
+        Self {
+            project,
+            tags: vec!["auto-recommended".to_string()],
+            min_mutations: 1,
+            kind: MemoryKind::Workflow,
+        }
+    }
+
+    /// Require at least `min` mutating tool calls before recommending. A value of
+    /// `0` is treated as `1` (a recommendation always needs some mutating work).
+    pub fn with_min_mutations(mut self, min: usize) -> Self {
+        self.min_mutations = min.max(1);
+        self
+    }
+
+    /// Override the kind assigned to recommended candidates (default
+    /// [`MemoryKind::Workflow`]).
+    pub fn with_kind(mut self, kind: MemoryKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    /// Add an extra tag (besides the default `auto-recommended`).
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        if let Some(tag) = non_empty_filter(tag.into()) {
+            self.tags.push(tag);
+        }
+        self
+    }
+}
+
+#[async_trait]
+impl MemoryRecommender for DeterministicMemoryRecommender {
+    async fn recommend(
+        &self,
+        request: TurnMemoryRecommendationRequest,
+    ) -> Result<Vec<MemoryCandidateInput>, HarnessError> {
+        // A turn is only memorable once it has actually finished with an answer.
+        let Some(answer) = request
+            .assistant_message()
+            .map(str::trim)
+            .filter(|message| !message.is_empty())
+        else {
+            return Ok(Vec::new());
+        };
+
+        // Collect the distinct mutating tools used, preserving first-seen order.
+        let mut mutating: Vec<&str> = Vec::new();
+        let mut mutation_count = 0usize;
+        for call in request.tool_calls() {
+            if is_mutating_tool(call.name()) {
+                mutation_count += 1;
+                if !mutating.contains(&call.name()) {
+                    mutating.push(call.name());
+                }
+            }
+        }
+        if mutation_count < self.min_mutations {
+            return Ok(Vec::new());
+        }
+
+        let goal = first_line(request.goal());
+        let goal = if goal.is_empty() {
+            first_line(answer)
+        } else {
+            goal
+        };
+        if goal.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let content = format!(
+            "Workflow: \"{goal}\" was accomplished using {tools}.",
+            tools = mutating.join(", "),
+        );
+
+        let id = format!(
+            "memory-candidate-{}-{}-1",
+            request.session_id().as_str(),
+            request.turn_id().as_str(),
+        );
+        let mut candidate = MemoryCandidateInput::new(
+            id,
+            self.project.clone(),
+            self.kind,
+            content,
+            MemorySource::turn(request.session_id().clone(), request.turn_id().clone()),
+        );
+        for tag in &self.tags {
+            candidate = candidate.with_tag(tag);
+        }
+
+        Ok(vec![candidate])
+    }
+}
+
+/// First non-empty line of `text`, trimmed and capped, for deterministic
+/// single-line summaries.
+fn first_line(text: &str) -> String {
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("");
+    if line.chars().count() > 120 {
+        format!("{}…", line.chars().take(119).collect::<String>())
+    } else {
+        line.to_string()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MemoryCandidateSinkOutcome {
     created_ids: Vec<String>,

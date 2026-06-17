@@ -214,6 +214,22 @@ impl AgentHarness {
                 )
                 .await;
 
+                // Auto-recommend memory candidates from the turn's work, so
+                // explicit `remember:` directives and machine recommendations
+                // both land in the same review queue.
+                self.recommend_memory_candidates(
+                    session_state.session_id().clone(),
+                    turn_id.clone(),
+                    latest_user_message(&session_state),
+                    assistant_message.clone(),
+                    executed_tool_calls
+                        .iter()
+                        .map(|call: &ExecutedToolCall| (call.name.clone(), None))
+                        .collect(),
+                    &mut events,
+                )
+                .await;
+
                 self.extract_skill_candidates(
                     session_state.session_id().clone(),
                     turn_id.clone(),

@@ -62,10 +62,11 @@ pub use learning::{
 };
 pub use lifecycle::{LifecycleHook, TurnLifecycleContext};
 pub use memory::{
-    ExplicitTurnMemoryExtractor, MemoryCandidateSink, MemoryCandidateSinkOutcome,
-    MemoryPromptAssembler, MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider,
-    ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest,
-    TurnMemoryExtractionRequest, TurnMemoryExtractor,
+    DeterministicMemoryRecommender, ExplicitTurnMemoryExtractor, MemoryCandidateSink,
+    MemoryCandidateSinkOutcome, MemoryPromptAssembler, MemoryRecommender,
+    MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider, ProjectMemoryContext,
+    ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest, RecommendationToolCall,
+    TurnMemoryExtractionRequest, TurnMemoryExtractor, TurnMemoryRecommendationRequest,
 };
 pub use permissions::{
     AllowAllPermissionPolicy, PermissionDecision, PermissionMode, PermissionPolicy,

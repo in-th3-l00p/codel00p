@@ -12,8 +12,8 @@ use crate::{
     learning::{SkillExtractionRequest, SkillExtractor, SkillProposalSink},
     lifecycle::{LifecycleHook, TurnLifecycleContext},
     memory::{
-        MemoryCandidateSink, ProjectMemoryProvider, ProjectMemoryRequest,
-        TurnMemoryExtractionRequest, TurnMemoryExtractor,
+        MemoryCandidateSink, MemoryRecommender, ProjectMemoryProvider, ProjectMemoryRequest,
+        TurnMemoryExtractionRequest, TurnMemoryExtractor, TurnMemoryRecommendationRequest,
     },
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
     session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage},
@@ -50,6 +50,7 @@ pub struct AgentHarness {
     project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
     skill_provider: Option<Arc<dyn SkillProvider>>,
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
+    memory_recommender: Option<Arc<dyn MemoryRecommender>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     skill_extractor: Option<Arc<dyn SkillExtractor>>,
     skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,

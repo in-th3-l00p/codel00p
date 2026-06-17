@@ -19,6 +19,7 @@ pub struct AgentHarnessBuilder {
     project_memory_provider: Option<Arc<dyn ProjectMemoryProvider>>,
     skill_provider: Option<Arc<dyn SkillProvider>>,
     turn_memory_extractor: Option<Arc<dyn TurnMemoryExtractor>>,
+    memory_recommender: Option<Arc<dyn MemoryRecommender>>,
     memory_candidate_sink: Option<Arc<dyn MemoryCandidateSink>>,
     skill_extractor: Option<Arc<dyn SkillExtractor>>,
     skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
@@ -128,6 +129,17 @@ impl AgentHarnessBuilder {
         T: TurnMemoryExtractor + 'static,
     {
         self.turn_memory_extractor = Some(Arc::new(turn_memory_extractor));
+        self
+    }
+
+    /// Sets a recommender that runs after each completed turn to *automatically*
+    /// propose memory candidates from the work — even when the agent emitted no
+    /// explicit `remember:` directive. Recommendations land in the same review
+    /// queue as explicit candidates (via `memory_candidate_sink`) and are never
+    /// auto-approved, so set a sink too. With no recommender configured, the
+    /// post-turn recommendation step is a no-op (backward compatible).
+    pub fn memory_recommender(mut self, recommender: Arc<dyn MemoryRecommender>) -> Self {
+        self.memory_recommender = Some(recommender);
         self
     }
 
@@ -296,6 +308,7 @@ impl AgentHarnessBuilder {
             project_memory_provider: self.project_memory_provider,
             skill_provider: self.skill_provider,
             turn_memory_extractor: self.turn_memory_extractor,
+            memory_recommender: self.memory_recommender,
             memory_candidate_sink: self.memory_candidate_sink,
             capability_extractor: self.capability_extractor,
             capability_proposal_sink,

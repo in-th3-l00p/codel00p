@@ -159,6 +159,73 @@ impl AgentHarness {
         }
     }
 
+    /// Auto-recommend memory candidates from the completed turn and queue them
+    /// for review. This is the post-session "Memory 2.0" path: even when the
+    /// agent emitted no explicit `remember:` directive, a productive turn can
+    /// still surface durable facts for a human to approve. Recommendations flow
+    /// into the same sink as explicit candidates and are never auto-approved.
+    /// A no-op when no recommender is configured.
+    pub(super) async fn recommend_memory_candidates(
+        &self,
+        session_id: SessionId,
+        turn_id: TurnId,
+        goal: String,
+        assistant_message: Option<String>,
+        tool_calls: Vec<(String, Option<String>)>,
+        events: &mut Vec<HarnessEvent>,
+    ) {
+        let (Some(recommender), Some(sink)) =
+            (&self.memory_recommender, &self.memory_candidate_sink)
+        else {
+            return;
+        };
+
+        let candidates = match recommender
+            .recommend(TurnMemoryRecommendationRequest::new(
+                session_id.clone(),
+                turn_id.clone(),
+                goal,
+                assistant_message,
+                tool_calls,
+            ))
+            .await
+        {
+            Ok(candidates) => candidates,
+            Err(error) => {
+                self.record_event(
+                    events,
+                    HarnessEvent::LifecycleHookFailed {
+                        event_id: EventId::new(),
+                        session_id,
+                        turn_id,
+                        hook: "memory_recommendation".to_string(),
+                        message: error.to_string(),
+                    },
+                )
+                .await;
+                return;
+            }
+        };
+
+        if candidates.is_empty() {
+            return;
+        }
+
+        if let Err(error) = sink.persist(candidates).await {
+            self.record_event(
+                events,
+                HarnessEvent::LifecycleHookFailed {
+                    event_id: EventId::new(),
+                    session_id,
+                    turn_id,
+                    hook: "memory_candidate_sink".to_string(),
+                    message: error.to_string(),
+                },
+            )
+            .await;
+        }
+    }
+
     pub(super) async fn extract_skill_candidates(
         &self,
         session_id: SessionId,
