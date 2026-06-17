@@ -4,9 +4,9 @@ use codel00p_storage::{InMemoryStorage, StorageScope};
 
 use crate::{
     MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError, MemoryListFilter, MemoryMerge,
-    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRetrievalQuery, MemorySimilarityQuery,
-    MemorySplit, MemoryStalenessQuery, QualityMemory, RankedMemory, RetrievedMemory,
-    ReviewDecision, SimilarMemory, StaleMemory,
+    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRetrievalQuery, MemoryRevision,
+    MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, QualityMemory, RankedMemory,
+    RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
 };
 
 pub trait MemoryRepository {
@@ -39,6 +39,13 @@ pub trait MemoryRepository {
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError>;
 
     fn audit_log(&self, id: &str) -> Result<Vec<MemoryAuditEvent>, MemoryError>;
+
+    /// Reconstructs the ordered list of content snapshots from the audit trail.
+    ///
+    /// Returns one [`MemoryRevision`] per content-bearing audit event
+    /// (`CandidateCreated` and `Edited`), in sequence order. Non-content events
+    /// (approve, archive, merge, …) are skipped.
+    fn revisions(&self, id: &str) -> Result<Vec<MemoryRevision>, MemoryError>;
 
     fn list(&self, filter: MemoryListFilter) -> Result<Vec<MemoryRecord>, MemoryError>;
 

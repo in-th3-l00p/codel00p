@@ -8,8 +8,8 @@ use codel00p_storage::{AppendLogStore, DocumentStore, StorageDocument};
 use crate::{
     MemoryAuditAction, MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError,
     MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRepository,
-    MemoryRetrievalQuery, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, QualityMemory,
-    RankedMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
+    MemoryRetrievalQuery, MemoryRevision, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery,
+    QualityMemory, RankedMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
     StorageBackedMemoryStore,
     records::{content_tokens, token_similarity_score},
 };
@@ -44,8 +44,14 @@ where
 
         let record = MemoryRecord::new(entry);
         self.put_record(&record)?;
-        self.append_audit(MemoryAuditEvent::candidate_created(record.entry().id()))?;
-        self.append_index(MemoryAuditEvent::candidate_created(record.entry().id()))?;
+        self.append_audit(MemoryAuditEvent::candidate_created(
+            record.entry().id(),
+            record.entry().content(),
+        ))?;
+        self.append_index(MemoryAuditEvent::candidate_created(
+            record.entry().id(),
+            record.entry().content(),
+        ))?;
 
         Ok(record)
     }
@@ -170,8 +176,14 @@ where
 
         let new_record = MemoryRecord::new(new_input.into_entry());
         self.put_record(&new_record)?;
-        self.append_audit(MemoryAuditEvent::candidate_created(split.new_id()))?;
-        self.append_index(MemoryAuditEvent::candidate_created(split.new_id()))?;
+        self.append_audit(MemoryAuditEvent::candidate_created(
+            split.new_id(),
+            new_record.entry().content(),
+        ))?;
+        self.append_index(MemoryAuditEvent::candidate_created(
+            split.new_id(),
+            new_record.entry().content(),
+        ))?;
 
         // Optionally update source content.
         if let Some(updated_content) = split.updated_source_content() {
@@ -213,6 +225,37 @@ where
             .into_iter()
             .map(MemoryAuditEvent::from_log_entry)
             .collect()
+    }
+
+    fn revisions(&self, id: &str) -> Result<Vec<MemoryRevision>, MemoryError> {
+        // Verify the memory exists before walking its audit stream.
+        self.get(id)?;
+
+        let events = self.audit_log(id)?;
+        let mut revision_number: u64 = 0;
+        let mut revisions = Vec::new();
+
+        for event in events {
+            let content = match event.action() {
+                MemoryAuditAction::CandidateCreated => event.new_content().map(str::to_owned),
+                MemoryAuditAction::Edited => event.new_content().map(str::to_owned),
+                _ => None,
+            };
+
+            if let Some(content) = content {
+                revision_number += 1;
+                revisions.push(MemoryRevision {
+                    revision: revision_number,
+                    sequence: event.sequence(),
+                    actor: event.actor().to_string(),
+                    action: event.action(),
+                    content,
+                    reason: event.reason().map(str::to_owned),
+                });
+            }
+        }
+
+        Ok(revisions)
     }
 
     fn list(&self, filter: MemoryListFilter) -> Result<Vec<MemoryRecord>, MemoryError> {

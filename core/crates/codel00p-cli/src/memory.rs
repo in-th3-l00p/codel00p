@@ -34,6 +34,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "list" => query::memory_list(config, rest),
         "show" => query::memory_show(config, rest),
         "audit" => review::memory_audit(config, rest),
+        "revisions" => review::memory_revisions(config, rest),
         "approve" => review::memory_review(config, rest, ReviewCommand::Approve),
         "reject" => review::memory_review(config, rest, ReviewCommand::Reject),
         "archive" => review::memory_review(config, rest, ReviewCommand::Archive),

@@ -1,6 +1,9 @@
 #[path = "lifecycle/support.rs"]
 mod support;
 
+#[path = "lifecycle/revisions.rs"]
+mod revisions;
+
 #[path = "lifecycle/candidates_quality.rs"]
 mod candidates_quality;
 #[path = "lifecycle/lifecycle_edit.rs"]

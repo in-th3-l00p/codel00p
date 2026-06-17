@@ -284,6 +284,53 @@ pub(super) fn memory_split(config: CliConfig, args: &[String]) -> CliResult<Stri
     ))
 }
 
+pub(super) fn memory_revisions(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some(id) = args.first() else {
+        return Err("missing memory id".to_string());
+    };
+    let mut json_output = false;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory revisions option: {flag}")),
+        }
+    }
+
+    let store = open_memory_store(&config)?;
+    let revisions = store.revisions(id).map_err(|error| error.to_string())?;
+
+    if json_output {
+        let items = revisions
+            .iter()
+            .map(super::json::memory_revision_json)
+            .collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
+    let mut output = String::new();
+    for rev in &revisions {
+        let preview: String = rev.content.chars().take(80).collect();
+        let preview = if rev.content.len() > 80 {
+            format!("{preview}…")
+        } else {
+            preview
+        };
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            rev.revision,
+            audit_action_label(rev.action),
+            rev.actor,
+            rev.reason.as_deref().unwrap_or(""),
+            preview,
+        ));
+    }
+    Ok(output)
+}
+
 pub(super) fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<String> {
     let Some(id) = args.first() else {
         return Err("missing memory id".to_string());
