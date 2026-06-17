@@ -1,10 +1,12 @@
-use std::{fs, path::Path};
+use std::fs;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{errors::HarnessError, tool_result::ToolResult, workspace::Workspace};
+use crate::{
+    errors::HarnessError, tool_result::ToolResult, walk::walk_files, workspace::Workspace,
+};
 use codel00p_protocol::PermissionScope;
 
 const MAX_LISTED_FILES: usize = 1_000;
@@ -104,7 +106,12 @@ impl Tool for ListFilesTool {
         let root = workspace.resolve(path)?;
         let mut files = Vec::new();
 
-        collect_files(workspace.root(), &root, &mut files)?;
+        // Ignore-aware and resilient: skips build/VCS sinks (`.git`, `target`,
+        // `node_modules`, …) and tolerates unreadable nested directories instead
+        // of aborting the whole listing.
+        walk_files(workspace.root(), &root, false, &mut |relative| {
+            files.push(relative.to_string());
+        })?;
         files.sort();
         files.truncate(MAX_LISTED_FILES);
 
@@ -230,7 +237,12 @@ impl Tool for SearchTextTool {
         let limit = optional_u64(&input, "limit");
         let root = workspace.resolve(path)?;
         let mut files = Vec::new();
-        collect_files(workspace.root(), &root, &mut files)?;
+        // Ignore-aware and resilient: skips build/VCS sinks (`.git`, `target`,
+        // `node_modules`, …) and tolerates unreadable nested directories instead
+        // of aborting the whole search.
+        walk_files(workspace.root(), &root, false, &mut |relative| {
+            files.push(relative.to_string());
+        })?;
         files.sort();
 
         // The window of matches the caller wants, plus one extra to detect
@@ -282,39 +294,6 @@ fn optional_u64(input: &Value, field: &str) -> Option<u64> {
     input.get(field).and_then(Value::as_u64)
 }
 
-fn collect_files(root: &Path, current: &Path, files: &mut Vec<String>) -> Result<(), HarnessError> {
-    if current.is_file() {
-        push_relative_file(root, current, files);
-        return Ok(());
-    }
-
-    for entry in fs::read_dir(current)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_dir() {
-            collect_files(root, &path, files)?;
-        } else if path.is_file() {
-            push_relative_file(root, &path, files);
-        }
-    }
-
-    Ok(())
-}
-
-fn push_relative_file(root: &Path, path: &Path, files: &mut Vec<String>) {
-    if let Ok(relative) = path.strip_prefix(root) {
-        files.push(normalize_path(relative));
-    }
-}
-
-fn normalize_path(path: &Path) -> String {
-    path.components()
-        .map(|component| component.as_os_str().to_string_lossy())
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
 pub(crate) fn required_string<'a>(
     tool: &str,
     input: &'a Value,
@@ -328,4 +307,144 @@ pub(crate) fn required_string<'a>(
 
 pub(crate) fn optional_string<'a>(input: &'a Value, key: &str) -> Option<&'a str> {
     input.get(key).and_then(Value::as_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn workspace_with(files: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
+        let dir = tempfile::tempdir().unwrap();
+        for (path, content) in files {
+            let full = dir.path().join(path);
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(full, content).unwrap();
+        }
+        let workspace = Workspace::new(dir.path()).unwrap();
+        (dir, workspace)
+    }
+
+    fn file_names(result: &ToolResult) -> Vec<String> {
+        result.content()["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn list_files_skips_ignored_dirs() {
+        let (_dir, workspace) = workspace_with(&[
+            ("src/main.rs", "fn main() {}"),
+            ("README.md", "# hi"),
+            ("target/debug/build.rs", "generated"),
+            (".git/config", "[core]"),
+            ("node_modules/pkg/index.js", "module.exports = {}"),
+        ]);
+
+        let result = ListFilesTool.execute(&workspace, json!({})).await.unwrap();
+
+        let names = file_names(&result);
+        assert_eq!(names, vec!["README.md", "src/main.rs"]);
+        assert!(!names.iter().any(|n| n.starts_with("target/")));
+        assert!(!names.iter().any(|n| n.starts_with(".git/")));
+        assert!(!names.iter().any(|n| n.starts_with("node_modules/")));
+    }
+
+    #[tokio::test]
+    async fn search_text_skips_ignored_dirs() {
+        let (_dir, workspace) = workspace_with(&[
+            ("src/lib.rs", "let needle = 1;"),
+            ("target/debug/gen.rs", "let needle = 2;"),
+            ("node_modules/pkg/x.js", "var needle = 3;"),
+        ]);
+
+        let result = SearchTextTool
+            .execute(&workspace, json!({ "query": "needle" }))
+            .await
+            .unwrap();
+
+        let matches = result.content()["matches"].as_array().unwrap();
+        let paths: Vec<&str> = matches
+            .iter()
+            .map(|m| m["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths, vec!["src/lib.rs"]);
+    }
+
+    /// Regression test for the macOS-TCC / EPERM bug: a recursive walk must not
+    /// abort the whole listing when it hits an unreadable subdirectory. We
+    /// create a readable file alongside a `0o000` directory and assert
+    /// `list_files` succeeds and returns the readable file.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn list_files_tolerates_unreadable_subdir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (dir, workspace) =
+            workspace_with(&[("readable.txt", "hello"), ("locked/secret.txt", "nope")]);
+        let locked = dir.path().join("locked");
+
+        // Restore permissions on drop so the tempdir can be cleaned up even if
+        // an assertion below panics.
+        struct Restore(std::path::PathBuf);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+            }
+        }
+        let _restore = Restore(locked.clone());
+
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let result = ListFilesTool
+            .execute(&workspace, json!({}))
+            .await
+            .expect("list_files must not abort on an unreadable subdir");
+
+        let names = file_names(&result);
+        assert!(
+            names.iter().any(|n| n == "readable.txt"),
+            "expected readable file in results, got {names:?}"
+        );
+    }
+
+    /// The same resilience must hold for `search_text`, which gathers candidate
+    /// files via the shared walk before grepping them.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn search_text_tolerates_unreadable_subdir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (dir, workspace) = workspace_with(&[
+            ("readable.txt", "needle here"),
+            ("locked/secret.txt", "needle hidden"),
+        ]);
+        let locked = dir.path().join("locked");
+
+        struct Restore(std::path::PathBuf);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+            }
+        }
+        let _restore = Restore(locked.clone());
+
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let result = SearchTextTool
+            .execute(&workspace, json!({ "query": "needle" }))
+            .await
+            .expect("search_text must not abort on an unreadable subdir");
+
+        let matches = result.content()["matches"].as_array().unwrap();
+        let paths: Vec<&str> = matches
+            .iter()
+            .map(|m| m["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths, vec!["readable.txt"]);
+    }
 }
