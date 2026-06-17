@@ -10,7 +10,13 @@ async fn git_defaults_expose_scoped_workflow_tools() {
 
     assert_eq!(
         registry.names(),
-        vec!["git_commit", "git_diff", "git_log", "git_status"]
+        vec![
+            "git_commit",
+            "git_diff",
+            "git_log",
+            "git_status",
+            "prepare_pr"
+        ]
     );
     assert_eq!(
         registry.permission_scope("git_status", &json!({})),
