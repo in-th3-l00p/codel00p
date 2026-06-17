@@ -34,7 +34,10 @@
 //! advance independently. [`Audience::Any`] (the default for the un-scoped
 //! builder methods) keeps the original single-conversation behavior.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use httpmock::{Method::POST, MockServer, prelude::HttpMockRequest};
 use serde_json::{Value, json};
@@ -111,6 +114,102 @@ impl MockProvider {
             registered_parent: 0,
             registered_child: 0,
         }
+    }
+
+    /// Queues a turn that, on the *first* time the model hits this turn's slot,
+    /// returns a retryable HTTP error (status `status`, with `Retry-After: 0` so
+    /// the client's backoff sleep is eliminated and the test stays fast), and on
+    /// every subsequent hit returns final assistant `text` and stops.
+    ///
+    /// This drives the inference client's same-route retry path through the real
+    /// binary: the default [`crate::CodelRunner`] provider wiring builds a client
+    /// with the default `RetryPolicy` (two retries), and a `429`/`503`-class status
+    /// is classified retryable, so the binary retries the same `POST
+    /// /chat/completions` and ultimately succeeds. Because the retried request
+    /// carries the *same* body (same tool-result count) as the failed one, this
+    /// turn distinguishes the retry from the original by an internal call counter
+    /// rather than by body shape — the only turn type that does so.
+    ///
+    /// It is registered as an [`Audience::Any`] turn occupying one tool-result
+    /// index slot, exactly like [`MockProvider::assistant_text`].
+    #[must_use]
+    pub fn transient_error_then_text(
+        mut self,
+        status: u16,
+        error_message: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
+        let index = self.registered;
+        self.registered += 1;
+
+        let error_message = error_message.into();
+        let success_body = response_for(&Turn::Text(text.into()));
+        let captured = Arc::clone(&self.captured);
+        // Shared across both mocks so the first matching request takes the error
+        // branch and all later ones take the success branch, deterministically.
+        let seen = Arc::new(AtomicUsize::new(0));
+
+        // Error mock: fires only on the *first* request that lands on this slot.
+        {
+            let seen = Arc::clone(&seen);
+            let captured = Arc::clone(&captured);
+            self.server.mock(move |when, then| {
+                let seen = Arc::clone(&seen);
+                let captured = Arc::clone(&captured);
+                when.method(POST).path("/chat/completions").is_true(
+                    move |req: &HttpMockRequest| {
+                        let body = req.body_string();
+                        if count_tool_results(&body) != index {
+                            return false;
+                        }
+                        // Claim the first hit for the error branch; reject after.
+                        if seen
+                            .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+                            .is_ok()
+                        {
+                            captured.lock().unwrap().push(body);
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                );
+                then.status(status)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "0")
+                    .json_body(json!({ "error": { "message": error_message.clone() } }));
+            });
+        }
+
+        // Success mock: fires on every later request that lands on this slot.
+        {
+            let seen = Arc::clone(&seen);
+            let captured = Arc::clone(&captured);
+            self.server.mock(move |when, then| {
+                let seen = Arc::clone(&seen);
+                let captured = Arc::clone(&captured);
+                when.method(POST).path("/chat/completions").is_true(
+                    move |req: &HttpMockRequest| {
+                        let body = req.body_string();
+                        if count_tool_results(&body) != index {
+                            return false;
+                        }
+                        // Only after the error branch has fired once.
+                        if seen.load(Ordering::SeqCst) >= 1 {
+                            captured.lock().unwrap().push(body);
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                );
+                then.status(200)
+                    .header("content-type", "application/json")
+                    .json_body(success_body.clone());
+            });
+        }
+
+        self
     }
 
     /// Queues a turn that returns final assistant text and stops.
