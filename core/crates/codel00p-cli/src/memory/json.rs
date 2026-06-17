@@ -1,3 +1,4 @@
+use codel00p_memory::MemoryRevision;
 use codel00p_protocol::MemorySource;
 use serde_json::{Value, json};
 
@@ -48,6 +49,20 @@ pub(super) fn stale_memory_json(memory: &codel00p_memory::StaleMemory) -> Value 
 pub(super) fn quality_memory_json(memory: &codel00p_memory::QualityMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
     item["quality"] = memory_quality_json(memory.quality());
+    item
+}
+
+pub(super) fn memory_revision_json(rev: &MemoryRevision) -> Value {
+    let mut item = json!({
+        "revision": rev.revision,
+        "sequence": rev.sequence,
+        "action": super::parse::audit_action_label(rev.action),
+        "actor": rev.actor,
+        "content": rev.content,
+    });
+    if let Some(reason) = &rev.reason {
+        item["reason"] = json!(reason);
+    }
     item
 }
 

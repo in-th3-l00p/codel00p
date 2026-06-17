@@ -200,6 +200,28 @@ impl MemoryEdit {
     }
 }
 
+/// A reconstructed content snapshot for a memory at a given point in its history.
+///
+/// Produced by [`MemoryRepository::revisions`], which walks the audit trail and
+/// emits one `MemoryRevision` per event that carried a content change
+/// (`CandidateCreated` and `Edited`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryRevision {
+    /// 1-based ordinal across content-bearing events only.
+    pub revision: u64,
+    /// Audit sequence number of the event that produced this content.
+    pub sequence: u64,
+    /// Actor who triggered this content version.
+    pub actor: String,
+    /// Audit action that introduced this content snapshot.
+    pub action: MemoryAuditAction,
+    /// Full content at this revision.
+    pub content: String,
+    /// Optional reason recorded with the event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryAuditAction {
@@ -236,7 +258,10 @@ pub struct MemoryAuditEvent {
 }
 
 impl MemoryAuditEvent {
-    pub(crate) fn candidate_created(memory_id: impl Into<String>) -> Self {
+    pub(crate) fn candidate_created(
+        memory_id: impl Into<String>,
+        initial_content: impl Into<String>,
+    ) -> Self {
         Self {
             memory_id: memory_id.into(),
             sequence: 0,
@@ -244,7 +269,7 @@ impl MemoryAuditEvent {
             actor: "system".to_string(),
             reason: None,
             previous_content: None,
-            new_content: None,
+            new_content: Some(initial_content.into()),
             merged_into: None,
             split_into: None,
         }

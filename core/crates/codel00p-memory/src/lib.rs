@@ -26,7 +26,8 @@ pub use records::{
 };
 pub use repository::{InMemoryMemoryStore, MemoryRepository, StorageBackedMemoryStore};
 pub use review::{
-    MemoryAuditAction, MemoryAuditEvent, MemoryEdit, MemoryMerge, MemorySplit, ReviewDecision,
+    MemoryAuditAction, MemoryAuditEvent, MemoryEdit, MemoryMerge, MemoryRevision, MemorySplit,
+    ReviewDecision,
 };
 
 pub fn crate_name() -> &'static str {
