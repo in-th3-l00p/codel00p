@@ -180,6 +180,36 @@ pub(super) fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_merge",
+            "description": "Merge a duplicate codel00p memory (source) into a canonical one (target), archiving the source.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["source_id", "target_id", "actor"],
+                "properties": {
+                    "source_id": { "type": "string" },
+                    "target_id": { "type": "string" },
+                    "actor": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
+            "name": "memory_split",
+            "description": "Split one codel00p memory into two: the source stays active, a new candidate is created carrying part of the content.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["source_id", "new_id", "actor", "content"],
+                "properties": {
+                    "source_id": { "type": "string" },
+                    "new_id": { "type": "string" },
+                    "actor": { "type": "string" },
+                    "content": { "type": "string" },
+                    "source_content": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
             "name": "session_show",
             "description": "Replay one codel00p agent session by id.",
             "inputSchema": {

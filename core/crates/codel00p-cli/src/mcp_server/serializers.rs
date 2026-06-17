@@ -125,6 +125,7 @@ pub(super) fn audit_action_label(action: MemoryAuditAction) -> &'static str {
         MemoryAuditAction::Archived => "archived",
         MemoryAuditAction::Edited => "edited",
         MemoryAuditAction::Merged => "merged",
+        MemoryAuditAction::Split => "split",
     }
 }
 

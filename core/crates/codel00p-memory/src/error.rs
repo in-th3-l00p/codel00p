@@ -14,6 +14,9 @@ pub enum MemoryError {
     #[error("invalid memory merge: {message}")]
     InvalidMerge { message: String },
 
+    #[error("invalid memory split: {message}")]
+    InvalidSplit { message: String },
+
     #[error("memory already exists: {id}")]
     MemoryAlreadyExists { id: String },
 

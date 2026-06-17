@@ -7,6 +7,8 @@ mod candidates_quality;
 mod lifecycle_edit;
 #[path = "lifecycle/lifecycle_merge.rs"]
 mod lifecycle_merge;
+#[path = "lifecycle/lifecycle_split.rs"]
+mod lifecycle_split;
 #[path = "lifecycle/list.rs"]
 mod list;
 #[path = "lifecycle/retrieval.rs"]

@@ -38,6 +38,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "archive" => review::memory_review(config, rest, ReviewCommand::Archive),
         "edit" => review::memory_edit(config, rest),
         "merge" => review::memory_merge(config, rest),
+        "split" => review::memory_split(config, rest),
         "restore" => review::memory_restore(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }

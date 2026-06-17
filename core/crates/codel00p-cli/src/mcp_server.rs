@@ -2,8 +2,9 @@ use std::io;
 
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
-    MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryQualityQuery,
-    MemoryQuery, MemoryRepository, MemorySimilarityQuery, MemoryStalenessQuery, ReviewDecision,
+    MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryMerge,
+    MemoryQualityQuery, MemoryQuery, MemoryRepository, MemorySimilarityQuery, MemorySplit,
+    MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
