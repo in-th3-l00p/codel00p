@@ -1,10 +1,11 @@
 use codel00p_memory::{MemoryEdit, MemoryMerge, MemoryRepository, MemorySplit, ReviewDecision};
+use codel00p_protocol::{EvidenceKind, MemoryEvidence};
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
 
 use super::{
     json::{audit_event_json, memory_record_json},
-    parse::{audit_action_label, status_label},
+    parse::{audit_action_label, parse_evidence_kind, status_label},
 };
 
 pub(super) enum ReviewCommand {
@@ -329,6 +330,70 @@ pub(super) fn memory_revisions(config: CliConfig, args: &[String]) -> CliResult<
         ));
     }
     Ok(output)
+}
+
+pub(super) fn memory_evidence_add(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let id = args
+        .first()
+        .ok_or_else(|| "missing memory id".to_string())?;
+    let reference = match args.get(1) {
+        Some(value) if !value.starts_with("--") => value,
+        _ => return Err("missing evidence reference".to_string()),
+    };
+
+    let mut kind = EvidenceKind::Other;
+    let mut note = None;
+    let mut actor = None;
+    let mut reason = None;
+    let mut json_output = false;
+    let mut index = 2;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--kind" => {
+                kind = parse_evidence_kind(&required_value(args, index, "--kind")?)?;
+                index += 2;
+            }
+            "--note" => {
+                note = Some(required_value(args, index, "--note")?);
+                index += 2;
+            }
+            "--actor" => {
+                actor = Some(required_value(args, index, "--actor")?);
+                index += 2;
+            }
+            "--reason" => {
+                reason = Some(required_value(args, index, "--reason")?);
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory evidence add option: {flag}")),
+        }
+    }
+
+    let actor = actor.unwrap_or_else(crate::actor::infer_actor);
+    let mut evidence = MemoryEvidence::new(kind, reference.clone());
+    if let Some(note) = note {
+        evidence = evidence.with_note(note);
+    }
+
+    let mut store = open_memory_store(&config)?;
+    let record = store
+        .add_evidence(id, evidence, &actor, reason)
+        .map_err(|error| error.to_string())?;
+    if json_output {
+        return serde_json::to_string(&memory_record_json(&record))
+            .map_err(|error| error.to_string());
+    }
+
+    Ok(format!(
+        "{}\t{}\n",
+        record.entry().id(),
+        status_label(record.entry().status())
+    ))
 }
 
 pub(super) fn memory_restore(config: CliConfig, args: &[String]) -> CliResult<String> {

@@ -12,8 +12,8 @@ use super::{
         similar_memory_json, source_uri, stale_memory_json,
     },
     parse::{
-        kind_label, parse_kind, parse_sensitivity, parse_status, parse_visibility, status_label,
-        visibility_label,
+        evidence_kind_label, kind_label, parse_kind, parse_sensitivity, parse_status,
+        parse_visibility, status_label, visibility_label,
     },
 };
 
@@ -487,6 +487,18 @@ pub(super) fn memory_show(config: CliConfig, args: &[String]) -> CliResult<Strin
             source.session_id().as_str(),
             source.turn_id().as_str(),
             source_uri(source)
+        ));
+    }
+    for evidence in record.entry().evidence() {
+        let note = match evidence.note() {
+            Some(note) => format!(" ({note})"),
+            None => String::new(),
+        };
+        output.push_str(&format!(
+            "evidence: {} {}{}\n",
+            evidence_kind_label(evidence.kind()),
+            evidence.reference(),
+            note
         ));
     }
     output.push_str(&format!("content: {}\n", record.entry().content()));

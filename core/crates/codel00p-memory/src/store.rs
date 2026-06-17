@@ -1,8 +1,8 @@
 //! Storage-backed implementation of the memory repository contract.
 
 use codel00p_protocol::{
-    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, MemoryVisibility,
-    SessionId, TurnId,
+    MemoryEntry, MemoryEvidence, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus,
+    MemoryVisibility, SessionId, TurnId,
 };
 use codel00p_storage::{AppendLogStore, DocumentStore, StorageDocument};
 
@@ -83,6 +83,32 @@ where
             &edit,
             previous_content,
             new_content,
+        ))?;
+
+        Ok(record)
+    }
+
+    fn add_evidence(
+        &mut self,
+        id: &str,
+        evidence: MemoryEvidence,
+        actor: &str,
+        reason: Option<String>,
+    ) -> Result<MemoryRecord, MemoryError> {
+        let current = self.get(id)?;
+        if !is_active_memory_status(current.entry().status()) {
+            return Err(MemoryError::InvalidEdit {
+                message: "cannot add evidence to a memory that is not active".to_string(),
+            });
+        }
+
+        let reference = evidence.reference().to_string();
+        let entry = append_evidence(current.entry(), evidence);
+        let record = MemoryRecord::new(entry);
+
+        self.put_record(&record)?;
+        self.append_audit(MemoryAuditEvent::evidence_added(
+            id, actor, reference, reason,
         ))?;
 
         Ok(record)
@@ -760,7 +786,34 @@ fn replace_content(entry: &MemoryEntry, content: String) -> MemoryEntry {
     for tag in entry.tags() {
         updated = updated.with_tag(tag.clone());
     }
+    for evidence in entry.evidence() {
+        updated = updated.with_evidence(evidence.clone());
+    }
     updated
+}
+
+/// Rebuilds `entry` with one additional evidence link appended, preserving all
+/// other fields including existing evidence.
+fn append_evidence(entry: &MemoryEntry, evidence: MemoryEvidence) -> MemoryEntry {
+    let mut updated = MemoryEntry::new(
+        entry.id().to_string(),
+        entry.project().clone(),
+        entry.kind(),
+        entry.content().to_string(),
+    )
+    .with_status(entry.status())
+    .with_sensitivity(entry.sensitivity())
+    .with_visibility(entry.visibility());
+    if let Some(source) = entry.source() {
+        updated = updated.with_source(source.clone());
+    }
+    for tag in entry.tags() {
+        updated = updated.with_tag(tag.clone());
+    }
+    for existing in entry.evidence() {
+        updated = updated.with_evidence(existing.clone());
+    }
+    updated.with_evidence(evidence)
 }
 
 /// Rebuilds `target` with the union of its own tags and `extra_tags`, preserving
@@ -777,6 +830,9 @@ fn union_tags(target: &MemoryEntry, extra_tags: &[String]) -> MemoryEntry {
     .with_visibility(target.visibility());
     if let Some(source) = target.source() {
         entry = entry.with_source(source.clone());
+    }
+    for evidence in target.evidence() {
+        entry = entry.with_evidence(evidence.clone());
     }
 
     let mut tags: Vec<String> = target.tags().to_vec();

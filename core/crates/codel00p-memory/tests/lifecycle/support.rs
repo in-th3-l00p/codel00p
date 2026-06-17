@@ -7,7 +7,8 @@ pub(crate) use codel00p_memory::{
     StorageBackedMemoryStore,
 };
 pub(crate) use codel00p_protocol::{
-    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId,
+    EvidenceKind, MemoryEvidence, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus,
+    ProjectRef, SessionId, TurnId,
 };
 pub(crate) use codel00p_storage::{InMemoryStorage, StorageScope};
 

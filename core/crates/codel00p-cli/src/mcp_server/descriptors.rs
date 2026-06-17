@@ -230,6 +230,22 @@ pub(super) fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_add_evidence",
+            "description": "Append an explicit evidence link (file, url, pr, issue, commit, other) to an existing active codel00p memory.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "reference", "actor"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "reference": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "note": { "type": "string" },
+                    "actor": { "type": "string" },
+                    "reason": { "type": "string" }
+                }
+            }
+        }),
+        json!({
             "name": "session_show",
             "description": "Replay one codel00p agent session by id.",
             "inputSchema": {

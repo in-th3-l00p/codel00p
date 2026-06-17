@@ -1,9 +1,10 @@
 use codel00p_memory::MemoryRevision;
-use codel00p_protocol::MemorySource;
+use codel00p_protocol::{MemoryEvidence, MemorySource};
 use serde_json::{Value, json};
 
 use super::parse::{
-    audit_action_label, kind_label, sensitivity_label, status_label, visibility_label,
+    audit_action_label, evidence_kind_label, kind_label, sensitivity_label, status_label,
+    visibility_label,
 };
 
 pub(super) fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
@@ -90,6 +91,9 @@ pub(super) fn audit_event_json(event: &codel00p_memory::MemoryAuditEvent) -> Val
     if let Some(split_into) = event.split_into() {
         item["split_into"] = json!(split_into);
     }
+    if let Some(evidence_reference) = event.evidence_reference() {
+        item["evidence_reference"] = json!(evidence_reference);
+    }
     item
 }
 
@@ -113,6 +117,26 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         }
         item["source"] = source_json;
         item["source_uri"] = json!(source_uri(source));
+    }
+    if !entry.evidence().is_empty() {
+        item["evidence"] = json!(
+            entry
+                .evidence()
+                .iter()
+                .map(evidence_json)
+                .collect::<Vec<_>>()
+        );
+    }
+    item
+}
+
+pub(super) fn evidence_json(evidence: &MemoryEvidence) -> Value {
+    let mut item = json!({
+        "kind": evidence_kind_label(evidence.kind()),
+        "reference": evidence.reference(),
+    });
+    if let Some(note) = evidence.note() {
+        item["note"] = json!(note);
     }
     item
 }

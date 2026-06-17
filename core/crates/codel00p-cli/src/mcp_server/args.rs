@@ -82,6 +82,18 @@ pub(super) fn parse_kind(value: &str) -> Result<MemoryKind, String> {
     }
 }
 
+pub(super) fn parse_evidence_kind(value: &str) -> Result<EvidenceKind, String> {
+    match value {
+        "file" => Ok(EvidenceKind::File),
+        "url" => Ok(EvidenceKind::Url),
+        "pr" => Ok(EvidenceKind::Pr),
+        "issue" => Ok(EvidenceKind::Issue),
+        "commit" => Ok(EvidenceKind::Commit),
+        "other" => Ok(EvidenceKind::Other),
+        _ => Err(format!("unknown evidence kind: {value}")),
+    }
+}
+
 pub(super) fn parse_sensitivity(value: &str) -> Result<MemorySensitivity, String> {
     match value {
         "normal" => Ok(MemorySensitivity::Normal),

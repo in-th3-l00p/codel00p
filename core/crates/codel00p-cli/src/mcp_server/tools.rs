@@ -28,6 +28,7 @@ pub(super) fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerR
         "memory_restore" => memory_restore(config, &arguments)?,
         "memory_merge" => memory_merge(config, &arguments)?,
         "memory_split" => memory_split(config, &arguments)?,
+        "memory_add_evidence" => memory_add_evidence(config, &arguments)?,
         "session_show" => (session_show(config, &arguments)?, Vec::new()),
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
@@ -245,6 +246,9 @@ fn memory_audit(config: &CliConfig, arguments: &Value) -> Result<String, String>
             if let Some(split_into) = event.split_into() {
                 item["split_into"] = json!(split_into);
             }
+            if let Some(evidence_reference) = event.evidence_reference() {
+                item["evidence_reference"] = json!(evidence_reference);
+            }
             item
         })
         .collect::<Vec<_>>();
@@ -414,6 +418,32 @@ fn memory_split(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<St
         text,
         vec![memory_resource_uri(source_id), memory_resource_uri(new_id)],
     ))
+}
+
+fn memory_add_evidence(
+    config: &CliConfig,
+    arguments: &Value,
+) -> Result<(String, Vec<String>), String> {
+    let id = required_string(arguments, "id")?;
+    let reference = required_string(arguments, "reference")?;
+    let actor = required_string(arguments, "actor")?;
+    let kind = match optional_string(arguments, "kind") {
+        Some(kind) => parse_evidence_kind(kind)?,
+        None => EvidenceKind::Other,
+    };
+    let mut evidence = MemoryEvidence::new(kind, reference);
+    if let Some(note) = optional_string(arguments, "note") {
+        evidence = evidence.with_note(note);
+    }
+    let reason = optional_string(arguments, "reason").map(ToString::to_string);
+
+    let mut store = open_memory_store(config)?;
+    let record = store
+        .add_evidence(id, evidence, actor, reason)
+        .map_err(|error| error.to_string())?;
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((text, vec![memory_resource_uri(id)]))
 }
 
 fn memory_resource_uri(id: &str) -> String {

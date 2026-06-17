@@ -65,6 +65,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert!(tool_names.contains(&"memory_audit"));
     assert!(tool_names.contains(&"memory_merge"));
     assert!(tool_names.contains(&"memory_split"));
+    assert!(tool_names.contains(&"memory_add_evidence"));
     assert!(tool_names.contains(&"session_show"));
 
     send(
@@ -450,6 +451,79 @@ fn mcp_memory_create_and_search_round_trips_visibility() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0]["id"], "mcp-private");
     assert_eq!(records[0]["visibility"], "private");
+
+    child.kill().expect("kill server");
+    let _ = child.wait();
+}
+
+#[test]
+fn mcp_memory_add_evidence_appends_link() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let mut child = spawn_codel00p_mcp_server(&db_path);
+    let stdout = child.stdout.take().expect("stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","method":"notifications/initialized","params":{}}),
+    );
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0", "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mcp-evidence",
+                    "kind": "decision",
+                    "content": "Adopted axum for the cloud service.",
+                    "session_id": "s1",
+                    "turn_id": "t1"
+                }
+            }
+        }),
+    );
+    read_response(&mut stdout);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_add_evidence",
+                "arguments": {
+                    "id": "mcp-evidence",
+                    "reference": "https://github.com/acme/repo/pull/9",
+                    "kind": "pr",
+                    "note": "decision PR",
+                    "actor": "alice",
+                    "reason": "link the decision"
+                }
+            }
+        }),
+    );
+    let resp = read_response(&mut stdout);
+    assert_eq!(resp["result"]["isError"], false);
+    let text = resp["result"]["content"][0]["text"].as_str().expect("text");
+    let record: serde_json::Value = serde_json::from_str(text).expect("json");
+    assert_eq!(record["id"], "mcp-evidence");
+    assert_eq!(record["evidence"][0]["kind"], "pr");
+    assert_eq!(
+        record["evidence"][0]["reference"],
+        "https://github.com/acme/repo/pull/9"
+    );
+    assert_eq!(record["evidence"][0]["note"], "decision PR");
 
     child.kill().expect("kill server");
     let _ = child.wait();

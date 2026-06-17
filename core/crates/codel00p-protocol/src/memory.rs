@@ -135,6 +135,61 @@ impl MemorySource {
     }
 }
 
+/// The category of an explicit evidence link backing a memory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceKind {
+    File,
+    Url,
+    Pr,
+    Issue,
+    Commit,
+    Other,
+}
+
+/// An explicit piece of source evidence backing a memory — a file path, URL,
+/// PR/issue/commit reference, etc. — recorded alongside the session/turn replay
+/// `MemorySource`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryEvidence {
+    kind: EvidenceKind,
+    reference: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+}
+
+impl MemoryEvidence {
+    pub fn new(kind: EvidenceKind, reference: impl Into<String>) -> Self {
+        Self {
+            kind,
+            reference: reference.into(),
+            note: None,
+        }
+    }
+
+    pub fn with_note(mut self, note: impl Into<String>) -> Self {
+        let note = note.into();
+        self.note = if note.trim().is_empty() {
+            None
+        } else {
+            Some(note)
+        };
+        self
+    }
+
+    pub fn kind(&self) -> EvidenceKind {
+        self.kind
+    }
+
+    pub fn reference(&self) -> &str {
+        &self.reference
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryEntry {
     id: String,
@@ -149,6 +204,8 @@ pub struct MemoryEntry {
     tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<MemorySource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    evidence: Vec<MemoryEvidence>,
 }
 
 impl MemoryEntry {
@@ -168,6 +225,7 @@ impl MemoryEntry {
             content: content.into(),
             tags: Vec::new(),
             source: None,
+            evidence: Vec::new(),
         }
     }
 
@@ -193,6 +251,11 @@ impl MemoryEntry {
 
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tags.push(tag.into());
+        self
+    }
+
+    pub fn with_evidence(mut self, evidence: MemoryEvidence) -> Self {
+        self.evidence.push(evidence);
         self
     }
 
@@ -230,6 +293,10 @@ impl MemoryEntry {
 
     pub fn source(&self) -> Option<&MemorySource> {
         self.source.as_ref()
+    }
+
+    pub fn evidence(&self) -> &[MemoryEvidence] {
+        &self.evidence
     }
 }
 

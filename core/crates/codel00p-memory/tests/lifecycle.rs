@@ -8,6 +8,8 @@ mod revisions;
 mod candidates_quality;
 #[path = "lifecycle/lifecycle_edit.rs"]
 mod lifecycle_edit;
+#[path = "lifecycle/lifecycle_evidence.rs"]
+mod lifecycle_evidence;
 #[path = "lifecycle/lifecycle_merge.rs"]
 mod lifecycle_merge;
 #[path = "lifecycle/lifecycle_split.rs"]
