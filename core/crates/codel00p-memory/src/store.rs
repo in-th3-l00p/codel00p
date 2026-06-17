@@ -1,13 +1,15 @@
 //! Storage-backed implementation of the memory repository contract.
 
-use codel00p_protocol::{MemoryEntry, MemoryKind, MemorySensitivity, MemoryStatus};
+use codel00p_protocol::{
+    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionId, TurnId,
+};
 use codel00p_storage::{AppendLogStore, DocumentStore, StorageDocument};
 
 use crate::{
     MemoryAuditAction, MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError,
     MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRepository,
-    MemorySimilarityQuery, MemoryStalenessQuery, QualityMemory, RetrievedMemory, ReviewDecision,
-    SimilarMemory, StaleMemory, StorageBackedMemoryStore,
+    MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, QualityMemory, RetrievedMemory,
+    ReviewDecision, SimilarMemory, StaleMemory, StorageBackedMemoryStore,
     records::{content_tokens, token_similarity_score},
 };
 
@@ -121,6 +123,80 @@ where
         self.append_audit(MemoryAuditEvent::merged_from(target_id, &merge, source_id))?;
 
         Ok(target_record)
+    }
+
+    fn split(&mut self, source_id: &str, split: MemorySplit) -> Result<MemoryRecord, MemoryError> {
+        let source = self.get(source_id)?;
+
+        if !is_active_memory_status(source.entry().status()) {
+            return Err(MemoryError::InvalidSplit {
+                message: "source memory is not active".to_string(),
+            });
+        }
+
+        // Reject if new_id is already taken.
+        if self
+            .storage
+            .get_document(&self.scope, MEMORY_COLLECTION, split.new_id())?
+            .is_some()
+        {
+            return Err(MemoryError::MemoryAlreadyExists {
+                id: split.new_id().to_string(),
+            });
+        }
+
+        // Build a source reference pointing back to the source memory's session
+        // source, so the new candidate retains provenance lineage.
+        let new_source = source.entry().source().cloned().unwrap_or_else(|| {
+            MemorySource::turn(
+                SessionId::from_static("system"),
+                TurnId::from_static("split"),
+            )
+        });
+
+        // Create the new candidate inheriting project/kind/sensitivity/tags.
+        let mut new_input = MemoryCandidateInput::new(
+            split.new_id(),
+            source.entry().project().clone(),
+            source.entry().kind(),
+            split.new_content(),
+            new_source,
+        )
+        .with_sensitivity(source.entry().sensitivity());
+        for tag in source.entry().tags() {
+            new_input = new_input.with_tag(tag.clone());
+        }
+
+        let new_record = MemoryRecord::new(new_input.into_entry());
+        self.put_record(&new_record)?;
+        self.append_audit(MemoryAuditEvent::candidate_created(split.new_id()))?;
+        self.append_index(MemoryAuditEvent::candidate_created(split.new_id()))?;
+
+        // Optionally update source content.
+        if let Some(updated_content) = split.updated_source_content() {
+            let previous_content = source.entry().content().to_string();
+            let source_entry = replace_content(source.entry(), updated_content.to_string());
+            let updated_source = MemoryRecord::new(source_entry);
+            self.put_record(&updated_source)?;
+            // Record an edit event for the content update on the source.
+            let edit = crate::MemoryEdit::replace_content(split.actor(), updated_content);
+            self.append_audit(MemoryAuditEvent::edited(
+                source_id,
+                &edit,
+                previous_content,
+                updated_content,
+            ))?;
+        }
+
+        // Two-sided split audit trail.
+        self.append_audit(MemoryAuditEvent::split_source(source_id, &split))?;
+        self.append_audit(MemoryAuditEvent::split_from(
+            split.new_id(),
+            &split,
+            source_id,
+        ))?;
+
+        Ok(new_record)
     }
 
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError> {

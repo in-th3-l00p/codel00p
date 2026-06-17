@@ -66,6 +66,65 @@ impl ReviewDecision {
     }
 }
 
+/// A request to split one memory into two: the source is retained (optionally
+/// with updated content), and a new candidate memory is created carrying part of
+/// the original content.  The operation records two-sided audit events so both
+/// memories carry a complete history.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemorySplit {
+    actor: String,
+    pub(crate) new_id: String,
+    pub(crate) new_content: String,
+    pub(crate) updated_source_content: Option<String>,
+    reason: Option<String>,
+}
+
+impl MemorySplit {
+    pub fn new(
+        actor: impl Into<String>,
+        new_id: impl Into<String>,
+        new_content: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor: actor.into(),
+            new_id: new_id.into(),
+            new_content: new_content.into(),
+            updated_source_content: None,
+            reason: None,
+        }
+    }
+
+    pub fn with_updated_source_content(mut self, content: impl Into<String>) -> Self {
+        self.updated_source_content = non_empty_filter(content.into());
+        self
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = non_empty_filter(reason.into());
+        self
+    }
+
+    pub fn actor(&self) -> &str {
+        &self.actor
+    }
+
+    pub fn new_id(&self) -> &str {
+        &self.new_id
+    }
+
+    pub fn new_content(&self) -> &str {
+        &self.new_content
+    }
+
+    pub fn updated_source_content(&self) -> Option<&str> {
+        self.updated_source_content.as_deref()
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        self.reason.as_deref()
+    }
+}
+
 /// A request to fold a duplicate memory (the source) into a canonical one (the
 /// target). Mirrors [`ReviewDecision`]/[`MemoryEdit`]: the operation lives on the
 /// repository; this only carries who did it and why.
@@ -150,6 +209,7 @@ pub enum MemoryAuditAction {
     Archived,
     Edited,
     Merged,
+    Split,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +228,11 @@ pub struct MemoryAuditEvent {
     /// source side of a merge; the target's event leaves it `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
     merged_into: Option<String>,
+    /// On a split, the new memory that was created from this source. Present
+    /// only on the source side of a split; the new memory's event leaves it
+    /// `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    split_into: Option<String>,
 }
 
 impl MemoryAuditEvent {
@@ -181,6 +246,7 @@ impl MemoryAuditEvent {
             previous_content: None,
             new_content: None,
             merged_into: None,
+            split_into: None,
         }
     }
 
@@ -194,6 +260,7 @@ impl MemoryAuditEvent {
             previous_content: None,
             new_content: None,
             merged_into: None,
+            split_into: None,
         }
     }
 
@@ -214,6 +281,7 @@ impl MemoryAuditEvent {
             previous_content: None,
             new_content: None,
             merged_into: Some(merged_into.into()),
+            split_into: None,
         }
     }
 
@@ -238,6 +306,49 @@ impl MemoryAuditEvent {
             previous_content: None,
             new_content: None,
             merged_into: None,
+            split_into: None,
+        }
+    }
+
+    /// The audit event written to the **source** memory of a split: it records
+    /// the new memory that was created from it and is paired with a
+    /// [`Self::split_from`] event on the new memory.
+    pub(crate) fn split_source(memory_id: impl Into<String>, split: &MemorySplit) -> Self {
+        Self {
+            memory_id: memory_id.into(),
+            sequence: 0,
+            action: MemoryAuditAction::Split,
+            actor: split.actor().to_string(),
+            reason: split.reason().map(ToString::to_string),
+            previous_content: None,
+            new_content: None,
+            merged_into: None,
+            split_into: Some(split.new_id().to_string()),
+        }
+    }
+
+    /// The audit event written to the **new** memory created by a split: it
+    /// names the source it was split from in its reason and leaves `split_into`
+    /// unset, marking it as the receiving side.
+    pub(crate) fn split_from(
+        memory_id: impl Into<String>,
+        split: &MemorySplit,
+        source_id: &str,
+    ) -> Self {
+        let reason = match split.reason() {
+            Some(reason) => format!("split from {source_id}: {reason}"),
+            None => format!("split from {source_id}"),
+        };
+        Self {
+            memory_id: memory_id.into(),
+            sequence: 0,
+            action: MemoryAuditAction::Split,
+            actor: split.actor().to_string(),
+            reason: Some(reason),
+            previous_content: None,
+            new_content: None,
+            merged_into: None,
+            split_into: None,
         }
     }
 
@@ -256,6 +367,7 @@ impl MemoryAuditEvent {
             previous_content: Some(previous_content.into()),
             new_content: Some(new_content.into()),
             merged_into: None,
+            split_into: None,
         }
     }
 
@@ -290,6 +402,11 @@ impl MemoryAuditEvent {
     /// On a merge's source event, the target memory it was folded into.
     pub fn merged_into(&self) -> Option<&str> {
         self.merged_into.as_deref()
+    }
+
+    /// On a split's source event, the new memory that was created from it.
+    pub fn split_into(&self) -> Option<&str> {
+        self.split_into.as_deref()
     }
 
     pub(crate) fn from_log_entry(entry: AppendLogEntry) -> Result<Self, MemoryError> {

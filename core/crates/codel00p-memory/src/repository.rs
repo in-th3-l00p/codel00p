@@ -4,8 +4,9 @@ use codel00p_storage::{InMemoryStorage, StorageScope};
 
 use crate::{
     MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError, MemoryListFilter, MemoryMerge,
-    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemorySimilarityQuery, MemoryStalenessQuery,
-    QualityMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
+    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemorySimilarityQuery, MemorySplit,
+    MemoryStalenessQuery, QualityMemory, RetrievedMemory, ReviewDecision, SimilarMemory,
+    StaleMemory,
 };
 
 pub trait MemoryRepository {
@@ -27,6 +28,13 @@ pub trait MemoryRepository {
         target_id: &str,
         merge: MemoryMerge,
     ) -> Result<MemoryRecord, MemoryError>;
+
+    /// Splits the `source` memory into two: the source is kept active (optionally
+    /// with updated content), and a new candidate memory is created carrying the
+    /// split-off content plus the source's project/kind/sensitivity/tags and a
+    /// source reference. Records a two-sided audit trail.
+    /// Returns the newly created memory record.
+    fn split(&mut self, source_id: &str, split: MemorySplit) -> Result<MemoryRecord, MemoryError>;
 
     fn get(&self, id: &str) -> Result<MemoryRecord, MemoryError>;
 

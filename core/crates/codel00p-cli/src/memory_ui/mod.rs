@@ -167,5 +167,6 @@ fn audit_action_label(action: codel00p_memory::MemoryAuditAction) -> &'static st
         Archived => "archived",
         Edited => "edited",
         Merged => "merged",
+        Split => "split",
     }
 }

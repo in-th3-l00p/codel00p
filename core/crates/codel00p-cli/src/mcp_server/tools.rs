@@ -25,6 +25,8 @@ pub(super) fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerR
         "memory_archive" => memory_review(config, &arguments, MemoryReviewAction::Archive)?,
         "memory_edit" => memory_edit(config, &arguments)?,
         "memory_restore" => memory_restore(config, &arguments)?,
+        "memory_merge" => memory_merge(config, &arguments)?,
+        "memory_split" => memory_split(config, &arguments)?,
         "session_show" => (session_show(config, &arguments)?, Vec::new()),
         _ => return Err(format!("unknown codel00p MCP tool: {name}")),
     };
@@ -200,6 +202,9 @@ fn memory_audit(config: &CliConfig, arguments: &Value) -> Result<String, String>
             if let Some(merged_into) = event.merged_into() {
                 item["merged_into"] = json!(merged_into);
             }
+            if let Some(split_into) = event.split_into() {
+                item["split_into"] = json!(split_into);
+            }
             item
         })
         .collect::<Vec<_>>();
@@ -317,6 +322,55 @@ fn memory_restore(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<
     let text =
         serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
     Ok((text, vec![memory_resource_uri(id)]))
+}
+
+fn memory_merge(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<String>), String> {
+    let source_id = required_string(arguments, "source_id")?;
+    let target_id = required_string(arguments, "target_id")?;
+    let actor = required_string(arguments, "actor")?;
+    let mut merge = MemoryMerge::new(actor);
+    if let Some(reason) = optional_string(arguments, "reason") {
+        merge = merge.with_reason(reason);
+    }
+
+    let mut store = open_memory_store(config)?;
+    let record = store
+        .merge(source_id, target_id, merge)
+        .map_err(|error| error.to_string())?;
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((
+        text,
+        vec![
+            memory_resource_uri(source_id),
+            memory_resource_uri(target_id),
+        ],
+    ))
+}
+
+fn memory_split(config: &CliConfig, arguments: &Value) -> Result<(String, Vec<String>), String> {
+    let source_id = required_string(arguments, "source_id")?;
+    let new_id = required_string(arguments, "new_id")?;
+    let actor = required_string(arguments, "actor")?;
+    let content = required_string(arguments, "content")?;
+    let mut split = MemorySplit::new(actor, new_id, content);
+    if let Some(source_content) = optional_string(arguments, "source_content") {
+        split = split.with_updated_source_content(source_content);
+    }
+    if let Some(reason) = optional_string(arguments, "reason") {
+        split = split.with_reason(reason);
+    }
+
+    let mut store = open_memory_store(config)?;
+    let record = store
+        .split(source_id, split)
+        .map_err(|error| error.to_string())?;
+    let text =
+        serde_json::to_string(&memory_record_json(&record)).map_err(|error| error.to_string())?;
+    Ok((
+        text,
+        vec![memory_resource_uri(source_id), memory_resource_uri(new_id)],
+    ))
 }
 
 fn memory_resource_uri(id: &str) -> String {
