@@ -29,13 +29,21 @@ multi-edit `apply_patch` engine.
 Only two small tool-calling tails remain: **token-efficient tool results**
 (Phase 2) and **streaming tool-call arguments** (Phase 3).
 
-**Next priority:** with #10 done, the active frontier moves to **Provider Route
-Intelligence (#2)**, **Memory 2.0 (#3)** (MCP merge tool + split workflow,
-semantic retrieval, post-session recommendations, imports), and **Agent Parity
-Hardening (#4)** (worktree-isolated execution, PR-prep workflow, deterministic
-context manifests). The two unstarted frontiers for the longer horizon are
-**Execution Backends & Sandboxing (#7)** — the blocker for true `execute_code` —
-and Capability Synthesis's next slices (org propagation, composition).
+**2026-06-17 wave** advanced #3 and #4: for **Memory 2.0 (#3)**, shipped the
+**`memory_merge` MCP tool + `memory split` workflow** (repository/CLI/MCP, PR #37)
+and **semantic (lexical) memory retrieval ranked behind deterministic filters**
+(repository/CLI/MCP, reusing the existing Jaccard similarity scorer, PR #39); for
+**Agent Parity Hardening (#4)**, shipped the **`prepare_pr` workflow tool**
+(offline PR-ready summary from git state, PR #36) and **deterministic context
+manifests** (the `ContextManifest` event with a content hash, PR #38).
+
+**Next priority:** **Agent Parity Hardening (#4)** now needs only
+**worktree-isolated execution** (in progress). The rest of **Memory 2.0 (#3)** is
+post-session recommendations, imports, richer revision history, source evidence,
+and visibility scopes. **Provider Route Intelligence (#2)** remains blocked on
+cloud product/design context. The longer-horizon frontiers are **Execution
+Backends & Sandboxing (#7)** — the blocker for true `execute_code` — and
+Capability Synthesis's next slices (org propagation, composition).
 
 Active follow-up: **TUI writable org switching** — Clerk token re-mint primitive
 shipped; the current slice wires the Org tab to a real organization picker and
@@ -137,8 +145,12 @@ Build:
   edits that preserve metadata and append CLI/MCP-visible `edited` audit
   events with memory id and previous/new content metadata, plus CLI/MCP restore
   from edit audit revisions;
-- deterministic approved-memory retrieval; started with CLI/MCP search over
-  approved project memory by text, kind, tag, and limit;
+- deterministic approved-memory retrieval; CLI/MCP substring search over
+  approved project memory by text, kind, tag, and limit, **plus `memory retrieve`
+  / `memory_retrieve` (PR #39): query-string → approved-memory results ranked by
+  the existing Jaccard similarity scorer behind deterministic filters (kind, tag,
+  sensitivity, limit), with deterministic id tie-breaking** — offline, no
+  embeddings;
 - source evidence links; started with CLI detail text plus CLI
   list/show/search/similar JSON source session/turn metadata, replay
   `source_uri`, and MCP
@@ -146,12 +158,15 @@ Build:
 - duplicate and near-duplicate detection; started with exact active duplicate
   candidate rejection, repository-level active memory similarity scoring, and
   CLI/MCP review access to near-duplicate scores;
-- merge/split workflows; started with a repository `merge(source, target)` that
-  archives the duplicate source, carries its tags onto the surviving target, and
-  writes a two-sided `merged` audit trail (the source records `merged_into`, the
-  target records the absorbed source), surfaced as `codel00p memory merge
-  <source> <target> --actor A [--reason R] [--json]` with `merged_into` in audit
-  JSON (CLI now; MCP merge tool and split are the next slices);
+- merge/split workflows; repository `merge(source, target)` archives the
+  duplicate source, carries its tags onto the surviving target, and writes a
+  two-sided `merged` audit trail — surfaced over **CLI and MCP** (`memory_merge`,
+  PR #37). **`memory split` (PR #37)** is the inverse: it creates a new candidate
+  from part of a source's content (carrying project/kind/sensitivity/tags + a
+  source reference), optionally updates the source content, and writes a two-sided
+  `split` audit trail using a dedicated `split_into` field; surfaced over
+  repository, CLI (`codel00p memory split <source> <new_id> --content ...`), and
+  MCP (`memory_split`);
 - stale-memory detection; started with repository-level newer active-memory
   overlap scoring for approved memories and CLI/MCP stale review output;
 - visibility and sensitivity scopes; started with normal/sensitive memory
@@ -172,14 +187,18 @@ Goal: close the remaining gap with mature coding agents.
 
 Build:
 
-- richer patch/diff engine;
-- cancellation and interruption;
-- background command monitoring;
-- web fetch/search tools;
-- worktree-isolated execution;
-- PR preparation workflow;
-- most-recent-session continue UX;
-- deterministic context manifests.
+- ~~richer patch/diff engine~~ (tolerant atomic multi-edit `apply_patch`);
+- ~~cancellation and interruption~~ (cooperative `CancelSignal`);
+- ~~background command monitoring~~ (`run_command background:true` + `process_*`);
+- ~~web fetch/search tools~~;
+- worktree-isolated execution **(in progress)** — mutating sub-agents in isolated
+  git worktrees;
+- ~~PR preparation workflow~~ (`prepare_pr` tool, PR #36);
+- ~~most-recent-session continue UX~~ (`agent continue`);
+- ~~deterministic context manifests~~ (`ContextManifest` event + content hash,
+  PR #38).
+
+Only **worktree-isolated execution** remains.
 
 ### 5. MCP Certification
 
