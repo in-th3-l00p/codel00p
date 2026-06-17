@@ -31,5 +31,5 @@ mod mock;
 mod runner;
 
 pub use assertions::{AgentEvent, RunResult};
-pub use mock::MockProvider;
+pub use mock::{Audience, MockProvider};
 pub use runner::{CodelRunner, codel00p_binary};
