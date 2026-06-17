@@ -1,0 +1,36 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Run all JavaScript actions on Node 24 (Node 20 is being phased out).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  e2e:
+    name: End-to-end harness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      # CI git defaults to `master`; the harness always `git init -b main`s its
+      # own throwaway workspaces, so no global git config is needed here.
+      - name: Run e2e harness (hermetic, no secrets)
+        run: |
+          cd core
+          # Build the real binary the harness drives before running the tests.
+          cargo build -p codel00p-cli --bin codel00p
+          cargo test -p codel00p-e2e
