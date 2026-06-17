@@ -5,8 +5,9 @@ A black-box, **fully hermetic** end-to-end test harness that drives the real
 no API keys, no shared global state — every run gets its own tempdir
 `CODEL00P_HOME`, its own workspace directory, and its own `memory.sqlite`.
 
-This is the foundation for a per-feature e2e matrix. The harness API quality is
-the point; the included pilot proves it end to end.
+This is the per-feature e2e matrix. The harness API quality is the point; the
+pilot proves it end to end and the [coverage matrix](#coverage-matrix) maps every
+agent feature to the scenarios that exercise it.
 
 ## Running
 
@@ -23,6 +24,54 @@ cargo run -p codel00p-e2e --example repl -- "Create and commit notes.txt"
 `cargo test -p codel00p-e2e` is self-contained: if the `codel00p` binary has not
 been built yet, the harness builds it on demand the first time it is needed (see
 binary resolution below).
+
+## Coverage matrix
+
+Every row drives the real `codel00p` binary through the mock provider unless
+marked **[live]**. Each scenario file lives under `tests/`. "Hermetic" means it
+runs in the default CI e2e job with no secrets; **[live]** tests are `#[ignore]`d
+and documented in-file, to be run manually with provider keys and
+`CODEL00P_INTEGRATION_TESTS=1`.
+
+| Feature group | File | What it proves | Status |
+|---|---|---|---|
+| Pilot (full stack) | `pilot.rs` | One scenario through turn loop → 3 tool-set presets → permissions → persistence → memory extraction → session replay | Hermetic |
+| Harness smoke | `smoke.rs` | Cross-crate binary resolution + on-demand build | Hermetic |
+| Read-only tools | `tools_readonly.rs` | `read_file`/`list_files`/`search_text`/`find_files`/`grep`/`repo_map` | Hermetic |
+| Editing tools | `tools_editing.rs` | `create_file`/`update_file`/`delete_file`/`apply_patch` incl. multi-edit atomicity | Hermetic |
+| Command tools | `tools_command.rs` | `run_command` foreground + background (`process_*`), timeout/cap | Hermetic |
+| Git tools | `tools_git.rs` | `git_status`/`diff`/`log`/`commit`/`prepare_pr` | Hermetic |
+| Planning + web | `planning_web.rs` | `update_plan`; `web_fetch` + `web_search` vs mock HTTP; real Brave path | Hermetic + 1 **[live]** |
+| Turn control | `turn_control.rs` | `tool_choice`, `response_format`, multi-iteration loop, result truncation, max-iteration cap, event ordering | Hermetic |
+| Context assembly | `context.rs` | CODEL00P.md/AGENTS.md/CLAUDE.md loading, approved-memory injection, skill injection, ContextManifest determinism | Hermetic |
+| Memory loop | `memory_loop.rs` | extract → review → inject lifecycle through CLI/store | Hermetic (+ gated cases) |
+| Delegation | `delegation.rs` | `delegate_task` shared + worktree isolation (parent tree untouched) | Hermetic |
+| Pipeline + capability | `pipeline_capability.rs` | `run_pipeline`; propose/verify → approved `CapabilityTool` execution | Hermetic |
+| MCP | `mcp.rs` | stdio server tool round-trip; progressive disclosure (`tool_search`/`tool_describe`) past the 15-tool threshold | Hermetic |
+| Sessions | `sessions.rs` | run/resume/continue/list recency/replay/sub-agent lineage | Hermetic |
+| Providers | `providers.rs` | retry/backoff (429/503 same-route), model catalog | Hermetic (+ gaps below) |
+| CLI surfaces | `cli_surfaces.rs` | version/help/config/providers/skills/cron(add/list/run)/cloud(status/push/pull vs mock)/update | Hermetic |
+| Permissions | `permissions.rs` | allow/ask/deny modes, remembered decisions, denied-tool events | Hermetic |
+| Nav robustness | `nav_robustness.rs` | regression for the `list_files`/`search_text` ignore-aware + unreadable-dir-tolerant walk (PR #61) | Hermetic |
+
+### Known gaps (documented, not faked)
+
+These were found while building the matrix and are asserted as the *real* current
+behavior (or `#[ignore]`d with an explanation) rather than papered over:
+
+- **Provider fallback routing** is a `codel00p-providers` request-builder API
+  (`InferenceRequest::fallback_route_with_base_url`) with **no CLI flag / config
+  key / env var** — not reachable through the binary. Library coverage lives in
+  `codel00p-providers/tests/fallback_routing.rs`.
+- **Usage / cost** is parsed at the providers layer but the `AgentEvent` protocol
+  carries no usage/cost field and the CLI prints none, so e2e asserts its
+  *absence*. Library coverage: `codel00p-providers/tests/usage_cost.rs`.
+- **Working-plan contents** live in an in-memory `PlanStore` with no dedicated
+  `AgentEvent`; the only end-to-end observable is the echoed `update_plan` tool
+  result in the next request, which is what `planning_web.rs` asserts.
+- **`web_search` live** (real Brave endpoint), **`update --check` / bare
+  `update`** (hard-coded GitHub release URL), and one **fallback** note are
+  `#[ignore]`d [live]/manual-only and documented in-file.
 
 ## How it works
 
