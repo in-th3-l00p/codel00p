@@ -16,6 +16,7 @@ pub(super) fn call_tool(config: &CliConfig, params: &Value) -> Result<McpServerR
         "memory_stale" => (memory_stale(config, &arguments)?, Vec::new()),
         "memory_quality" => (memory_quality(config, &arguments)?, Vec::new()),
         "memory_search" => (memory_search(config, &arguments)?, Vec::new()),
+        "memory_retrieve" => (memory_retrieve(config, &arguments)?, Vec::new()),
         "memory_list" => (memory_list(config, &arguments)?, Vec::new()),
         "memory_show" => (memory_show(config, &arguments)?, Vec::new()),
         "memory_audit" => (memory_audit(config, &arguments)?, Vec::new()),
@@ -143,6 +144,36 @@ fn memory_search(config: &CliConfig, arguments: &Value) -> Result<String, String
         .iter()
         .map(retrieved_memory_json)
         .collect::<Vec<_>>();
+    serde_json::to_string(&items).map_err(|error| error.to_string())
+}
+
+fn memory_retrieve(config: &CliConfig, arguments: &Value) -> Result<String, String> {
+    let query_text = required_string(arguments, "query")?;
+    let mut query = MemoryRetrievalQuery::new(config.project.clone(), query_text);
+    if let Some(kind) = optional_string(arguments, "kind") {
+        query = query.with_kind(parse_kind(kind)?);
+    }
+    if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
+        query = query.with_sensitivity(parse_sensitivity(sensitivity)?);
+    }
+    if let Some(tag) = optional_string(arguments, "tag") {
+        query = query.with_tag(tag);
+    }
+    if let Some(threshold) = optional_usize(arguments, "threshold")? {
+        if threshold > 100 {
+            return Err("argument `threshold` must be between 0 and 100".to_string());
+        }
+        query = query.with_min_score(threshold as u8);
+    }
+    if let Some(limit) = optional_usize(arguments, "limit")? {
+        query = query.with_limit(limit);
+    }
+
+    let store = open_memory_store(config)?;
+    let records = store
+        .retrieve_ranked(query)
+        .map_err(|error| error.to_string())?;
+    let items = records.iter().map(ranked_memory_json).collect::<Vec<_>>();
     serde_json::to_string(&items).map_err(|error| error.to_string())
 }
 

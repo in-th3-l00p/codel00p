@@ -5,6 +5,8 @@ mod support;
 mod list_search;
 #[path = "memory_cli/quality.rs"]
 mod quality;
+#[path = "memory_cli/ranked_retrieval.rs"]
+mod ranked_retrieval;
 #[path = "memory_cli/review_edit.rs"]
 mod review_edit;
 #[path = "memory_cli/review_merge.rs"]

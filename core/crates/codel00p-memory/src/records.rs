@@ -59,6 +59,14 @@ pub struct SimilarMemory {
     pub(crate) score: u8,
 }
 
+/// An approved memory matched by free-text retrieval, carrying its lexical
+/// similarity score against the query.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RankedMemory {
+    pub(crate) record: MemoryRecord,
+    pub(crate) score: u8,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StaleMemory {
     pub(crate) record: MemoryRecord,
@@ -73,6 +81,20 @@ pub struct QualityMemory {
 }
 
 impl SimilarMemory {
+    pub fn entry(&self) -> &MemoryEntry {
+        self.record.entry()
+    }
+
+    pub fn quality(&self) -> MemoryQuality {
+        self.record.quality()
+    }
+
+    pub fn score(&self) -> u8 {
+        self.score
+    }
+}
+
+impl RankedMemory {
     pub fn entry(&self) -> &MemoryEntry {
         self.record.entry()
     }

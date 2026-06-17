@@ -1,14 +1,15 @@
 use codel00p_memory::{
-    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRepository, MemorySimilarityQuery,
-    MemoryStalenessQuery,
+    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRepository, MemoryRetrievalQuery,
+    MemorySimilarityQuery, MemoryStalenessQuery,
 };
+use codel00p_protocol::MemorySensitivity;
 
 use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
 
 use super::{
     json::{
-        memory_record_json, quality_memory_json, retrieved_memory_json, similar_memory_json,
-        source_uri, stale_memory_json,
+        memory_record_json, quality_memory_json, ranked_memory_json, retrieved_memory_json,
+        similar_memory_json, source_uri, stale_memory_json,
     },
     parse::{kind_label, parse_kind, parse_sensitivity, parse_status, status_label},
 };
@@ -281,6 +282,79 @@ pub(super) fn memory_search(config: CliConfig, args: &[String]) -> CliResult<Str
             status_label(memory.entry().status()),
             kind_label(memory.entry().kind()),
             memory.reason(),
+            memory.entry().content()
+        ));
+    }
+    Ok(output)
+}
+
+pub(super) fn memory_retrieve(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some((query_text, rest)) = args.split_first() else {
+        return Err("memory retrieve expects a query string".to_string());
+    };
+    if query_text.starts_with("--") {
+        return Err("memory retrieve expects a query string".to_string());
+    }
+
+    let mut query = MemoryRetrievalQuery::new(config.project.clone(), query_text);
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--kind" => {
+                query = query.with_kind(parse_kind(&required_value(rest, index, "--kind")?)?);
+                index += 2;
+            }
+            "--tag" => {
+                query = query.with_tag(required_value(rest, index, "--tag")?);
+                index += 2;
+            }
+            "--sensitive" => {
+                query = query.with_sensitivity(MemorySensitivity::Sensitive);
+                index += 1;
+            }
+            "--threshold" => {
+                let score = required_value(rest, index, "--threshold")?
+                    .parse::<u8>()
+                    .map_err(|_| "invalid --threshold".to_string())?;
+                if score > 100 {
+                    return Err("invalid --threshold".to_string());
+                }
+                query = query.with_min_score(score);
+                index += 2;
+            }
+            "--limit" => {
+                let limit = required_value(rest, index, "--limit")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid --limit".to_string())?;
+                query = query.with_limit(limit);
+                index += 2;
+            }
+            "--json" => {
+                json_output = true;
+                index += 1;
+            }
+            flag => return Err(format!("unknown memory retrieve option: {flag}")),
+        }
+    }
+
+    let store = open_memory_store(&config)?;
+    let records = store
+        .retrieve_ranked(query)
+        .map_err(|error| error.to_string())?;
+    if json_output {
+        let items = records.iter().map(ranked_memory_json).collect::<Vec<_>>();
+        return serde_json::to_string(&items).map_err(|error| error.to_string());
+    }
+
+    let mut output = String::new();
+    for memory in records {
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            memory.entry().id(),
+            status_label(memory.entry().status()),
+            kind_label(memory.entry().kind()),
+            memory.score(),
             memory.entry().content()
         ));
     }

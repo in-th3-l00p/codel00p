@@ -3,7 +3,7 @@
 pub(crate) use codel00p_memory::{
     InMemoryMemoryStore, MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryError,
     MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRepository,
-    MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, ReviewDecision,
+    MemoryRetrievalQuery, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, ReviewDecision,
     StorageBackedMemoryStore,
 };
 pub(crate) use codel00p_protocol::{

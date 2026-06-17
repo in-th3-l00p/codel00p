@@ -11,6 +11,8 @@ mod lifecycle_merge;
 mod lifecycle_split;
 #[path = "lifecycle/list.rs"]
 mod list;
+#[path = "lifecycle/ranked_retrieval.rs"]
+mod ranked_retrieval;
 #[path = "lifecycle/retrieval.rs"]
 mod retrieval;
 #[path = "lifecycle/similarity_staleness.rs"]
