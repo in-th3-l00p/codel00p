@@ -154,6 +154,8 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
                         app.session_label(),
                         persisted
                     ));
+                    app.conversation
+                        .append_session_messages(app.session_state.messages());
                 }
                 Err(error) => app.conversation.push_error(error),
             }
@@ -1017,6 +1019,7 @@ mod tests {
             &mut app,
             Msg::SessionList(Ok(vec![SessionSummary {
                 session_id: "chat-42".to_string(),
+                title: Some("Fix switcher history".to_string()),
                 source: "cli".to_string(),
                 message_count: 3,
             }])),
@@ -1030,22 +1033,26 @@ mod tests {
     }
 
     #[test]
-    fn session_resumed_resets_conversation_and_usage() {
+    fn session_resumed_loads_history_and_resets_usage() {
         let mut app = test_app();
         app.conversation.push_user("stale message");
         app.persisted_message_count = 9;
         let mut resumed = SessionState::new(SessionId::from_static("chat-42"));
+        resumed.push_user(codel00p_harness::UserMessage::new("prior question"));
         resumed.push_assistant("prior answer");
-        update(&mut app, Msg::SessionResumed(Ok((Box::new(resumed), 1))));
+        update(&mut app, Msg::SessionResumed(Ok((Box::new(resumed), 2))));
         assert_eq!(app.session_label(), "chat-42");
-        assert_eq!(app.persisted_message_count, 1);
-        assert_eq!(app.usage.messages, 1);
+        assert_eq!(app.persisted_message_count, 2);
+        assert_eq!(app.usage.messages, 2);
         assert!(app.usage.estimated_tokens > 0);
-        // Conversation was reset to just the resume notice.
-        assert!(matches!(
-            app.conversation.blocks.as_slice(),
-            [ChatBlock::Notice(_)]
-        ));
+        assert_eq!(
+            app.conversation.blocks,
+            vec![
+                ChatBlock::Notice("Resumed conversation chat-42 (2 message(s)).".to_string()),
+                ChatBlock::User("prior question".to_string()),
+                ChatBlock::Assistant("prior answer".to_string()),
+            ]
+        );
     }
 
     #[test]

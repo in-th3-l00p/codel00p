@@ -1,6 +1,8 @@
 //! The chat transcript model: an ordered list of blocks the view renders. This is
 //! pure state — no terminal or I/O — so its behavior is unit-tested directly.
 
+use codel00p_protocol::{SessionMessage, SessionRole};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ToolState {
     Requested,
@@ -34,6 +36,35 @@ impl Conversation {
 
     pub(crate) fn push_error(&mut self, text: impl Into<String>) {
         self.blocks.push(Block::Error(text.into()));
+    }
+
+    pub(crate) fn append_session_messages(&mut self, messages: &[SessionMessage]) {
+        for message in messages {
+            match message.role() {
+                SessionRole::System => {
+                    if !message.content().is_empty() {
+                        self.push_notice(message.content());
+                    }
+                }
+                SessionRole::User => self.push_user(message.content()),
+                SessionRole::Assistant => {
+                    if !message.content().is_empty() {
+                        self.blocks
+                            .push(Block::Assistant(message.content().to_string()));
+                    }
+                    for call in message.tool_calls() {
+                        self.blocks.push(Block::Tool {
+                            name: call.name().to_string(),
+                            state: ToolState::Done,
+                        });
+                    }
+                }
+                SessionRole::Tool => self.blocks.push(Block::Tool {
+                    name: message.tool_name().unwrap_or("tool").to_string(),
+                    state: ToolState::Done,
+                }),
+            }
+        }
     }
 
     /// Appends a streamed token, growing the current assistant block or starting a

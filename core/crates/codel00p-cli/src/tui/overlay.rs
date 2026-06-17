@@ -68,19 +68,29 @@ impl ModelPicker {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SessionSummary {
     pub(crate) session_id: String,
+    pub(crate) title: Option<String>,
     pub(crate) source: String,
     pub(crate) message_count: usize,
 }
 
 impl PickerItem for SessionSummary {
     fn label(&self) -> String {
-        self.session_id.clone()
+        self.title
+            .clone()
+            .unwrap_or_else(|| self.session_id.clone())
     }
     fn detail(&self) -> Option<String> {
-        Some(format!(
-            "{} · {} message(s)",
-            self.source, self.message_count
-        ))
+        if self.title.is_some() {
+            Some(format!(
+                "{} · {} · {} message(s)",
+                self.session_id, self.source, self.message_count
+            ))
+        } else {
+            Some(format!(
+                "{} · {} message(s)",
+                self.source, self.message_count
+            ))
+        }
     }
 }
 
@@ -364,5 +374,26 @@ pub(crate) enum Overlay {
 impl Overlay {
     pub(crate) fn is_open(&self) -> bool {
         !matches!(self, Overlay::None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_summary_uses_title_as_primary_label() {
+        let summary = SessionSummary {
+            session_id: "chat-42".to_string(),
+            title: Some("Review release blockers".to_string()),
+            source: "cli".to_string(),
+            message_count: 3,
+        };
+
+        assert_eq!(summary.label(), "Review release blockers");
+        assert_eq!(
+            summary.detail(),
+            Some("chat-42 · cli · 3 message(s)".to_string())
+        );
     }
 }

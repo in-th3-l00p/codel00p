@@ -287,15 +287,25 @@ pub(crate) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
 
     let mut output = String::new();
     for metadata in sessions {
-        let messages = store
+        let records = store
             .replay(metadata.session_id())
-            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?;
+        let messages = records
             .iter()
             .filter(|record| matches!(record.record(), SessionRecord::Message(_)))
             .count();
+        let title = metadata.title().map(str::to_string).or_else(|| {
+            crate::session::session_title_from_messages(records.iter().filter_map(|record| {
+                match record.record() {
+                    SessionRecord::Message(message) => Some(message),
+                    SessionRecord::Event(_) => None,
+                }
+            }))
+        });
         output.push_str(&format!(
-            "  {}\t{}\t{} message(s)\n",
+            "  {}\t{}\t{}\t{} message(s)\n",
             metadata.session_id().as_str(),
+            title.as_deref().unwrap_or("Untitled conversation"),
             metadata.source(),
             messages
         ));
@@ -308,6 +318,7 @@ pub(crate) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
 /// [`chat_sessions_listing`] but returns structured rows instead of a text blob.
 pub(crate) struct ChatSessionSummary {
     pub(crate) session_id: String,
+    pub(crate) title: Option<String>,
     pub(crate) source: String,
     pub(crate) message_count: usize,
 }
@@ -328,14 +339,24 @@ pub(crate) fn chat_session_summaries(config: &CliConfig) -> CliResult<Vec<ChatSe
 
     let mut summaries = Vec::with_capacity(sessions.len());
     for metadata in sessions {
-        let message_count = store
+        let records = store
             .replay(metadata.session_id())
-            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?;
+        let message_count = records
             .iter()
             .filter(|record| matches!(record.record(), SessionRecord::Message(_)))
             .count();
+        let title = metadata.title().map(str::to_string).or_else(|| {
+            crate::session::session_title_from_messages(records.iter().filter_map(|record| {
+                match record.record() {
+                    SessionRecord::Message(message) => Some(message),
+                    SessionRecord::Event(_) => None,
+                }
+            }))
+        });
         summaries.push(ChatSessionSummary {
             session_id: metadata.session_id().as_str().to_string(),
+            title,
             source: metadata.source().to_string(),
             message_count,
         });

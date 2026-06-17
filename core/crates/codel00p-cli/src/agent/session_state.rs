@@ -78,6 +78,9 @@ pub(super) fn persist_session_records(
     let mut store = open_session_store(config)?;
     let mut metadata = SessionMetadata::new(session_state.session_id().clone(), source)
         .with_created_at(now_millis());
+    if let Some(title) = crate::session::session_title_from_messages(session_state.messages()) {
+        metadata = metadata.with_title(title);
+    }
     if let Some(parent) = parent {
         metadata = metadata.with_parent(parent);
     }
@@ -127,12 +130,22 @@ pub(super) fn latest_session_id(sessions: &[SessionMetadata]) -> Option<String> 
 
 #[cfg(test)]
 mod tests {
-    use super::latest_session_id;
-    use codel00p_protocol::SessionId;
-    use codel00p_session::SessionMetadata;
+    use super::{latest_session_id, persist_session_records};
+    use crate::config::{CliConfig, open_session_store};
+    use codel00p_harness::{SessionState, UserMessage};
+    use codel00p_protocol::{ProjectRef, SessionId};
+    use codel00p_session::{SessionMetadata, SessionStore};
 
     fn dated(id: &'static str, created_at: u64) -> SessionMetadata {
         SessionMetadata::new(SessionId::from_static(id), "cli").with_created_at(created_at)
+    }
+
+    fn test_config(dir: &std::path::Path) -> CliConfig {
+        CliConfig {
+            memory_db: dir.join("memory.sqlite"),
+            organization_id: "org-1".to_string(),
+            project: ProjectRef::new("project-1", "codel00p"),
+        }
     }
 
     #[test]
@@ -159,5 +172,22 @@ mod tests {
         let sessions = vec![dated("session-b", 5), dated("session-a", 5)];
         assert_eq!(latest_session_id(&sessions).as_deref(), Some("session-b"));
         assert_eq!(latest_session_id(&[]), None);
+    }
+
+    #[test]
+    fn persist_session_records_titles_new_sessions_from_first_user_message() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = test_config(dir.path());
+        let mut session_state = SessionState::new(SessionId::from_static("chat-titled"));
+        session_state.push_user(UserMessage::new("  Explain\n release   readiness  "));
+        session_state.push_assistant("ready");
+
+        persist_session_records(&config, &session_state, &[], 0, "cli", None).expect("persist");
+
+        let store = open_session_store(&config).expect("open store");
+        let metadata = store
+            .metadata(session_state.session_id())
+            .expect("metadata");
+        assert_eq!(metadata.title(), Some("Explain release readiness"));
     }
 }

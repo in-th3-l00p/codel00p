@@ -183,6 +183,26 @@ fn created_at_round_trips_through_the_store() {
 }
 
 #[test]
+fn title_round_trips_through_the_store() {
+    let mut store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "project-1"),
+        InMemoryStorage::default(),
+    );
+    let session_id = SessionId::from_static("session-titled");
+
+    store
+        .create_session(
+            SessionMetadata::new(session_id.clone(), "cli").with_title("Review release blockers"),
+        )
+        .expect("create titled session");
+
+    assert_eq!(
+        store.metadata(&session_id).expect("metadata").title(),
+        Some("Review release blockers")
+    );
+}
+
+#[test]
 fn metadata_without_created_at_deserializes_to_none() {
     // A session persisted before `created_at` existed has no such field.
     let legacy = serde_json::json!({
@@ -192,5 +212,6 @@ fn metadata_without_created_at_deserializes_to_none() {
     });
     let metadata: SessionMetadata = serde_json::from_value(legacy).expect("deserialize legacy");
     assert_eq!(metadata.created_at(), None);
+    assert_eq!(metadata.title(), None);
     assert_eq!(metadata.session_id().as_str(), "session-legacy");
 }

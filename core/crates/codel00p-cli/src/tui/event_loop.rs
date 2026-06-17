@@ -278,6 +278,7 @@ fn spawn_session_list(config: CliConfig, tx: UnboundedSender<Msg>) {
                     .into_iter()
                     .map(|summary| SessionSummary {
                         session_id: summary.session_id,
+                        title: summary.title,
                         source: summary.source,
                         message_count: summary.message_count,
                     })

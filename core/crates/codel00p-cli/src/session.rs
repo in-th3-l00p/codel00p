@@ -5,6 +5,8 @@ use serde_json::json;
 use crate::config::{CliConfig, CliResult, open_session_store, parse_session_id, single_id};
 use crate::settings::AgentSettings;
 
+const SESSION_TITLE_MAX_CHARS: usize = 64;
+
 pub fn run(config: CliConfig, agent_defaults: AgentSettings, args: &[String]) -> CliResult<String> {
     let Some((command, rest)) = args.split_first() else {
         // Bare `codel00p sessions` on a terminal opens the browser dialog; pipes
@@ -27,6 +29,7 @@ pub fn run(config: CliConfig, agent_defaults: AgentSettings, args: &[String]) ->
 
 struct SessionSummary {
     session_id: String,
+    title: Option<String>,
     source: String,
     parent_session_id: Option<String>,
     message_count: usize,
@@ -47,9 +50,16 @@ fn session_list(config: CliConfig, args: &[String]) -> CliResult<String> {
             .iter()
             .filter(|record| matches!(record.record(), SessionRecord::Message(_)))
             .count();
+        let title = metadata.title().map(str::to_string).or_else(|| {
+            session_title_from_messages(records.iter().filter_map(|record| match record.record() {
+                SessionRecord::Message(message) => Some(message),
+                SessionRecord::Event(_) => None,
+            }))
+        });
         let event_count = records.len() - message_count;
         summaries.push(SessionSummary {
             session_id: metadata.session_id().as_str().to_string(),
+            title,
             source: metadata.source().to_string(),
             parent_session_id: metadata
                 .parent_session_id()
@@ -80,8 +90,12 @@ fn session_list(config: CliConfig, args: &[String]) -> CliResult<String> {
     let mut output = String::new();
     for summary in &summaries {
         output.push_str(&format!(
-            "{}\t{}\t{} message(s)\t{} event(s)\n",
-            summary.session_id, summary.source, summary.message_count, summary.event_count
+            "{}\t{}\t{}\t{} message(s)\t{} event(s)\n",
+            summary.session_id,
+            summary.title.as_deref().unwrap_or("Untitled conversation"),
+            summary.source,
+            summary.message_count,
+            summary.event_count
         ));
     }
     Ok(output)
@@ -101,6 +115,7 @@ fn parse_list_flags(args: &[String]) -> CliResult<bool> {
 fn session_summary_json(summary: &SessionSummary) -> serde_json::Value {
     json!({
         "session_id": summary.session_id,
+        "title": summary.title,
         "source": summary.source,
         "parent_session_id": summary.parent_session_id,
         "message_count": summary.message_count,
@@ -156,6 +171,50 @@ pub(crate) fn session_message_summary(message: &SessionMessage) -> String {
     String::new()
 }
 
+pub(crate) fn session_title_from_messages<'a>(
+    messages: impl IntoIterator<Item = &'a SessionMessage>,
+) -> Option<String> {
+    messages.into_iter().find_map(|message| {
+        if message.role() == SessionRole::User {
+            normalized_session_title(message.content())
+        } else {
+            None
+        }
+    })
+}
+
+fn normalized_session_title(content: &str) -> Option<String> {
+    let title = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    if title.is_empty() {
+        return None;
+    }
+    if title.chars().count() <= SESSION_TITLE_MAX_CHARS {
+        return Some(title);
+    }
+
+    let mut truncated = String::new();
+    for word in title.split_whitespace() {
+        let separator = usize::from(!truncated.is_empty());
+        let candidate_len = truncated.chars().count() + separator + word.chars().count() + 3;
+        if candidate_len > SESSION_TITLE_MAX_CHARS {
+            break;
+        }
+        if !truncated.is_empty() {
+            truncated.push(' ');
+        }
+        truncated.push_str(word);
+    }
+
+    if truncated.is_empty() {
+        truncated = title
+            .chars()
+            .take(SESSION_TITLE_MAX_CHARS.saturating_sub(3))
+            .collect::<String>();
+    }
+
+    Some(format!("{}...", truncated.trim_end()))
+}
+
 pub(crate) fn agent_event_label(event: &AgentEvent) -> &'static str {
     match event {
         AgentEvent::SessionStarted { .. } => "session_started",
@@ -173,5 +232,36 @@ pub(crate) fn agent_event_label(event: &AgentEvent) -> &'static str {
         AgentEvent::LifecycleHookFailed { .. } => "lifecycle_hook_failed",
         AgentEvent::ContextManifest { .. } => "context_manifest",
         AgentEvent::TurnCompleted { .. } => "turn_completed",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_title_from_messages_uses_first_user_message() {
+        let messages = [
+            SessionMessage::system("context"),
+            SessionMessage::user("  Explain\n the   release process?  "),
+            SessionMessage::user("second user message"),
+        ];
+
+        assert_eq!(
+            session_title_from_messages(messages.iter()).as_deref(),
+            Some("Explain the release process?")
+        );
+    }
+
+    #[test]
+    fn session_title_from_messages_caps_long_titles() {
+        let messages = [SessionMessage::user(
+            "Explain exactly how the command-line conversation switcher should rebuild history",
+        )];
+
+        assert_eq!(
+            session_title_from_messages(messages.iter()).as_deref(),
+            Some("Explain exactly how the command-line conversation switcher...")
+        );
     }
 }

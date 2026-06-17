@@ -37,6 +37,7 @@ fn seed_session(
     id: &'static str,
     source: &str,
     created_at: Option<u64>,
+    title: Option<&str>,
     user_messages: &[&str],
 ) {
     let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
@@ -46,6 +47,9 @@ fn seed_session(
     let mut metadata = SessionMetadata::new(session_id.clone(), source);
     if let Some(created_at) = created_at {
         metadata = metadata.with_created_at(created_at);
+    }
+    if let Some(title) = title {
+        metadata = metadata.with_title(title);
     }
     store.create_session(metadata).expect("create session");
     for message in user_messages {
@@ -65,20 +69,28 @@ fn session_list_prints_all_conversations_newest_first() {
         "session-a",
         "chat",
         Some(1_000),
+        Some("Plan the release"),
         &["hello", "again"],
     );
-    seed_session(&db_path, "session-b", "cli", Some(2_000), &["one"]);
+    seed_session(
+        &db_path,
+        "session-b",
+        "cli",
+        Some(2_000),
+        Some("Fix the CLI switcher"),
+        &["one"],
+    );
 
     let output = run_codel00p(&db_path, &["session", "list"]);
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let listing = stdout(&output);
     assert!(
-        listing.contains("session-a\tchat\t2 message(s)"),
+        listing.contains("session-a\tPlan the release\tchat\t2 message(s)"),
         "stdout: {listing}"
     );
     assert!(
-        listing.contains("session-b\tcli\t1 message(s)"),
+        listing.contains("session-b\tFix the CLI switcher\tcli\t1 message(s)"),
         "stdout: {listing}"
     );
     // Most recent first: session-b (newer) appears before session-a.
@@ -94,8 +106,22 @@ fn session_list_prints_all_conversations_newest_first() {
 fn session_list_sorts_undated_sessions_after_dated_ones() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
-    seed_session(&db_path, "session-dated", "cli", Some(5_000), &["hi"]);
-    seed_session(&db_path, "session-legacy", "cli", None, &["hi"]);
+    seed_session(
+        &db_path,
+        "session-dated",
+        "cli",
+        Some(5_000),
+        Some("Dated"),
+        &["hi"],
+    );
+    seed_session(
+        &db_path,
+        "session-legacy",
+        "cli",
+        None,
+        Some("Legacy"),
+        &["hi"],
+    );
 
     let output = run_codel00p(&db_path, &["session", "list"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
@@ -114,6 +140,7 @@ fn session_list_json_reports_counts() {
         "session-a",
         "chat",
         Some(1_234),
+        Some("Summarize the roadmap"),
         &["hello", "again"],
     );
 
@@ -125,6 +152,7 @@ fn session_list_json_reports_counts() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0]["session_id"], "session-a");
     assert_eq!(records[0]["source"], "chat");
+    assert_eq!(records[0]["title"], "Summarize the roadmap");
     assert_eq!(records[0]["message_count"], 2);
     assert_eq!(records[0]["created_at"], 1_234);
 }

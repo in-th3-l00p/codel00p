@@ -18,6 +18,10 @@ pub struct SessionMetadata {
     /// sessions sort oldest when picking the most recent conversation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     created_at: Option<u64>,
+    /// Human-readable conversation name. Optional so legacy sessions without
+    /// names keep deserializing and can derive a display title from messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
 }
 
 impl SessionMetadata {
@@ -27,6 +31,7 @@ impl SessionMetadata {
             source: source.into(),
             parent_session_id: None,
             created_at: None,
+            title: None,
         }
     }
 
@@ -39,6 +44,12 @@ impl SessionMetadata {
     /// the caller so the store stays deterministic and testable.
     pub fn with_created_at(mut self, created_at: u64) -> Self {
         self.created_at = Some(created_at);
+        self
+    }
+
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        let title = title.into().trim().to_string();
+        self.title = if title.is_empty() { None } else { Some(title) };
         self
     }
 
@@ -56,6 +67,10 @@ impl SessionMetadata {
 
     pub fn created_at(&self) -> Option<u64> {
         self.created_at
+    }
+
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
     }
 }
 

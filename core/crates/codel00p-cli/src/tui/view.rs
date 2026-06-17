@@ -930,6 +930,7 @@ mod tests {
         switcher.set_sessions(
             vec![SessionSummary {
                 session_id: "chat-99".to_string(),
+                title: Some("Debug release packaging".to_string()),
                 source: "cli".to_string(),
                 message_count: 2,
             }],
@@ -939,6 +940,7 @@ mod tests {
         app.overlay = Overlay::Sessions(switcher);
         let rendered = render_to_string(&mut app, 80, 20);
         assert!(rendered.contains("switch session"));
+        assert!(rendered.contains("Debug release packaging"));
         assert!(rendered.contains("chat-99"));
     }
 }
