@@ -13,6 +13,7 @@ members = [
     "crates/codel00p-gateway",
     "crates/codel00p-cli",
     "crates/codel00p-cloud",
+    "crates/codel00p-e2e",
 ]
 resolver = "3"
 
