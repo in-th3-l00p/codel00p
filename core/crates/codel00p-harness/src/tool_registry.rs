@@ -14,6 +14,7 @@ use crate::{
     find::{FindFilesTool, GrepTool},
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
     planning::{PlanStore, UpdatePlanTool},
+    pr::PreparePrTool,
     repo_map::RepoMapTool,
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool, ToolSpec},
@@ -79,6 +80,7 @@ impl ToolRegistry {
             .with_tool(GitDiffTool)
             .with_tool(GitLogTool)
             .with_tool(GitStatusTool)
+            .with_tool(PreparePrTool)
     }
 
     /// Web tools (`web_fetch`, `web_search`) gated behind `PermissionScope::Network`.

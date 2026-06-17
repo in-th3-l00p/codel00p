@@ -19,6 +19,7 @@ pub mod memory;
 pub mod permissions;
 pub mod pipeline;
 pub mod planning;
+pub mod pr;
 pub mod provider_adapter;
 pub mod repo_map;
 pub mod session;
@@ -74,6 +75,7 @@ pub use pipeline::{
     PipelineEngine, PipelineRun, PipelineStep, RunPipelineTool, parse_steps, pipeline_tools,
 };
 pub use planning::{PlanItem, PlanStatus, PlanStore, UpdatePlanTool};
+pub use pr::PreparePrTool;
 pub use provider_adapter::ProviderModelClient;
 pub use repo_map::RepoMapTool;
 pub use session::{
