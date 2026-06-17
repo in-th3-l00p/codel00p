@@ -1,4 +1,4 @@
-use codel00p_protocol::{MemoryKind, MemorySensitivity, MemoryStatus};
+use codel00p_protocol::{MemoryKind, MemorySensitivity, MemoryStatus, MemoryVisibility};
 
 use crate::config::CliResult;
 
@@ -32,6 +32,16 @@ pub(super) fn parse_sensitivity(value: &str) -> CliResult<MemorySensitivity> {
     }
 }
 
+pub(super) fn parse_visibility(value: &str) -> CliResult<MemoryVisibility> {
+    match value {
+        "private" => Ok(MemoryVisibility::Private),
+        "project" => Ok(MemoryVisibility::Project),
+        "team" => Ok(MemoryVisibility::Team),
+        "org" => Ok(MemoryVisibility::Org),
+        _ => Err(format!("unknown memory visibility: {value}")),
+    }
+}
+
 pub(super) fn status_label(status: MemoryStatus) -> &'static str {
     match status {
         MemoryStatus::Candidate => "candidate",
@@ -45,6 +55,15 @@ pub(super) fn sensitivity_label(sensitivity: MemorySensitivity) -> &'static str 
     match sensitivity {
         MemorySensitivity::Normal => "normal",
         MemorySensitivity::Sensitive => "sensitive",
+    }
+}
+
+pub(super) fn visibility_label(visibility: MemoryVisibility) -> &'static str {
+    match visibility {
+        MemoryVisibility::Private => "private",
+        MemoryVisibility::Project => "project",
+        MemoryVisibility::Team => "team",
+        MemoryVisibility::Org => "org",
     }
 }
 

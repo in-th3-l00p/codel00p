@@ -61,6 +61,25 @@ impl MemorySensitivity {
     }
 }
 
+/// Retrieval visibility scope for a memory, ordered narrow (`Private`) to wide
+/// (`Org`). The ordering is meaningful: a max-visibility filter returns every
+/// memory whose scope is at or below the requested width.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryVisibility {
+    Private,
+    #[default]
+    Project,
+    Team,
+    Org,
+}
+
+impl MemoryVisibility {
+    pub fn is_project(&self) -> bool {
+        *self == Self::Project
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemorySource {
     session_id: SessionId,
@@ -124,6 +143,8 @@ pub struct MemoryEntry {
     status: MemoryStatus,
     #[serde(default, skip_serializing_if = "MemorySensitivity::is_normal")]
     sensitivity: MemorySensitivity,
+    #[serde(default, skip_serializing_if = "MemoryVisibility::is_project")]
+    visibility: MemoryVisibility,
     content: String,
     tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,6 +164,7 @@ impl MemoryEntry {
             kind,
             status: MemoryStatus::Candidate,
             sensitivity: MemorySensitivity::Normal,
+            visibility: MemoryVisibility::Project,
             content: content.into(),
             tags: Vec::new(),
             source: None,
@@ -161,6 +183,11 @@ impl MemoryEntry {
 
     pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
         self.sensitivity = sensitivity;
+        self
+    }
+
+    pub fn with_visibility(mut self, visibility: MemoryVisibility) -> Self {
+        self.visibility = visibility;
         self
     }
 
@@ -187,6 +214,10 @@ impl MemoryEntry {
 
     pub fn sensitivity(&self) -> MemorySensitivity {
         self.sensitivity
+    }
+
+    pub fn visibility(&self) -> MemoryVisibility {
+        self.visibility
     }
 
     pub fn content(&self) -> &str {

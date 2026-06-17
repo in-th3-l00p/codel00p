@@ -7,7 +7,8 @@ use codel00p_memory::{
     MemorySplit, MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{
-    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
+    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, MemoryVisibility, SessionMessage,
+    SessionRole, TurnId,
 };
 use codel00p_session::{SessionRecord, SessionStore, SessionStoreError};
 use serde_json::{Value, json};
@@ -30,7 +31,7 @@ mod tools;
 
 use args::{
     optional_string, optional_string_array, optional_usize, parse_kind, parse_sensitivity,
-    parse_status, parse_turn_id, required_string, required_u64,
+    parse_status, parse_turn_id, parse_visibility, required_string, required_u64,
 };
 use descriptors::{mcp_resource_templates, mcp_tools};
 use permissions::permissions;

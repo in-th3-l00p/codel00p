@@ -77,6 +77,7 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         "status": status_label(entry.status()),
         "kind": kind_label(entry.kind()),
         "sensitivity": sensitivity_label(entry.sensitivity()),
+        "visibility": visibility_label(entry.visibility()),
         "content": entry.content(),
         "tags": entry.tags(),
     });
@@ -122,6 +123,15 @@ fn sensitivity_label(sensitivity: MemorySensitivity) -> &'static str {
     match sensitivity {
         MemorySensitivity::Normal => "normal",
         MemorySensitivity::Sensitive => "sensitive",
+    }
+}
+
+fn visibility_label(visibility: MemoryVisibility) -> &'static str {
+    match visibility {
+        MemoryVisibility::Private => "private",
+        MemoryVisibility::Project => "project",
+        MemoryVisibility::Team => "team",
+        MemoryVisibility::Org => "org",
     }
 }
 

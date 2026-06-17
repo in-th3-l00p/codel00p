@@ -1,6 +1,8 @@
 //! Query and filter builders for memory listing, retrieval, and quality review.
 
-use codel00p_protocol::{MemoryKind, MemorySensitivity, MemoryStatus, ProjectRef};
+use codel00p_protocol::{
+    MemoryKind, MemorySensitivity, MemoryStatus, MemoryVisibility, ProjectRef,
+};
 
 use crate::util::non_empty_filter;
 
@@ -9,6 +11,7 @@ pub struct MemoryQuery {
     pub(crate) project: ProjectRef,
     pub(crate) kind: Option<MemoryKind>,
     pub(crate) sensitivity: Option<MemorySensitivity>,
+    pub(crate) visibility: Option<MemoryVisibility>,
     pub(crate) tag: Option<String>,
     pub(crate) text: Option<String>,
     pub(crate) limit: Option<usize>,
@@ -20,6 +23,7 @@ pub struct MemoryListFilter {
     pub(crate) status: Option<MemoryStatus>,
     pub(crate) kind: Option<MemoryKind>,
     pub(crate) sensitivity: Option<MemorySensitivity>,
+    pub(crate) visibility: Option<MemoryVisibility>,
     pub(crate) tag: Option<String>,
     pub(crate) limit: Option<usize>,
 }
@@ -33,6 +37,7 @@ pub struct MemoryRetrievalQuery {
     pub(crate) query: String,
     pub(crate) kind: Option<MemoryKind>,
     pub(crate) sensitivity: Option<MemorySensitivity>,
+    pub(crate) visibility: Option<MemoryVisibility>,
     pub(crate) tag: Option<String>,
     pub(crate) min_score: u8,
     pub(crate) limit: Option<usize>,
@@ -73,6 +78,7 @@ impl MemoryListFilter {
             status: None,
             kind: None,
             sensitivity: None,
+            visibility: None,
             tag: None,
             limit: None,
         }
@@ -90,6 +96,13 @@ impl MemoryListFilter {
 
     pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
         self.sensitivity = Some(sensitivity);
+        self
+    }
+
+    /// Restricts the listing to memories whose visibility is at or below the
+    /// given scope (narrow→wide). Unset returns every visibility.
+    pub fn with_visibility(mut self, visibility: MemoryVisibility) -> Self {
+        self.visibility = Some(visibility);
         self
     }
 
@@ -191,6 +204,7 @@ impl MemoryRetrievalQuery {
             query: query.into(),
             kind: None,
             sensitivity: None,
+            visibility: None,
             tag: None,
             min_score: 1,
             limit: None,
@@ -204,6 +218,13 @@ impl MemoryRetrievalQuery {
 
     pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
         self.sensitivity = Some(sensitivity);
+        self
+    }
+
+    /// Restricts ranked retrieval to memories whose visibility is at or below
+    /// the given scope (narrow→wide). Unset returns every visibility.
+    pub fn with_visibility(mut self, visibility: MemoryVisibility) -> Self {
+        self.visibility = Some(visibility);
         self
     }
 
@@ -253,6 +274,7 @@ impl MemoryQuery {
             project,
             kind: None,
             sensitivity: None,
+            visibility: None,
             tag: None,
             text: None,
             limit: None,
@@ -266,6 +288,13 @@ impl MemoryQuery {
 
     pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
         self.sensitivity = Some(sensitivity);
+        self
+    }
+
+    /// Restricts retrieval to memories whose visibility is at or below the given
+    /// scope (narrow→wide). Unset returns every visibility.
+    pub fn with_visibility(mut self, visibility: MemoryVisibility) -> Self {
+        self.visibility = Some(visibility);
         self
     }
 

@@ -26,7 +26,8 @@ pub use context::{CompactionRecord, ContextWindowState, ToolProgress};
 pub use events::{AgentEvent, compute_manifest_hash};
 pub use ids::{EventId, SessionId, TurnId};
 pub use memory::{
-    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef,
+    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, MemoryVisibility,
+    ProjectRef,
 };
 pub use permissions::{
     PermissionDecision, PermissionMode, PermissionRequest, PermissionScope, PermissionStatus,

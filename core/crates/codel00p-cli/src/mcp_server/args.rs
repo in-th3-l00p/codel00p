@@ -89,3 +89,13 @@ pub(super) fn parse_sensitivity(value: &str) -> Result<MemorySensitivity, String
         _ => Err(format!("unknown memory sensitivity: {value}")),
     }
 }
+
+pub(super) fn parse_visibility(value: &str) -> Result<MemoryVisibility, String> {
+    match value {
+        "private" => Ok(MemoryVisibility::Private),
+        "project" => Ok(MemoryVisibility::Project),
+        "team" => Ok(MemoryVisibility::Team),
+        "org" => Ok(MemoryVisibility::Org),
+        _ => Err(format!("unknown memory visibility: {value}")),
+    }
+}

@@ -11,7 +11,10 @@ use super::{
         memory_record_json, quality_memory_json, ranked_memory_json, retrieved_memory_json,
         similar_memory_json, source_uri, stale_memory_json,
     },
-    parse::{kind_label, parse_kind, parse_sensitivity, parse_status, status_label},
+    parse::{
+        kind_label, parse_kind, parse_sensitivity, parse_status, parse_visibility, status_label,
+        visibility_label,
+    },
 };
 
 pub(super) fn memory_quality(config: CliConfig, args: &[String]) -> CliResult<String> {
@@ -249,6 +252,14 @@ pub(super) fn memory_search(config: CliConfig, args: &[String]) -> CliResult<Str
                 )?)?);
                 index += 2;
             }
+            "--visibility" => {
+                query = query.with_visibility(parse_visibility(&required_value(
+                    args,
+                    index,
+                    "--visibility",
+                )?)?);
+                index += 2;
+            }
             "--limit" => {
                 let limit = required_value(args, index, "--limit")?
                     .parse::<usize>()
@@ -312,6 +323,14 @@ pub(super) fn memory_retrieve(config: CliConfig, args: &[String]) -> CliResult<S
             "--sensitive" => {
                 query = query.with_sensitivity(MemorySensitivity::Sensitive);
                 index += 1;
+            }
+            "--visibility" => {
+                query = query.with_visibility(parse_visibility(&required_value(
+                    rest,
+                    index,
+                    "--visibility",
+                )?)?);
+                index += 2;
             }
             "--threshold" => {
                 let score = required_value(rest, index, "--threshold")?
@@ -384,6 +403,14 @@ pub(super) fn memory_list(config: CliConfig, args: &[String]) -> CliResult<Strin
                 )?)?);
                 index += 2;
             }
+            "--visibility" => {
+                filter = filter.with_visibility(parse_visibility(&required_value(
+                    args,
+                    index,
+                    "--visibility",
+                )?)?);
+                index += 2;
+            }
             "--tag" => {
                 filter = filter.with_tag(required_value(args, index, "--tag")?);
                 index += 2;
@@ -447,10 +474,11 @@ pub(super) fn memory_show(config: CliConfig, args: &[String]) -> CliResult<Strin
     }
 
     let mut output = format!(
-        "id: {}\nstatus: {}\nkind: {}\ntags: {}\n",
+        "id: {}\nstatus: {}\nkind: {}\nvisibility: {}\ntags: {}\n",
         record.entry().id(),
         status_label(record.entry().status()),
         kind_label(record.entry().kind()),
+        visibility_label(record.entry().visibility()),
         record.entry().tags().join(",")
     );
     if let Some(source) = record.entry().source() {

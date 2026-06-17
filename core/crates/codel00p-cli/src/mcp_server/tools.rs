@@ -131,6 +131,9 @@ fn memory_search(config: &CliConfig, arguments: &Value) -> Result<String, String
     if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
         query = query.with_sensitivity(parse_sensitivity(sensitivity)?);
     }
+    if let Some(visibility) = optional_string(arguments, "visibility") {
+        query = query.with_visibility(parse_visibility(visibility)?);
+    }
     if let Some(tag) = optional_string(arguments, "tag") {
         query = query.with_tag(tag);
     }
@@ -155,6 +158,9 @@ fn memory_retrieve(config: &CliConfig, arguments: &Value) -> Result<String, Stri
     }
     if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
         query = query.with_sensitivity(parse_sensitivity(sensitivity)?);
+    }
+    if let Some(visibility) = optional_string(arguments, "visibility") {
+        query = query.with_visibility(parse_visibility(visibility)?);
     }
     if let Some(tag) = optional_string(arguments, "tag") {
         query = query.with_tag(tag);
@@ -187,6 +193,9 @@ fn memory_list(config: &CliConfig, arguments: &Value) -> Result<String, String> 
     }
     if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
         filter = filter.with_sensitivity(parse_sensitivity(sensitivity)?);
+    }
+    if let Some(visibility) = optional_string(arguments, "visibility") {
+        filter = filter.with_visibility(parse_visibility(visibility)?);
     }
     if let Some(tag) = optional_string(arguments, "tag") {
         filter = filter.with_tag(tag);
@@ -266,6 +275,9 @@ fn memory_create_candidate(
     }
     if let Some(sensitivity) = optional_string(arguments, "sensitivity") {
         input = input.with_sensitivity(parse_sensitivity(sensitivity)?);
+    }
+    if let Some(visibility) = optional_string(arguments, "visibility") {
+        input = input.with_visibility(parse_visibility(visibility)?);
     }
 
     let mut store = open_memory_store(config)?;

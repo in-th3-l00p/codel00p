@@ -2,7 +2,9 @@ use codel00p_memory::MemoryRevision;
 use codel00p_protocol::MemorySource;
 use serde_json::{Value, json};
 
-use super::parse::{audit_action_label, kind_label, sensitivity_label, status_label};
+use super::parse::{
+    audit_action_label, kind_label, sensitivity_label, status_label, visibility_label,
+};
 
 pub(super) fn memory_record_json(record: &codel00p_memory::MemoryRecord) -> Value {
     let mut item = memory_entry_json(record.entry());
@@ -97,6 +99,7 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         "status": status_label(entry.status()),
         "kind": kind_label(entry.kind()),
         "sensitivity": sensitivity_label(entry.sensitivity()),
+        "visibility": visibility_label(entry.visibility()),
         "content": entry.content(),
         "tags": entry.tags(),
     });
