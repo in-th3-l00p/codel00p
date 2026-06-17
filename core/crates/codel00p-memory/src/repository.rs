@@ -1,5 +1,6 @@
 //! Repository trait and storage-backed repository handle.
 
+use codel00p_protocol::MemoryEvidence;
 use codel00p_storage::{InMemoryStorage, StorageScope};
 
 use crate::{
@@ -18,6 +19,18 @@ pub trait MemoryRepository {
     fn review(&mut self, id: &str, decision: ReviewDecision) -> Result<MemoryRecord, MemoryError>;
 
     fn edit(&mut self, id: &str, edit: MemoryEdit) -> Result<MemoryRecord, MemoryError>;
+
+    /// Appends an explicit evidence link to an existing active memory and records
+    /// an [`crate::MemoryAuditAction::EvidenceAdded`] audit event. The optional
+    /// `reason` and `actor` are carried onto that event. Returns the updated
+    /// record.
+    fn add_evidence(
+        &mut self,
+        id: &str,
+        evidence: MemoryEvidence,
+        actor: &str,
+        reason: Option<String>,
+    ) -> Result<MemoryRecord, MemoryError>;
 
     /// Folds the `source` memory into the `target`: archives the source, carries
     /// its tags onto the target, and records the merge on both audit logs.

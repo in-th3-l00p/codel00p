@@ -1,7 +1,8 @@
 //! Candidate and extraction input types for memory workflows.
 
 use codel00p_protocol::{
-    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryVisibility, ProjectRef,
+    MemoryEntry, MemoryEvidence, MemoryKind, MemorySensitivity, MemorySource, MemoryVisibility,
+    ProjectRef,
 };
 
 use crate::{MemoryError, util::non_empty_filter};
@@ -16,6 +17,7 @@ pub struct MemoryCandidateInput {
     content: String,
     source: MemorySource,
     tags: Vec<String>,
+    evidence: Vec<MemoryEvidence>,
 }
 
 impl MemoryCandidateInput {
@@ -35,6 +37,7 @@ impl MemoryCandidateInput {
             content: content.into(),
             source,
             tags: Vec::new(),
+            evidence: Vec::new(),
         }
     }
 
@@ -42,6 +45,11 @@ impl MemoryCandidateInput {
         if let Some(tag) = non_empty_filter(tag.into()) {
             self.tags.push(tag);
         }
+        self
+    }
+
+    pub fn with_evidence(mut self, evidence: MemoryEvidence) -> Self {
+        self.evidence.push(evidence);
         self
     }
 
@@ -87,6 +95,10 @@ impl MemoryCandidateInput {
         &self.tags
     }
 
+    pub fn evidence(&self) -> &[MemoryEvidence] {
+        &self.evidence
+    }
+
     pub(crate) fn validate(&self) -> Result<(), MemoryError> {
         if self.id.trim().is_empty() {
             return Err(MemoryError::InvalidCandidate {
@@ -110,6 +122,9 @@ impl MemoryCandidateInput {
             .with_visibility(self.visibility);
         for tag in self.tags {
             entry = entry.with_tag(tag);
+        }
+        for evidence in self.evidence {
+            entry = entry.with_evidence(evidence);
         }
         entry
     }

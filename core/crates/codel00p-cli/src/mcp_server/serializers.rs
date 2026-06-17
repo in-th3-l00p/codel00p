@@ -92,7 +92,38 @@ fn memory_entry_json(entry: &codel00p_protocol::MemoryEntry) -> Value {
         item["source"] = source_json;
         item["source_uri"] = json!(source_uri(source));
     }
+    if !entry.evidence().is_empty() {
+        item["evidence"] = json!(
+            entry
+                .evidence()
+                .iter()
+                .map(evidence_json)
+                .collect::<Vec<_>>()
+        );
+    }
     item
+}
+
+pub(super) fn evidence_json(evidence: &MemoryEvidence) -> Value {
+    let mut item = json!({
+        "kind": evidence_kind_label(evidence.kind()),
+        "reference": evidence.reference(),
+    });
+    if let Some(note) = evidence.note() {
+        item["note"] = json!(note);
+    }
+    item
+}
+
+fn evidence_kind_label(kind: EvidenceKind) -> &'static str {
+    match kind {
+        EvidenceKind::File => "file",
+        EvidenceKind::Url => "url",
+        EvidenceKind::Pr => "pr",
+        EvidenceKind::Issue => "issue",
+        EvidenceKind::Commit => "commit",
+        EvidenceKind::Other => "other",
+    }
 }
 
 fn memory_quality_json(quality: &codel00p_memory::MemoryQuality) -> Value {
@@ -144,6 +175,7 @@ pub(super) fn audit_action_label(action: MemoryAuditAction) -> &'static str {
         MemoryAuditAction::Edited => "edited",
         MemoryAuditAction::Merged => "merged",
         MemoryAuditAction::Split => "split",
+        MemoryAuditAction::EvidenceAdded => "evidence_added",
     }
 }
 

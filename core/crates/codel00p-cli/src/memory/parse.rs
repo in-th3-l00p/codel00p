@@ -1,4 +1,6 @@
-use codel00p_protocol::{MemoryKind, MemorySensitivity, MemoryStatus, MemoryVisibility};
+use codel00p_protocol::{
+    EvidenceKind, MemoryKind, MemorySensitivity, MemoryStatus, MemoryVisibility,
+};
 
 use crate::config::CliResult;
 
@@ -39,6 +41,29 @@ pub(super) fn parse_visibility(value: &str) -> CliResult<MemoryVisibility> {
         "team" => Ok(MemoryVisibility::Team),
         "org" => Ok(MemoryVisibility::Org),
         _ => Err(format!("unknown memory visibility: {value}")),
+    }
+}
+
+pub(super) fn parse_evidence_kind(value: &str) -> CliResult<EvidenceKind> {
+    match value {
+        "file" => Ok(EvidenceKind::File),
+        "url" => Ok(EvidenceKind::Url),
+        "pr" => Ok(EvidenceKind::Pr),
+        "issue" => Ok(EvidenceKind::Issue),
+        "commit" => Ok(EvidenceKind::Commit),
+        "other" => Ok(EvidenceKind::Other),
+        _ => Err(format!("unknown evidence kind: {value}")),
+    }
+}
+
+pub(super) fn evidence_kind_label(kind: EvidenceKind) -> &'static str {
+    match kind {
+        EvidenceKind::File => "file",
+        EvidenceKind::Url => "url",
+        EvidenceKind::Pr => "pr",
+        EvidenceKind::Issue => "issue",
+        EvidenceKind::Commit => "commit",
+        EvidenceKind::Other => "other",
     }
 }
 
@@ -87,5 +112,6 @@ pub(super) fn audit_action_label(action: codel00p_memory::MemoryAuditAction) -> 
         codel00p_memory::MemoryAuditAction::Edited => "edited",
         codel00p_memory::MemoryAuditAction::Merged => "merged",
         codel00p_memory::MemoryAuditAction::Split => "split",
+        codel00p_memory::MemoryAuditAction::EvidenceAdded => "evidence_added",
     }
 }

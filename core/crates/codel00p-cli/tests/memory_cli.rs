@@ -15,6 +15,8 @@ mod quality;
 mod ranked_retrieval;
 #[path = "memory_cli/review_edit.rs"]
 mod review_edit;
+#[path = "memory_cli/review_evidence.rs"]
+mod review_evidence;
 #[path = "memory_cli/review_merge.rs"]
 mod review_merge;
 #[path = "memory_cli/review_split.rs"]

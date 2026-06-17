@@ -232,6 +232,7 @@ pub enum MemoryAuditAction {
     Edited,
     Merged,
     Split,
+    EvidenceAdded,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,6 +256,9 @@ pub struct MemoryAuditEvent {
     /// `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
     split_into: Option<String>,
+    /// On an evidence-added event, the reference of the evidence link recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    evidence_reference: Option<String>,
 }
 
 impl MemoryAuditEvent {
@@ -272,6 +276,7 @@ impl MemoryAuditEvent {
             new_content: Some(initial_content.into()),
             merged_into: None,
             split_into: None,
+            evidence_reference: None,
         }
     }
 
@@ -286,6 +291,7 @@ impl MemoryAuditEvent {
             new_content: None,
             merged_into: None,
             split_into: None,
+            evidence_reference: None,
         }
     }
 
@@ -307,6 +313,7 @@ impl MemoryAuditEvent {
             new_content: None,
             merged_into: Some(merged_into.into()),
             split_into: None,
+            evidence_reference: None,
         }
     }
 
@@ -332,6 +339,7 @@ impl MemoryAuditEvent {
             new_content: None,
             merged_into: None,
             split_into: None,
+            evidence_reference: None,
         }
     }
 
@@ -349,6 +357,7 @@ impl MemoryAuditEvent {
             new_content: None,
             merged_into: None,
             split_into: Some(split.new_id().to_string()),
+            evidence_reference: None,
         }
     }
 
@@ -374,6 +383,7 @@ impl MemoryAuditEvent {
             new_content: None,
             merged_into: None,
             split_into: None,
+            evidence_reference: None,
         }
     }
 
@@ -393,6 +403,30 @@ impl MemoryAuditEvent {
             new_content: Some(new_content.into()),
             merged_into: None,
             split_into: None,
+            evidence_reference: None,
+        }
+    }
+
+    /// The audit event written when an explicit evidence link is appended to an
+    /// existing active memory. Records the actor, optional reason, and the
+    /// evidence reference that was added.
+    pub(crate) fn evidence_added(
+        memory_id: impl Into<String>,
+        actor: impl Into<String>,
+        reference: impl Into<String>,
+        reason: Option<String>,
+    ) -> Self {
+        Self {
+            memory_id: memory_id.into(),
+            sequence: 0,
+            action: MemoryAuditAction::EvidenceAdded,
+            actor: actor.into(),
+            reason,
+            previous_content: None,
+            new_content: None,
+            merged_into: None,
+            split_into: None,
+            evidence_reference: Some(reference.into()),
         }
     }
 
@@ -432,6 +466,11 @@ impl MemoryAuditEvent {
     /// On a split's source event, the new memory that was created from it.
     pub fn split_into(&self) -> Option<&str> {
         self.split_into.as_deref()
+    }
+
+    /// On an evidence-added event, the reference of the evidence link recorded.
+    pub fn evidence_reference(&self) -> Option<&str> {
+        self.evidence_reference.as_deref()
     }
 
     pub(crate) fn from_log_entry(entry: AppendLogEntry) -> Result<Self, MemoryError> {

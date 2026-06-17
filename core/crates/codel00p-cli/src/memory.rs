@@ -40,6 +40,13 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "reject" => review::memory_review(config, rest, ReviewCommand::Reject),
         "archive" => review::memory_review(config, rest, ReviewCommand::Archive),
         "edit" => review::memory_edit(config, rest),
+        "evidence" => match rest.split_first() {
+            Some((sub, evidence_rest)) if sub == "add" => {
+                review::memory_evidence_add(config, evidence_rest)
+            }
+            Some((sub, _)) => Err(format!("unknown memory evidence command: {sub}")),
+            None => Err("missing memory evidence command".to_string()),
+        },
         "merge" => review::memory_merge(config, rest),
         "split" => review::memory_split(config, rest),
         "restore" => review::memory_restore(config, rest),
