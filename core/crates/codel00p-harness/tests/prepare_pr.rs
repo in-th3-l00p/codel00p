@@ -8,7 +8,7 @@ use tempfile::tempdir;
 
 fn git_repo_with_branch() -> tempfile::TempDir {
     let dir = tempdir().expect("tempdir");
-    run_git(dir.path(), &["init"]);
+    run_git(dir.path(), &["init", "-b", "main"]);
     run_git(dir.path(), &["config", "user.name", "codel00p test"]);
     run_git(
         dir.path(),
@@ -195,7 +195,7 @@ async fn prepare_pr_multi_commit_branch_returns_correct_structure() {
 #[tokio::test]
 async fn prepare_pr_single_commit_uses_subject_as_title() {
     let dir = tempdir().expect("tempdir");
-    run_git(dir.path(), &["init"]);
+    run_git(dir.path(), &["init", "-b", "main"]);
     run_git(dir.path(), &["config", "user.name", "codel00p test"]);
     run_git(
         dir.path(),
@@ -241,7 +241,7 @@ async fn prepare_pr_single_commit_uses_subject_as_title() {
 #[tokio::test]
 async fn prepare_pr_empty_range_returns_pr_ready_false() {
     let dir = tempdir().expect("tempdir");
-    run_git(dir.path(), &["init"]);
+    run_git(dir.path(), &["init", "-b", "main"]);
     run_git(dir.path(), &["config", "user.name", "codel00p test"]);
     run_git(
         dir.path(),
