@@ -29,21 +29,23 @@ multi-edit `apply_patch` engine.
 Only two small tool-calling tails remain: **token-efficient tool results**
 (Phase 2) and **streaming tool-call arguments** (Phase 3).
 
-**2026-06-17 wave** advanced #3 and #4: for **Memory 2.0 (#3)**, shipped the
-**`memory_merge` MCP tool + `memory split` workflow** (repository/CLI/MCP, PR #37)
-and **semantic (lexical) memory retrieval ranked behind deterministic filters**
-(repository/CLI/MCP, reusing the existing Jaccard similarity scorer, PR #39); for
-**Agent Parity Hardening (#4)**, shipped the **`prepare_pr` workflow tool**
-(offline PR-ready summary from git state, PR #36) and **deterministic context
-manifests** (the `ContextManifest` event with a content hash, PR #38).
+**2026-06-17 wave completed #3 and #4.** For **Agent Parity Hardening (#4)**:
+`prepare_pr` workflow tool (PR #36), deterministic context manifests (PR #38),
+and worktree-isolated execution for mutating sub-agents (PR #41) — **#4 is now
+complete**. For **Memory 2.0 (#3)**: `memory_merge` MCP tool + `memory split`
+(PR #37), semantic retrieval (PR #39), knowledge imports (PR #42), reconstructable
+revision history (PR #43), post-session recommendations (PR #44), visibility
+scopes (PR #46), and explicit evidence links (PR #45) — **every listed #3 slice
+has shipped**.
 
-**Next priority:** **Agent Parity Hardening (#4)** now needs only
-**worktree-isolated execution** (in progress). The rest of **Memory 2.0 (#3)** is
-post-session recommendations, imports, richer revision history, source evidence,
-and visibility scopes. **Provider Route Intelligence (#2)** remains blocked on
-cloud product/design context. The longer-horizon frontiers are **Execution
-Backends & Sandboxing (#7)** — the blocker for true `execute_code` — and
-Capability Synthesis's next slices (org propagation, composition).
+**Next priority:** with #1, #3, and #4 done, the remaining frontier is
+**Provider Route Intelligence (#2)** (blocked on cloud product/design context),
+**MCP Certification (#5)** (needs live third-party servers to verify), and the
+longer-horizon **Execution Backends & Sandboxing (#7)** — the blocker for true
+`execute_code` — plus Capability Synthesis's next slices (org propagation,
+composition). Memory 2.0 follow-ups beyond the original list: an LLM-assisted
+memory recommender, near-duplicate-aware import dedup, and an MCP `memory_import`
+tool.
 
 Active follow-up: **TUI writable org switching** — Clerk token re-mint primitive
 shipped; the current slice wires the Org tab to a real organization picker and
@@ -139,22 +141,37 @@ surfaces.
 
 Goal: make project memory trusted, maintainable, and visibly sourced.
 
+**Status: essentially complete** — the 2026-06-17 wave shipped the remaining
+slices (imports, revision history, post-session recommendations, source
+evidence, visibility scopes; on top of merge/split and semantic retrieval).
+
 Build:
 
-- memory editing and revision history; started with CLI/MCP-backed content
-  edits that preserve metadata and append CLI/MCP-visible `edited` audit
-  events with memory id and previous/new content metadata, plus CLI/MCP restore
-  from edit audit revisions;
+- memory editing and revision history; CLI/MCP-backed content edits that preserve
+  metadata and append CLI/MCP-visible `edited` audit events with previous/new
+  content, plus CLI/MCP restore from edit audit revisions, **plus
+  reconstructable content revision history — `memory revisions <id>` /
+  `revisions(id)` returns the ordered content snapshots rebuilt from the audit
+  trail (PR #43)**;
 - deterministic approved-memory retrieval; CLI/MCP substring search over
   approved project memory by text, kind, tag, and limit, **plus `memory retrieve`
   / `memory_retrieve` (PR #39): query-string → approved-memory results ranked by
   the existing Jaccard similarity scorer behind deterministic filters (kind, tag,
   sensitivity, limit), with deterministic id tie-breaking** — offline, no
   embeddings;
-- source evidence links; started with CLI detail text plus CLI
-  list/show/search/similar JSON source session/turn metadata, replay
-  `source_uri`, and MCP
-  show/resource/list/search/similar JSON source metadata;
+- source evidence links; CLI detail text plus CLI list/show/search/similar JSON
+  source session/turn metadata, replay `source_uri`, and MCP JSON source
+  metadata, **plus explicit evidence links — a `MemoryEvidence { kind (File /
+  Url / Pr / Issue / Commit / Other), reference, note }` list on each memory,
+  `memory evidence add` / `memory_add_evidence`, an `EvidenceAdded` audit event,
+  surfaced in CLI/MCP memory JSON (PR #45)**;
+- knowledge imports; **`codel00p memory import <path> [--split-sections]` reads
+  markdown/text files into the candidate review queue (never auto-approved), with
+  deterministic ids and a file-path source via `MemorySource::import` (PR #42)**;
+- post-session memory recommendations; **a `MemoryRecommender` (deterministic,
+  mirroring the capability-extractor pattern) auto-proposes memory candidates to
+  the existing review queue after a productive turn, alongside the explicit
+  `remember:` extraction (PR #44)**;
 - duplicate and near-duplicate detection; started with exact active duplicate
   candidate rejection, repository-level active memory similarity scoring, and
   CLI/MCP review access to near-duplicate scores;
@@ -169,19 +186,23 @@ Build:
   MCP (`memory_split`);
 - stale-memory detection; started with repository-level newer active-memory
   overlap scoring for approved memories and CLI/MCP stale review output;
-- visibility and sensitivity scopes; started with normal/sensitive memory
-  labels, default normal-only retrieval, and explicit CLI/MCP sensitive-memory
-  review/search filters;
+- visibility and sensitivity scopes; normal/sensitive memory labels, default
+  normal-only retrieval, and explicit CLI/MCP sensitive-memory filters, **plus a
+  `MemoryVisibility` scope (Private < Project < Team < Org; default Project) with
+  max-visibility filtering across search/retrieve/list and the approved-memory
+  provider, mirroring the sensitivity mechanism (PR #46)**;
 - memory quality scoring; started with deterministic `MemoryRecord::quality()`
   advisory scores and findings for short, long, or vague memory content, now
   exposed in CLI/MCP memory JSON records for review surfaces, plus a core
   low-quality active-memory review query surfaced through CLI and MCP with
   status-, kind-, sensitivity-, and tag-scoped review filters.
 
-Why next: memory is the product moat. Provider breadth matters, but durable
-reviewed knowledge is what makes codel00p distinct for teams.
+Why this mattered: memory is the product moat. Provider breadth matters, but
+durable reviewed knowledge is what makes codel00p distinct for teams. With the
+listed slices shipped, future work is refinement (LLM-assisted recommendations,
+import dedup, semantic embeddings) rather than net-new capability.
 
-### 4. Agent Parity Hardening
+### 4. Agent Parity Hardening — COMPLETE
 
 Goal: close the remaining gap with mature coding agents.
 
@@ -191,14 +212,15 @@ Build:
 - ~~cancellation and interruption~~ (cooperative `CancelSignal`);
 - ~~background command monitoring~~ (`run_command background:true` + `process_*`);
 - ~~web fetch/search tools~~;
-- worktree-isolated execution **(in progress)** — mutating sub-agents in isolated
-  git worktrees;
+- ~~worktree-isolated execution~~ — opt-in `isolation:"worktree"` runs a mutating
+  sub-agent in a temp git worktree off HEAD, captures its diff back to the parent,
+  leaves the parent tree untouched (PR #41);
 - ~~PR preparation workflow~~ (`prepare_pr` tool, PR #36);
 - ~~most-recent-session continue UX~~ (`agent continue`);
 - ~~deterministic context manifests~~ (`ContextManifest` event + content hash,
   PR #38).
 
-Only **worktree-isolated execution** remains.
+All items shipped — **#4 is complete**.
 
 ### 5. MCP Certification
 

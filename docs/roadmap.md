@@ -127,23 +127,25 @@ Exit criteria:
 Goal: make reviewed project memory accurate, maintainable, and valuable for
 teams.
 
-Build:
+Build (all listed slices shipped as of the 2026-06-17 wave):
 
-- memory editing and revision history;
-- source evidence links;
-- duplicate and near-duplicate detection;
-- stale-memory detection;
-- sensitivity and visibility scopes;
-- ~~merge/split workflows~~ — `memory merge` (archive the duplicate, carry tags
-  onto the survivor, two-sided `merged` audit) and `memory split` (new candidate
-  from part of a source, two-sided `split` audit), both over repository/CLI/MCP
-  (PR #37);
+- ~~memory editing and revision history~~ (edits + restore, plus reconstructable
+  content revision history `memory revisions`, PR #43);
+- ~~source evidence links~~ (`MemoryEvidence` list + `memory evidence add`, PR #45);
+- ~~duplicate and near-duplicate detection~~ (similarity scoring + review access);
+- ~~stale-memory detection~~;
+- ~~sensitivity and visibility scopes~~ (`MemoryVisibility`
+  Private<Project<Team<Org max-visibility filtering, PR #46);
+- ~~merge/split workflows~~ — `memory merge` and `memory split` over
+  repository/CLI/MCP (PR #37);
 - ~~semantic retrieval behind deterministic filters~~ — `memory retrieve` ranks
   approved memory by the existing Jaccard scorer behind kind/tag/sensitivity/limit
   filters, offline, deterministic ties (PR #39);
-- memory quality scoring;
-- post-session memory recommendations;
-- imports from docs, issues, PRs, and existing project notes.
+- ~~memory quality scoring~~ (`MemoryRecord::quality()` + low-quality review query);
+- ~~post-session memory recommendations~~ (deterministic `MemoryRecommender`
+  auto-proposing candidates after a turn, PR #44);
+- ~~imports from docs, issues, PRs, and existing project notes~~ (`memory import`
+  of markdown/text into the candidate queue, PR #42).
 
 Exit criteria:
 
