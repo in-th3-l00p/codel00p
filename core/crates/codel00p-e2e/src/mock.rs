@@ -19,6 +19,20 @@
 //! (OpenAI-compatible) transport produces and parses: `finish_reason:
 //! "tool_calls"` with a `tool_calls` array of `function` calls whose `arguments`
 //! is a JSON-encoded **string**.
+//!
+//! # Sub-agent delegation: parent vs child turns
+//!
+//! Delegation makes the *parent* harness spawn a *child* harness in the same
+//! process. Both hit this one mock server, but each has its own conversation, so
+//! both start over from zero tool-result messages — their indices would collide.
+//! To keep the script unambiguous, a turn can be scoped to an
+//! [`Audience`]: the orchestrator parent always advertises the `delegate_task`
+//! tool while the child (a leaf) never does, so a turn restricted to
+//! [`Audience::Parent`] only fires on requests whose advertised `tools` include
+//! `delegate_task`, and [`Audience::Child`] only on those that don't. Each
+//! audience gets its OWN tool-result index sequence, so parent and child scripts
+//! advance independently. [`Audience::Any`] (the default for the un-scoped
+//! builder methods) keeps the original single-conversation behavior.
 
 use std::sync::{Arc, Mutex};
 
@@ -33,6 +47,32 @@ enum Turn {
     /// One or more tool calls in a single assistant turn
     /// (`finish_reason: "tool_calls"`).
     ToolCalls(Vec<(String, Value)>),
+}
+
+/// Which conversation a scripted turn belongs to.
+///
+/// Delegation runs a parent and a child harness against the same mock; scoping a
+/// turn keeps their scripts from colliding (see the module docs). The parent is
+/// the only one whose advertised tools include `delegate_task`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Audience {
+    /// Any request, regardless of advertised tools (default; backward compatible).
+    Any,
+    /// Only the orchestrator parent (advertises `delegate_task`).
+    Parent,
+    /// Only a delegated child (a leaf, never advertises `delegate_task`).
+    Child,
+}
+
+impl Audience {
+    /// Whether a request body advertising `delegate_task` belongs to this audience.
+    fn matches(self, advertises_delegate: bool) -> bool {
+        match self {
+            Audience::Any => true,
+            Audience::Parent => advertises_delegate,
+            Audience::Child => !advertises_delegate,
+        }
+    }
 }
 
 /// A fluent builder for a scripted conversation served to the real binary.
@@ -52,8 +92,12 @@ pub struct MockProvider {
     server: MockServer,
     /// Bodies of requests served so far, recorded in matcher order.
     captured: Arc<Mutex<Vec<String>>>,
-    /// Count of turns registered so far, used to assign each turn its index.
+    /// Count of `Any`-audience turns registered, used to assign each its index.
     registered: usize,
+    /// Per-audience registration counts, so parent and child turns each get an
+    /// independent index sequence that tracks only their own tool results.
+    registered_parent: usize,
+    registered_child: usize,
 }
 
 impl MockProvider {
@@ -64,6 +108,8 @@ impl MockProvider {
             server: MockServer::start(),
             captured: Arc::new(Mutex::new(Vec::new())),
             registered: 0,
+            registered_parent: 0,
+            registered_child: 0,
         }
     }
 
@@ -71,7 +117,7 @@ impl MockProvider {
     #[must_use]
     pub fn assistant_text(mut self, text: impl Into<String>) -> Self {
         let turn = Turn::Text(text.into());
-        self.register(turn);
+        self.register(turn, Audience::Any);
         self
     }
 
@@ -83,7 +129,7 @@ impl MockProvider {
     #[must_use]
     pub fn tool_call(mut self, name: impl Into<String>, args: Value) -> Self {
         let turn = Turn::ToolCalls(vec![(name.into(), args)]);
-        self.register(turn);
+        self.register(turn, Audience::Any);
         self
     }
 
@@ -91,7 +137,41 @@ impl MockProvider {
     #[must_use]
     pub fn tool_calls(mut self, calls: Vec<(String, Value)>) -> Self {
         let turn = Turn::ToolCalls(calls);
-        self.register(turn);
+        self.register(turn, Audience::Any);
+        self
+    }
+
+    /// Queues a [`Audience::Parent`]-scoped tool-call turn (fires only on requests
+    /// that advertise `delegate_task`). For delegation scenarios.
+    #[must_use]
+    pub fn parent_tool_call(mut self, name: impl Into<String>, args: Value) -> Self {
+        let turn = Turn::ToolCalls(vec![(name.into(), args)]);
+        self.register(turn, Audience::Parent);
+        self
+    }
+
+    /// Queues a [`Audience::Parent`]-scoped final-text turn.
+    #[must_use]
+    pub fn parent_text(mut self, text: impl Into<String>) -> Self {
+        let turn = Turn::Text(text.into());
+        self.register(turn, Audience::Parent);
+        self
+    }
+
+    /// Queues a [`Audience::Child`]-scoped tool-call turn (fires only on requests
+    /// that do NOT advertise `delegate_task`, i.e. a delegated leaf child).
+    #[must_use]
+    pub fn child_tool_call(mut self, name: impl Into<String>, args: Value) -> Self {
+        let turn = Turn::ToolCalls(vec![(name.into(), args)]);
+        self.register(turn, Audience::Child);
+        self
+    }
+
+    /// Queues a [`Audience::Child`]-scoped final-text turn (the child's summary).
+    #[must_use]
+    pub fn child_text(mut self, text: impl Into<String>) -> Self {
+        let turn = Turn::Text(text.into());
+        self.register(turn, Audience::Child);
         self
     }
 
@@ -114,9 +194,26 @@ impl MockProvider {
         self.captured.lock().unwrap().clone()
     }
 
-    fn register(&mut self, turn: Turn) {
-        let index = self.registered;
-        self.registered += 1;
+    fn register(&mut self, turn: Turn, audience: Audience) {
+        // Each audience counts its own tool results, so parent and child scripts
+        // advance independently even though both hit this one server.
+        let index = match audience {
+            Audience::Any => {
+                let i = self.registered;
+                self.registered += 1;
+                i
+            }
+            Audience::Parent => {
+                let i = self.registered_parent;
+                self.registered_parent += 1;
+                i
+            }
+            Audience::Child => {
+                let i = self.registered_child;
+                self.registered_child += 1;
+                i
+            }
+        };
         let body = response_for(&turn);
         let captured = Arc::clone(&self.captured);
         self.server.mock(move |when, then| {
@@ -125,7 +222,8 @@ impl MockProvider {
                 .path("/chat/completions")
                 .is_true(move |req: &HttpMockRequest| {
                     let request_body = req.body_string();
-                    if count_tool_results(&request_body) == index {
+                    let in_audience = audience.matches(advertises_delegate(&request_body));
+                    if in_audience && count_tool_results(&request_body) == index {
                         // Record on the matching turn so each request is captured
                         // exactly once, in served order.
                         captured.lock().unwrap().push(request_body);
@@ -139,6 +237,14 @@ impl MockProvider {
                 .json_body(body);
         });
     }
+}
+
+/// Whether a request body advertises the `delegate_task` tool, which only the
+/// orchestrator parent does (a leaf child never gets it). Tolerates whitespace
+/// around JSON punctuation so it works on compact or pretty bodies.
+fn advertises_delegate(body: &str) -> bool {
+    let compact: String = body.chars().filter(|c| !c.is_whitespace()).collect();
+    compact.contains(r#""name":"delegate_task""#)
 }
 
 /// Counts `"role":"tool"` messages in a request body, tolerating whitespace
