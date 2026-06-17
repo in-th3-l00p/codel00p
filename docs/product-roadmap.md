@@ -182,19 +182,27 @@ Current foundation:
 - SQLite-backed local persistence through `codel00p-storage`;
 - CLI review commands.
 
-Next work:
+Next work (all shipped as of the 2026-06-17 wave):
 
-- richer memory revision history;
-- source evidence links beyond session replay references;
-- near-duplicate detection;
-- visibility scopes and richer sensitivity policy;
+- ~~richer memory revision history~~ (reconstructable content snapshots
+  `memory revisions`, PR #43);
+- ~~source evidence links beyond session replay references~~ (`MemoryEvidence`
+  list + `memory evidence add`, PR #45);
+- ~~near-duplicate detection~~ (similarity scoring + review access);
+- ~~visibility scopes and richer sensitivity policy~~ (`MemoryVisibility`
+  Private<Project<Team<Org, PR #46);
 - ~~merge/split workflows~~ (`memory merge` + `memory split` over
   repository/CLI/MCP, PR #37);
 - ~~semantic retrieval behind deterministic filters~~ (`memory retrieve`, ranked
   by the existing Jaccard scorer, offline, PR #39);
-- memory quality scoring;
-- memory recommendations after agent work;
-- import from docs, issues, PRs, and existing project notes.
+- ~~memory quality scoring~~ (`MemoryRecord::quality()`);
+- ~~memory recommendations after agent work~~ (deterministic `MemoryRecommender`,
+  PR #44);
+- ~~import from docs, issues, PRs, and existing project notes~~ (`memory import`,
+  PR #42).
+
+Follow-ups beyond the original list: an LLM-assisted recommender, import dedup,
+and semantic-embedding retrieval.
 
 Exit criteria:
 
