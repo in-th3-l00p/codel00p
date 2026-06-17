@@ -4,6 +4,9 @@ mod support;
 #[path = "memory_cli/revisions.rs"]
 mod revisions;
 
+#[path = "memory_cli/import.rs"]
+mod import;
+
 #[path = "memory_cli/list_search.rs"]
 mod list_search;
 #[path = "memory_cli/quality.rs"]

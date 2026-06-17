@@ -4,6 +4,7 @@
 //! submodules so search/list behavior can evolve independently from review and
 //! audit commands.
 
+mod import;
 mod json;
 mod parse;
 mod query;
@@ -42,6 +43,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "merge" => review::memory_merge(config, rest),
         "split" => review::memory_split(config, rest),
         "restore" => review::memory_restore(config, rest),
+        "import" => import::memory_import(config, rest),
         _ => Err(format!("unknown memory command: {command}")),
     }
 }
