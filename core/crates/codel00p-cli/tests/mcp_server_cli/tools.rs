@@ -53,6 +53,7 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert!(tool_names.contains(&"memory_stale"));
     assert!(tool_names.contains(&"memory_quality"));
     assert!(tool_names.contains(&"memory_search"));
+    assert!(tool_names.contains(&"memory_retrieve"));
     assert!(tool_names.contains(&"memory_list"));
     assert!(tool_names.contains(&"memory_show"));
     assert!(tool_names.contains(&"memory_create_candidate"));
@@ -82,6 +83,102 @@ fn mcp_serve_exposes_memory_tools_over_stdio_json_rpc() {
     assert_eq!(call["result"]["isError"], false);
     assert_eq!(call["result"]["content"][0]["type"], "text");
     assert_eq!(call["result"]["content"][0]["text"], "[]");
+
+    child.kill().expect("kill server");
+    let _ = child.wait();
+}
+
+#[test]
+fn mcp_memory_retrieve_ranks_approved_memory_by_similarity() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let mut child = spawn_codel00p_mcp_server(&db_path);
+    let stdout = child.stdout.take().expect("stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","method":"notifications/initialized","params":{}}),
+    );
+
+    // Seed a close match and an unrelated memory, then approve both.
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0", "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mcp-close",
+                    "kind": "workflow",
+                    "content": "Run pnpm verify before pushing to the main branch.",
+                    "session_id": "s1",
+                    "turn_id": "t1"
+                }
+            }
+        }),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0", "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_create_candidate",
+                "arguments": {
+                    "id": "mcp-unrelated",
+                    "kind": "workflow",
+                    "content": "Configure the colorful unicorn dashboard widget.",
+                    "session_id": "s1",
+                    "turn_id": "t2"
+                }
+            }
+        }),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"memory_approve","arguments":{"id":"mcp-close","actor":"alice"}}}),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"memory_approve","arguments":{"id":"mcp-unrelated","actor":"alice"}}}),
+    );
+    read_response(&mut stdout);
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "memory_retrieve",
+                "arguments": { "query": "Run pnpm verify before pushing main branch." }
+            }
+        }),
+    );
+    let retrieve = read_response(&mut stdout);
+    assert_eq!(retrieve["result"]["isError"], false);
+    let text = retrieve["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    let records: serde_json::Value = serde_json::from_str(text).expect("json");
+    let records = records.as_array().expect("record array");
+    // Only the lexically related, approved memory is returned, carrying a score.
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mcp-close");
+    assert_eq!(records[0]["status"], "approved");
+    assert!(records[0]["score"].as_u64().expect("score") > 0);
 
     child.kill().expect("kill server");
     let _ = child.wait();

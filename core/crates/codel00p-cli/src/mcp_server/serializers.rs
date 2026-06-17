@@ -38,6 +38,14 @@ pub(super) fn retrieved_memory_json(memory: &codel00p_memory::RetrievedMemory) -
     item
 }
 
+pub(super) fn ranked_memory_json(memory: &codel00p_memory::RankedMemory) -> Value {
+    let mut item = memory_entry_json(memory.entry());
+    let quality = memory.quality();
+    item["quality"] = memory_quality_json(&quality);
+    item["score"] = json!(memory.score());
+    item
+}
+
 pub(super) fn similar_memory_json(memory: &codel00p_memory::SimilarMemory) -> Value {
     let mut item = memory_entry_json(memory.entry());
     let quality = memory.quality();

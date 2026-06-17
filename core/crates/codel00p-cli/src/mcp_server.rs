@@ -3,8 +3,8 @@ use std::io;
 use codel00p_mcp::{McpServerHandler, McpServerResponse, serve_stdio_server};
 use codel00p_memory::{
     MemoryAuditAction, MemoryCandidateInput, MemoryEdit, MemoryListFilter, MemoryMerge,
-    MemoryQualityQuery, MemoryQuery, MemoryRepository, MemorySimilarityQuery, MemorySplit,
-    MemoryStalenessQuery, ReviewDecision,
+    MemoryQualityQuery, MemoryQuery, MemoryRepository, MemoryRetrievalQuery, MemorySimilarityQuery,
+    MemorySplit, MemoryStalenessQuery, ReviewDecision,
 };
 use codel00p_protocol::{
     MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionMessage, SessionRole, TurnId,
@@ -36,8 +36,8 @@ use descriptors::{mcp_resource_templates, mcp_tools};
 use permissions::permissions;
 use resources::read_resource;
 use serializers::{
-    audit_action_label, memory_record_json, quality_memory_json, retrieved_memory_json,
-    session_records_json, similar_memory_json, stale_memory_json,
+    audit_action_label, memory_record_json, quality_memory_json, ranked_memory_json,
+    retrieved_memory_json, session_records_json, similar_memory_json, stale_memory_json,
 };
 use server::serve_stdio;
 use tools::call_tool;

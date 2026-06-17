@@ -24,6 +24,20 @@ pub struct MemoryListFilter {
     pub(crate) limit: Option<usize>,
 }
 
+/// Free-text retrieval query: deterministic filters bound the candidate set,
+/// then the query string is ranked against each memory's content by lexical
+/// similarity. This is offline (no embeddings, no network).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryRetrievalQuery {
+    pub(crate) project: ProjectRef,
+    pub(crate) query: String,
+    pub(crate) kind: Option<MemoryKind>,
+    pub(crate) sensitivity: Option<MemorySensitivity>,
+    pub(crate) tag: Option<String>,
+    pub(crate) min_score: u8,
+    pub(crate) limit: Option<usize>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemorySimilarityQuery {
     pub(crate) project: ProjectRef,
@@ -156,6 +170,50 @@ impl MemoryStalenessQuery {
         self
     }
 
+    pub fn with_min_score(mut self, min_score: u8) -> Self {
+        self.min_score = min_score;
+        self
+    }
+
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = if limit == 0 { None } else { Some(limit) };
+        self
+    }
+}
+
+impl MemoryRetrievalQuery {
+    /// Creates a ranked retrieval query for approved project memory. By default
+    /// only memories sharing at least one token with the query (score >= 1) are
+    /// returned, and sensitive memory is excluded.
+    pub fn new(project: ProjectRef, query: impl Into<String>) -> Self {
+        Self {
+            project,
+            query: query.into(),
+            kind: None,
+            sensitivity: None,
+            tag: None,
+            min_score: 1,
+            limit: None,
+        }
+    }
+
+    pub fn with_kind(mut self, kind: MemoryKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_sensitivity(mut self, sensitivity: MemorySensitivity) -> Self {
+        self.sensitivity = Some(sensitivity);
+        self
+    }
+
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = non_empty_filter(tag.into());
+        self
+    }
+
+    /// Sets the inclusive minimum similarity score a memory must reach to be
+    /// returned. A score of 0 returns every filtered candidate.
     pub fn with_min_score(mut self, min_score: u8) -> Self {
         self.min_score = min_score;
         self

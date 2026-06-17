@@ -17,10 +17,12 @@ pub use error::MemoryError;
 pub use extraction::{ExplicitMemoryExtractor, MemoryCandidateExtractor};
 pub use inputs::{MemoryCandidateInput, MemoryExtractionInput};
 pub use query::{
-    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemorySimilarityQuery, MemoryStalenessQuery,
+    MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRetrievalQuery, MemorySimilarityQuery,
+    MemoryStalenessQuery,
 };
 pub use records::{
-    MemoryQuality, MemoryRecord, QualityMemory, RetrievedMemory, SimilarMemory, StaleMemory,
+    MemoryQuality, MemoryRecord, QualityMemory, RankedMemory, RetrievedMemory, SimilarMemory,
+    StaleMemory,
 };
 pub use repository::{InMemoryMemoryStore, MemoryRepository, StorageBackedMemoryStore};
 pub use review::{

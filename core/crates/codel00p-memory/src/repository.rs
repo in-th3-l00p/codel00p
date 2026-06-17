@@ -4,9 +4,9 @@ use codel00p_storage::{InMemoryStorage, StorageScope};
 
 use crate::{
     MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError, MemoryListFilter, MemoryMerge,
-    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemorySimilarityQuery, MemorySplit,
-    MemoryStalenessQuery, QualityMemory, RetrievedMemory, ReviewDecision, SimilarMemory,
-    StaleMemory,
+    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRetrievalQuery, MemorySimilarityQuery,
+    MemorySplit, MemoryStalenessQuery, QualityMemory, RankedMemory, RetrievedMemory,
+    ReviewDecision, SimilarMemory, StaleMemory,
 };
 
 pub trait MemoryRepository {
@@ -43,6 +43,17 @@ pub trait MemoryRepository {
     fn list(&self, filter: MemoryListFilter) -> Result<Vec<MemoryRecord>, MemoryError>;
 
     fn retrieve(&self, query: MemoryQuery) -> Result<Vec<RetrievedMemory>, MemoryError>;
+
+    /// Ranks approved project memory by lexical similarity of the query string
+    /// against each memory's content. Deterministic filters (kind/tag/sensitivity)
+    /// are applied first to bound the candidate set, then results are ordered by
+    /// descending score with ties broken by memory id. Reuses the same token
+    /// similarity scorer as `similar_active`, so ranking is consistent across the
+    /// product. Offline: no embeddings, no network.
+    fn retrieve_ranked(
+        &self,
+        query: MemoryRetrievalQuery,
+    ) -> Result<Vec<RankedMemory>, MemoryError>;
 
     fn similar_active(
         &self,

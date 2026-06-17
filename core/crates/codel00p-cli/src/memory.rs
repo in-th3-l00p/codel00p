@@ -27,6 +27,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
 
     match command.as_str() {
         "search" => query::memory_search(config, rest),
+        "retrieve" => query::memory_retrieve(config, rest),
         "similar" => query::memory_similar(config, rest),
         "stale" => query::memory_stale(config, rest),
         "quality" => query::memory_quality(config, rest),

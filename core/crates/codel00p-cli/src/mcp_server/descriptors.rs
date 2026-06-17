@@ -60,6 +60,22 @@ pub(super) fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "memory_retrieve",
+            "description": "Rank approved codel00p project memory by lexical similarity to a query, behind deterministic filters. Offline, no embeddings.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "sensitivity": { "type": "string" },
+                    "tag": { "type": "string" },
+                    "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "limit": { "type": "integer", "minimum": 1 }
+                }
+            }
+        }),
+        json!({
             "name": "memory_list",
             "description": "List codel00p project memory records.",
             "inputSchema": {

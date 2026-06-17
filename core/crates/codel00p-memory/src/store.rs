@@ -8,8 +8,9 @@ use codel00p_storage::{AppendLogStore, DocumentStore, StorageDocument};
 use crate::{
     MemoryAuditAction, MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError,
     MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRepository,
-    MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, QualityMemory, RetrievedMemory,
-    ReviewDecision, SimilarMemory, StaleMemory, StorageBackedMemoryStore,
+    MemoryRetrievalQuery, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, QualityMemory,
+    RankedMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
+    StorageBackedMemoryStore,
     records::{content_tokens, token_similarity_score},
 };
 
@@ -329,6 +330,71 @@ where
             retrieved.truncate(limit);
         }
         Ok(retrieved)
+    }
+
+    fn retrieve_ranked(
+        &self,
+        query: MemoryRetrievalQuery,
+    ) -> Result<Vec<RankedMemory>, MemoryError> {
+        let query_tokens = content_tokens(&query.query);
+        let mut ranked = Vec::new();
+
+        for record in self.records()? {
+            // Deterministic filters first, so the candidate set is bounded and
+            // reproducible before any ranking happens.
+            if record.entry().status() != MemoryStatus::Approved {
+                continue;
+            }
+
+            if record.entry().project().id() != query.project.id() {
+                continue;
+            }
+
+            if let Some(sensitivity) = query.sensitivity {
+                if record.entry().sensitivity() != sensitivity {
+                    continue;
+                }
+            } else if record.entry().sensitivity() == MemorySensitivity::Sensitive {
+                continue;
+            }
+
+            if let Some(kind) = query.kind
+                && record.entry().kind() != kind
+            {
+                continue;
+            }
+
+            if let Some(tag) = &query.tag
+                && !record
+                    .entry()
+                    .tags()
+                    .iter()
+                    .any(|candidate| candidate == tag)
+            {
+                continue;
+            }
+
+            // Reuse the same token similarity scorer as near-duplicate detection
+            // so retrieval ranking stays consistent with the rest of the product.
+            let score =
+                token_similarity_score(&query_tokens, &content_tokens(record.entry().content()));
+            if score < query.min_score {
+                continue;
+            }
+
+            ranked.push(RankedMemory { record, score });
+        }
+
+        ranked.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.entry().id().cmp(right.entry().id()))
+        });
+        if let Some(limit) = query.limit {
+            ranked.truncate(limit);
+        }
+        Ok(ranked)
     }
 
     fn similar_active(
