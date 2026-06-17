@@ -44,11 +44,28 @@ impl AgentRole {
     }
 }
 
+/// How a delegated child's workspace relates to the parent's.
+///
+/// `Shared` (the default) runs the child against the parent's workspace, as the
+/// classic isolated-context sub-agent does — safe for read-only children.
+/// `Worktree` runs the child in its OWN temporary git worktree created off the
+/// parent repo's HEAD, so a *mutating* child's file changes never touch the
+/// parent working tree; the spawner captures the child's diff and returns it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TaskIsolation {
+    /// Run against the parent workspace (default, backward compatible).
+    #[default]
+    Shared,
+    /// Run in a throwaway git worktree; mutations stay out of the parent tree.
+    Worktree,
+}
+
 /// A unit of work an orchestrator hands to a child agent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DelegatedTask {
     description: String,
     label: Option<String>,
+    isolation: TaskIsolation,
 }
 
 impl DelegatedTask {
@@ -56,12 +73,20 @@ impl DelegatedTask {
         Self {
             description: description.into(),
             label: None,
+            isolation: TaskIsolation::Shared,
         }
     }
 
     /// A short label for progress/audit display (defaults to none).
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Select how the child's workspace is isolated (defaults to
+    /// [`TaskIsolation::Shared`]).
+    pub fn with_isolation(mut self, isolation: TaskIsolation) -> Self {
+        self.isolation = isolation;
         self
     }
 
@@ -72,6 +97,10 @@ impl DelegatedTask {
     pub fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
+
+    pub fn isolation(&self) -> TaskIsolation {
+        self.isolation
+    }
 }
 
 /// What a finished child agent reports back to its parent.
@@ -80,6 +109,9 @@ pub struct DelegationOutcome {
     summary: String,
     child_session_id: SessionId,
     tool_calls: usize,
+    /// The child's complete diff, present only for worktree-isolated children
+    /// (so the parent can see what the child changed without sharing its tree).
+    diff: Option<String>,
 }
 
 impl DelegationOutcome {
@@ -88,7 +120,14 @@ impl DelegationOutcome {
             summary: summary.into(),
             child_session_id,
             tool_calls,
+            diff: None,
         }
+    }
+
+    /// Attach the child's captured diff (worktree isolation).
+    pub fn with_diff(mut self, diff: impl Into<String>) -> Self {
+        self.diff = Some(diff.into());
+        self
     }
 
     pub fn summary(&self) -> &str {
@@ -101,6 +140,10 @@ impl DelegationOutcome {
 
     pub fn tool_calls(&self) -> usize {
         self.tool_calls
+    }
+
+    pub fn diff(&self) -> Option<&str> {
+        self.diff.as_deref()
     }
 }
 
@@ -142,15 +185,25 @@ impl Tool for DelegateTaskTool {
             "required": ["task"],
             "properties": {
                 "task": { "type": "string" },
-                "label": { "type": "string" }
+                "label": { "type": "string" },
+                "isolation": {
+                    "type": "string",
+                    "enum": ["shared", "worktree"],
+                    "description": "`worktree` runs a mutating child in its own \
+                        throwaway git worktree off HEAD (its diff is returned and \
+                        the parent tree is untouched); `shared` (default) runs \
+                        against the parent workspace."
+                }
             }
         })
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
         // Children are isolated runs, so a batch of delegations can execute
-        // concurrently; the spawner caps how many run at once. (Revisit once
-        // children may mutate a shared workspace — see worktree isolation.)
+        // concurrently; the spawner caps how many run at once. Worktree
+        // isolation (`isolation: "worktree"`) gives each mutating child its own
+        // throwaway worktree, so even file-writing children are safe to batch —
+        // their changes can't collide on a shared working tree.
         true
     }
 
@@ -170,14 +223,24 @@ impl Tool for DelegateTaskTool {
         if let Some(label) = optional_string(&input, "label") {
             task = task.with_label(label);
         }
+        // Unknown/missing isolation falls back to `Shared` for compatibility.
+        let isolation = match optional_string(&input, "isolation") {
+            Some("worktree") => TaskIsolation::Worktree,
+            _ => TaskIsolation::Shared,
+        };
+        task = task.with_isolation(isolation);
 
         let outcome = self.spawner.spawn(task).await?;
 
-        Ok(ToolResult::json(json!({
+        let mut payload = json!({
             "summary": outcome.summary(),
             "child_session_id": outcome.child_session_id().clone(),
             "tool_calls": outcome.tool_calls(),
-        })))
+        });
+        if let Some(diff) = outcome.diff() {
+            payload["diff"] = json!(diff);
+        }
+        Ok(ToolResult::json(payload))
     }
 }
 

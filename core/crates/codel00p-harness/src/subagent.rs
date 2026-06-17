@@ -13,8 +13,9 @@ use async_trait::async_trait;
 
 use crate::{
     agent::AgentHarness,
-    delegation::{DelegatedTask, DelegationOutcome, SubAgentSpawner},
+    delegation::{DelegatedTask, DelegationOutcome, SubAgentSpawner, TaskIsolation},
     errors::HarnessError,
+    git::{DEFAULT_DIFF_BYTES, cap_string, git_output},
     permissions::PermissionPolicy,
     session::{SessionId, UserMessage},
     tool_registry::ToolRegistry,
@@ -78,9 +79,16 @@ impl HarnessSubAgentSpawner {
     }
 
     fn build_child(&self) -> Result<AgentHarness, HarnessError> {
+        self.build_child_in(self.workspace.clone())
+    }
+
+    /// Build the child harness against `workspace`, keeping the SAME tool set,
+    /// permission ceiling, and limits. Worktree isolation uses this to point a
+    /// child at a throwaway worktree instead of the shared parent workspace.
+    fn build_child_in(&self, workspace: Workspace) -> Result<AgentHarness, HarnessError> {
         let mut builder = AgentHarness::builder()
             .model_client_arc(self.model_client.clone())
-            .workspace(self.workspace.clone())
+            .workspace(workspace)
             .tools(self.tools.clone())
             .max_iterations(self.max_iterations);
         if let Some(policy) = &self.permission_policy {
@@ -91,23 +99,114 @@ impl HarnessSubAgentSpawner {
         }
         builder.build()
     }
-}
 
-#[async_trait]
-impl SubAgentSpawner for HarnessSubAgentSpawner {
-    async fn spawn(&self, task: DelegatedTask) -> Result<DelegationOutcome, HarnessError> {
+    /// Run a child in the shared parent workspace (classic isolated-context
+    /// sub-agent). No diff is captured.
+    async fn spawn_shared(&self, task: &DelegatedTask) -> Result<DelegationOutcome, HarnessError> {
         let child_session = SessionId::new();
         let child = self.build_child()?;
         let outcome = child
             .run_turn(child_session.clone(), UserMessage::new(task.description()))
             .await?;
-        let summary = outcome
-            .assistant_message
-            .unwrap_or_else(|| "(the sub-agent finished without a text summary)".to_string());
+        let summary = summary_of(outcome.assistant_message);
         Ok(DelegationOutcome::new(
             summary,
             child_session,
             outcome.tool_calls.len(),
         ))
+    }
+
+    /// Run a mutating child in its own temporary git worktree off the parent
+    /// repo's HEAD, capture its complete diff, then tear the worktree down. The
+    /// parent working tree is never touched.
+    async fn spawn_worktree(
+        &self,
+        task: &DelegatedTask,
+    ) -> Result<DelegationOutcome, HarnessError> {
+        // (a) Worktree isolation only makes sense inside a git repo.
+        git_output(
+            "delegate_task",
+            &self.workspace,
+            &["rev-parse", "--git-dir"],
+        )
+        .map_err(|_| HarnessError::ToolFailed {
+            name: "delegate_task".to_string(),
+            message: "worktree isolation requires the parent workspace to be a git \
+                          repository (run `git init` or use isolation \"shared\")"
+                .to_string(),
+        })?;
+
+        // (b) Create a throwaway worktree OUTSIDE the repo, detached at HEAD.
+        let temp = tempfile::tempdir().map_err(|error| HarnessError::ToolFailed {
+            name: "delegate_task".to_string(),
+            message: format!("failed to create a temp dir for the worktree: {error}"),
+        })?;
+        let worktree_path = temp.path().join("wt");
+        let worktree_arg = worktree_path.to_string_lossy().to_string();
+        git_output(
+            "delegate_task",
+            &self.workspace,
+            &["worktree", "add", "--detach", &worktree_arg, "HEAD"],
+        )?;
+
+        // From here on we must clean the worktree up regardless of outcome.
+        let result = self.run_in_worktree(task, &worktree_path).await;
+
+        // (f) Best-effort cleanup; never let teardown lose the child's result.
+        let _ = git_output(
+            "delegate_task",
+            &self.workspace,
+            &["worktree", "remove", "--force", &worktree_arg],
+        );
+        let _ = git_output("delegate_task", &self.workspace, &["worktree", "prune"]);
+        drop(temp);
+
+        result
+    }
+
+    /// Build + run the child in `worktree_path` and capture its full diff.
+    async fn run_in_worktree(
+        &self,
+        task: &DelegatedTask,
+        worktree_path: &std::path::Path,
+    ) -> Result<DelegationOutcome, HarnessError> {
+        let child_workspace = Workspace::new(worktree_path)?;
+        let child_session = SessionId::new();
+        let child = self.build_child_in(child_workspace.clone())?;
+        let outcome = child
+            .run_turn(child_session.clone(), UserMessage::new(task.description()))
+            .await?;
+        let summary = summary_of(outcome.assistant_message);
+
+        // (e) Capture the COMPLETE diff, including new/untracked files: stage
+        // everything, then diff the index. Cap it like `git_diff` so a huge
+        // diff can't blow the parent context.
+        git_output("delegate_task", &child_workspace, &["add", "-A"])?;
+        let raw = git_output(
+            "delegate_task",
+            &child_workspace,
+            &["diff", "--cached", "--no-ext-diff"],
+        )?;
+        let diff = cap_string(&raw, DEFAULT_DIFF_BYTES).content;
+
+        Ok(
+            DelegationOutcome::new(summary, child_session, outcome.tool_calls.len())
+                .with_diff(diff),
+        )
+    }
+}
+
+fn summary_of(assistant_message: Option<String>) -> String {
+    assistant_message
+        .unwrap_or_else(|| "(the sub-agent finished without a text summary)".to_string())
+}
+
+#[async_trait]
+impl SubAgentSpawner for HarnessSubAgentSpawner {
+    async fn spawn(&self, task: DelegatedTask) -> Result<DelegationOutcome, HarnessError> {
+        match task.isolation() {
+            TaskIsolation::Shared => self.spawn_shared(&task).await,
+            TaskIsolation::Worktree => self.spawn_worktree(&task).await,
+        }
     }
 }

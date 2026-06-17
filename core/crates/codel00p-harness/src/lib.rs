@@ -47,7 +47,7 @@ pub use capability::{
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool};
 pub use delegation::{
-    AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner,
+    AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner, TaskIsolation,
     delegation_tools,
 };
 pub use errors::HarnessError;

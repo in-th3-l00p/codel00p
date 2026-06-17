@@ -11,7 +11,7 @@ use crate::{
     workspace::Workspace,
 };
 
-const DEFAULT_DIFF_BYTES: usize = 16_384;
+pub(crate) const DEFAULT_DIFF_BYTES: usize = 16_384;
 const MAX_DIFF_BYTES: usize = 131_072;
 const DEFAULT_LOG_LIMIT: usize = 10;
 const MAX_LOG_LIMIT: usize = 100;
@@ -202,7 +202,7 @@ impl Tool for GitCommitTool {
     }
 }
 
-fn git_output(
+pub(crate) fn git_output(
     tool_name: &str,
     workspace: &Workspace,
     args: &[&str],
@@ -294,12 +294,12 @@ fn validate_commit_message(message: &str) -> Result<(), HarnessError> {
     Ok(())
 }
 
-struct CappedString {
-    content: String,
-    truncated: bool,
+pub(crate) struct CappedString {
+    pub(crate) content: String,
+    pub(crate) truncated: bool,
 }
 
-fn cap_string(value: &str, max_bytes: usize) -> CappedString {
+pub(crate) fn cap_string(value: &str, max_bytes: usize) -> CappedString {
     if value.len() <= max_bytes {
         return CappedString {
             content: value.to_string(),
