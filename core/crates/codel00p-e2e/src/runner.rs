@@ -114,6 +114,7 @@ pub struct CodelRunner {
     workspace: TempDir,
     extra_env: BTreeMap<String, String>,
     base_url: Option<String>,
+    permission_mode: String,
 }
 
 impl Default for CodelRunner {
@@ -131,7 +132,21 @@ impl CodelRunner {
             workspace: TempDir::new().expect("create workspace tempdir"),
             extra_env: BTreeMap::new(),
             base_url: None,
+            // Default: auto-approve every tool so existing scenarios stay green.
+            permission_mode: "allow".to_string(),
         }
+    }
+
+    /// Overrides the `--permission-mode` the runner appends to `agent`
+    /// subcommands (default `allow`). Use `"ask"` or `"deny"` to exercise the
+    /// permission policy. Because the runner appends its provider flags *after*
+    /// the caller's args, setting the mode here (rather than passing
+    /// `--permission-mode` in `run`) is the only way to make it take effect — a
+    /// later flag wins in the CLI's last-write parser.
+    #[must_use]
+    pub fn permission_mode(mut self, mode: impl Into<String>) -> Self {
+        self.permission_mode = mode.into();
+        self
     }
 
     /// Initializes the workspace as a git repo (`git init -b main`, identity, and
@@ -163,7 +178,8 @@ impl CodelRunner {
 
     /// Attaches a scripted mock provider; the runner will pass `--provider
     /// custom --model test-model --base-url <url> --json-events
-    /// --permission-mode allow` automatically.
+    /// --permission-mode <mode>` automatically (the mode defaults to `allow`;
+    /// override it with [`CodelRunner::permission_mode`]).
     #[must_use]
     pub fn with_provider(mut self, provider: &MockProvider) -> Self {
         self.base_url = Some(provider.base_url());
@@ -237,7 +253,7 @@ impl CodelRunner {
                 .arg(base_url)
                 .arg("--json-events")
                 .arg("--permission-mode")
-                .arg("allow");
+                .arg(&self.permission_mode);
         }
 
         let output = command.output().expect("spawn codel00p binary");
