@@ -32,7 +32,7 @@ use serde_json::{Value, json};
 /// Opens the memory store in the runner's `CODEL00P_HOME` and returns all
 /// candidate IDs and content strings (status == Candidate).
 fn list_candidates(runner: &CodelRunner) -> Vec<(String, String)> {
-    let storage = SqliteStorage::open(&runner.memory_db()).expect("open memory.sqlite");
+    let storage = SqliteStorage::open(runner.memory_db()).expect("open memory.sqlite");
     let store = StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);
     let project = ProjectRef::new("project-1", "codel00p");
     let filter = MemoryListFilter::new(project).with_status(MemoryStatus::Candidate);
