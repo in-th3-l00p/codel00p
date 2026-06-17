@@ -20,3 +20,5 @@ mod ranked_retrieval;
 mod retrieval;
 #[path = "lifecycle/similarity_staleness.rs"]
 mod similarity_staleness;
+#[path = "lifecycle/visibility.rs"]
+mod visibility;

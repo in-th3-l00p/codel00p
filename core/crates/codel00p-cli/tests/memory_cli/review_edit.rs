@@ -42,7 +42,7 @@ fn memory_show_and_audit_print_stable_details() {
     assert!(audit.status.success(), "stderr: {}", stderr(&audit));
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: candidate\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
+        "id: mem-workflow\nstatus: candidate\nkind: workflow\nvisibility: project\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
     );
     let record: serde_json::Value = serde_json::from_str(&stdout(&show_json)).expect("show json");
     assert_eq!(record["id"], "mem-workflow");
@@ -174,7 +174,7 @@ fn memory_edit_updates_content_and_prints_audit_event() {
     assert_eq!(edited["source_uri"], "codel00p://sessions/session-cli");
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
+        "id: mem-workflow\nstatus: approved\nkind: workflow\nvisibility: project\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run pnpm verify before pushing main.\n"
     );
     assert_eq!(
         stdout(&audit),
@@ -260,7 +260,7 @@ fn memory_restore_reverts_to_previous_edit_content() {
     assert_eq!(restored["source_uri"], "codel00p://sessions/session-cli");
     assert_eq!(
         stdout(&show),
-        "id: mem-workflow\nstatus: approved\nkind: workflow\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run tests before pushing.\n"
+        "id: mem-workflow\nstatus: approved\nkind: workflow\nvisibility: project\ntags: verify\nsource_session: session-cli\nsource_turn: turn-cli\nsource_uri: codel00p://sessions/session-cli\ncontent: Run tests before pushing.\n"
     );
     let audit_events: serde_json::Value =
         serde_json::from_str(&stdout(&audit_json)).expect("audit json");

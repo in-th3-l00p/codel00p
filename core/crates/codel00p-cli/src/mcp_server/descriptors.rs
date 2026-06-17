@@ -54,6 +54,7 @@ pub(super) fn mcp_tools() -> Vec<Value> {
                     "text": { "type": "string" },
                     "kind": { "type": "string" },
                     "sensitivity": { "type": "string" },
+                    "visibility": { "type": "string" },
                     "tag": { "type": "string" },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -69,6 +70,7 @@ pub(super) fn mcp_tools() -> Vec<Value> {
                     "query": { "type": "string" },
                     "kind": { "type": "string" },
                     "sensitivity": { "type": "string" },
+                    "visibility": { "type": "string" },
                     "tag": { "type": "string" },
                     "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
                     "limit": { "type": "integer", "minimum": 1 }
@@ -84,6 +86,7 @@ pub(super) fn mcp_tools() -> Vec<Value> {
                     "status": { "type": "string" },
                     "kind": { "type": "string" },
                     "sensitivity": { "type": "string" },
+                    "visibility": { "type": "string" },
                     "tag": { "type": "string" },
                     "limit": { "type": "integer", "minimum": 1 }
                 }
@@ -125,6 +128,7 @@ pub(super) fn mcp_tools() -> Vec<Value> {
                     "turn_id": { "type": "string" },
                     "source_uri": { "type": "string" },
                     "sensitivity": { "type": "string" },
+                    "visibility": { "type": "string" },
                     "tags": { "type": "array", "items": { "type": "string" } }
                 }
             }

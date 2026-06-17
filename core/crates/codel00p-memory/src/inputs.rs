@@ -1,6 +1,8 @@
 //! Candidate and extraction input types for memory workflows.
 
-use codel00p_protocol::{MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, ProjectRef};
+use codel00p_protocol::{
+    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryVisibility, ProjectRef,
+};
 
 use crate::{MemoryError, util::non_empty_filter};
 
@@ -10,6 +12,7 @@ pub struct MemoryCandidateInput {
     project: ProjectRef,
     kind: MemoryKind,
     sensitivity: MemorySensitivity,
+    visibility: MemoryVisibility,
     content: String,
     source: MemorySource,
     tags: Vec<String>,
@@ -28,6 +31,7 @@ impl MemoryCandidateInput {
             project,
             kind,
             sensitivity: MemorySensitivity::Normal,
+            visibility: MemoryVisibility::Project,
             content: content.into(),
             source,
             tags: Vec::new(),
@@ -46,6 +50,11 @@ impl MemoryCandidateInput {
         self
     }
 
+    pub fn with_visibility(mut self, visibility: MemoryVisibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -60,6 +69,10 @@ impl MemoryCandidateInput {
 
     pub fn sensitivity(&self) -> MemorySensitivity {
         self.sensitivity
+    }
+
+    pub fn visibility(&self) -> MemoryVisibility {
+        self.visibility
     }
 
     pub fn content(&self) -> &str {
@@ -93,7 +106,8 @@ impl MemoryCandidateInput {
     pub(crate) fn into_entry(self) -> MemoryEntry {
         let mut entry = MemoryEntry::new(self.id, self.project, self.kind, self.content)
             .with_source(self.source)
-            .with_sensitivity(self.sensitivity);
+            .with_sensitivity(self.sensitivity)
+            .with_visibility(self.visibility);
         for tag in self.tags {
             entry = entry.with_tag(tag);
         }

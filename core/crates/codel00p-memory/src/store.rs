@@ -1,7 +1,8 @@
 //! Storage-backed implementation of the memory repository contract.
 
 use codel00p_protocol::{
-    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, SessionId, TurnId,
+    MemoryEntry, MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, MemoryVisibility,
+    SessionId, TurnId,
 };
 use codel00p_storage::{AppendLogStore, DocumentStore, StorageDocument};
 
@@ -169,7 +170,8 @@ where
             split.new_content(),
             new_source,
         )
-        .with_sensitivity(source.entry().sensitivity());
+        .with_sensitivity(source.entry().sensitivity())
+        .with_visibility(source.entry().visibility());
         for tag in source.entry().tags() {
             new_input = new_input.with_tag(tag.clone());
         }
@@ -283,6 +285,12 @@ where
                 continue;
             }
 
+            if let Some(visibility) = filter.visibility
+                && record.entry().visibility() > visibility
+            {
+                continue;
+            }
+
             if let Some(tag) = &filter.tag
                 && !record
                     .entry()
@@ -322,6 +330,12 @@ where
                 continue;
             }
 
+            if let Some(visibility) = query.visibility
+                && record.entry().visibility() > visibility
+            {
+                continue;
+            }
+
             let mut reasons = Vec::new();
             if let Some(kind) = query.kind {
                 if record.entry().kind() != kind {
@@ -356,6 +370,13 @@ where
                 reasons.push(format!(
                     "sensitivity {}",
                     memory_sensitivity_label(sensitivity)
+                ));
+            }
+
+            if let Some(visibility) = query.visibility {
+                reasons.push(format!(
+                    "visibility {}",
+                    memory_visibility_label(visibility)
                 ));
             }
 
@@ -398,6 +419,12 @@ where
                     continue;
                 }
             } else if record.entry().sensitivity() == MemorySensitivity::Sensitive {
+                continue;
+            }
+
+            if let Some(visibility) = query.visibility
+                && record.entry().visibility() > visibility
+            {
                 continue;
             }
 
@@ -725,7 +752,8 @@ fn replace_content(entry: &MemoryEntry, content: String) -> MemoryEntry {
         content,
     )
     .with_status(entry.status())
-    .with_sensitivity(entry.sensitivity());
+    .with_sensitivity(entry.sensitivity())
+    .with_visibility(entry.visibility());
     if let Some(source) = entry.source() {
         updated = updated.with_source(source.clone());
     }
@@ -745,7 +773,8 @@ fn union_tags(target: &MemoryEntry, extra_tags: &[String]) -> MemoryEntry {
         target.content().to_string(),
     )
     .with_status(target.status())
-    .with_sensitivity(target.sensitivity());
+    .with_sensitivity(target.sensitivity())
+    .with_visibility(target.visibility());
     if let Some(source) = target.source() {
         entry = entry.with_source(source.clone());
     }
@@ -781,6 +810,15 @@ fn memory_sensitivity_label(sensitivity: MemorySensitivity) -> &'static str {
     match sensitivity {
         MemorySensitivity::Normal => "normal",
         MemorySensitivity::Sensitive => "sensitive",
+    }
+}
+
+fn memory_visibility_label(visibility: MemoryVisibility) -> &'static str {
+    match visibility {
+        MemoryVisibility::Private => "private",
+        MemoryVisibility::Project => "project",
+        MemoryVisibility::Team => "team",
+        MemoryVisibility::Org => "org",
     }
 }
 

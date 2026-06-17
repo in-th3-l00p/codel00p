@@ -23,3 +23,5 @@ mod review_split;
 mod similar_stale;
 #[path = "memory_cli/validation.rs"]
 mod validation;
+#[path = "memory_cli/visibility.rs"]
+mod visibility;

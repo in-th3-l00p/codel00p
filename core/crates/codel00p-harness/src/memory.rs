@@ -5,7 +5,7 @@ use codel00p_memory::{
     ExplicitMemoryExtractor, MemoryCandidateExtractor, MemoryCandidateInput, MemoryExtractionInput,
     MemoryQuery, MemoryRepository,
 };
-use codel00p_protocol::{MemoryKind, MemorySource, ProjectRef};
+use codel00p_protocol::{MemoryKind, MemorySource, MemoryVisibility, ProjectRef};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -577,6 +577,7 @@ pub struct MemoryRepositoryProjectMemoryProvider<R> {
     kind: Option<MemoryKind>,
     tag: Option<String>,
     text: Option<String>,
+    visibility: Option<MemoryVisibility>,
     limit: Option<usize>,
 }
 
@@ -588,12 +589,20 @@ impl<R> MemoryRepositoryProjectMemoryProvider<R> {
             kind: None,
             tag: None,
             text: None,
+            visibility: None,
             limit: None,
         }
     }
 
     pub fn with_kind(mut self, kind: MemoryKind) -> Self {
         self.kind = Some(kind);
+        self
+    }
+
+    /// Caps retrieved project memory to the given maximum visibility scope
+    /// (narrow→wide). Unset returns every visibility, matching prior behavior.
+    pub fn with_visibility(mut self, visibility: MemoryVisibility) -> Self {
+        self.visibility = Some(visibility);
         self
     }
 
@@ -631,6 +640,9 @@ where
         }
         if let Some(text) = &self.text {
             query = query.with_text(text);
+        }
+        if let Some(visibility) = self.visibility {
+            query = query.with_visibility(visibility);
         }
         if let Some(limit) = self.limit {
             query = query.with_limit(limit);

@@ -364,3 +364,93 @@ fn mcp_memory_split_creates_candidate_from_source() {
     child.kill().expect("kill server");
     let _ = child.wait();
 }
+
+#[test]
+fn mcp_memory_create_and_search_round_trips_visibility() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let mut child = spawn_codel00p_mcp_server(&db_path);
+    let stdout = child.stdout.take().expect("stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","method":"notifications/initialized","params":{}}),
+    );
+
+    // Create an org-scoped and a private-scoped candidate, then approve both.
+    send(
+        &mut child,
+        json!({
+            "jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+                "name":"memory_create_candidate",
+                "arguments":{
+                    "id":"mcp-org","kind":"workflow",
+                    "content":"Run pnpm verify across the org dashboard.",
+                    "session_id":"s1","turn_id":"t1","visibility":"org"
+                }
+            }
+        }),
+    );
+    let created = read_response(&mut stdout);
+    let created_text = created["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    let created_record: serde_json::Value = serde_json::from_str(created_text).expect("json");
+    assert_eq!(created_record["visibility"], "org");
+
+    send(
+        &mut child,
+        json!({
+            "jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+                "name":"memory_create_candidate",
+                "arguments":{
+                    "id":"mcp-private","kind":"workflow",
+                    "content":"Run pnpm verify before pushing main.",
+                    "session_id":"s1","turn_id":"t2","visibility":"private"
+                }
+            }
+        }),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"memory_approve","arguments":{"id":"mcp-org","actor":"alice"}}}),
+    );
+    read_response(&mut stdout);
+    send(
+        &mut child,
+        json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"memory_approve","arguments":{"id":"mcp-private","actor":"alice"}}}),
+    );
+    read_response(&mut stdout);
+
+    // A max-visibility of project excludes the org-scoped memory.
+    send(
+        &mut child,
+        json!({
+            "jsonrpc":"2.0","id":6,"method":"tools/call","params":{
+                "name":"memory_search",
+                "arguments":{"text":"verify","visibility":"project"}
+            }
+        }),
+    );
+    let search = read_response(&mut stdout);
+    assert_eq!(search["result"]["isError"], false);
+    let text = search["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    let records: serde_json::Value = serde_json::from_str(text).expect("json");
+    let records = records.as_array().expect("record array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["id"], "mcp-private");
+    assert_eq!(records[0]["visibility"], "private");
+
+    child.kill().expect("kill server");
+    let _ = child.wait();
+}

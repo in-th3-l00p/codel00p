@@ -10,7 +10,8 @@ pub(crate) use codel00p_memory::{
     StorageBackedMemoryStore,
 };
 pub(crate) use codel00p_protocol::{
-    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, ProjectRef, SessionId, TurnId,
+    MemoryKind, MemorySensitivity, MemorySource, MemoryStatus, MemoryVisibility, ProjectRef,
+    SessionId, TurnId,
 };
 pub(crate) use codel00p_storage::{SqliteStorage, StorageScope};
 pub(crate) use tempfile::tempdir;
@@ -46,6 +47,26 @@ pub(crate) fn seed_candidate_with_sensitivity(
             MemoryCandidateInput::new(id, project(), kind, content, source())
                 .with_tag(tag)
                 .with_sensitivity(sensitivity),
+        )
+        .expect("create candidate");
+}
+
+pub(crate) fn seed_candidate_with_visibility(
+    db_path: &Path,
+    id: &str,
+    kind: MemoryKind,
+    content: &str,
+    tag: &str,
+    visibility: MemoryVisibility,
+) {
+    let storage = SqliteStorage::open(db_path).expect("open sqlite storage");
+    let mut store =
+        StorageBackedMemoryStore::new(StorageScope::project("org-1", "project-1"), storage);
+    store
+        .create_candidate(
+            MemoryCandidateInput::new(id, project(), kind, content, source())
+                .with_tag(tag)
+                .with_visibility(visibility),
         )
         .expect("create candidate");
 }

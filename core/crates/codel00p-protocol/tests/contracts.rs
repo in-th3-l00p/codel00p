@@ -1,11 +1,11 @@
 use codel00p_protocol::{
     Agent, AgentEvent, AgentUpdate, CompactionRecord, ContextWindowState, EventId, McpServer,
     McpServerUpdate, McpTransport, MemoryAuditEntry, MemoryEntry, MemoryKind, MemoryReviewAction,
-    MemorySensitivity, MemorySource, MemoryStatus, NewAgent, NewMcpServer, NewMemoryCandidate,
-    NewProject, OrgMember, OrgRef, OrgRole, PermissionDecision, PermissionMode, PermissionRequest,
-    PermissionScope, Project, ProjectRef, ProjectUpdate, ProtocolVersion, ProviderRef,
-    RuntimeErrorKind, SessionId, SessionMessage, SessionPersistenceEvent, SessionRole, ToolCall,
-    ToolProgress, ToolResult, TurnId, Viewer,
+    MemorySensitivity, MemorySource, MemoryStatus, MemoryVisibility, NewAgent, NewMcpServer,
+    NewMemoryCandidate, NewProject, OrgMember, OrgRef, OrgRole, PermissionDecision, PermissionMode,
+    PermissionRequest, PermissionScope, Project, ProjectRef, ProjectUpdate, ProtocolVersion,
+    ProviderRef, RuntimeErrorKind, SessionId, SessionMessage, SessionPersistenceEvent, SessionRole,
+    ToolCall, ToolProgress, ToolResult, TurnId, Viewer,
 };
 use serde_json::json;
 
@@ -121,6 +121,42 @@ fn memory_sources_can_carry_explicit_source_uri() {
             "uri": "https://github.com/in-th3-l00p/codel00p/pull/1"
         })
     );
+}
+
+#[test]
+fn memory_entries_default_to_project_visibility_and_omit_it_when_serialized() {
+    let memory = MemoryEntry::new(
+        "mem-default",
+        ProjectRef::new("project-1", "codel00p"),
+        MemoryKind::Workflow,
+        "Default scoped knowledge.",
+    );
+    assert_eq!(memory.visibility(), MemoryVisibility::Project);
+
+    // Default visibility is skipped on serialize, keeping the wire format
+    // backward compatible with pre-visibility records.
+    let encoded = serde_json::to_value(&memory).expect("serialize memory");
+    assert!(encoded.get("visibility").is_none());
+
+    let decoded: MemoryEntry = serde_json::from_value(encoded).expect("decode memory");
+    assert_eq!(decoded.visibility(), MemoryVisibility::Project);
+}
+
+#[test]
+fn memory_entries_can_widen_visibility_scope() {
+    let memory = MemoryEntry::new(
+        "mem-org",
+        ProjectRef::new("project-1", "codel00p"),
+        MemoryKind::Workflow,
+        "Org-wide knowledge.",
+    )
+    .with_visibility(MemoryVisibility::Org);
+
+    let encoded = serde_json::to_value(&memory).expect("serialize memory");
+    assert_eq!(encoded["visibility"], "org");
+
+    let decoded: MemoryEntry = serde_json::from_value(encoded).expect("decode memory");
+    assert_eq!(decoded.visibility(), MemoryVisibility::Org);
 }
 
 #[test]
