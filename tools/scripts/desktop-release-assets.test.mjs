@@ -97,6 +97,14 @@ test("normalizes the newest matching desktop artifact when old local builds rema
   );
 });
 
+test("desktop electron-builder config uses a filesystem-safe executable name", () => {
+  const desktopPackage = JSON.parse(readFileSync("apps/desktop/package.json", "utf8"));
+  const executableName = desktopPackage.build?.executableName;
+
+  assert.equal(executableName, "codel00p-desktop");
+  assert.match(executableName, /^[A-Za-z0-9._ -]+$/);
+});
+
 test("web docs list every desktop release asset", () => {
   const page = readFileSync("apps/landing/app/docs/desktop/page.tsx", "utf8");
   const nav = readFileSync("apps/landing/components/docs/nav.ts", "utf8");

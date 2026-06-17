@@ -14,6 +14,7 @@
   "build": {
     "appId": "dev.codel00p.desktop",
     "productName": "codel00p",
+    "executableName": "codel00p-desktop",
     "asar": true,
     "npmRebuild": false,
     "directories": {
