@@ -12,6 +12,7 @@ const MCP_DISCLOSURE_THRESHOLD: usize = 15;
 pub(super) async fn build_tool_registry(
     tool_sets: &[AgentToolSet],
     mcp_servers: &[McpServerSpec],
+    execution_backend: Arc<dyn TerminalBackend>,
 ) -> CliResult<ToolRegistry> {
     // Every agent gets the planning tool, like the navigation defaults — it is
     // workspace-read-only and useful regardless of which other tool sets are on.
@@ -21,7 +22,9 @@ pub(super) async fn build_tool_registry(
         registry = match tool_set {
             AgentToolSet::Read => registry,
             AgentToolSet::Edit => registry.with_registry(ToolRegistry::editing_defaults()),
-            AgentToolSet::Command => registry.with_registry(ToolRegistry::command_defaults()),
+            AgentToolSet::Command => registry.with_registry(
+                ToolRegistry::command_defaults_with_backend(execution_backend.clone()),
+            ),
             AgentToolSet::Git => registry.with_registry(ToolRegistry::git_defaults()),
             AgentToolSet::Web => registry.with_registry(ToolRegistry::web_defaults()),
             // Delegation needs the provider/model config to build a spawner, so
@@ -35,7 +38,9 @@ pub(super) async fn build_tool_registry(
             AgentToolSet::Pipeline => registry,
             AgentToolSet::All => registry
                 .with_registry(ToolRegistry::editing_defaults())
-                .with_registry(ToolRegistry::command_defaults())
+                .with_registry(ToolRegistry::command_defaults_with_backend(
+                    execution_backend.clone(),
+                ))
                 .with_registry(ToolRegistry::git_defaults())
                 .with_registry(ToolRegistry::web_defaults()),
         };

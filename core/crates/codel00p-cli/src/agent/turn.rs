@@ -2,6 +2,48 @@
 
 use super::*;
 
+/// Resolve the configured `agent.execution_backend` to a concrete
+/// [`TerminalBackend`]. Only `local` exists in Phase 1 of initiative #7; the
+/// absent/`local` value yields [`LocalBackend`] (today's behavior) and any other
+/// value is a clear error pointing at the supported set. This is the selection
+/// seam Phase 2's Docker backend slots into without re-plumbing.
+fn resolve_execution_backend(workspace: &Path) -> CliResult<Arc<dyn TerminalBackend>> {
+    let configured = crate::settings::load_layered(workspace)
+        .ok()
+        .and_then(|resolved| resolved.merged.agent.execution_backend.clone());
+    backend_from_setting(configured.as_deref())
+}
+
+/// Map a resolved `agent.execution_backend` string to a backend. Absent or
+/// `local` yields [`LocalBackend`]; anything else is a clear error. Pure so it
+/// can be unit-tested without touching the layered config or filesystem.
+fn backend_from_setting(value: Option<&str>) -> CliResult<Arc<dyn TerminalBackend>> {
+    match value {
+        None | Some("local") => Ok(Arc::new(LocalBackend::new())),
+        Some(other) => Err(format!(
+            "unknown agent.execution_backend `{other}`: only `local` is supported"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execution_backend_resolves_local_and_rejects_unknown() {
+        // Absent and explicit `local` both resolve (today's behavior).
+        assert!(backend_from_setting(None).is_ok());
+        assert!(backend_from_setting(Some("local")).is_ok());
+        // Anything else is a clear, actionable error.
+        let Err(error) = backend_from_setting(Some("docker")) else {
+            panic!("expected unknown backend to error");
+        };
+        assert!(error.contains("docker"));
+        assert!(error.contains("only `local` is supported"));
+    }
+}
+
 pub(super) fn run_agent_turn(
     config: CliConfig,
     options: AgentRunOptions,
@@ -191,8 +233,12 @@ pub(crate) async fn build_agent_harness_with(
         .with_tag("agent")
         .with_tag("cli");
 
-    let mut tools =
-        plugins.apply_to_tool_registry(build_tool_registry(&options.tool_sets, mcp_servers).await?);
+    // Resolve where commands execute (Phase 1: always LocalBackend) and route the
+    // command tools through it. Errors here surface an unknown backend config.
+    let execution_backend = resolve_execution_backend(&options.workspace)?;
+    let mut tools = plugins.apply_to_tool_registry(
+        build_tool_registry(&options.tool_sets, mcp_servers, execution_backend).await?,
+    );
     if options.tool_sets.contains(&AgentToolSet::Delegate) {
         let max_children = crate::settings::load_layered(&options.workspace)
             .ok()

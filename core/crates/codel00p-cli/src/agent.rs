@@ -15,13 +15,13 @@ use codel00p_gateway::{
 };
 use codel00p_harness::{
     AgentEventSink, AgentHarness, AgentRole, CancelSignal, DelegatedTask, DelegationOutcome,
-    ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, MemoryCandidateSink,
+    ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent, LocalBackend, MemoryCandidateSink,
     MemoryCandidateSinkOutcome, PermissionDecision, PermissionMode, PermissionPolicy,
     PermissionRequest, PermissionScope, ProcedureSkillExtractor, ProjectMemoryContext,
     ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest, ProposedSkill,
     ProviderModelClient, SessionId, SkillContext, SkillPrompt, SkillProposalSink, SkillProvider,
-    SkillSelectionRequest, SubAgentSpawner, TokenSink, ToolRegistry, UserMessage, Workspace,
-    delegation_tools, learning_tools,
+    SkillSelectionRequest, SubAgentSpawner, TerminalBackend, TokenSink, ToolRegistry, UserMessage,
+    Workspace, delegation_tools, learning_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,

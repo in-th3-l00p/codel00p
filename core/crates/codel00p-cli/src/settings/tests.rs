@@ -107,6 +107,21 @@ fn set_get_and_unset_round_trip_with_coercion() {
 }
 
 #[test]
+fn execution_backend_key_round_trips() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        let path = user_config_path();
+        set_value(&path, "agent.execution_backend", "local").expect("set backend");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().execution_backend.as_deref(), Some("local"));
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.execution_backend").unwrap(),
+            Some("local".to_string())
+        );
+    });
+}
+
+#[test]
 fn set_rejects_unknown_key() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

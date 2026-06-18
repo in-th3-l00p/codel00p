@@ -76,8 +76,15 @@ pub(super) fn run_agent_chat(config: CliConfig, mut options: AgentRunOptions) ->
                         continue;
                     }
                     "tools" => {
-                        let registry =
-                            build_tool_registry(&options.tool_sets, &mcp_servers).await?;
+                        // A listing only needs tool names; the backend is never
+                        // invoked, so use the local default rather than resolving
+                        // config here.
+                        let registry = build_tool_registry(
+                            &options.tool_sets,
+                            &mcp_servers,
+                            Arc::new(LocalBackend::new()),
+                        )
+                        .await?;
                         write!(stderr, "{}", chat_tools_listing(&registry)).ok();
                         continue;
                     }
