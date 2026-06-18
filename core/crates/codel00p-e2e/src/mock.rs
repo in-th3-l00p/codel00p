@@ -42,11 +42,19 @@ use std::sync::{
 use httpmock::{Method::POST, MockServer, prelude::HttpMockRequest};
 use serde_json::{Value, json};
 
+/// A scripted OpenAI-style `usage` block to attach to a response.
+#[derive(Clone, Copy)]
+pub struct ScriptedUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+}
+
 /// One scripted model response.
 #[derive(Clone)]
 enum Turn {
-    /// A final assistant message (`finish_reason: "stop"`).
-    Text(String),
+    /// A final assistant message (`finish_reason: "stop"`), optionally carrying
+    /// a `usage` block so tests can assert usage surfacing.
+    Text(String, Option<ScriptedUsage>),
     /// One or more tool calls in a single assistant turn
     /// (`finish_reason: "tool_calls"`).
     ToolCalls(Vec<(String, Value)>),
@@ -143,7 +151,7 @@ impl MockProvider {
         self.registered += 1;
 
         let error_message = error_message.into();
-        let success_body = response_for(&Turn::Text(text.into()));
+        let success_body = response_for(&Turn::Text(text.into(), None));
         let captured = Arc::clone(&self.captured);
         // Shared across both mocks so the first matching request takes the error
         // branch and all later ones take the success branch, deterministically.
@@ -215,7 +223,28 @@ impl MockProvider {
     /// Queues a turn that returns final assistant text and stops.
     #[must_use]
     pub fn assistant_text(mut self, text: impl Into<String>) -> Self {
-        let turn = Turn::Text(text.into());
+        let turn = Turn::Text(text.into(), None);
+        self.register(turn, Audience::Any);
+        self
+    }
+
+    /// Queues a final-text turn whose response includes an OpenAI-style `usage`
+    /// block, so tests can assert that token usage is surfaced on the agent's
+    /// events.
+    #[must_use]
+    pub fn assistant_text_with_usage(
+        mut self,
+        text: impl Into<String>,
+        prompt_tokens: u64,
+        completion_tokens: u64,
+    ) -> Self {
+        let turn = Turn::Text(
+            text.into(),
+            Some(ScriptedUsage {
+                prompt_tokens,
+                completion_tokens,
+            }),
+        );
         self.register(turn, Audience::Any);
         self
     }
@@ -252,7 +281,7 @@ impl MockProvider {
     /// Queues a [`Audience::Parent`]-scoped final-text turn.
     #[must_use]
     pub fn parent_text(mut self, text: impl Into<String>) -> Self {
-        let turn = Turn::Text(text.into());
+        let turn = Turn::Text(text.into(), None);
         self.register(turn, Audience::Parent);
         self
     }
@@ -269,7 +298,7 @@ impl MockProvider {
     /// Queues a [`Audience::Child`]-scoped final-text turn (the child's summary).
     #[must_use]
     pub fn child_text(mut self, text: impl Into<String>) -> Self {
-        let turn = Turn::Text(text.into());
+        let turn = Turn::Text(text.into(), None);
         self.register(turn, Audience::Child);
         self
     }
@@ -355,16 +384,26 @@ fn count_tool_results(body: &str) -> usize {
 
 fn response_for(turn: &Turn) -> Value {
     match turn {
-        Turn::Text(text) => json!({
-            "id": "chatcmpl-e2e",
-            "object": "chat.completion",
-            "model": "test-model",
-            "choices": [{
-                "index": 0,
-                "message": { "role": "assistant", "content": text },
-                "finish_reason": "stop"
-            }]
-        }),
+        Turn::Text(text, usage) => {
+            let mut body = json!({
+                "id": "chatcmpl-e2e",
+                "object": "chat.completion",
+                "model": "test-model",
+                "choices": [{
+                    "index": 0,
+                    "message": { "role": "assistant", "content": text },
+                    "finish_reason": "stop"
+                }]
+            });
+            if let Some(usage) = usage {
+                body["usage"] = json!({
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.prompt_tokens + usage.completion_tokens,
+                });
+            }
+            body
+        }
         Turn::ToolCalls(calls) => {
             let tool_calls: Vec<Value> = calls
                 .iter()

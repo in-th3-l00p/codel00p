@@ -256,17 +256,18 @@ fn providers_show_rejects_an_unknown_provider() {
     );
 }
 
-/// Documented boundary: **usage / cost is not surfaced through the binary.** A
-/// normal `agent run` whose mock response carries an OpenAI-style `usage` block is
-/// still successful, but no emitted protocol event exposes token usage or cost —
-/// the `AgentEvent` enum has no such field (`codel00p-protocol/src/events.rs`).
-/// The mock's success body does not include `usage` (the harness never asks the
-/// model for pricing and never prints it), so we assert the *consequence*: the
-/// event stream is well-formed and carries no usage/cost surface. Usage/cost is
-/// covered at the library layer in `codel00p-providers/tests/usage_cost.rs`.
+/// **Usage IS surfaced through the binary.** A normal `agent run` whose mock
+/// response carries an OpenAI-style `usage` block emits protocol events that
+/// carry the token usage: the per-inference `InferenceCompleted` event and the
+/// turn-total `TurnCompleted` event both expose a `usage` payload. (Supersedes
+/// the previous boundary note that documented usage/cost as *not* surfaced —
+/// the protocol now mirrors usage on these events; see
+/// `codel00p-protocol/src/events.rs::{TokenUsage, CostEstimate}`.)
 #[test]
-fn usage_and_cost_are_not_exposed_in_the_event_stream() {
-    let provider = MockProvider::start().assistant_text("done");
+fn usage_is_exposed_in_the_event_stream() {
+    // prompt_tokens=120 with no cached-token detail -> input_tokens=120;
+    // completion_tokens=34 -> output_tokens=34.
+    let provider = MockProvider::start().assistant_text_with_usage("done", 120, 34);
     let runner = CodelRunner::new().with_provider(&provider);
     let result = runner.run(&["agent", "run", "Say hi.", "--tool-set", "all"]);
     result.assert_success();
@@ -274,31 +275,39 @@ fn usage_and_cost_are_not_exposed_in_the_event_stream() {
     let events = result.events();
     assert!(!events.is_empty(), "expected emitted protocol events");
 
-    // No event variant carries usage/cost; the closing event reports only
-    // iterations. This documents that usage/cost lives at the providers layer and
-    // is not part of the CLI-observable protocol.
-    let turn_completed = events
+    // The per-inference event carries the usage the provider reported.
+    let inference_usage = events
         .iter()
-        .find(|event| matches!(event, AgentEvent::TurnCompleted { .. }))
-        .expect("a TurnCompleted event");
-    assert!(
-        matches!(turn_completed, AgentEvent::TurnCompleted { .. }),
-        "TurnCompleted is the terminal event and exposes no usage/cost"
-    );
+        .find_map(|event| match event {
+            AgentEvent::InferenceCompleted { usage, .. } => usage.clone(),
+            _ => None,
+        })
+        .expect("InferenceCompleted should carry usage");
+    assert_eq!(inference_usage.input_tokens, 120);
+    assert_eq!(inference_usage.output_tokens, 34);
 
-    // The serialized event stream contains no token/cost keys (there is no
-    // protocol field that could carry them).
+    // The terminal event reports the aggregated turn total.
+    let turn_usage = events
+        .iter()
+        .find_map(|event| match event {
+            AgentEvent::TurnCompleted { usage, .. } => usage.clone(),
+            _ => None,
+        })
+        .expect("TurnCompleted should carry the aggregated usage");
+    assert_eq!(turn_usage.input_tokens, 120);
+    assert_eq!(turn_usage.output_tokens, 34);
+    assert_eq!(turn_usage.total_tokens(), 154);
+
+    // The serialized stream now contains the usage keys.
     let serialized = events
         .iter()
         .map(|event| serde_json::to_string(event).expect("serialize event"))
         .collect::<Vec<_>>()
         .join("\n");
-    for forbidden in ["total_nanos", "input_tokens", "output_tokens", "\"cost\""] {
-        assert!(
-            !serialized.contains(forbidden),
-            "no protocol event should carry `{forbidden}`; events:\n{serialized}"
-        );
-    }
+    assert!(
+        serialized.contains("input_tokens") && serialized.contains("output_tokens"),
+        "the event stream should carry token usage; events:\n{serialized}"
+    );
 }
 
 /// Documented boundary: **provider/model fallback routing is not reachable through

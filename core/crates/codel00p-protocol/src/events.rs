@@ -5,6 +5,74 @@ use sha2::{Digest, Sha256};
 
 use crate::{EventId, PermissionScope, SessionId, TurnId};
 
+/// Protocol-local mirror of normalized token usage counters.
+///
+/// Mirrors `codel00p_providers::Usage` as a plain serializable struct so the
+/// protocol crate does not need to depend on the providers crate. All counts
+/// are token totals reported by (or estimated from) the provider response.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub reasoning_tokens: u64,
+}
+
+impl TokenUsage {
+    /// Total prompt-side tokens (input + cache reads/writes).
+    pub fn prompt_tokens(&self) -> u64 {
+        self.input_tokens
+            .saturating_add(self.cache_read_tokens)
+            .saturating_add(self.cache_write_tokens)
+    }
+
+    /// Total completion-side tokens (output + reasoning).
+    pub fn completion_tokens(&self) -> u64 {
+        self.output_tokens.saturating_add(self.reasoning_tokens)
+    }
+
+    /// Grand total of all token counters.
+    pub fn total_tokens(&self) -> u64 {
+        self.prompt_tokens()
+            .saturating_add(self.completion_tokens())
+    }
+
+    /// Accumulate another usage record into this one (saturating).
+    pub fn add(&mut self, other: &TokenUsage) {
+        self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
+        self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
+        self.cache_read_tokens = self
+            .cache_read_tokens
+            .saturating_add(other.cache_read_tokens);
+        self.cache_write_tokens = self
+            .cache_write_tokens
+            .saturating_add(other.cache_write_tokens);
+        self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
+    }
+}
+
+/// Protocol-local mirror of a normalized usage cost estimate.
+///
+/// Mirrors `codel00p_providers::UsageCostEstimate`. Costs are expressed in
+/// nano units of `currency` (e.g. USD nanos: 1_000_000_000 == $1).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CostEstimate {
+    pub currency: String,
+    pub total_nanos: u64,
+}
+
+impl CostEstimate {
+    /// Accumulate another cost into this one (saturating). The currency of the
+    /// accumulator is taken from the first non-empty currency seen.
+    pub fn add(&mut self, other: &CostEstimate) {
+        if self.currency.is_empty() {
+            self.currency = other.currency.clone();
+        }
+        self.total_nanos = self.total_nanos.saturating_add(other.total_nanos);
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AgentEvent {
@@ -62,6 +130,12 @@ pub enum AgentEvent {
         session_id: SessionId,
         turn_id: TurnId,
         finish_reason: Option<String>,
+        /// Token usage for this single inference, when the provider reported it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<TokenUsage>,
+        /// Estimated cost for this single inference, when pricing was available.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cost: Option<CostEstimate>,
     },
     ToolCallRequested {
         event_id: EventId,
@@ -119,6 +193,13 @@ pub enum AgentEvent {
         session_id: SessionId,
         turn_id: TurnId,
         iterations: u32,
+        /// Aggregated token usage across every inference in the turn, when any
+        /// inference reported usage.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<TokenUsage>,
+        /// Aggregated estimated cost across the turn, when pricing was available.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cost: Option<CostEstimate>,
     },
 }
 
@@ -265,6 +346,99 @@ mod tests {
         );
         assert_eq!(hash1, hash2);
         assert_eq!(hash1.len(), 64, "SHA-256 hex is 64 chars");
+    }
+
+    #[test]
+    fn inference_completed_usage_round_trip() {
+        let event = AgentEvent::InferenceCompleted {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            finish_reason: Some("stop".to_string()),
+            usage: Some(TokenUsage {
+                input_tokens: 1234,
+                output_tokens: 567,
+                cache_read_tokens: 10,
+                cache_write_tokens: 0,
+                reasoning_tokens: 5,
+            }),
+            cost: Some(CostEstimate {
+                currency: "USD".to_string(),
+                total_nanos: 4_200_000,
+            }),
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
+    }
+
+    #[test]
+    fn turn_completed_usage_round_trip() {
+        let event = AgentEvent::TurnCompleted {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            iterations: 3,
+            usage: Some(TokenUsage {
+                input_tokens: 100,
+                output_tokens: 50,
+                ..Default::default()
+            }),
+            cost: None,
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
+    }
+
+    #[test]
+    fn events_without_usage_deserialize_for_backward_compat() {
+        // Events serialized before usage/cost existed omit those keys entirely.
+        let inference = r#"{"kind":"inference_completed","event_id":"ev-1","session_id":"ses-1","turn_id":"turn-1","finish_reason":"stop"}"#;
+        let event: AgentEvent = serde_json::from_str(inference).expect("deserialize legacy");
+        assert!(matches!(
+            event,
+            AgentEvent::InferenceCompleted {
+                usage: None,
+                cost: None,
+                ..
+            }
+        ));
+
+        let turn = r#"{"kind":"turn_completed","event_id":"ev-1","session_id":"ses-1","turn_id":"turn-1","iterations":1}"#;
+        let event: AgentEvent = serde_json::from_str(turn).expect("deserialize legacy");
+        assert!(matches!(
+            event,
+            AgentEvent::TurnCompleted {
+                usage: None,
+                cost: None,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn token_usage_aggregates_and_totals() {
+        let mut total = TokenUsage::default();
+        total.add(&TokenUsage {
+            input_tokens: 100,
+            output_tokens: 20,
+            cache_read_tokens: 5,
+            reasoning_tokens: 3,
+            ..Default::default()
+        });
+        total.add(&TokenUsage {
+            input_tokens: 200,
+            output_tokens: 40,
+            ..Default::default()
+        });
+        assert_eq!(total.input_tokens, 300);
+        assert_eq!(total.output_tokens, 60);
+        assert_eq!(total.prompt_tokens(), 305);
+        assert_eq!(total.completion_tokens(), 63);
+        assert_eq!(total.total_tokens(), 368);
     }
 
     #[test]

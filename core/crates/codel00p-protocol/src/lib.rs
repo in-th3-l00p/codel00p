@@ -23,7 +23,7 @@ pub use cloud::{
     OrgRole, Project, ProjectUpdate, Viewer,
 };
 pub use context::{CompactionRecord, ContextWindowState, ToolProgress};
-pub use events::{AgentEvent, compute_manifest_hash};
+pub use events::{AgentEvent, CostEstimate, TokenUsage, compute_manifest_hash};
 pub use ids::{EventId, SessionId, TurnId};
 pub use memory::{
     EvidenceKind, MemoryEntry, MemoryEvidence, MemoryKind, MemorySensitivity, MemorySource,

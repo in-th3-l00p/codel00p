@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use codel00p_protocol::ContextWindowState;
 pub use codel00p_protocol::ToolCall as ModelToolCall;
+use codel00p_protocol::{ContextWindowState, CostEstimate, TokenUsage};
 pub use codel00p_providers::{ResponseFormat, TokenSink, ToolChoice};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -163,6 +163,10 @@ pub struct HarnessInferenceResponse {
     assistant_message: Option<String>,
     tool_calls: Vec<ModelToolCall>,
     finish_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    usage: Option<TokenUsage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cost: Option<CostEstimate>,
 }
 
 impl HarnessInferenceResponse {
@@ -177,6 +181,8 @@ impl HarnessInferenceResponse {
             assistant_message: Some(content.into()),
             tool_calls: Vec::new(),
             finish_reason: Some("stop".to_string()),
+            usage: None,
+            cost: None,
         }
     }
 
@@ -191,6 +197,8 @@ impl HarnessInferenceResponse {
             assistant_message: None,
             tool_calls,
             finish_reason: Some("tool_calls".to_string()),
+            usage: None,
+            cost: None,
         }
     }
 
@@ -207,7 +215,29 @@ impl HarnessInferenceResponse {
             assistant_message,
             tool_calls,
             finish_reason,
+            usage: None,
+            cost: None,
         }
+    }
+
+    /// Attach normalized token usage to this response (builder style).
+    pub fn with_usage(mut self, usage: Option<TokenUsage>) -> Self {
+        self.usage = usage;
+        self
+    }
+
+    /// Attach an estimated cost to this response (builder style).
+    pub fn with_cost(mut self, cost: Option<CostEstimate>) -> Self {
+        self.cost = cost;
+        self
+    }
+
+    pub fn usage(&self) -> Option<&TokenUsage> {
+        self.usage.as_ref()
+    }
+
+    pub fn cost(&self) -> Option<&CostEstimate> {
+        self.cost.as_ref()
     }
 
     pub fn provider(&self) -> &str {
