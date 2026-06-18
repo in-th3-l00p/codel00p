@@ -176,6 +176,13 @@ pub(crate) async fn build_agent_harness_with(
     } else {
         model_client
     };
+    // Attach any configured fallback routes so a fallback-eligible primary
+    // failure transparently retries them. No-op when none are configured.
+    let model_client = if options.fallback_routes.is_empty() {
+        model_client
+    } else {
+        model_client.with_fallback_routes(options.fallback_routes.clone())
+    };
 
     let workspace = Workspace::new(&options.workspace).map_err(|error| error.to_string())?;
     let memory_provider = CliProjectMemoryProvider::new(config.clone()).with_limit(8);

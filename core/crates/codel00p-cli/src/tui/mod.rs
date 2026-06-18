@@ -69,6 +69,7 @@ pub(crate) mod test_support {
             permission_mode: CliPermissionMode::Ask,
             remember_permissions: false,
             mcp_servers: Vec::new(),
+            fallback_routes: Vec::new(),
             gateway_approval: None,
         };
         App::new(

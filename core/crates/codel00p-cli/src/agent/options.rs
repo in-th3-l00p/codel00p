@@ -24,6 +24,9 @@ pub(crate) struct AgentRunOptions {
     pub(crate) permission_mode: CliPermissionMode,
     pub(crate) remember_permissions: bool,
     pub(crate) mcp_servers: Vec<McpServerSpec>,
+    /// Provider/model routes the inference client tries, in order, when the
+    /// primary route fails with a fallback-eligible error. Empty by default.
+    pub(crate) fallback_routes: Vec<InferenceFallbackRoute>,
     /// When set, the turn is a messaging-gateway turn: privileged tools pause
     /// for a remote chat user's `/approve` decision instead of using the local
     /// CLI permission mode. See [`GatewayApprovalPolicy`].
@@ -108,6 +111,7 @@ fn parse_agent_flag_options(
     let mut permission_mode = None;
     let mut remember_permissions = None;
     let mut mcp_servers = Vec::new();
+    let mut fallback_routes = Vec::new();
     let mut index = start;
 
     while index < args.len() {
@@ -185,6 +189,11 @@ fn parse_agent_flag_options(
                 mcp_servers.push(parse_mcp_server(&value)?);
                 index += 2;
             }
+            "--fallback" => {
+                let value = required_value(args, index, "--fallback")?;
+                fallback_routes.push(parse_fallback_route(&value)?);
+                index += 2;
+            }
             flag => return Err(format!("unknown agent {context} option: {flag}")),
         }
     }
@@ -251,6 +260,19 @@ fn parse_agent_flag_options(
     let remember_permissions = remember_permissions
         .or(defaults.remember_permissions)
         .unwrap_or(false);
+    // Explicit `--fallback` flags win; otherwise fall back to the configured
+    // `agent.fallbacks` list. Empty in both cases leaves behavior unchanged.
+    let fallback_routes = if fallback_routes.is_empty() {
+        match &defaults.fallbacks {
+            Some(values) => values
+                .iter()
+                .map(|value| parse_fallback_route(value))
+                .collect::<CliResult<Vec<_>>>()?,
+            None => Vec::new(),
+        }
+    } else {
+        fallback_routes
+    };
 
     Ok(AgentRunOptions {
         prompt: String::new(),
@@ -270,6 +292,7 @@ fn parse_agent_flag_options(
         permission_mode,
         remember_permissions,
         mcp_servers,
+        fallback_routes,
         gateway_approval: None,
     })
 }
@@ -300,6 +323,51 @@ pub(super) fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
         "pipeline" | "programmatic" => Ok(AgentToolSet::Pipeline),
         "all" => Ok(AgentToolSet::All),
         _ => Err(format!("unknown tool set: {value}")),
+    }
+}
+
+/// Parses a `--fallback` value into an [`InferenceFallbackRoute`].
+///
+/// Format: `<provider>:<model>[@<base_url>]`. The provider/model split is on the
+/// *first* `:` so model ids may contain further colons or slashes (e.g.
+/// `anthropic/claude-sonnet`). An optional `@<base_url>` suffix supplies the
+/// route's base URL — required for the `custom` provider, mirroring how the
+/// primary route resolves a base URL. The base URL is split off first so a URL's
+/// own `:` (e.g. `http://host:8080`) does not confuse the provider/model split.
+pub(super) fn parse_fallback_route(value: &str) -> CliResult<InferenceFallbackRoute> {
+    let (route, base_url) = match value.split_once('@') {
+        Some((route, base_url)) => (route, Some(base_url.trim())),
+        None => (value, None),
+    };
+    let (provider, model) = route.split_once(':').ok_or_else(|| {
+        format!("invalid --fallback `{value}`: expected `<provider>:<model>[@<base_url>]`")
+    })?;
+    let provider = provider.trim();
+    let model = model.trim();
+    if provider.is_empty() || model.is_empty() {
+        return Err(format!(
+            "invalid --fallback `{value}`: provider and model must be non-empty"
+        ));
+    }
+    let route = InferenceFallbackRoute::new(provider, model);
+    Ok(match base_url {
+        Some(base_url) if !base_url.is_empty() => route.base_url(base_url),
+        _ => route,
+    })
+}
+
+/// Resolves the configured `agent.fallbacks` list into routes. Used by the
+/// unattended (cron/gateway) entrypoints that build options directly from
+/// settings without a flag parser. Empty/absent yields no routes.
+pub(super) fn resolve_configured_fallback_routes(
+    fallbacks: Option<&Vec<String>>,
+) -> CliResult<Vec<InferenceFallbackRoute>> {
+    match fallbacks {
+        Some(values) => values
+            .iter()
+            .map(|value| parse_fallback_route(value))
+            .collect(),
+        None => Ok(Vec::new()),
     }
 }
 
@@ -466,6 +534,81 @@ mod tests {
         ];
         let options = parse_agent_run_options(&defaults, &args).expect("parse");
         assert_eq!(options.tool_choice, Some(ToolChoice::Required));
+    }
+
+    #[test]
+    fn parse_fallback_route_provider_model_only() {
+        let route = parse_fallback_route("openrouter:anthropic/claude-sonnet").expect("parse");
+        assert_eq!(route.provider, "openrouter");
+        assert_eq!(route.model, "anthropic/claude-sonnet");
+        assert_eq!(route.base_url, None);
+    }
+
+    #[test]
+    fn parse_fallback_route_with_base_url_keeps_url_colons() {
+        let route =
+            parse_fallback_route("custom:local-model@http://127.0.0.1:8080").expect("parse");
+        assert_eq!(route.provider, "custom");
+        assert_eq!(route.model, "local-model");
+        assert_eq!(route.base_url.as_deref(), Some("http://127.0.0.1:8080"));
+    }
+
+    #[test]
+    fn parse_fallback_route_rejects_missing_model() {
+        assert!(parse_fallback_route("openrouter").is_err());
+        assert!(parse_fallback_route("openrouter:").is_err());
+        assert!(parse_fallback_route(":model").is_err());
+    }
+
+    #[test]
+    fn explicit_fallback_flag_is_parsed_into_a_route() {
+        let options = run_opts(&[
+            "do it",
+            "--fallback",
+            "custom:local-model@http://127.0.0.1:9000",
+        ]);
+        assert_eq!(options.fallback_routes.len(), 1);
+        assert_eq!(options.fallback_routes[0].provider, "custom");
+        assert_eq!(options.fallback_routes[0].model, "local-model");
+        assert_eq!(
+            options.fallback_routes[0].base_url.as_deref(),
+            Some("http://127.0.0.1:9000")
+        );
+    }
+
+    #[test]
+    fn configured_fallbacks_apply_when_no_flag_is_passed() {
+        let defaults = AgentSettings {
+            fallbacks: Some(vec!["openrouter:anthropic/claude-sonnet".to_string()]),
+            ..test_defaults()
+        };
+        let args = vec!["do it".to_string()];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        assert_eq!(options.fallback_routes.len(), 1);
+        assert_eq!(options.fallback_routes[0].provider, "openrouter");
+    }
+
+    #[test]
+    fn explicit_fallback_flag_overrides_configured_fallbacks() {
+        let defaults = AgentSettings {
+            fallbacks: Some(vec!["openrouter:anthropic/claude-sonnet".to_string()]),
+            ..test_defaults()
+        };
+        let args = vec![
+            "do it".to_string(),
+            "--fallback".to_string(),
+            "custom:local-model".to_string(),
+        ];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        assert_eq!(options.fallback_routes.len(), 1);
+        assert_eq!(options.fallback_routes[0].provider, "custom");
+        assert_eq!(options.fallback_routes[0].model, "local-model");
+    }
+
+    #[test]
+    fn no_fallback_configured_yields_empty_routes() {
+        let options = run_opts(&["do it"]);
+        assert!(options.fallback_routes.is_empty());
     }
 
     #[test]

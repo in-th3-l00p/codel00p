@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use codel00p_providers::{
-    ChatMessage, InferenceClient, InferenceRequest, InferenceResponse, ToolDefinition,
+    ChatMessage, InferenceClient, InferenceFallbackRoute, InferenceRequest, InferenceResponse,
+    ToolDefinition,
 };
 
 use crate::{
@@ -20,6 +21,11 @@ pub struct ProviderModelClient {
     provider: String,
     model: String,
     base_url: Option<String>,
+    /// Provider/model candidates the inference client tries, in order, if the
+    /// primary route fails with a fallback-eligible error (rate limit, overload,
+    /// model-unavailable). Empty by default, so behavior is unchanged unless a
+    /// caller wires routes in.
+    fallback_routes: Vec<InferenceFallbackRoute>,
 }
 
 impl ProviderModelClient {
@@ -33,11 +39,20 @@ impl ProviderModelClient {
             provider: provider.into(),
             model: model.into(),
             base_url: None,
+            fallback_routes: Vec::new(),
         }
     }
 
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
+        self
+    }
+
+    /// Attaches fallback routes that every inference request this client issues
+    /// will carry. When the primary route fails with a fallback-eligible error,
+    /// [`InferenceClient::complete`] retries against these routes in order.
+    pub fn with_fallback_routes(mut self, routes: Vec<InferenceFallbackRoute>) -> Self {
+        self.fallback_routes = routes;
         self
     }
 
@@ -158,12 +173,15 @@ impl ModelClient for ProviderModelClient {
         &self,
         request: HarnessInferenceRequest,
     ) -> Result<HarnessInferenceResponse, HarnessError> {
-        let provider_request = Self::build_provider_request_with_base_url(
+        let mut provider_request = Self::build_provider_request_with_base_url(
             &self.provider,
             &self.model,
             &request,
             self.base_url.as_deref(),
         );
+        provider_request
+            .fallback_routes
+            .clone_from(&self.fallback_routes);
         let response = self
             .client
             .complete(provider_request)
@@ -184,12 +202,15 @@ impl ModelClient for ProviderModelClient {
         request: HarnessInferenceRequest,
         sink: &dyn TokenSink,
     ) -> Result<HarnessInferenceResponse, HarnessError> {
-        let provider_request = Self::build_provider_request_with_base_url(
+        let mut provider_request = Self::build_provider_request_with_base_url(
             &self.provider,
             &self.model,
             &request,
             self.base_url.as_deref(),
         );
+        provider_request
+            .fallback_routes
+            .clone_from(&self.fallback_routes);
         let response = self
             .client
             .complete_streaming(provider_request, sink)

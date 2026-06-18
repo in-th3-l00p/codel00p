@@ -220,6 +220,45 @@ impl MockProvider {
         self
     }
 
+    /// Queues a turn that *always* answers with a fallback-eligible HTTP error
+    /// (status `status`, `Retry-After: 0` so any same-route retry is immediate),
+    /// for every request landing on this turn's slot.
+    ///
+    /// Unlike [`MockProvider::transient_error_then_text`] this never recovers on
+    /// the same route, so once the inference client exhausts its same-route
+    /// retries it falls through to any configured fallback route. Use it as the
+    /// *primary* endpoint in a fallback scenario: the primary keeps failing, and
+    /// the run only succeeds via the fallback server.
+    ///
+    /// Registered as an [`Audience::Any`] turn occupying one tool-result slot,
+    /// exactly like [`MockProvider::assistant_text`].
+    #[must_use]
+    pub fn always_error(mut self, status: u16, error_message: impl Into<String>) -> Self {
+        let index = self.registered;
+        self.registered += 1;
+
+        let error_message = error_message.into();
+        let captured = Arc::clone(&self.captured);
+        self.server.mock(move |when, then| {
+            let captured = Arc::clone(&captured);
+            when.method(POST)
+                .path("/chat/completions")
+                .is_true(move |req: &HttpMockRequest| {
+                    let body = req.body_string();
+                    if count_tool_results(&body) != index {
+                        return false;
+                    }
+                    captured.lock().unwrap().push(body);
+                    true
+                });
+            then.status(status)
+                .header("content-type", "application/json")
+                .header("retry-after", "0")
+                .json_body(json!({ "error": { "message": error_message.clone() } }));
+        });
+        self
+    }
+
     /// Queues a turn that returns final assistant text and stops.
     #[must_use]
     pub fn assistant_text(mut self, text: impl Into<String>) -> Self {
