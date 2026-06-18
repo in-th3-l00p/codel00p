@@ -42,18 +42,19 @@
 //!   is covered at the transport layer in `codel00p-providers`. We assert
 //!   `--json-events` ordering stability instead (the recommended fallback).
 //!
-//! # Harness-only knobs (NOT CLI-reachable — documented, not faked)
+//! # `tool_choice` / `response_format` (CLI-reachable via flags; off by default)
 //!
-//! - **`tool_choice`** (auto / required / specific / none) and **`response_format`**
-//!   / JSON mode are `AgentHarness::builder()` methods
-//!   (`codel00p-harness/src/agent/builder.rs`: `tool_choice`, `response_format`)
-//!   that the turn loop forwards onto the inference request
-//!   (`turn.rs`: `with_tool_choice` / `with_response_format`). There is **no**
-//!   `agent run` flag for either (verified: no match in `codel00p-cli/src`). They
-//!   are covered by harness-level tests in
-//!   `codel00p-harness/tests/provider_adapter.rs`. The note test below asserts the
-//!   *consequence* of this: the request the model receives on the default CLI path
-//!   carries neither a `tool_choice` nor a `response_format` field.
+//! - **`--tool-choice <auto|required|none|NAME>`** and
+//!   **`--response-format <text|json>`** expose the `AgentHarness::builder()`
+//!   `tool_choice` / `response_format` knobs
+//!   (`codel00p-harness/src/agent/builder.rs`), which the turn loop forwards onto
+//!   the inference request (`turn.rs`: `with_tool_choice` /
+//!   `with_response_format`). They are parsed in
+//!   `codel00p-cli/src/agent/options.rs` and applied in
+//!   `codel00p-cli/src/agent/turn.rs`. The richer `JsonSchema` response format
+//!   (name + JSON Schema) stays builder-only. The tests below assert both that
+//!   the DEFAULT path forwards neither field AND that the flags do set them on
+//!   the outgoing request body.
 //!
 //! Fully hermetic: no network, no API keys, isolated `CODEL00P_HOME` + workspace.
 
@@ -354,5 +355,66 @@ fn tool_choice_and_response_format_are_not_set_on_default_cli_path() {
     assert!(
         !obj.contains_key("response_format"),
         "response_format is harness-only and must not appear on the default CLI path: {body}"
+    );
+}
+
+/// `--tool-choice required` is now CLI-reachable: passing it makes the outgoing
+/// chat-completions request carry the OpenAI-form `tool_choice: "required"`
+/// field. This proves the flag is wired from `agent run` through option parsing
+/// and the harness builder onto the actual provider request body.
+#[test]
+fn tool_choice_flag_sets_tool_choice_on_the_request() {
+    let provider = MockProvider::start().assistant_text("hello");
+    let runner = CodelRunner::new().with_provider(&provider);
+    let result = runner.run(&[
+        "agent",
+        "run",
+        "Say hi.",
+        "--tool-set",
+        "all",
+        "--tool-choice",
+        "required",
+    ]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    assert_eq!(requests.len(), 1, "expected a single model round-trip");
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+
+    assert_eq!(
+        body.get("tool_choice"),
+        Some(&json!("required")),
+        "tool_choice should be forwarded as the OpenAI `required` form: {body}"
+    );
+}
+
+/// `--response-format json` is now CLI-reachable: passing it makes the outgoing
+/// chat-completions request carry the OpenAI-form `response_format` JSON-object
+/// field, proving the flag is wired end to end onto the provider request body.
+#[test]
+fn response_format_flag_sets_response_format_on_the_request() {
+    let provider = MockProvider::start().assistant_text("hello");
+    let runner = CodelRunner::new().with_provider(&provider);
+    let result = runner.run(&[
+        "agent",
+        "run",
+        "Say hi.",
+        "--tool-set",
+        "all",
+        "--response-format",
+        "json",
+    ]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    assert_eq!(requests.len(), 1, "expected a single model round-trip");
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+
+    assert_eq!(
+        body.get("response_format"),
+        Some(&json!({ "type": "json_object" })),
+        "response_format should be forwarded as the OpenAI json_object form: {body}"
     );
 }

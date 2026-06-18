@@ -54,6 +54,12 @@ pub struct AgentSettings {
     pub permission_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_sets: Option<Vec<String>>,
+    /// Default tool-choice control (`auto`/`required`/`none`/a tool name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<String>,
+    /// Default structured-output request (`text`/`json`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -128,6 +134,8 @@ impl AgentSettings {
         take(&mut self.max_iterations, other.max_iterations);
         take(&mut self.permission_mode, other.permission_mode);
         take(&mut self.tool_sets, other.tool_sets);
+        take(&mut self.tool_choice, other.tool_choice);
+        take(&mut self.response_format, other.response_format);
         take(&mut self.stream, other.stream);
         take(&mut self.remember_permissions, other.remember_permissions);
     }

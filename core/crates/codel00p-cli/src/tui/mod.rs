@@ -64,6 +64,8 @@ pub(crate) mod test_support {
             stream_events: false,
             stream: true,
             tool_sets: Vec::new(),
+            tool_choice: None,
+            response_format: None,
             permission_mode: CliPermissionMode::Ask,
             remember_permissions: false,
             mcp_servers: Vec::new(),

@@ -242,7 +242,8 @@ Advanced (raw key access):
 
 Keys: workspace.{organization_id,project_id,project_name,memory_db},
       agent.{provider,model,base_url,provider_policy_preset,max_iterations,
-      permission_mode,tool_sets,stream,remember_permissions}
+      permission_mode,tool_sets,tool_choice,response_format,stream,
+      remember_permissions}
 ";
 
 const PROVIDERS_HELP: &str = "\
@@ -324,6 +325,8 @@ Options:
   --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
+  --response-format <format>  Structured output: text or json (JSON mode)
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
   --stream                    Stream assistant text token by token to stdout
@@ -347,6 +350,8 @@ Options:
   --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
+  --response-format <format>  Structured output: text or json (JSON mode)
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
   --stream                    Stream assistant text token by token to stdout
@@ -367,6 +372,8 @@ Options:
   --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
+  --response-format <format>  Structured output: text or json (JSON mode)
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during the turn
   --stream                    Stream assistant text token by token to stdout
@@ -401,6 +408,8 @@ Options:
   --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
+  --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
+  --response-format <format>  Structured output: text or json (JSON mode)
   --remember-permissions      Persist ask-mode MCP connector decisions
   --stream-events             Stream serialized harness events during each turn
   --stream                    Stream assistant text token by token to stdout

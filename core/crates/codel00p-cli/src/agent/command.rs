@@ -65,6 +65,8 @@ pub(crate) fn run_scheduled_job(
         stream: false,
         // Restricted by default: an unattended run may only read.
         tool_sets: vec![AgentToolSet::Read],
+        tool_choice: None,
+        response_format: None,
         permission_mode: CliPermissionMode::Allow,
         remember_permissions: false,
         mcp_servers: Vec::new(),
@@ -201,6 +203,8 @@ fn gateway_turn(
             AgentToolSet::Edit,
             AgentToolSet::Command,
         ],
+        tool_choice: None,
+        response_format: None,
         permission_mode: CliPermissionMode::Allow,
         remember_permissions: false,
         mcp_servers: Vec::new(),

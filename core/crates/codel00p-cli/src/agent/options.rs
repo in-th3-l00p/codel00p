@@ -16,6 +16,11 @@ pub(crate) struct AgentRunOptions {
     pub(crate) stream_events: bool,
     pub(crate) stream: bool,
     pub(crate) tool_sets: Vec<AgentToolSet>,
+    /// Optional control over whether/which tool the model must call. `None`
+    /// leaves the provider default (auto) in place — the default CLI path.
+    pub(crate) tool_choice: Option<codel00p_harness::ToolChoice>,
+    /// Optional structured-output (JSON mode) request. `None` is plain text.
+    pub(crate) response_format: Option<codel00p_harness::ResponseFormat>,
     pub(crate) permission_mode: CliPermissionMode,
     pub(crate) remember_permissions: bool,
     pub(crate) mcp_servers: Vec<McpServerSpec>,
@@ -98,6 +103,8 @@ fn parse_agent_flag_options(
     let mut stream_events = false;
     let mut stream = None;
     let mut tool_sets = Vec::new();
+    let mut tool_choice = None;
+    let mut response_format = None;
     let mut permission_mode = None;
     let mut remember_permissions = None;
     let mut mcp_servers = Vec::new();
@@ -152,6 +159,16 @@ fn parse_agent_flag_options(
             "--tool-set" => {
                 let value = required_value(args, index, "--tool-set")?;
                 tool_sets.push(parse_agent_tool_set(&value)?);
+                index += 2;
+            }
+            "--tool-choice" => {
+                let value = required_value(args, index, "--tool-choice")?;
+                tool_choice = Some(parse_tool_choice(&value)?);
+                index += 2;
+            }
+            "--response-format" => {
+                let value = required_value(args, index, "--response-format")?;
+                response_format = Some(parse_response_format(&value)?);
                 index += 2;
             }
             "--permission-mode" => {
@@ -214,6 +231,22 @@ fn parse_agent_flag_options(
     } else {
         tool_sets
     };
+    // A flag wins; otherwise fall back to a configured default; otherwise leave
+    // unset so the default CLI path forwards nothing to the provider.
+    let tool_choice = match tool_choice {
+        Some(choice) => Some(choice),
+        None => match &defaults.tool_choice {
+            Some(value) => Some(parse_tool_choice(value)?),
+            None => None,
+        },
+    };
+    let response_format = match response_format {
+        Some(format) => Some(format),
+        None => match &defaults.response_format {
+            Some(value) => Some(parse_response_format(value)?),
+            None => None,
+        },
+    };
     let stream = stream.or(defaults.stream).unwrap_or(false);
     let remember_permissions = remember_permissions
         .or(defaults.remember_permissions)
@@ -232,6 +265,8 @@ fn parse_agent_flag_options(
         stream_events,
         stream,
         tool_sets,
+        tool_choice,
+        response_format,
         permission_mode,
         remember_permissions,
         mcp_servers,
@@ -277,6 +312,36 @@ pub(super) fn parse_permission_mode(value: &str) -> CliResult<CliPermissionMode>
     }
 }
 
+/// Parses `--tool-choice <auto|required|none|NAME>`. A bare token that is not one
+/// of the reserved words selects that specific tool by name
+/// ([`ToolChoice::Tool`]).
+pub(super) fn parse_tool_choice(value: &str) -> CliResult<codel00p_harness::ToolChoice> {
+    use codel00p_harness::ToolChoice;
+    let trimmed = value.trim();
+    match trimmed.to_ascii_lowercase().as_str() {
+        "" => Err("empty --tool-choice".to_string()),
+        "auto" => Ok(ToolChoice::Auto),
+        "required" | "any" => Ok(ToolChoice::Required),
+        "none" => Ok(ToolChoice::None),
+        // Any other token is a specific tool name; keep the original casing.
+        _ => Ok(ToolChoice::Tool(trimmed.to_string())),
+    }
+}
+
+/// Parses `--response-format <text|json>`. `json` maps to
+/// [`ResponseFormat::JsonObject`] (JSON mode). The richer
+/// [`ResponseFormat::JsonSchema`] variant takes a name + JSON Schema, which is
+/// awkward to express on the command line, so it stays builder-only.
+pub(super) fn parse_response_format(value: &str) -> CliResult<codel00p_harness::ResponseFormat> {
+    use codel00p_harness::ResponseFormat;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" => Err("empty --response-format".to_string()),
+        "text" => Ok(ResponseFormat::Text),
+        "json" | "json_object" | "json-object" => Ok(ResponseFormat::JsonObject),
+        _ => Err(format!("unknown response format: {value}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,6 +382,90 @@ mod tests {
         // silently widened to editing.
         let options = run_opts(&["look around", "--tool-set", "read"]);
         assert_eq!(options.tool_sets, vec![AgentToolSet::Read]);
+    }
+
+    #[test]
+    fn parse_tool_choice_keywords_and_specific_tool() {
+        use codel00p_harness::ToolChoice;
+        assert_eq!(parse_tool_choice("auto").unwrap(), ToolChoice::Auto);
+        assert_eq!(parse_tool_choice("REQUIRED").unwrap(), ToolChoice::Required);
+        assert_eq!(parse_tool_choice("none").unwrap(), ToolChoice::None);
+        // A bare tool name selects that tool and preserves casing.
+        assert_eq!(
+            parse_tool_choice("read_file").unwrap(),
+            ToolChoice::Tool("read_file".to_string())
+        );
+        assert!(parse_tool_choice("  ").is_err());
+    }
+
+    #[test]
+    fn parse_response_format_text_and_json() {
+        use codel00p_harness::ResponseFormat;
+        assert_eq!(parse_response_format("text").unwrap(), ResponseFormat::Text);
+        assert_eq!(
+            parse_response_format("json").unwrap(),
+            ResponseFormat::JsonObject
+        );
+        assert_eq!(
+            parse_response_format("JSON_OBJECT").unwrap(),
+            ResponseFormat::JsonObject
+        );
+        assert!(parse_response_format("yaml").is_err());
+    }
+
+    #[test]
+    fn default_run_leaves_tool_choice_and_response_format_unset() {
+        // The default CLI path must forward neither knob to the provider.
+        let options = run_opts(&["do something"]);
+        assert!(options.tool_choice.is_none());
+        assert!(options.response_format.is_none());
+    }
+
+    #[test]
+    fn flags_populate_tool_choice_and_response_format() {
+        use codel00p_harness::{ResponseFormat, ToolChoice};
+        let options = run_opts(&[
+            "do something",
+            "--tool-choice",
+            "required",
+            "--response-format",
+            "json",
+        ]);
+        assert_eq!(options.tool_choice, Some(ToolChoice::Required));
+        assert_eq!(options.response_format, Some(ResponseFormat::JsonObject));
+    }
+
+    #[test]
+    fn configured_defaults_apply_for_tool_choice_and_response_format() {
+        use codel00p_harness::{ResponseFormat, ToolChoice};
+        let defaults = AgentSettings {
+            tool_choice: Some("read_file".to_string()),
+            response_format: Some("json".to_string()),
+            ..test_defaults()
+        };
+        let args = vec!["do something".to_string()];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        assert_eq!(
+            options.tool_choice,
+            Some(ToolChoice::Tool("read_file".to_string()))
+        );
+        assert_eq!(options.response_format, Some(ResponseFormat::JsonObject));
+    }
+
+    #[test]
+    fn explicit_flag_overrides_configured_default() {
+        use codel00p_harness::ToolChoice;
+        let defaults = AgentSettings {
+            tool_choice: Some("auto".to_string()),
+            ..test_defaults()
+        };
+        let args = vec![
+            "do something".to_string(),
+            "--tool-choice".to_string(),
+            "required".to_string(),
+        ];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        assert_eq!(options.tool_choice, Some(ToolChoice::Required));
     }
 
     #[test]
