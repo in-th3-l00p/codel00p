@@ -1,8 +1,4 @@
-use std::{
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use codel00p_protocol::PermissionScope;
@@ -11,6 +7,7 @@ use serde_json::{Value, json};
 use crate::{
     background::{BackgroundProcesses, ProcessStatus},
     errors::HarnessError,
+    terminal::{CommandSpec, LocalBackend, OutputLimits, TerminalBackend},
     tool_result::ToolResult,
     tools::{Tool, optional_string, required_string},
     workspace::Workspace,
@@ -20,19 +17,31 @@ const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const MAX_TIMEOUT_MS: u64 = 120_000;
 const DEFAULT_MAX_OUTPUT_BYTES: usize = 16_384;
 const MAX_OUTPUT_BYTES: usize = 131_072;
-const POLL_INTERVAL_MS: u64 = 10;
 
 /// Runs commands inside the workspace. Foreground calls block until the command
 /// exits (or times out); `background: true` spawns the command, returns a
 /// `process_id` immediately, and registers it with the shared
 /// [`BackgroundProcesses`] store the `process_*` tools read from.
+///
+/// Both the foreground run and the background spawn go through the same
+/// [`TerminalBackend`], so swapping the backend swaps where every command runs.
 pub struct RunCommandTool {
     processes: BackgroundProcesses,
+    backend: Arc<dyn TerminalBackend>,
 }
 
 impl RunCommandTool {
+    /// Construct with a process store, defaulting the foreground backend to
+    /// [`LocalBackend`].
     pub fn new(processes: BackgroundProcesses) -> Self {
-        Self { processes }
+        Self::with_backend(processes, Arc::new(LocalBackend::new()))
+    }
+
+    /// Construct with an explicit foreground backend. `processes` carries its own
+    /// backend for the background path; pass the same `Arc` to both for a
+    /// consistent execution target.
+    pub fn with_backend(processes: BackgroundProcesses, backend: Arc<dyn TerminalBackend>) -> Self {
+        Self { processes, backend }
     }
 }
 
@@ -123,68 +132,28 @@ impl Tool for RunCommandTool {
         let max_output_bytes = optional_usize(&input, "max_output_bytes", DEFAULT_MAX_OUTPUT_BYTES)
             .min(MAX_OUTPUT_BYTES);
 
-        let mut child = Command::new(program)
-            .args(&args)
-            .current_dir(&working_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| HarnessError::ToolFailed {
-                name: self.name().to_string(),
-                message: error.to_string(),
-            })?;
-
-        let started = Instant::now();
-        let mut timed_out = false;
-        loop {
-            if child.try_wait()?.is_some() {
-                break;
-            }
-            if started.elapsed() >= timeout {
-                timed_out = true;
-                let _ = child.kill();
-                break;
-            }
-            thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
-        }
-
-        let output = child.wait_with_output()?;
-        let stdout = cap_output(&output.stdout, max_output_bytes);
-        let stderr = cap_output(&output.stderr, max_output_bytes);
-        let exit_code = if timed_out {
-            None
-        } else {
-            output.status.code()
+        let spec = CommandSpec::new(program, args.clone(), working_dir);
+        let limits = OutputLimits {
+            timeout,
+            max_output_bytes,
         };
-        let success = !timed_out && output.status.success();
+        // Run inline, matching the previous foreground path verbatim (it polled
+        // the child on the calling task). The backend abstracts where the command
+        // runs, not the synchronous wait.
+        let outcome = self.backend.run_foreground(&spec, limits)?;
 
         Ok(ToolResult::json(json!({
             "program": program,
             "args": args,
             "cwd": cwd,
-            "exit_code": exit_code,
-            "success": success,
-            "timed_out": timed_out,
-            "stdout": stdout.content,
-            "stderr": stderr.content,
-            "stdout_truncated": stdout.truncated,
-            "stderr_truncated": stderr.truncated,
+            "exit_code": outcome.exit_code,
+            "success": outcome.success,
+            "timed_out": outcome.timed_out,
+            "stdout": outcome.stdout,
+            "stderr": outcome.stderr,
+            "stdout_truncated": outcome.stdout_truncated,
+            "stderr_truncated": outcome.stderr_truncated,
         })))
-    }
-}
-
-struct CappedOutput {
-    content: String,
-    truncated: bool,
-}
-
-fn cap_output(bytes: &[u8], max_bytes: usize) -> CappedOutput {
-    let truncated = bytes.len() > max_bytes;
-    let end = bytes.len().min(max_bytes);
-    CappedOutput {
-        content: String::from_utf8_lossy(&bytes[..end]).to_string(),
-        truncated,
     }
 }
 
@@ -549,5 +518,50 @@ mod tests {
             .unwrap();
         assert_eq!(result.content()["success"], true);
         assert!(result.content()["stdout"].as_str().unwrap().contains("hi"));
+    }
+
+    #[tokio::test]
+    async fn tools_run_through_an_injected_backend() {
+        // Exercise the injection seam: construct the command tools with an
+        // explicitly-provided `Arc<dyn TerminalBackend>` (LocalBackend here) and
+        // confirm both the foreground and background paths use it.
+        let (_dir, ws) = workspace();
+        let backend: Arc<dyn TerminalBackend> = Arc::new(LocalBackend::new());
+        let processes = BackgroundProcesses::with_backend(backend.clone());
+        let run = RunCommandTool::with_backend(processes.clone(), backend);
+        let output = ProcessOutputTool::new(processes);
+
+        // Foreground.
+        let result = run
+            .execute(&ws, json!({ "program": "sh", "args": ["-c", "echo seam"] }))
+            .await
+            .unwrap();
+        assert_eq!(result.content()["success"], true);
+        assert!(
+            result.content()["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("seam")
+        );
+
+        // Background, via the same injected backend.
+        let spawned = run
+            .execute(
+                &ws,
+                json!({
+                    "program": "sh",
+                    "args": ["-c", "printf bg"],
+                    "background": true
+                }),
+            )
+            .await
+            .unwrap();
+        let id = spawned.content()["process_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let final_state = wait_for_exit(&output, &ws, &id).await;
+        assert_eq!(final_state["status"]["state"], "exited");
+        assert!(final_state["stdout"].as_str().unwrap().contains("bg"));
     }
 }

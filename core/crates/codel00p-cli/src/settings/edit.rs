@@ -32,6 +32,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.tool_sets", ValueKind::StrList),
     ("agent.stream", ValueKind::Bool),
     ("agent.remember_permissions", ValueKind::Bool),
+    ("agent.execution_backend", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
 ];
@@ -75,6 +76,7 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.tool_sets" => agent.tool_sets.as_ref().map(|sets| sets.join(",")),
         "agent.stream" => agent.stream.map(|value| value.to_string()),
         "agent.remember_permissions" => agent.remember_permissions.map(|value| value.to_string()),
+        "agent.execution_backend" => agent.execution_backend.clone(),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -244,6 +246,7 @@ pub fn starter_template() -> String {
          # model = \"openai/gpt-4o-mini\"\n\
          # stream = true\n\
          # permission_mode = \"ask\"   # allow | ask | deny\n\
-         # tool_sets = [\"read\"]       # read | edit | command | git | all\n"
+         # tool_sets = [\"read\"]       # read | edit | command | git | all\n\
+         # execution_backend = \"local\"  # where commands run (only `local` today)\n"
     )
 }

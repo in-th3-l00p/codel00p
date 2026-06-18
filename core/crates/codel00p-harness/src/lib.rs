@@ -25,6 +25,7 @@ pub mod repo_map;
 pub mod session;
 pub mod skills;
 pub mod subagent;
+pub mod terminal;
 pub mod tool_registry;
 pub mod tool_result;
 pub mod tools;
@@ -86,6 +87,9 @@ pub use skills::{
     SkillContext, SkillPrompt, SkillPromptAssembler, SkillProvider, SkillSelectionRequest,
 };
 pub use subagent::HarnessSubAgentSpawner;
+pub use terminal::{
+    ChildHandle, CommandOutcome, CommandSpec, LocalBackend, OutputLimits, TerminalBackend,
+};
 pub use tool_registry::{TOOL_DESCRIBE, TOOL_SEARCH, ToolRegistry};
 pub use tool_result::ToolResult;
 pub use tools::{Tool, ToolSpec};

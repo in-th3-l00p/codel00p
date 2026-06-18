@@ -69,6 +69,11 @@ pub struct AgentSettings {
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remember_permissions: Option<bool>,
+    /// Where the agent's commands execute. Only `local` is implemented today
+    /// (the default); this is the selection seam for future isolating backends
+    /// (Docker, SSH, cloud sandboxes) from initiative #7.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_backend: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -144,6 +149,7 @@ impl AgentSettings {
         take(&mut self.fallbacks, other.fallbacks);
         take(&mut self.stream, other.stream);
         take(&mut self.remember_permissions, other.remember_permissions);
+        take(&mut self.execution_backend, other.execution_backend);
     }
 }
 

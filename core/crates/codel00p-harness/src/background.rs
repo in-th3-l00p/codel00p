@@ -15,7 +15,6 @@ use std::{
     collections::BTreeMap,
     io::Read,
     path::Path,
-    process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -23,7 +22,10 @@ use std::{
     thread,
 };
 
-use crate::errors::HarnessError;
+use crate::{
+    errors::HarnessError,
+    terminal::{ChildHandle, CommandSpec, LocalBackend, TerminalBackend},
+};
 
 /// Per-stream buffer cap. Beyond this the oldest output is preserved and new
 /// output is dropped (with a `truncated` flag), so a runaway process cannot
@@ -40,6 +42,11 @@ pub struct BackgroundProcesses {
 struct Inner {
     processes: Mutex<BTreeMap<String, Arc<ProcessEntry>>>,
     next_id: AtomicU64,
+    /// Where commands are actually executed. The store spawns through this
+    /// backend instead of calling `Command::new` itself, so the same background
+    /// machinery (reader threads + `StreamBuffer` + join-before-exited) works
+    /// for any backend.
+    backend: Arc<dyn TerminalBackend>,
 }
 
 impl Default for BackgroundProcesses {
@@ -50,10 +57,17 @@ impl Default for BackgroundProcesses {
 
 impl BackgroundProcesses {
     pub fn new() -> Self {
+        Self::with_backend(Arc::new(LocalBackend::new()))
+    }
+
+    /// Construct a store that spawns through `backend`. `new()` uses
+    /// [`LocalBackend`], preserving today's behavior exactly.
+    pub fn with_backend(backend: Arc<dyn TerminalBackend>) -> Self {
         Self {
             inner: Arc::new(Inner {
                 processes: Mutex::new(BTreeMap::new()),
                 next_id: AtomicU64::new(1),
+                backend,
             }),
         }
     }
@@ -67,20 +81,11 @@ impl BackgroundProcesses {
         working_dir: &Path,
         label: String,
     ) -> Result<String, HarnessError> {
-        let mut child = Command::new(program)
-            .args(args)
-            .current_dir(working_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| HarnessError::ToolFailed {
-                name: "run_command".to_string(),
-                message: error.to_string(),
-            })?;
+        let spec = CommandSpec::new(program, args.to_vec(), working_dir.to_path_buf());
+        let mut child = self.inner.backend.spawn_background(&spec)?;
 
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
+        let stdout = child.take_stdout();
+        let stderr = child.take_stderr();
         let stdout_buffer = Arc::new(Mutex::new(StreamBuffer::default()));
         let stderr_buffer = Arc::new(Mutex::new(StreamBuffer::default()));
 
@@ -179,7 +184,7 @@ struct ProcessEntry {
     label: String,
     stdout: Arc<Mutex<StreamBuffer>>,
     stderr: Arc<Mutex<StreamBuffer>>,
-    child: Mutex<Child>,
+    child: Mutex<Box<dyn ChildHandle>>,
     finished: Mutex<Option<ExitInfo>>,
     readers: Mutex<Vec<thread::JoinHandle<()>>>,
 }
@@ -197,11 +202,11 @@ impl ProcessEntry {
     fn refresh_status(&self) -> ProcessStatus {
         let mut finished = self.finished.lock().expect("finished lock");
         if finished.is_none()
-            && let Ok(Some(status)) = self.child.lock().expect("child lock").try_wait()
+            && let Ok(Some(code)) = self.child.lock().expect("child lock").try_wait()
         {
             self.drain_readers();
             *finished = Some(ExitInfo {
-                code: status.code(),
+                code,
                 killed: false,
             });
         }

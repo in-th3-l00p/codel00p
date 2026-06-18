@@ -16,6 +16,7 @@ use crate::{
     planning::{PlanStore, UpdatePlanTool},
     pr::PreparePrTool,
     repo_map::RepoMapTool,
+    terminal::{LocalBackend, TerminalBackend},
     tool_result::ToolResult,
     tools::{ListFilesTool, ReadFileTool, SearchTextTool, Tool, ToolSpec},
     web::web_tools,
@@ -64,11 +65,19 @@ impl ToolRegistry {
     }
 
     pub fn command_defaults() -> Self {
+        Self::command_defaults_with_backend(Arc::new(LocalBackend::new()))
+    }
+
+    /// Build the command tool set executing through `backend`. The foreground
+    /// (`run_command`) and background (`process_*`) paths share the backend, so
+    /// every command runs against the same target. `command_defaults()` uses
+    /// [`LocalBackend`], preserving today's behavior.
+    pub fn command_defaults_with_backend(backend: Arc<dyn TerminalBackend>) -> Self {
         // All four command tools share one process store so `process_output` /
         // `process_list` / `process_kill` see what `run_command` spawned.
-        let processes = BackgroundProcesses::new();
+        let processes = BackgroundProcesses::with_backend(backend.clone());
         Self::new()
-            .with_tool(RunCommandTool::new(processes.clone()))
+            .with_tool(RunCommandTool::with_backend(processes.clone(), backend))
             .with_tool(ProcessOutputTool::new(processes.clone()))
             .with_tool(ProcessListTool::new(processes.clone()))
             .with_tool(ProcessKillTool::new(processes))
