@@ -159,6 +159,30 @@ fn docker_nested_keys_round_trip() {
 }
 
 #[test]
+fn require_isolation_for_unattended_round_trips_as_bool() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        let path = user_config_path();
+        set_value(&path, "agent.require_isolation_for_unattended", "true")
+            .expect("set isolation policy");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(
+            resolved.agent().require_isolation_for_unattended,
+            Some(true)
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.require_isolation_for_unattended").unwrap(),
+            Some("true".to_string())
+        );
+        assert!(
+            unset_value(&path, "agent.require_isolation_for_unattended").expect("unset policy")
+        );
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.agent().require_isolation_for_unattended.is_none());
+    });
+}
+
+#[test]
 fn set_rejects_unknown_key() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

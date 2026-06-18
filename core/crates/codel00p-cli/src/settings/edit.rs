@@ -39,6 +39,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.docker.cpus", ValueKind::Str),
     ("agent.docker.network", ValueKind::Str),
     ("agent.docker.map_host_user", ValueKind::Bool),
+    ("agent.require_isolation_for_unattended", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
 ];
@@ -89,6 +90,9 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.docker.cpus" => agent.docker.cpus.clone(),
         "agent.docker.network" => agent.docker.network.clone(),
         "agent.docker.map_host_user" => agent.docker.map_host_user.map(|value| value.to_string()),
+        "agent.require_isolation_for_unattended" => agent
+            .require_isolation_for_unattended
+            .map(|value| value.to_string()),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -287,6 +291,7 @@ pub fn starter_template() -> String {
          # permission_mode = \"ask\"   # allow | ask | deny\n\
          # tool_sets = [\"read\"]       # read | edit | command | git | all\n\
          # execution_backend = \"local\"  # local | docker\n\
+         # require_isolation_for_unattended = false  # force docker for unattended shell\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

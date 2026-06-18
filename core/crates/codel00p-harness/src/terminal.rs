@@ -114,6 +114,17 @@ pub trait TerminalBackend: Send + Sync {
     /// Spawn a command without waiting, returning a handle the background store
     /// manages (drains output, polls status, kills).
     fn spawn_background(&self, spec: &CommandSpec) -> Result<Box<dyn ChildHandle>, HarnessError>;
+
+    /// Whether this backend isolates command execution from the host (container,
+    /// VM, remote sandbox) rather than running directly on the local machine.
+    ///
+    /// Governance layers use this to enforce policies such as "unattended or
+    /// gateway-initiated shell must run in an isolating backend." The default is
+    /// `false` (fail-closed: an unknown backend is treated as non-isolating), so
+    /// only a backend that genuinely sandboxes execution should override it.
+    fn is_isolated(&self) -> bool {
+        false
+    }
 }
 
 /// The default backend: runs commands locally, exactly as before the seam

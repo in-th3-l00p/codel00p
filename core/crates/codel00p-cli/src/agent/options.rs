@@ -31,6 +31,11 @@ pub(crate) struct AgentRunOptions {
     /// for a remote chat user's `/approve` decision instead of using the local
     /// CLI permission mode. See [`GatewayApprovalPolicy`].
     pub(crate) gateway_approval: Option<GatewayApproval>,
+    /// True when the turn runs without an interactive operator at the keyboard
+    /// (messaging gateway, scheduled/cron job). Used to enforce the
+    /// `agent.require_isolation_for_unattended` org policy: such a turn may not
+    /// run shell-capable tool sets on a non-isolating execution backend.
+    pub(crate) unattended: bool,
 }
 
 /// Routes a gateway turn's privileged-tool permissions through a remote chat
@@ -294,6 +299,9 @@ fn parse_agent_flag_options(
         mcp_servers,
         fallback_routes,
         gateway_approval: None,
+        // Interactive `agent run`/`chat`/`resume`/`continue` runs with an
+        // operator present; only gateway/cron turns set this.
+        unattended: false,
     })
 }
 

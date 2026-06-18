@@ -70,6 +70,34 @@ fn docker_backend_from_settings(
     Ok(DockerBackend::new(workspace_root, config))
 }
 
+/// Org-policy guard (#7): when `require_isolation` is set, an `unattended` turn
+/// whose tool sets can execute shell commands must run on an isolating backend.
+/// Fail-closed — returns an actionable error otherwise. A no-op for interactive
+/// turns, when the policy is off, when the backend is already isolating, or when
+/// the turn cannot run shell commands.
+fn enforce_unattended_isolation(
+    unattended: bool,
+    require_isolation: bool,
+    tool_sets: &[AgentToolSet],
+    backend_isolated: bool,
+) -> CliResult<()> {
+    if !unattended || !require_isolation || backend_isolated {
+        return Ok(());
+    }
+    let shell_capable = tool_sets
+        .iter()
+        .any(|set| matches!(set, AgentToolSet::Command | AgentToolSet::All));
+    if shell_capable {
+        return Err(
+            "agent.require_isolation_for_unattended is set: this unattended/gateway turn can \
+             execute shell commands but the execution backend does not isolate them. Set \
+             agent.execution_backend = \"docker\" (or disable the policy) to run it."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +121,43 @@ mod tests {
         assert!(error.contains("ssh"));
         assert!(error.contains("`local`"));
         assert!(error.contains("`docker`"));
+    }
+
+    #[test]
+    fn unattended_shell_on_non_isolating_backend_is_refused() {
+        // The policy bites only here: unattended + policy on + shell-capable +
+        // non-isolating backend.
+        let shell = [AgentToolSet::Read, AgentToolSet::Command];
+        let Err(error) = enforce_unattended_isolation(true, true, &shell, false) else {
+            panic!("expected the policy to refuse shell on a non-isolating backend");
+        };
+        assert!(error.contains("require_isolation_for_unattended"));
+        assert!(error.contains("docker"));
+
+        // `all` is shell-capable too.
+        assert!(enforce_unattended_isolation(true, true, &[AgentToolSet::All], false).is_err());
+    }
+
+    #[test]
+    fn isolation_policy_allows_the_safe_cases() {
+        let shell = [AgentToolSet::Command];
+        let readonly = [AgentToolSet::Read, AgentToolSet::Edit];
+        // Isolating backend satisfies the policy.
+        assert!(enforce_unattended_isolation(true, true, &shell, true).is_ok());
+        // Interactive (attended) turns are never gated.
+        assert!(enforce_unattended_isolation(false, true, &shell, false).is_ok());
+        // Policy off ⇒ no gating.
+        assert!(enforce_unattended_isolation(true, false, &shell, false).is_ok());
+        // Unattended but not shell-capable ⇒ nothing to isolate.
+        assert!(enforce_unattended_isolation(true, true, &readonly, false).is_ok());
+    }
+
+    #[test]
+    fn docker_backend_reports_isolated_local_does_not() {
+        use codel00p_harness::TerminalBackend;
+        assert!(!LocalBackend::new().is_isolated());
+        let docker = docker_backend_from_settings(&ws(), &DockerSettings::default()).unwrap();
+        assert!(docker.is_isolated());
     }
 
     #[test]
@@ -314,9 +379,22 @@ pub(crate) async fn build_agent_harness_with(
         .with_tag("agent")
         .with_tag("cli");
 
-    // Resolve where commands execute (Phase 1: always LocalBackend) and route the
-    // command tools through it. Errors here surface an unknown backend config.
+    // Resolve where commands execute (`local` or an isolating `docker` backend)
+    // and route the command tools through it. Errors here surface an unknown
+    // backend config.
     let execution_backend = resolve_execution_backend(&options.workspace)?;
+    // Org policy (#7): an unattended/gateway turn that can run shell commands
+    // must do so on an isolating backend when the policy is enabled. Fail-closed.
+    let require_isolation = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .and_then(|resolved| resolved.merged.agent.require_isolation_for_unattended)
+        .unwrap_or(false);
+    enforce_unattended_isolation(
+        options.unattended,
+        require_isolation,
+        &options.tool_sets,
+        execution_backend.is_isolated(),
+    )?;
     let mut tools = plugins.apply_to_tool_registry(
         build_tool_registry(&options.tool_sets, mcp_servers, execution_backend).await?,
     );

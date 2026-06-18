@@ -72,6 +72,8 @@ pub(crate) fn run_scheduled_job(
         mcp_servers: Vec::new(),
         fallback_routes: resolve_configured_fallback_routes(defaults.fallbacks.as_ref())?,
         gateway_approval: None,
+        // Scheduled/cron job: no operator present.
+        unattended: true,
     };
 
     run_agent_turn(config, options, AgentSessionMode::Fresh)
@@ -215,6 +217,8 @@ fn gateway_turn(
             conversation: conversation.to_string(),
             granted_tool,
         }),
+        // Messaging-gateway turn: driven by a remote chat user, no local operator.
+        unattended: true,
     };
     let reply = run_agent_turn(config, options, mode)?;
 
