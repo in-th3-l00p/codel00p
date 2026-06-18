@@ -27,7 +27,9 @@ use crate::{
     },
     workspace::Workspace,
 };
-use codel00p_protocol::{ContextWindowState, EventId, RuntimeErrorKind, SessionRole};
+use codel00p_protocol::{
+    ContextWindowState, CostEstimate, EventId, RuntimeErrorKind, SessionRole, TokenUsage,
+};
 use serde_json::json;
 
 mod builder;

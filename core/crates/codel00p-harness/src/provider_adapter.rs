@@ -118,6 +118,9 @@ impl ProviderModelClient {
             })
             .collect();
 
+        let usage = response.usage.as_ref().map(map_usage);
+        let cost = response.cost.as_ref().map(map_cost);
+
         HarnessInferenceResponse::from_parts(
             provider,
             model,
@@ -125,6 +128,27 @@ impl ProviderModelClient {
             tool_calls,
             response.finish_reason,
         )
+        .with_usage(usage)
+        .with_cost(cost)
+    }
+}
+
+/// Translate a providers `Usage` record into the protocol-local mirror.
+fn map_usage(usage: &codel00p_providers::Usage) -> codel00p_protocol::TokenUsage {
+    codel00p_protocol::TokenUsage {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_read_tokens: usage.cache_read_tokens,
+        cache_write_tokens: usage.cache_write_tokens,
+        reasoning_tokens: usage.reasoning_tokens,
+    }
+}
+
+/// Translate a providers cost estimate into the protocol-local mirror.
+fn map_cost(cost: &codel00p_providers::UsageCostEstimate) -> codel00p_protocol::CostEstimate {
+    codel00p_protocol::CostEstimate {
+        currency: cost.currency.clone(),
+        total_nanos: cost.total_nanos,
     }
 }
 

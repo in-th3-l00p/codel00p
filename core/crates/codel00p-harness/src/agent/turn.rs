@@ -56,6 +56,13 @@ impl AgentHarness {
 
         let mut executed_tool_calls = Vec::new();
 
+        // Accumulate token usage / cost across every inference in this turn so
+        // the closing `TurnCompleted` can report a turn total. Stays `None`
+        // until at least one inference reports usage, preserving the legacy
+        // (no-usage) shape for providers that don't surface it.
+        let mut turn_usage: Option<TokenUsage> = None;
+        let mut turn_cost: Option<CostEstimate> = None;
+
         let budget = IterationBudget::new(self.max_iterations);
         while budget.consume() {
             let iteration = budget.used();
@@ -69,6 +76,8 @@ impl AgentHarness {
                         executed_tool_calls,
                         events,
                         iteration.saturating_sub(1),
+                        turn_usage,
+                        turn_cost,
                     )
                     .await;
             }
@@ -188,6 +197,20 @@ impl AgentHarness {
                 },
             )
             .await;
+            // Surface per-inference usage/cost on the event, and fold it into
+            // the running turn total emitted later on `TurnCompleted`.
+            let inference_usage = response.usage().cloned();
+            let inference_cost = response.cost().cloned();
+            if let Some(usage) = &inference_usage {
+                turn_usage
+                    .get_or_insert_with(TokenUsage::default)
+                    .add(usage);
+            }
+            if let Some(cost) = &inference_cost {
+                turn_cost
+                    .get_or_insert_with(CostEstimate::default)
+                    .add(cost);
+            }
             self.record_event(
                 &mut events,
                 HarnessEvent::InferenceCompleted {
@@ -195,6 +218,8 @@ impl AgentHarness {
                     session_id: session_state.session_id().clone(),
                     turn_id: turn_id.clone(),
                     finish_reason: response.finish_reason().map(str::to_string),
+                    usage: inference_usage,
+                    cost: inference_cost,
                 },
             )
             .await;
@@ -280,6 +305,8 @@ impl AgentHarness {
                         session_id: session_state.session_id().clone(),
                         turn_id,
                         iterations: iteration,
+                        usage: turn_usage,
+                        cost: turn_cost,
                     },
                 )
                 .await;
@@ -304,6 +331,8 @@ impl AgentHarness {
                         executed_tool_calls,
                         events,
                         iteration,
+                        turn_usage,
+                        turn_cost,
                     )
                     .await;
             }
@@ -563,6 +592,7 @@ impl AgentHarness {
     /// Runs the `turn_completed` hook and emits `TurnCompleted` (so listeners see
     /// the turn end like any other), then returns a `cancelled` outcome carrying
     /// the messages and tool results gathered so far.
+    #[allow(clippy::too_many_arguments)]
     async fn finish_cancelled(
         &self,
         session_state: SessionState,
@@ -570,6 +600,8 @@ impl AgentHarness {
         executed_tool_calls: Vec<ExecutedToolCall>,
         mut events: Vec<HarnessEvent>,
         iterations: u32,
+        usage: Option<TokenUsage>,
+        cost: Option<CostEstimate>,
     ) -> Result<TurnOutcome, HarnessError> {
         self.run_lifecycle_hook(
             "turn_completed",
@@ -588,6 +620,8 @@ impl AgentHarness {
                 session_id: session_state.session_id().clone(),
                 turn_id,
                 iterations,
+                usage,
+                cost,
             },
         )
         .await;

@@ -74,6 +74,15 @@ pub(super) fn run_agent_turn(
             previous_message_count,
         )?;
 
+        // Surface the turn's token usage (and cost when priced) on stderr so it
+        // is visible in normal runs without polluting stdout — which carries the
+        // assistant reply and any `--json-events` NDJSON that scripts parse.
+        if !options.json_events
+            && let Some(summary) = turn_usage_summary(&outcome.events)
+        {
+            eprintln!("{summary}");
+        }
+
         if outcome.cancelled {
             output
                 .push_str("Interrupted — partial progress saved. Resume with `agent continue`.\n");
@@ -81,6 +90,39 @@ pub(super) fn run_agent_turn(
 
         Ok(output)
     })
+}
+
+/// Render a concise one-line token-usage summary from the turn's events.
+///
+/// Returns `None` when the turn produced no usage data (e.g. a provider that
+/// doesn't report it), so callers can stay silent rather than print zeros.
+fn turn_usage_summary(events: &[AgentEvent]) -> Option<String> {
+    let (usage, cost) = events.iter().rev().find_map(|event| match event {
+        AgentEvent::TurnCompleted { usage, cost, .. } if usage.is_some() => {
+            Some((usage.clone(), cost.clone()))
+        }
+        _ => None,
+    })?;
+    let usage = usage?;
+
+    let mut line = format!(
+        "tokens: {} prompt + {} completion = {} total",
+        usage.prompt_tokens(),
+        usage.completion_tokens(),
+        usage.total_tokens(),
+    );
+    if let Some(cost) = cost
+        && cost.total_nanos > 0
+    {
+        // Render nano-currency units as a fixed-point amount (1e9 nanos == 1 unit).
+        let whole = cost.total_nanos / 1_000_000_000;
+        let frac = cost.total_nanos % 1_000_000_000;
+        line.push_str(&format!(
+            " (cost: {whole}.{frac:09} {currency})",
+            currency = cost.currency,
+        ));
+    }
+    Some(line)
 }
 
 /// Builds a fresh `AgentHarness` from the parsed run options. The harness is
