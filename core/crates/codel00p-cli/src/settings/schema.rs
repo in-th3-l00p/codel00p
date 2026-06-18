@@ -69,11 +69,57 @@ pub struct AgentSettings {
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remember_permissions: Option<bool>,
-    /// Where the agent's commands execute. Only `local` is implemented today
-    /// (the default); this is the selection seam for future isolating backends
-    /// (Docker, SSH, cloud sandboxes) from initiative #7.
+    /// Where the agent's commands execute. `local` (the default) runs them in
+    /// the bare workspace; `docker` runs each command in an ephemeral container
+    /// with the workspace bind-mounted (configured via `[agent.docker]`). This
+    /// is the selection seam from initiative #7.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_backend: Option<String>,
+    /// Settings for the Docker execution backend (used when
+    /// `execution_backend = "docker"`).
+    #[serde(skip_serializing_if = "DockerSettings::is_empty")]
+    pub docker: DockerSettings,
+}
+
+/// Configuration for the Docker execution backend. All fields are optional; the
+/// harness applies its own defaults (image `alpine`, mount `/workspace`,
+/// network `none`, map host user on) for anything left unset.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DockerSettings {
+    /// Image to run commands in (e.g. `alpine`, `rust:1`). Defaults to `alpine`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    /// Absolute path inside the container where the workspace is mounted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container_mount: Option<String>,
+    /// `--memory` limit (e.g. `512m`, `2g`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory: Option<String>,
+    /// `--cpus` limit (e.g. `1.5`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpus: Option<String>,
+    /// `--network` mode (e.g. `none`, `bridge`, `host`). Defaults to `none`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
+    /// Run the container as the host uid:gid so workspace files stay host-owned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map_host_user: Option<bool>,
+}
+
+impl DockerSettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.image, other.image);
+        take(&mut self.container_mount, other.container_mount);
+        take(&mut self.memory, other.memory);
+        take(&mut self.cpus, other.cpus);
+        take(&mut self.network, other.network);
+        take(&mut self.map_host_user, other.map_host_user);
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -150,6 +196,7 @@ impl AgentSettings {
         take(&mut self.stream, other.stream);
         take(&mut self.remember_permissions, other.remember_permissions);
         take(&mut self.execution_backend, other.execution_backend);
+        self.docker.merge(other.docker);
     }
 }
 

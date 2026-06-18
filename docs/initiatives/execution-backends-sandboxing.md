@@ -69,8 +69,15 @@ The agent loop and tool contracts stay identical across backends.
 - [ ] Per-project/session backend selection in layered config.
 
 ### Phase 2 — Docker
-- [ ] Docker backend with workspace mount, streamed I/O, resource limits.
+- [x] Docker backend (`DockerBackend`) with workspace bind-mount, streamed I/O,
+      resource limits (`--memory`/`--cpus`), `--network` mode, and host uid:gid
+      mapping so workspace files stay host-owned. Each command runs in its own
+      ephemeral `docker run --rm` container; timeout/kill run `docker kill` so no
+      container is orphaned. Selected via `agent.execution_backend = "docker"`
+      and configured under `[agent.docker]`.
 - [ ] Org policy: require isolation for unattended/gateway shell scopes.
+- [ ] Warm/long-lived session container to amortize per-command spin-up (today
+      each command starts a fresh container — see the Performance risk below).
 
 ### Phase 3 — Remote & ephemeral
 - [ ] SSH remote backend.

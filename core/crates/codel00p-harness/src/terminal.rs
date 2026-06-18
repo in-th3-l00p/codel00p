@@ -28,6 +28,10 @@ use std::{
 
 use crate::errors::HarnessError;
 
+mod docker;
+
+pub use docker::{DockerBackend, DockerConfig};
+
 const POLL_INTERVAL_MS: u64 = 10;
 
 /// A command to execute, expressed in data so any backend can interpret it.

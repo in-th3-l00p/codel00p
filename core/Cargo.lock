@@ -372,6 +372,7 @@ dependencies = [
  "codel00p-providers",
  "futures",
  "httpmock",
+ "libc",
  "regex",
  "reqwest",
  "serde",

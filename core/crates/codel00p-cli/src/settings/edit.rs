@@ -33,6 +33,12 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.stream", ValueKind::Bool),
     ("agent.remember_permissions", ValueKind::Bool),
     ("agent.execution_backend", ValueKind::Str),
+    ("agent.docker.image", ValueKind::Str),
+    ("agent.docker.container_mount", ValueKind::Str),
+    ("agent.docker.memory", ValueKind::Str),
+    ("agent.docker.cpus", ValueKind::Str),
+    ("agent.docker.network", ValueKind::Str),
+    ("agent.docker.map_host_user", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
 ];
@@ -77,6 +83,12 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.stream" => agent.stream.map(|value| value.to_string()),
         "agent.remember_permissions" => agent.remember_permissions.map(|value| value.to_string()),
         "agent.execution_backend" => agent.execution_backend.clone(),
+        "agent.docker.image" => agent.docker.image.clone(),
+        "agent.docker.container_mount" => agent.docker.container_mount.clone(),
+        "agent.docker.memory" => agent.docker.memory.clone(),
+        "agent.docker.cpus" => agent.docker.cpus.clone(),
+        "agent.docker.network" => agent.docker.network.clone(),
+        "agent.docker.map_host_user" => agent.docker.map_host_user.map(|value| value.to_string()),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -127,12 +139,12 @@ fn coerce(kind: ValueKind, raw: &str) -> SettingsResult<Value> {
 /// stamping `config_version`, backing up, and writing atomically.
 pub fn set_value(path: &Path, key: &str, raw: &str) -> SettingsResult<()> {
     let kind = key_kind(key).ok_or_else(|| unknown_key_error(key))?;
-    let (section, field) = key.split_once('.').expect("validated keys contain a dot");
+    let (table_path, field) = key.rsplit_once('.').expect("validated keys contain a dot");
     let value = coerce(kind, raw)?;
 
     let mut doc = read_document(path)?;
     ensure_version(&mut doc);
-    let table = section_table(&mut doc, section)?;
+    let table = nested_table(&mut doc, table_path)?;
     table.insert(field, Item::Value(value));
 
     write_document(path, &doc)
@@ -143,25 +155,40 @@ pub fn unset_value(path: &Path, key: &str) -> SettingsResult<bool> {
     if key_kind(key).is_none() {
         return Err(unknown_key_error(key));
     }
-    let (section, field) = key.split_once('.').expect("validated keys contain a dot");
+    let (table_path, field) = key.rsplit_once('.').expect("validated keys contain a dot");
 
     let mut doc = read_document(path)?;
-    let removed = match doc.get_mut(section).and_then(Item::as_table_mut) {
-        Some(table) => {
-            let removed = table.remove(field).is_some();
-            if table.is_empty() {
-                doc.remove(section);
-            }
-            removed
-        }
-        None => false,
-    };
+    let removed = remove_nested(&mut doc, table_path, field);
 
     if removed {
         ensure_version(&mut doc);
         write_document(path, &doc)?;
     }
     Ok(removed)
+}
+
+/// Remove `field` from the table at the dotted `table_path`, pruning any tables
+/// that become empty along the way (so `agent.docker.image` unset can leave both
+/// `[agent.docker]` and `[agent]` clean if nothing else remains).
+fn remove_nested(doc: &mut DocumentMut, table_path: &str, field: &str) -> bool {
+    let segments: Vec<&str> = table_path.split('.').collect();
+    remove_in(doc.as_table_mut(), &segments, field)
+}
+
+fn remove_in(table: &mut Table, segments: &[&str], field: &str) -> bool {
+    match segments.split_first() {
+        None => table.remove(field).is_some(),
+        Some((head, rest)) => {
+            let Some(child) = table.get_mut(head).and_then(Item::as_table_mut) else {
+                return false;
+            };
+            let removed = remove_in(child, rest, field);
+            if child.is_empty() {
+                table.remove(head);
+            }
+            removed
+        }
+    }
 }
 
 fn ensure_version(doc: &mut DocumentMut) {
@@ -182,13 +209,25 @@ pub fn migrate(path: &Path) -> SettingsResult<u32> {
     Ok(CONFIG_VERSION)
 }
 
-fn section_table<'a>(doc: &'a mut DocumentMut, section: &str) -> SettingsResult<&'a mut Table> {
-    let entry = doc
-        .entry(section)
-        .or_insert(Item::Table(Table::new()))
-        .as_table_mut()
-        .ok_or_else(|| format!("config key `{section}` is not a table"))?;
-    Ok(entry)
+/// Resolve (creating as needed) the table at the dotted `table_path`, e.g.
+/// `agent` or `agent.docker`. Errors if a segment exists but is not a table.
+fn nested_table<'a>(doc: &'a mut DocumentMut, table_path: &str) -> SettingsResult<&'a mut Table> {
+    let mut table = doc.as_table_mut();
+    let mut walked = String::new();
+    for segment in table_path.split('.') {
+        if walked.is_empty() {
+            walked.push_str(segment);
+        } else {
+            walked.push('.');
+            walked.push_str(segment);
+        }
+        table = table
+            .entry(segment)
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| format!("config key `{walked}` is not a table"))?;
+    }
+    Ok(table)
 }
 
 fn write_document(path: &Path, doc: &DocumentMut) -> SettingsResult<()> {
@@ -247,6 +286,14 @@ pub fn starter_template() -> String {
          # stream = true\n\
          # permission_mode = \"ask\"   # allow | ask | deny\n\
          # tool_sets = [\"read\"]       # read | edit | command | git | all\n\
-         # execution_backend = \"local\"  # where commands run (only `local` today)\n"
+         # execution_backend = \"local\"  # local | docker\n\
+         \n\
+         # [agent.docker]               # used when execution_backend = \"docker\"\n\
+         # image = \"alpine\"            # container image commands run in\n\
+         # container_mount = \"/workspace\"  # where the workspace is bind-mounted\n\
+         # network = \"none\"            # none | bridge | host\n\
+         # memory = \"512m\"             # optional --memory limit\n\
+         # cpus = \"1.5\"                # optional --cpus limit\n\
+         # map_host_user = true         # run as host uid:gid so files stay host-owned\n"
     )
 }
