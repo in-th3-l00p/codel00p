@@ -3,44 +3,125 @@
 use super::*;
 
 /// Resolve the configured `agent.execution_backend` to a concrete
-/// [`TerminalBackend`]. Only `local` exists in Phase 1 of initiative #7; the
-/// absent/`local` value yields [`LocalBackend`] (today's behavior) and any other
-/// value is a clear error pointing at the supported set. This is the selection
-/// seam Phase 2's Docker backend slots into without re-plumbing.
+/// [`TerminalBackend`]. `local` (or absent) yields [`LocalBackend`] (today's
+/// behavior); `docker` builds a [`DockerBackend`] from the workspace path plus
+/// the `[agent.docker]` config section; anything else is a clear error.
 fn resolve_execution_backend(workspace: &Path) -> CliResult<Arc<dyn TerminalBackend>> {
-    let configured = crate::settings::load_layered(workspace)
+    let agent = crate::settings::load_layered(workspace)
         .ok()
-        .and_then(|resolved| resolved.merged.agent.execution_backend.clone());
-    backend_from_setting(configured.as_deref())
+        .map(|resolved| resolved.merged.agent)
+        .unwrap_or_default();
+    backend_from_setting(agent.execution_backend.as_deref(), workspace, &agent.docker)
 }
 
-/// Map a resolved `agent.execution_backend` string to a backend. Absent or
-/// `local` yields [`LocalBackend`]; anything else is a clear error. Pure so it
-/// can be unit-tested without touching the layered config or filesystem.
-fn backend_from_setting(value: Option<&str>) -> CliResult<Arc<dyn TerminalBackend>> {
+/// Map a resolved `agent.execution_backend` value to a backend. Absent or
+/// `local` yields [`LocalBackend`]; `docker` builds a [`DockerBackend`] for
+/// `workspace` from `docker` settings; anything else is a clear error. Kept
+/// dependency-light (workspace path + settings, no live config load) so it is
+/// unit-testable.
+fn backend_from_setting(
+    value: Option<&str>,
+    workspace: &Path,
+    docker: &DockerSettings,
+) -> CliResult<Arc<dyn TerminalBackend>> {
     match value {
         None | Some("local") => Ok(Arc::new(LocalBackend::new())),
+        Some("docker") => Ok(Arc::new(docker_backend_from_settings(workspace, docker)?)),
         Some(other) => Err(format!(
-            "unknown agent.execution_backend `{other}`: only `local` is supported"
+            "unknown agent.execution_backend `{other}`: supported values are `local` and `docker`"
         )),
     }
+}
+
+/// Build a [`DockerBackend`] from the `[agent.docker]` settings, applying the
+/// harness defaults for anything unset and resolving the workspace to an
+/// absolute path (Docker bind mounts require absolute host paths).
+fn docker_backend_from_settings(
+    workspace: &Path,
+    docker: &DockerSettings,
+) -> CliResult<DockerBackend> {
+    let workspace_root = std::fs::canonicalize(workspace).map_err(|error| {
+        format!(
+            "docker backend: cannot resolve workspace path {}: {error}",
+            workspace.display()
+        )
+    })?;
+
+    let mut config = DockerConfig::default();
+    if let Some(image) = &docker.image {
+        config.image = image.clone();
+    }
+    if let Some(mount) = &docker.container_mount {
+        config.container_mount = mount.into();
+    }
+    if docker.memory.is_some() {
+        config.memory = docker.memory.clone();
+    }
+    if docker.cpus.is_some() {
+        config.cpus = docker.cpus.clone();
+    }
+    if docker.network.is_some() {
+        config.network = docker.network.clone();
+    }
+    if let Some(map_host_user) = docker.map_host_user {
+        config.map_host_user = map_host_user;
+    }
+
+    Ok(DockerBackend::new(workspace_root, config))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn ws() -> std::path::PathBuf {
+        std::env::temp_dir()
+    }
+
     #[test]
-    fn execution_backend_resolves_local_and_rejects_unknown() {
-        // Absent and explicit `local` both resolve (today's behavior).
-        assert!(backend_from_setting(None).is_ok());
-        assert!(backend_from_setting(Some("local")).is_ok());
-        // Anything else is a clear, actionable error.
-        let Err(error) = backend_from_setting(Some("docker")) else {
+    fn execution_backend_resolves_local_docker_and_rejects_unknown() {
+        let docker = DockerSettings::default();
+        // Absent and explicit `local` both resolve to the local backend.
+        assert!(backend_from_setting(None, &ws(), &docker).is_ok());
+        assert!(backend_from_setting(Some("local"), &ws(), &docker).is_ok());
+        // `docker` is now a valid backend (previously an error in Phase 1).
+        assert!(backend_from_setting(Some("docker"), &ws(), &docker).is_ok());
+        // Anything else is a clear, actionable error naming the supported set.
+        let Err(error) = backend_from_setting(Some("ssh"), &ws(), &docker) else {
             panic!("expected unknown backend to error");
         };
-        assert!(error.contains("docker"));
-        assert!(error.contains("only `local` is supported"));
+        assert!(error.contains("ssh"));
+        assert!(error.contains("`local`"));
+        assert!(error.contains("`docker`"));
+    }
+
+    #[test]
+    fn docker_settings_apply_over_defaults() {
+        let docker = DockerSettings {
+            image: Some("rust:1".into()),
+            container_mount: Some("/src".into()),
+            memory: Some("1g".into()),
+            cpus: Some("2".into()),
+            network: Some("bridge".into()),
+            map_host_user: Some(false),
+        };
+        let backend = docker_backend_from_settings(&ws(), &docker).unwrap();
+        let expected = DockerConfig {
+            image: "rust:1".into(),
+            container_mount: "/src".into(),
+            memory: Some("1g".into()),
+            cpus: Some("2".into()),
+            network: Some("bridge".into()),
+            map_host_user: false,
+            env: Vec::new(),
+        };
+        assert_eq!(backend.config(), &expected);
+    }
+
+    #[test]
+    fn docker_defaults_when_settings_empty() {
+        let backend = docker_backend_from_settings(&ws(), &DockerSettings::default()).unwrap();
+        assert_eq!(backend.config(), &DockerConfig::default());
     }
 }
 
