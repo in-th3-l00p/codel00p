@@ -75,7 +75,11 @@ The agent loop and tool contracts stay identical across backends.
       ephemeral `docker run --rm` container; timeout/kill run `docker kill` so no
       container is orphaned. Selected via `agent.execution_backend = "docker"`
       and configured under `[agent.docker]`.
-- [ ] Org policy: require isolation for unattended/gateway shell scopes.
+- [x] Org policy: require isolation for unattended/gateway shell scopes
+      (`agent.require_isolation_for_unattended`). When set, an unattended
+      (gateway/cron) turn whose tool sets can run shell commands is refused on a
+      non-isolating backend (`TerminalBackend::is_isolated()` — false for local,
+      true for docker). Fail-closed, enforced in `build_agent_harness_with`.
 - [ ] Warm/long-lived session container to amortize per-command spin-up (today
       each command starts a fresh container — see the Performance risk below).
 

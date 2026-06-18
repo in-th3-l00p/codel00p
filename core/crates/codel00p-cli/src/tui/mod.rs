@@ -71,6 +71,7 @@ pub(crate) mod test_support {
             mcp_servers: Vec::new(),
             fallback_routes: Vec::new(),
             gateway_approval: None,
+            unattended: false,
         };
         App::new(
             config,

@@ -79,6 +79,12 @@ pub struct AgentSettings {
     /// `execution_backend = "docker"`).
     #[serde(skip_serializing_if = "DockerSettings::is_empty")]
     pub docker: DockerSettings,
+    /// Org policy: when true, unattended turns (messaging gateway, scheduled
+    /// jobs) that can execute shell commands must run on an isolating execution
+    /// backend (e.g. `docker`). Fail-closed — such a turn is refused on a
+    /// non-isolating backend. Defaults to off (unset). Part of initiative #7.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_isolation_for_unattended: Option<bool>,
 }
 
 /// Configuration for the Docker execution backend. All fields are optional; the
@@ -197,6 +203,10 @@ impl AgentSettings {
         take(&mut self.remember_permissions, other.remember_permissions);
         take(&mut self.execution_backend, other.execution_backend);
         self.docker.merge(other.docker);
+        take(
+            &mut self.require_isolation_for_unattended,
+            other.require_isolation_for_unattended,
+        );
     }
 }
 

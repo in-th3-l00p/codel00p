@@ -273,6 +273,11 @@ impl TerminalBackend for DockerBackend {
             container_name: name,
         }))
     }
+
+    /// Docker runs each command in its own container, isolated from the host.
+    fn is_isolated(&self) -> bool {
+        true
+    }
 }
 
 /// A [`ChildHandle`] backed by a local `docker run` proxy process plus the name
