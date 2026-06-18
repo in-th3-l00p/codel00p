@@ -70,6 +70,7 @@ pub(crate) fn run_scheduled_job(
         permission_mode: CliPermissionMode::Allow,
         remember_permissions: false,
         mcp_servers: Vec::new(),
+        fallback_routes: resolve_configured_fallback_routes(defaults.fallbacks.as_ref())?,
         gateway_approval: None,
     };
 
@@ -208,6 +209,7 @@ fn gateway_turn(
         permission_mode: CliPermissionMode::Allow,
         remember_permissions: false,
         mcp_servers: Vec::new(),
+        fallback_routes: resolve_configured_fallback_routes(defaults.fallbacks.as_ref())?,
         gateway_approval: Some(GatewayApproval {
             store: store.clone(),
             conversation: conversation.to_string(),

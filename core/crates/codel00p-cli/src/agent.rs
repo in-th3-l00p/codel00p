@@ -30,7 +30,7 @@ use codel00p_mcp::{
 use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
 use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
-use codel00p_providers::{ProviderRegistry, default_registry};
+use codel00p_providers::{InferenceFallbackRoute, ProviderRegistry, default_registry};
 use codel00p_session::{SessionMetadata, SessionRecord, SessionStore, SessionStoreError};
 use codel00p_skill::{
     SkillError, SkillProposal, SkillSource, load_skills, propose_skill, record_skill_usage,
@@ -86,7 +86,7 @@ use mcp::{agent_mcp, build_mcp_registry_for_server, parse_mcp_server};
 use memory::{CliMemoryCandidateSink, CliProjectMemoryProvider};
 use options::{
     AgentSessionMode, AgentToolSet, GatewayApproval, parse_agent_chat_options,
-    parse_agent_resume_options, parse_agent_run_options,
+    parse_agent_resume_options, parse_agent_run_options, resolve_configured_fallback_routes,
 };
 use permissions::GatewayApprovalPolicy;
 use plugins::load_plugins;

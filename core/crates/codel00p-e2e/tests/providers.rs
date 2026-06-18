@@ -23,6 +23,16 @@
 //!   Asserted via the model round-trip count (the failed attempt + the retry that
 //!   succeeds) and a successful exit.
 //!
+//! - **Fallback routing between providers** — now reachable. `agent run` accepts a
+//!   repeatable `--fallback <provider:model[@base_url]>` flag (and an
+//!   `agent.fallbacks` config list), parsed into
+//!   `codel00p_providers::InferenceFallbackRoute`s and threaded onto every
+//!   inference request (`ProviderModelClient::with_fallback_routes`). A
+//!   fallback-eligible primary failure (rate limit / overload / model-unavailable)
+//!   transparently retries the fallback. Exercised end-to-end in
+//!   `tests/fallback.rs`; the providers layer that consumes the routes is covered
+//!   in `codel00p-providers/tests/fallback_routing.rs`.
+//!
 //! - **Model catalog / provider listing** — `codel00p config providers list` and
 //!   `codel00p config providers show <id>` read the static built-in provider
 //!   registry (`default_registry()`); they are hermetic (no network, no key) and
@@ -31,22 +41,6 @@
 //!   auto-inject provider/model/base-url flags — they run via `.run([...])` as-is.
 //!
 //! # NOT reachable through the real binary (documented, not faked)
-//!
-//! - **Fallback routing between providers** — fallback is a per-request route chain
-//!   (`InferenceRequest::fallback_route_with_base_url`,
-//!   `codel00p-providers/src/request.rs`) consumed by `InferenceClient::complete`.
-//!   There is **no** CLI flag, config-TOML key, or env var to populate it: a repo
-//!   search for `fallback_route` / `fallback` finds zero call sites in
-//!   `codel00p-cli/src` or `codel00p-harness/src`, and the harness's provider
-//!   adapter builds the request without ever appending a fallback route. So the
-//!   real binary never sets a fallback route and the behavior cannot be triggered
-//!   end-to-end. It is covered at the library layer in
-//!   `codel00p-providers/tests/fallback_routing.rs`
-//!   (`falls_back_when_primary_route_is_rate_limited`,
-//!   `does_not_fallback_for_non_fallbackable_errors`) and
-//!   `codel00p-providers/tests/retry_backoff.rs`
-//!   (`retries_the_same_route_then_falls_back`). The `#[ignore]`d note test below
-//!   records this boundary explicitly.
 //!
 //! - **Usage / cost reporting** — token usage and an estimated cost are parsed and
 //!   attached to the provider response (`Usage` / `UsageCostEstimate` on
@@ -310,26 +304,7 @@ fn usage_is_exposed_in_the_event_stream() {
     );
 }
 
-/// Documented boundary: **provider/model fallback routing is not reachable through
-/// the real binary.** Fallback is a per-request route chain
-/// (`InferenceRequest::fallback_route_with_base_url`) consumed by
-/// `InferenceClient::complete`, but there is no CLI flag, config-TOML key, or env
-/// var that populates it — `codel00p-cli/src` and `codel00p-harness/src` never call
-/// `fallback_route*`, and the harness's provider adapter builds the request without
-/// a fallback route. So the binary always runs with an empty fallback chain and the
-/// behavior cannot be exercised end-to-end.
-///
-/// This is asserted at the library layer instead:
-/// `codel00p-providers/tests/fallback_routing.rs` proves a rate-limited primary
-/// falls back to a healthy secondary and that non-fallbackable errors (e.g. `401`)
-/// do not, and `codel00p-providers/tests/retry_backoff.rs` proves retry-then-
-/// fallback ordering. This test is `#[ignore]`d because there is no hermetic CLI
-/// path to drive; it exists to record the boundary next to the reachable scenarios.
-#[test]
-#[ignore = "fallback routing has no CLI/config/env surface; covered in codel00p-providers/tests/fallback_routing.rs"]
-fn fallback_routing_has_no_cli_surface() {
-    // Intentionally empty. See the doc comment: there is no `agent run` flag,
-    // config key, or environment variable that adds a fallback route to the
-    // inference request the binary builds, so this behavior is not reachable
-    // hermetically through the product and is covered by the providers crate.
-}
+// NOTE: provider/model fallback routing *is* now reachable through the real
+// binary via the `--fallback <provider:model[@base_url]>` flag (and the
+// `agent.fallbacks` config list). The end-to-end coverage that supersedes the
+// former "no CLI surface" boundary lives in `tests/fallback.rs`.
