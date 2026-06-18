@@ -53,6 +53,7 @@ and documented in-file, to be run manually with provider keys and
 | CLI surfaces | `cli_surfaces.rs` | version/help/config/providers/skills/cron(add/list/run)/cloud(status/push/pull vs mock)/update | Hermetic |
 | Permissions | `permissions.rs` | allow/ask/deny modes, remembered decisions, denied-tool events | Hermetic |
 | Nav robustness | `nav_robustness.rs` | regression for the `list_files`/`search_text` ignore-aware + unreadable-dir-tolerant walk (PR #61) | Hermetic |
+| Default tool set | `default_tool_set.rs` | regression: `agent run` with no `--tool-set` advertises the editing tools and can actually create a file | Hermetic |
 
 ### Known gaps (documented, not faked)
 

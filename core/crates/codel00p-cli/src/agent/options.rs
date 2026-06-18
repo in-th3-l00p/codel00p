@@ -199,7 +199,17 @@ fn parse_agent_flag_options(
                 .iter()
                 .map(|value| parse_agent_tool_set(value))
                 .collect::<CliResult<Vec<_>>>()?,
-            None => Vec::new(),
+            // codel00p is a coding agent: an interactive `agent run`/`agent chat`
+            // with no `--tool-set` (and no configured default) must be able to
+            // create, edit, and delete files, not just read them. Without this the
+            // model is never advertised `create_file`/`update_file`/`delete_file`
+            // and falls back to telling the user to write the file themselves.
+            // The read-only navigation tools are always present (see
+            // `build_tool_registry`), so this layers write access on top. Higher-
+            // risk sets (command, git, web) stay opt-in via `--tool-set`; the
+            // restricted unattended paths (gateway/cron) set their own `Read` set
+            // and are unaffected.
+            None => vec![AgentToolSet::Edit],
         }
     } else {
         tool_sets
@@ -264,5 +274,62 @@ pub(super) fn parse_permission_mode(value: &str) -> CliResult<CliPermissionMode>
         "ask" | "prompt" | "interactive" => Ok(CliPermissionMode::Ask),
         "deny" | "denied" => Ok(CliPermissionMode::Deny),
         _ => Err(format!("unknown permission mode: {value}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::AgentSettings;
+
+    fn test_defaults() -> AgentSettings {
+        // A provider/model must resolve for option parsing to succeed; the tool
+        // set is intentionally left unset to exercise the built-in default.
+        AgentSettings {
+            provider: Some("custom".to_string()),
+            model: Some("test-model".to_string()),
+            ..AgentSettings::default()
+        }
+    }
+
+    fn run_opts(args: &[&str]) -> AgentRunOptions {
+        let defaults = test_defaults();
+        let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        parse_agent_run_options(&defaults, &args).expect("parse")
+    }
+
+    #[test]
+    fn default_run_includes_editing_so_files_can_be_written() {
+        // A coding agent with no `--tool-set` and no config default must be able
+        // to create/edit/delete files. Regression: this used to resolve to an
+        // empty tool set, leaving the model with only read-only navigation.
+        let options = run_opts(&["write hello.txt"]);
+        assert!(
+            options.tool_sets.contains(&AgentToolSet::Edit),
+            "default interactive run must advertise the editing tools, got {:?}",
+            options.tool_sets
+        );
+    }
+
+    #[test]
+    fn explicit_tool_set_still_overrides_the_default() {
+        // Passing `--tool-set read` opts back into read-only and must not be
+        // silently widened to editing.
+        let options = run_opts(&["look around", "--tool-set", "read"]);
+        assert_eq!(options.tool_sets, vec![AgentToolSet::Read]);
+    }
+
+    #[test]
+    fn configured_default_tool_sets_take_precedence_over_the_builtin_default() {
+        let defaults = AgentSettings {
+            tool_sets: Some(vec!["read".to_string(), "git".to_string()]),
+            ..test_defaults()
+        };
+        let args = vec!["do something".to_string()];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        assert_eq!(
+            options.tool_sets,
+            vec![AgentToolSet::Read, AgentToolSet::Git]
+        );
     }
 }

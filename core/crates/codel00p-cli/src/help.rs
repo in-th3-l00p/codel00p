@@ -321,7 +321,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
+  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
@@ -344,7 +344,7 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
+  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
@@ -364,7 +364,7 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
+  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
@@ -398,7 +398,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations per turn
-  --tool-set <name>           Enable a tool set: read, edit, command, git, delegate, learn, all
+  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, all (default: read+edit)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --remember-permissions      Persist ask-mode MCP connector decisions
