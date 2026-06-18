@@ -16,6 +16,10 @@
 //! ```sh
 //! CODEL00P_DOCKER_TESTS=1 cargo test -p codel00p-harness --test docker_backend -- --ignored
 //! ```
+//!
+//! Set `CODEL00P_DOCKER_TEST_IMAGE` to run against an image other than `alpine`
+//! (any image with a POSIX `sh`), useful where `alpine` is not pullable but
+//! another small image is already cached.
 
 use std::{
     process::{Command, Stdio},
@@ -63,8 +67,20 @@ fn limits(timeout_ms: u64, max_bytes: usize) -> OutputLimits {
     }
 }
 
+/// The image the live tests run in. Defaults to `alpine`, but can be overridden
+/// with `CODEL00P_DOCKER_TEST_IMAGE` so the suite runs in environments where a
+/// different small image (any with a POSIX `sh`) is already cached and `alpine`
+/// is not pullable.
+fn test_image() -> String {
+    std::env::var("CODEL00P_DOCKER_TEST_IMAGE")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "alpine".to_string())
+}
+
 fn backend(workspace: &std::path::Path) -> DockerBackend {
-    DockerBackend::new(workspace, DockerConfig::new("alpine"))
+    DockerBackend::new(workspace, DockerConfig::new(test_image()))
 }
 
 #[test]
@@ -238,7 +254,7 @@ fn background_spawn_output_then_kill_stops_container() {
 fn file_created_in_container_appears_on_host_with_host_ownership() {
     require_docker!();
     let ws = tempfile::tempdir().unwrap();
-    let backend = DockerBackend::new(ws.path(), DockerConfig::new("alpine"));
+    let backend = DockerBackend::new(ws.path(), DockerConfig::new(test_image()));
     let outcome = backend
         .run_foreground(
             &CommandSpec::new(
