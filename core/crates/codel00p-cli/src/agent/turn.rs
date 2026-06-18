@@ -237,6 +237,14 @@ pub(crate) async fn build_agent_harness_with(
     {
         builder = builder.programmatic_tooling(true);
     }
+    // Forward the CLI tool-choice / response-format knobs onto every turn when
+    // set; left unset, the default CLI path stays unchanged (provider defaults).
+    if let Some(tool_choice) = &options.tool_choice {
+        builder = builder.tool_choice(tool_choice.clone());
+    }
+    if let Some(response_format) = &options.response_format {
+        builder = builder.response_format(response_format.clone());
+    }
     builder = builder.cancel_signal(cancel);
 
     builder.build().map_err(|error| error.to_string())
