@@ -11,10 +11,15 @@
 //!      `codel00p-providers/tests/support`).
 //!
 //! To run them locally (requires Docker running and the `alpine` image
-//! pullable):
+//! pullable). These tests share one Docker daemon and assert on container
+//! presence/absence by name, and the warm-container tests keep a long-lived
+//! container up for the duration of a test — so they MUST run serially
+//! (`--test-threads=1`); running them in parallel makes one test observe
+//! another's still-running container and spuriously fail:
 //!
 //! ```sh
-//! CODEL00P_DOCKER_TESTS=1 cargo test -p codel00p-harness --test docker_backend -- --ignored
+//! CODEL00P_DOCKER_TESTS=1 cargo test -p codel00p-harness --test docker_backend \
+//!     -- --ignored --test-threads=1
 //! ```
 //!
 //! Set `CODEL00P_DOCKER_TEST_IMAGE` to run against an image other than `alpine`
