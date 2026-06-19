@@ -31,6 +31,7 @@ pub struct AgentHarnessBuilder {
     response_format: Option<ResponseFormat>,
     cancel: Option<CancelSignal>,
     programmatic_tooling: bool,
+    code_execution: bool,
     capabilities: Vec<crate::capability::Capability>,
     capability_proposals: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
     capability_extractor: Option<Arc<dyn crate::capability::CapabilityExtractor>>,
@@ -212,6 +213,19 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Adds the `execute_code` tool (SOTA programmatic tool calling): the model
+    /// can run a short sandboxed Rhai script with arbitrary control flow whose
+    /// tool calls are dispatched through this harness's own tool registry and
+    /// permission policy — governed exactly like a direct tool call, and audited
+    /// through the harness event sink per in-script call. Only orchestration moves
+    /// into the script; authority never does. The script calls the tool set as
+    /// configured at build time (minus `execute_code` itself, so scripts do not
+    /// nest), and is bounded in time and operations.
+    pub fn code_execution(mut self, enabled: bool) -> Self {
+        self.code_execution = enabled;
+        self
+    }
+
     /// Register approved synthesized capabilities as callable tools. Each runs
     /// its frozen pipeline through this harness's tool set and permission policy,
     /// so a capability is governed exactly like the direct tool calls it wraps.
@@ -277,6 +291,17 @@ impl AgentHarnessBuilder {
             tools = tools.with_registry(crate::pipeline::pipeline_tools(
                 base.clone(),
                 permission_policy.clone(),
+            ));
+        }
+        // `execute_code` mirrors programmatic_tooling: it dispatches its in-script
+        // tool calls through the same pre-snapshot tool surface and permission
+        // policy, and emits per-call audit events through this harness's event
+        // sink (so each governed in-script call is auditable like a direct call).
+        if self.code_execution {
+            tools = tools.with_registry(crate::code_exec::code_execution_tools(
+                base.clone(),
+                permission_policy.clone(),
+                self.event_sink.clone(),
             ));
         }
         if !self.capabilities.is_empty() {

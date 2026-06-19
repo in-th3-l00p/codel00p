@@ -36,6 +36,10 @@ pub(super) async fn build_tool_registry(
             // Programmatic tooling (`run_pipeline`) needs the permission policy,
             // so it is enabled on the harness builder by `build_agent_harness`.
             AgentToolSet::Pipeline => registry,
+            // Code execution (`execute_code`) needs the permission policy and the
+            // event sink, so it is enabled on the harness builder by
+            // `build_agent_harness`.
+            AgentToolSet::Code => registry,
             AgentToolSet::All => registry
                 .with_registry(ToolRegistry::editing_defaults())
                 .with_registry(ToolRegistry::command_defaults_with_backend(
