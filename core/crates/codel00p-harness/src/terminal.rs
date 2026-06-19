@@ -21,7 +21,7 @@
 
 use std::{
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
@@ -29,8 +29,10 @@ use std::{
 use crate::errors::HarnessError;
 
 mod docker;
+mod local_fs;
 
 pub use docker::{DockerBackend, DockerConfig};
+pub use local_fs::{DirEntry, FileKind};
 
 const POLL_INTERVAL_MS: u64 = 10;
 
@@ -115,6 +117,48 @@ pub trait TerminalBackend: Send + Sync {
     /// manages (drains output, polls status, kills).
     fn spawn_background(&self, spec: &CommandSpec) -> Result<Box<dyn ChildHandle>, HarnessError>;
 
+    // --- Filesystem ops (initiative #7, phase 3) -------------------------
+    //
+    // All paths are WORKSPACE-RELATIVE. The backend roots them at its own
+    // workspace and is responsible for keeping the resolved real path inside
+    // that workspace (the same canonicalize + `starts_with(root)` boundary
+    // `Workspace` historically enforced). The default impls return a clear
+    // error so a backend that does not implement a workspace filesystem (the
+    // fallback) fails loudly rather than touching the host fs; `LocalBackend`
+    // and `DockerBackend` override all of them via the shared local-fs impl.
+
+    /// Read a workspace-relative file's raw bytes.
+    fn read_file(&self, rel: &Path) -> Result<Vec<u8>, HarnessError> {
+        Err(unsupported_fs(rel))
+    }
+
+    /// Write `contents` to a workspace-relative path, creating parent
+    /// directories as needed.
+    fn write_file(&self, rel: &Path, _contents: &[u8]) -> Result<(), HarnessError> {
+        Err(unsupported_fs(rel))
+    }
+
+    /// Delete a workspace-relative file.
+    fn delete_file(&self, rel: &Path) -> Result<(), HarnessError> {
+        Err(unsupported_fs(rel))
+    }
+
+    /// Recursively create a workspace-relative directory.
+    fn create_dir_all(&self, rel: &Path) -> Result<(), HarnessError> {
+        Err(unsupported_fs(rel))
+    }
+
+    /// Report whether a workspace-relative path exists and what it is.
+    fn metadata(&self, rel: &Path) -> Result<FileKind, HarnessError> {
+        Err(unsupported_fs(rel))
+    }
+
+    /// List the immediate entries (name + is_dir) of a workspace-relative
+    /// directory. Wired by the traversal tools in PR2 of initiative #7.
+    fn read_dir(&self, rel: &Path) -> Result<Vec<DirEntry>, HarnessError> {
+        Err(unsupported_fs(rel))
+    }
+
     /// Whether this backend isolates command execution from the host (container,
     /// VM, remote sandbox) rather than running directly on the local machine.
     ///
@@ -127,18 +171,90 @@ pub trait TerminalBackend: Send + Sync {
     }
 }
 
+/// Error returned by the default (no-op) filesystem trait methods so an
+/// fs-incapable backend fails loudly instead of silently touching the host.
+fn unsupported_fs(rel: &Path) -> HarnessError {
+    HarnessError::ToolFailed {
+        name: "workspace".to_string(),
+        message: format!(
+            "this execution backend does not support workspace filesystem access ({})",
+            rel.display()
+        ),
+    }
+}
+
 /// The default backend: runs commands locally, exactly as before the seam
-/// existed. Stateless and cheap to clone behind an `Arc`.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct LocalBackend;
+/// existed. Cheap to clone behind an `Arc`.
+///
+/// Command execution is stateless (cwd is an absolute path in [`CommandSpec`]),
+/// but the workspace filesystem ops need to know where the workspace lives, so
+/// the backend optionally carries the workspace root. Construct with
+/// [`LocalBackend::rooted`] to enable fs ops; [`LocalBackend::new`] keeps the
+/// historical stateless behavior for command-only call sites (the fs ops then
+/// error like any fs-incapable backend).
+#[derive(Clone, Debug, Default)]
+pub struct LocalBackend {
+    /// Absolute workspace root for filesystem ops, if this backend is rooted.
+    workspace_root: Option<PathBuf>,
+}
 
 impl LocalBackend {
+    /// A stateless local backend for command execution only. Filesystem ops on
+    /// it return an "unsupported" error (no root to bound them); use
+    /// [`LocalBackend::rooted`] when the backend also serves workspace fs ops.
     pub fn new() -> Self {
-        Self
+        Self {
+            workspace_root: None,
+        }
+    }
+
+    /// A local backend whose filesystem ops are rooted at (and bounded to)
+    /// `workspace_root`, which must be an absolute, canonicalized host path.
+    pub fn rooted(workspace_root: impl Into<PathBuf>) -> Self {
+        Self {
+            workspace_root: Some(workspace_root.into()),
+        }
+    }
+
+    /// The workspace root this backend's fs ops are bounded to, if any.
+    pub fn workspace_root(&self) -> Option<&Path> {
+        self.workspace_root.as_deref()
+    }
+
+    /// The workspace root, or an "unsupported" error if this backend is not
+    /// rooted (constructed via [`LocalBackend::new`]).
+    fn root_for(&self, rel: &Path) -> Result<&Path, HarnessError> {
+        self.workspace_root
+            .as_deref()
+            .ok_or_else(|| unsupported_fs(rel))
     }
 }
 
 impl TerminalBackend for LocalBackend {
+    fn read_file(&self, rel: &Path) -> Result<Vec<u8>, HarnessError> {
+        local_fs::read_file(self.root_for(rel)?, rel)
+    }
+
+    fn write_file(&self, rel: &Path, contents: &[u8]) -> Result<(), HarnessError> {
+        local_fs::write_file(self.root_for(rel)?, rel, contents)
+    }
+
+    fn delete_file(&self, rel: &Path) -> Result<(), HarnessError> {
+        local_fs::delete_file(self.root_for(rel)?, rel)
+    }
+
+    fn create_dir_all(&self, rel: &Path) -> Result<(), HarnessError> {
+        local_fs::create_dir_all(self.root_for(rel)?, rel)
+    }
+
+    fn metadata(&self, rel: &Path) -> Result<FileKind, HarnessError> {
+        local_fs::metadata(self.root_for(rel)?, rel)
+    }
+
+    fn read_dir(&self, rel: &Path) -> Result<Vec<DirEntry>, HarnessError> {
+        local_fs::read_dir(self.root_for(rel)?, rel)
+    }
+
     fn run_foreground(
         &self,
         spec: &CommandSpec,
@@ -331,6 +447,174 @@ mod tests {
             .unwrap();
         assert_eq!(outcome.stdout, "aaaa");
         assert!(outcome.stdout_truncated);
+    }
+
+    // --- Filesystem op tests (initiative #7, phase 3) -------------------
+
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn fs_read_write_delete_round_trip() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let backend = LocalBackend::rooted(root.clone());
+
+        backend
+            .write_file(Path::new("a/b.txt"), b"hello")
+            .expect("write creates parents");
+        assert!(root.join("a/b.txt").is_file());
+
+        let bytes = backend.read_file(Path::new("a/b.txt")).unwrap();
+        assert_eq!(bytes, b"hello");
+
+        let meta = backend.metadata(Path::new("a/b.txt")).unwrap();
+        assert!(meta.exists && meta.is_file && !meta.is_dir);
+
+        backend.delete_file(Path::new("a/b.txt")).unwrap();
+        assert!(!root.join("a/b.txt").exists());
+
+        let meta = backend.metadata(Path::new("a/b.txt")).unwrap();
+        assert_eq!(meta, FileKind::MISSING);
+    }
+
+    #[test]
+    fn fs_create_dir_all_and_read_dir() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let backend = LocalBackend::rooted(root.clone());
+
+        backend.create_dir_all(Path::new("nested/inner")).unwrap();
+        assert!(root.join("nested/inner").is_dir());
+        backend
+            .write_file(Path::new("nested/file.txt"), b"x")
+            .unwrap();
+
+        let mut entries = backend.read_dir(Path::new("nested")).unwrap();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries[0],
+            DirEntry {
+                name: "file.txt".into(),
+                is_dir: false
+            }
+        );
+        assert_eq!(
+            entries[1],
+            DirEntry {
+                name: "inner".into(),
+                is_dir: true
+            }
+        );
+
+        let meta = backend.metadata(Path::new("nested")).unwrap();
+        assert!(meta.is_dir && !meta.is_file);
+    }
+
+    #[test]
+    fn fs_rejects_parent_dir_traversal() {
+        let dir = tempdir().unwrap();
+        let backend = LocalBackend::rooted(dir.path().canonicalize().unwrap());
+
+        assert!(matches!(
+            backend.read_file(Path::new("../outside.txt")),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+        assert!(matches!(
+            backend.write_file(Path::new("../outside.txt"), b"x"),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+        assert!(matches!(
+            backend.create_dir_all(Path::new("../evil")),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+    }
+
+    #[test]
+    fn fs_rejects_absolute_paths_for_writes() {
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let backend = LocalBackend::rooted(dir.path().canonicalize().unwrap());
+
+        let abs = outside.path().join("secret.txt");
+        assert!(matches!(
+            backend.write_file(&abs, b"x"),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+        assert!(matches!(
+            backend.create_dir_all(&abs),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+    }
+
+    #[test]
+    fn fs_rejects_absolute_path_reads_outside_workspace() {
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let outside_file = outside.path().join("secret.txt");
+        fs::write(&outside_file, "secret").unwrap();
+        let backend = LocalBackend::rooted(dir.path().canonicalize().unwrap());
+
+        // An absolute path that canonicalizes outside the root is rejected
+        // (same as the historical `Workspace::resolve`).
+        assert!(matches!(
+            backend.read_file(&outside_file),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+    }
+
+    /// The canonicalize-based escape protection: a symlink that lives inside the
+    /// workspace but points outside it must be rejected on read AND on delete,
+    /// proving symlink-escape protection survived the refactor.
+    #[cfg(unix)]
+    #[test]
+    fn fs_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let outside_file = outside.path().join("secret.txt");
+        fs::write(&outside_file, "secret").unwrap();
+
+        // A symlink inside the workspace pointing at a file outside it.
+        let link = root.join("escape");
+        symlink(&outside_file, &link).unwrap();
+
+        let backend = LocalBackend::rooted(root.clone());
+
+        // Reading through the symlink resolves (canonicalize) to outside the
+        // workspace and is rejected.
+        assert!(matches!(
+            backend.read_file(Path::new("escape")),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+        // Deleting through the symlink is likewise rejected.
+        assert!(matches!(
+            backend.delete_file(Path::new("escape")),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+        // The outside file is untouched.
+        assert_eq!(fs::read_to_string(&outside_file).unwrap(), "secret");
+
+        // A symlinked *directory* escape: writing a file "through" it must also
+        // be rejected (nearest-existing-parent canonicalizes outside the root).
+        let outside_dir = tempdir().unwrap();
+        let dir_link = root.join("dirlink");
+        symlink(outside_dir.path(), &dir_link).unwrap();
+        assert!(matches!(
+            backend.write_file(Path::new("dirlink/new.txt"), b"x"),
+            Err(HarnessError::WorkspaceEscape { .. })
+        ));
+        assert!(!outside_dir.path().join("new.txt").exists());
+    }
+
+    #[test]
+    fn unrooted_local_backend_fs_ops_error() {
+        let backend = LocalBackend::new();
+        assert!(backend.read_file(Path::new("x.txt")).is_err());
+        assert!(backend.write_file(Path::new("x.txt"), b"x").is_err());
     }
 
     #[test]

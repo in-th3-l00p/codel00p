@@ -45,8 +45,8 @@ use std::{
 use crate::errors::HarnessError;
 
 use super::{
-    CappedOutput, ChildHandle, CommandOutcome, CommandSpec, OutputLimits, POLL_INTERVAL_MS,
-    TerminalBackend, cap_output,
+    CappedOutput, ChildHandle, CommandOutcome, CommandSpec, DirEntry, FileKind, OutputLimits,
+    POLL_INTERVAL_MS, TerminalBackend, cap_output, local_fs,
 };
 
 /// The tool name reported in [`HarnessError::ToolFailed`] from this backend.
@@ -197,6 +197,35 @@ impl DockerBackend {
 }
 
 impl TerminalBackend for DockerBackend {
+    // Filesystem ops: the workspace is bind-mounted from the host, so the bytes
+    // on disk live at the host `workspace_root`. The fs ops are therefore the
+    // same workspace-bounded local fs as `LocalBackend`, sharing one impl and
+    // one security boundary.
+
+    fn read_file(&self, rel: &Path) -> Result<Vec<u8>, HarnessError> {
+        local_fs::read_file(&self.workspace_root, rel)
+    }
+
+    fn write_file(&self, rel: &Path, contents: &[u8]) -> Result<(), HarnessError> {
+        local_fs::write_file(&self.workspace_root, rel, contents)
+    }
+
+    fn delete_file(&self, rel: &Path) -> Result<(), HarnessError> {
+        local_fs::delete_file(&self.workspace_root, rel)
+    }
+
+    fn create_dir_all(&self, rel: &Path) -> Result<(), HarnessError> {
+        local_fs::create_dir_all(&self.workspace_root, rel)
+    }
+
+    fn metadata(&self, rel: &Path) -> Result<FileKind, HarnessError> {
+        local_fs::metadata(&self.workspace_root, rel)
+    }
+
+    fn read_dir(&self, rel: &Path) -> Result<Vec<DirEntry>, HarnessError> {
+        local_fs::read_dir(&self.workspace_root, rel)
+    }
+
     fn run_foreground(
         &self,
         spec: &CommandSpec,
