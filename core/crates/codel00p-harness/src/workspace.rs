@@ -228,6 +228,27 @@ impl Workspace {
         reject_unsafe_components(path)?;
         self.backend.metadata(path)
     }
+
+    /// Recursively walk a workspace directory (or file) `path`, invoking `visit`
+    /// with each file's path relative to the workspace root (`/`-normalized).
+    ///
+    /// Does the lexical pre-checks here (reject `..` / empty components) and
+    /// delegates the traversal — and its on-disk boundary enforcement — to the
+    /// backend, so traversal flows through the configured execution backend just
+    /// like the single-path I/O does. Skips the default build/VCS directories
+    /// unless `include_ignored`, is resilient to unreadable nested directories,
+    /// and hard-errors only if `path` itself is unreadable (the backend's `walk`
+    /// contract).
+    pub fn walk(
+        &self,
+        path: impl AsRef<Path>,
+        include_ignored: bool,
+        visit: &mut dyn FnMut(&str),
+    ) -> Result<(), HarnessError> {
+        let path = path.as_ref();
+        reject_unsafe_components(path)?;
+        self.backend.walk(path, include_ignored, visit)
+    }
 }
 
 /// Canonicalize and validate a workspace root: it must exist and be a directory.

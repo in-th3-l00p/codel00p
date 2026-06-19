@@ -1,12 +1,8 @@
-use std::fs;
-
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{
-    errors::HarnessError, tool_result::ToolResult, walk::walk_files, workspace::Workspace,
-};
+use crate::{errors::HarnessError, tool_result::ToolResult, workspace::Workspace};
 use codel00p_protocol::PermissionScope;
 
 const MAX_LISTED_FILES: usize = 1_000;
@@ -103,13 +99,13 @@ impl Tool for ListFilesTool {
         input: Value,
     ) -> Result<ToolResult, HarnessError> {
         let path = optional_string(&input, "path").unwrap_or(".");
-        let root = workspace.resolve(path)?;
         let mut files = Vec::new();
 
         // Ignore-aware and resilient: skips build/VCS sinks (`.git`, `target`,
         // `node_modules`, …) and tolerates unreadable nested directories instead
-        // of aborting the whole listing.
-        walk_files(workspace.root(), &root, false, &mut |relative| {
+        // of aborting the whole listing. Routed through the workspace facade so
+        // the configured execution backend performs the traversal.
+        workspace.walk(path, false, &mut |relative| {
             files.push(relative.to_string());
         })?;
         files.sort();
@@ -235,12 +231,11 @@ impl Tool for SearchTextTool {
         let path = optional_string(&input, "path").unwrap_or(".");
         let offset = optional_u64(&input, "offset");
         let limit = optional_u64(&input, "limit");
-        let root = workspace.resolve(path)?;
         let mut files = Vec::new();
         // Ignore-aware and resilient: skips build/VCS sinks (`.git`, `target`,
         // `node_modules`, …) and tolerates unreadable nested directories instead
-        // of aborting the whole search.
-        walk_files(workspace.root(), &root, false, &mut |relative| {
+        // of aborting the whole search. Routed through the workspace facade.
+        workspace.walk(path, false, &mut |relative| {
             files.push(relative.to_string());
         })?;
         files.sort();
@@ -257,8 +252,7 @@ impl Tool for SearchTextTool {
 
         let mut all = Vec::new();
         'outer: for relative in files {
-            let absolute = workspace.resolve(&relative)?;
-            let Ok(content) = fs::read_to_string(absolute) else {
+            let Ok(content) = workspace.read_utf8(&relative) else {
                 continue;
             };
             for (index, line) in content.lines().enumerate() {
@@ -311,6 +305,8 @@ pub(crate) fn optional_string<'a>(input: &'a Value, key: &str) -> Option<&'a str
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     fn workspace_with(files: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {

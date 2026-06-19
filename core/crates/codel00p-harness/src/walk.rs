@@ -1,9 +1,16 @@
 //! Shared workspace-walking helpers used by the file-navigation tools
-//! (`find_files`, `grep`) and the repo map. Walks skip the usual
-//! build/dependency/VCS sinks by default so tools are not flooded with
-//! generated or vendored files.
+//! (`find_files`, `grep`) and the repo map.
+//!
+//! The traversal itself now lives behind the execution backend: directory walks
+//! go through [`Workspace::walk`](crate::workspace::Workspace::walk), which
+//! delegates to the configured [`TerminalBackend`](crate::terminal::TerminalBackend)
+//! so a remote backend can walk a remote workspace. The local/Docker backends
+//! use the efficient absolute-path walk in
+//! [`local_fs::walk`](crate::terminal::local_fs::walk). This module keeps the
+//! traversal *policy* shared between those code paths — the default ignored-dir
+//! set, the file-count ceiling, and `/`-normalization — plus the glob matcher.
 
-use std::{fs, path::Path};
+use std::path::Path;
 
 use regex::Regex;
 
@@ -37,111 +44,6 @@ pub(crate) const DEFAULT_IGNORED_DIRS: &[&str] = &[
 /// Hard ceiling on files visited during a single walk, so a pathological tree
 /// cannot hang a tool call.
 pub(crate) const MAX_FILES_WALKED: usize = 100_000;
-
-/// Recursively visit every file under `current`, invoking `visit` with each
-/// file's path relative to `root` (normalized with `/` separators). Skips the
-/// default build/VCS directories unless `include_ignored` is set, and bails out
-/// after [`MAX_FILES_WALKED`] files as a runaway guard.
-///
-/// The walk is resilient to read errors in nested subdirectories: if a
-/// directory cannot be listed (e.g. an `EACCES`/`EPERM` permission error from a
-/// macOS TCC-protected directory) or an individual entry's metadata cannot be
-/// read, that directory/entry is skipped and the walk continues rather than
-/// aborting. Only a failure to read the top-level `current` path is surfaced as
-/// an error, since that is the caller's explicitly requested root.
-pub(crate) fn walk_files(
-    root: &Path,
-    current: &Path,
-    include_ignored: bool,
-    visit: &mut dyn FnMut(&str),
-) -> Result<(), HarnessError> {
-    let mut state = WalkState {
-        visited: 0,
-        skipped_unreadable: 0,
-    };
-
-    if current.is_file() {
-        if let Ok(relative) = current.strip_prefix(root) {
-            visit(&normalize_path(relative));
-        }
-        return Ok(());
-    }
-
-    // The root directory must be readable: a failure here is a legitimate hard
-    // error (the caller asked for exactly this path). Failures deeper in the
-    // tree are tolerated by `walk_dir_resilient`.
-    let entries = fs::read_dir(current)?;
-    walk_entries(root, entries, include_ignored, &mut state, visit);
-    Ok(())
-}
-
-/// Mutable bookkeeping threaded through the recursive walk.
-struct WalkState {
-    visited: usize,
-    /// Count of nested directories/entries skipped because they could not be
-    /// read. Tracked so callers *could* surface it later without a breaking
-    /// change to the `visit` signature; not currently exposed.
-    #[allow(dead_code)]
-    skipped_unreadable: usize,
-}
-
-/// Recursively walk a nested directory, tolerating read errors by skipping the
-/// offending directory or entry and continuing.
-fn walk_dir_resilient(
-    root: &Path,
-    current: &Path,
-    include_ignored: bool,
-    state: &mut WalkState,
-    visit: &mut dyn FnMut(&str),
-) {
-    match fs::read_dir(current) {
-        Ok(entries) => walk_entries(root, entries, include_ignored, state, visit),
-        Err(_) => {
-            // Unreadable nested directory (e.g. EACCES/EPERM). Skip it and
-            // continue the walk instead of aborting the whole listing.
-            state.skipped_unreadable += 1;
-        }
-    }
-}
-
-/// Drain a `ReadDir` iterator, recursing into subdirectories and visiting files.
-/// Individual entry errors are tolerated and skipped.
-fn walk_entries(
-    root: &Path,
-    entries: fs::ReadDir,
-    include_ignored: bool,
-    state: &mut WalkState,
-    visit: &mut dyn FnMut(&str),
-) {
-    for entry in entries {
-        if state.visited >= MAX_FILES_WALKED {
-            return;
-        }
-        let Ok(entry) = entry else {
-            // The entry's metadata could not be read; skip it and continue.
-            state.skipped_unreadable += 1;
-            continue;
-        };
-        let path = entry.path();
-
-        if path.is_dir() {
-            if !include_ignored
-                && path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| DEFAULT_IGNORED_DIRS.contains(&name))
-            {
-                continue;
-            }
-            walk_dir_resilient(root, &path, include_ignored, state, visit);
-        } else if path.is_file()
-            && let Ok(relative) = path.strip_prefix(root)
-        {
-            visit(&normalize_path(relative));
-            state.visited += 1;
-        }
-    }
-}
 
 pub(crate) fn normalize_path(path: &Path) -> String {
     path.components()
@@ -243,61 +145,5 @@ mod tests {
         let matcher = GlobMatcher::compile("find_files", "*.rs").unwrap();
         assert!(matcher.is_match("deep/nested/lib.rs"));
         assert!(!matcher.is_match("deep/nested/lib.py"));
-    }
-
-    /// A nested unreadable directory must be skipped, not abort the walk.
-    #[cfg(unix)]
-    #[test]
-    fn walk_files_skips_unreadable_nested_dir() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("top.txt"), "x").unwrap();
-        let locked = dir.path().join("locked");
-        fs::create_dir(&locked).unwrap();
-        fs::write(locked.join("inner.txt"), "y").unwrap();
-
-        struct Restore(std::path::PathBuf);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
-            }
-        }
-        let _restore = Restore(locked.clone());
-        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
-
-        let mut seen = Vec::new();
-        walk_files(dir.path(), dir.path(), false, &mut |r| {
-            seen.push(r.to_string())
-        })
-        .expect("walk must tolerate an unreadable nested dir");
-
-        assert!(seen.iter().any(|s| s == "top.txt"), "got {seen:?}");
-    }
-
-    /// An unreadable ROOT path is a legitimate hard error and must surface.
-    #[cfg(unix)]
-    #[test]
-    fn walk_files_errors_on_unreadable_root() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("root");
-        fs::create_dir(&root).unwrap();
-
-        struct Restore(std::path::PathBuf);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
-            }
-        }
-        let _restore = Restore(root.clone());
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o000)).unwrap();
-
-        let result = walk_files(&root, &root, false, &mut |_| {});
-        assert!(
-            result.is_err(),
-            "an unreadable root must surface as a hard error"
-        );
     }
 }

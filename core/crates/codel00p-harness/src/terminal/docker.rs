@@ -226,6 +226,18 @@ impl TerminalBackend for DockerBackend {
         local_fs::read_dir(&self.workspace_root, rel)
     }
 
+    /// Override the default walk with the efficient absolute-path local walk:
+    /// the workspace is bind-mounted from the host, so traversal reads the host
+    /// bytes directly, identical to [`LocalBackend`](super::LocalBackend).
+    fn walk(
+        &self,
+        rel: &Path,
+        include_ignored: bool,
+        visit: &mut dyn FnMut(&str),
+    ) -> Result<(), HarnessError> {
+        local_fs::walk_rel(&self.workspace_root, rel, include_ignored, visit)
+    }
+
     fn run_foreground(
         &self,
         spec: &CommandSpec,

@@ -13,7 +13,7 @@
 //! symbols' scores. It is deterministic and good enough to point the model at
 //! the right files fast; for exact navigation it pairs with `grep` / `read_file`.
 
-use std::{collections::HashMap, fs, sync::OnceLock};
+use std::{collections::HashMap, sync::OnceLock};
 
 use async_trait::async_trait;
 use codel00p_protocol::PermissionScope;
@@ -24,7 +24,7 @@ use crate::{
     errors::HarnessError,
     tool_result::ToolResult,
     tools::{Tool, optional_string},
-    walk::{GlobMatcher, walk_files},
+    walk::GlobMatcher,
     workspace::Workspace,
 };
 
@@ -102,9 +102,8 @@ impl Tool for RepoMapTool {
             None => None,
         };
 
-        let root = workspace.resolve(path)?;
         let mut relatives = Vec::new();
-        walk_files(workspace.root(), &root, include_ignored, &mut |relative| {
+        workspace.walk(path, include_ignored, &mut |relative| {
             if glob.as_ref().is_none_or(|g| g.is_match(relative))
                 && language_for(relative).is_some()
             {
@@ -121,14 +120,23 @@ impl Tool for RepoMapTool {
         let mut symbols_found = 0usize;
 
         for relative in &relatives {
-            let absolute = workspace.resolve(relative)?;
-            if fs::metadata(&absolute)
-                .map(|meta| meta.len() > MAX_SOURCE_FILE_BYTES)
-                .unwrap_or(true)
-            {
+            // Stat through the facade first and skip oversized files WITHOUT
+            // reading them, so a pathological large file cannot be slurped into
+            // memory. Unreadable/missing files are skipped, matching historical
+            // behavior.
+            let Ok(meta) = workspace.metadata(relative) else {
+                continue;
+            };
+            if meta.size > MAX_SOURCE_FILE_BYTES {
                 continue;
             }
-            let Ok(content) = fs::read_to_string(&absolute) else {
+            // Read through the workspace facade so a remote backend reads remote
+            // files. Unreadable or non-UTF-8 files are skipped (assumed
+            // generated/minified), matching the historical behavior.
+            let Ok(bytes) = workspace.read_bytes(relative) else {
+                continue;
+            };
+            let Ok(content) = String::from_utf8(bytes) else {
                 continue;
             };
             files_scanned += 1;
@@ -447,6 +455,8 @@ fn build_languages() -> Languages {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     fn workspace_with(files: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
@@ -549,6 +559,26 @@ mod tests {
             ("README.md", "# not code\n"),
             ("target/gen.rs", "fn generated() {}\n"),
         ]);
+        let map = run(&ws, json!({}));
+        let paths: Vec<&str> = map["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths, vec!["src/main.rs"]);
+        assert_eq!(map["files_scanned"], 1);
+    }
+
+    #[test]
+    fn skips_oversized_source_files_via_size_stat() {
+        // An oversized source file is skipped by the metadata size-gate without
+        // being read into memory; only the in-limit file is scanned.
+        let (dir, ws) = workspace_with(&[("src/main.rs", "fn main() {}\n")]);
+        let mut big = vec![b'x'; (MAX_SOURCE_FILE_BYTES + 16) as usize];
+        big[..13].copy_from_slice(b"fn huge() {}\n");
+        fs::write(dir.path().join("src/big.rs"), &big).unwrap();
+
         let map = run(&ws, json!({}));
         let paths: Vec<&str> = map["files"]
             .as_array()

@@ -10,8 +10,6 @@
 //! tools with the two capabilities a coding agent leans on most: finding files
 //! by name/glob and searching contents by regex with surrounding context.
 
-use std::fs;
-
 use async_trait::async_trait;
 use codel00p_protocol::PermissionScope;
 use regex::RegexBuilder;
@@ -21,7 +19,7 @@ use crate::{
     errors::HarnessError,
     tool_result::ToolResult,
     tools::{Tool, optional_string, required_string},
-    walk::{GlobMatcher, walk_files},
+    walk::GlobMatcher,
     workspace::Workspace,
 };
 
@@ -88,11 +86,10 @@ impl Tool for FindFilesTool {
             .unwrap_or(DEFAULT_FIND_LIMIT)
             .clamp(1, MAX_FIND_LIMIT);
 
-        let root = workspace.resolve(path)?;
         let matcher = GlobMatcher::compile(self.name(), pattern)?;
 
         let mut files = Vec::new();
-        walk_files(workspace.root(), &root, include_ignored, &mut |relative| {
+        workspace.walk(path, include_ignored, &mut |relative| {
             files.push(relative.to_string())
         })?;
         files.sort();
@@ -187,9 +184,8 @@ impl Tool for GrepTool {
             None => None,
         };
 
-        let root = workspace.resolve(path)?;
         let mut files = Vec::new();
-        walk_files(workspace.root(), &root, include_ignored, &mut |relative| {
+        workspace.walk(path, include_ignored, &mut |relative| {
             if glob.as_ref().is_none_or(|g| g.is_match(relative)) {
                 files.push(relative.to_string());
             }
@@ -202,14 +198,23 @@ impl Tool for GrepTool {
         let mut all = Vec::new();
         let mut files_with_matches = 0usize;
         'outer: for relative in &files {
-            let absolute = workspace.resolve(relative)?;
-            if fs::metadata(&absolute)
-                .map(|meta| meta.len() > MAX_GREP_FILE_BYTES)
-                .unwrap_or(true)
-            {
+            // Stat through the facade first and skip oversized files WITHOUT
+            // reading them, so a pathological multi-GB file cannot be slurped
+            // into memory. An unreadable/missing file is skipped (matching the
+            // historical metadata/read failure handling).
+            let Ok(meta) = workspace.metadata(relative) else {
+                continue;
+            };
+            if meta.size > MAX_GREP_FILE_BYTES {
                 continue;
             }
-            let Ok(content) = fs::read_to_string(&absolute) else {
+            // Read through the workspace facade so a remote backend reads remote
+            // files. Unreadable or non-UTF-8 files are skipped (assumed
+            // binary/generated).
+            let Ok(bytes) = workspace.read_bytes(relative) else {
+                continue;
+            };
+            let Ok(content) = String::from_utf8(bytes) else {
                 continue;
             };
             let lines: Vec<&str> = content.lines().collect();
@@ -279,6 +284,8 @@ fn optional_usize(input: &Value, key: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     fn workspace_with(files: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
@@ -368,6 +375,26 @@ mod tests {
         assert_eq!(matches[0]["path"], "a.rs");
         assert_eq!(matches[0]["line"], 1);
         assert_eq!(result.content()["files_with_matches"], 1);
+    }
+
+    #[tokio::test]
+    async fn grep_skips_oversized_files_via_size_stat() {
+        // An oversized file that also contains the needle must be skipped by the
+        // metadata size-gate WITHOUT being read into memory. Only the small file
+        // matches, proving the stat-before-read path works.
+        let (dir, workspace) = workspace_with(&[("small.rs", "needle here\n")]);
+        let mut big = vec![b'x'; (MAX_GREP_FILE_BYTES + 16) as usize];
+        big[..7].copy_from_slice(b"needle\n");
+        fs::write(dir.path().join("big.rs"), &big).unwrap();
+
+        let result = GrepTool
+            .execute(&workspace, json!({ "pattern": "needle" }))
+            .await
+            .unwrap();
+
+        let matches = result.content()["matches"].as_array().unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0]["path"], "small.rs");
     }
 
     #[tokio::test]
