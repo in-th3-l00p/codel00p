@@ -26,10 +26,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::errors::HarnessError;
+use crate::{
+    errors::HarnessError,
+    walk::{DEFAULT_IGNORED_DIRS, MAX_FILES_WALKED},
+};
 
 mod docker;
-mod local_fs;
+pub(crate) mod local_fs;
 
 pub use docker::{DockerBackend, DockerConfig};
 pub use local_fs::{DirEntry, FileKind};
@@ -159,6 +162,85 @@ pub trait TerminalBackend: Send + Sync {
         Err(unsupported_fs(rel))
     }
 
+    /// Recursively visit every file under the workspace-relative directory (or
+    /// file) `rel`, invoking `visit` with each file's path **relative to the
+    /// workspace root**, normalized with `/` separators.
+    ///
+    /// Contract (identical to the historical local `walk_files`):
+    /// * Skips [`DEFAULT_IGNORED_DIRS`](crate::walk::DEFAULT_IGNORED_DIRS)
+    ///   (build/dependency/VCS sinks) unless `include_ignored` is set.
+    /// * Bails out after [`MAX_FILES_WALKED`](crate::walk::MAX_FILES_WALKED)
+    ///   files as a runaway guard.
+    /// * Is resilient to read errors in nested subdirectories — an unreadable
+    ///   nested directory or entry is skipped and the walk continues.
+    /// * Hard-errors only if the requested `rel` root itself is unreadable, since
+    ///   that is the caller's explicitly requested path.
+    ///
+    /// The default implementation is built on [`read_dir`](Self::read_dir) +
+    /// [`metadata`](Self::metadata), so any backend that implements those fs
+    /// primitives — including a future remote (SSH/cloud) backend — walks
+    /// correctly out of the box (at the cost of a per-directory round-trip).
+    /// [`LocalBackend`] and [`DockerBackend`] override this with the efficient
+    /// absolute-path walk in [`local_fs::walk`], preserving local traversal's
+    /// exact behavior and performance.
+    fn walk(
+        &self,
+        rel: &Path,
+        include_ignored: bool,
+        visit: &mut dyn FnMut(&str),
+    ) -> Result<(), HarnessError> {
+        // Default, backend-agnostic walk over the `read_dir`/`metadata`
+        // primitives. `rel` is workspace-relative and emitted paths are
+        // workspace-relative too, matching the override's contract.
+        let kind = self.metadata(rel)?;
+        if kind.is_file {
+            visit(&normalize_rel(rel));
+            return Ok(());
+        }
+        // A failure to list the requested root surfaces (mirrors the local
+        // walk's hard-error-on-root contract). The base path for emitted paths
+        // is `rel` itself when it is a real subdirectory, or empty for the
+        // workspace root (`.`), so outputs stay workspace-relative.
+        let base = rel_base(rel);
+        let entries = self.read_dir(rel)?;
+        let mut visited = 0usize;
+        self.walk_default_dir(&base, entries, include_ignored, &mut visited, visit);
+        Ok(())
+    }
+
+    /// Recursive helper for the default [`walk`](Self::walk): drains one
+    /// directory's entries (already listed), recursing into subdirectories via
+    /// `read_dir` and tolerating unreadable nested directories by skipping them.
+    /// Not part of the public contract; only the default `walk` calls it.
+    #[doc(hidden)]
+    fn walk_default_dir(
+        &self,
+        base: &str,
+        entries: Vec<DirEntry>,
+        include_ignored: bool,
+        visited: &mut usize,
+        visit: &mut dyn FnMut(&str),
+    ) {
+        for entry in entries {
+            if *visited >= MAX_FILES_WALKED {
+                return;
+            }
+            let child = join_rel(base, &entry.name);
+            if entry.is_dir {
+                if !include_ignored && DEFAULT_IGNORED_DIRS.contains(&entry.name.as_str()) {
+                    continue;
+                }
+                // An unreadable nested directory is skipped, not fatal.
+                if let Ok(children) = self.read_dir(Path::new(&child)) {
+                    self.walk_default_dir(&child, children, include_ignored, visited, visit);
+                }
+            } else {
+                visit(&child);
+                *visited += 1;
+            }
+        }
+    }
+
     /// Whether this backend isolates command execution from the host (container,
     /// VM, remote sandbox) rather than running directly on the local machine.
     ///
@@ -168,6 +250,39 @@ pub trait TerminalBackend: Send + Sync {
     /// only a backend that genuinely sandboxes execution should override it.
     fn is_isolated(&self) -> bool {
         false
+    }
+}
+
+/// Normalize a workspace-relative path to `/`-separated form (used by the
+/// default `walk` for the single-file case). Equivalent to
+/// [`walk::normalize_path`](crate::walk) on a relative path.
+fn normalize_rel(rel: &Path) -> String {
+    rel.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// The `/`-normalized base prefix used by the default `walk` for entries under
+/// `rel`. The workspace root (`.` / empty) yields an empty base so emitted
+/// paths are not prefixed with `./`; any other directory yields its normalized
+/// path as the prefix.
+fn rel_base(rel: &Path) -> String {
+    let normalized = normalize_rel(rel);
+    if normalized == "." || normalized.is_empty() {
+        String::new()
+    } else {
+        normalized
+    }
+}
+
+/// Join a child name onto a `/`-normalized base, omitting the separator when the
+/// base is empty (the workspace root).
+fn join_rel(base: &str, name: &str) -> String {
+    if base.is_empty() {
+        name.to_string()
+    } else {
+        format!("{base}/{name}")
     }
 }
 
@@ -253,6 +368,18 @@ impl TerminalBackend for LocalBackend {
 
     fn read_dir(&self, rel: &Path) -> Result<Vec<DirEntry>, HarnessError> {
         local_fs::read_dir(self.root_for(rel)?, rel)
+    }
+
+    /// Override the default `read_dir`-based walk with the efficient absolute-
+    /// path local walk, so local traversal keeps identical behavior AND
+    /// performance to before the seam (no per-directory `canonicalize`).
+    fn walk(
+        &self,
+        rel: &Path,
+        include_ignored: bool,
+        visit: &mut dyn FnMut(&str),
+    ) -> Result<(), HarnessError> {
+        local_fs::walk_rel(self.root_for(rel)?, rel, include_ignored, visit)
     }
 
     fn run_foreground(
@@ -615,6 +742,133 @@ mod tests {
         let backend = LocalBackend::new();
         assert!(backend.read_file(Path::new("x.txt")).is_err());
         assert!(backend.write_file(Path::new("x.txt"), b"x").is_err());
+    }
+
+    // --- Default (read_dir-based) walk test (covers the remote backend path) ---
+
+    /// A backend that implements ONLY the `read_dir` + `metadata` fs primitives
+    /// (over a local tempdir), so it falls through to the DEFAULT
+    /// `TerminalBackend::walk`. This proves a future remote backend — which gets
+    /// `walk` for free from those two primitives — lists files, skips ignored
+    /// dirs, and is resilient to unreadable nested directories. Command methods
+    /// are unused here and panic if called.
+    struct ReadDirOnlyBackend {
+        root: PathBuf,
+    }
+
+    impl TerminalBackend for ReadDirOnlyBackend {
+        fn metadata(&self, rel: &Path) -> Result<FileKind, HarnessError> {
+            local_fs::metadata(&self.root, rel)
+        }
+
+        fn read_dir(&self, rel: &Path) -> Result<Vec<DirEntry>, HarnessError> {
+            local_fs::read_dir(&self.root, rel)
+        }
+
+        fn run_foreground(
+            &self,
+            _spec: &CommandSpec,
+            _limits: OutputLimits,
+        ) -> Result<CommandOutcome, HarnessError> {
+            unreachable!("command execution not exercised by the default-walk test")
+        }
+
+        fn spawn_background(
+            &self,
+            _spec: &CommandSpec,
+        ) -> Result<Box<dyn ChildHandle>, HarnessError> {
+            unreachable!("command execution not exercised by the default-walk test")
+        }
+    }
+
+    #[test]
+    fn default_walk_lists_files_and_skips_ignored_dirs() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        for (path, content) in [
+            ("src/main.rs", "fn main() {}"),
+            ("src/util/helper.rs", "pub fn h() {}"),
+            ("README.md", "# hi"),
+            ("target/debug/build.rs", "generated"),
+            ("node_modules/pkg/index.js", "vendored"),
+        ] {
+            let full = root.join(path);
+            fs::create_dir_all(full.parent().unwrap()).unwrap();
+            fs::write(full, content).unwrap();
+        }
+
+        let backend = ReadDirOnlyBackend { root: root.clone() };
+
+        // Default walk from the workspace root: lists readable files and skips
+        // the ignored build/VCS sinks (`target`, `node_modules`).
+        let mut seen = Vec::new();
+        backend
+            .walk(Path::new("."), false, &mut |r| seen.push(r.to_string()))
+            .unwrap();
+        seen.sort();
+        assert_eq!(
+            seen,
+            vec!["README.md", "src/main.rs", "src/util/helper.rs"],
+            "default walk should list readable files, `/`-normalized and \
+             workspace-relative, skipping ignored dirs"
+        );
+
+        // With `include_ignored`, the ignored dirs are descended into.
+        let mut all = Vec::new();
+        backend
+            .walk(Path::new("."), true, &mut |r| all.push(r.to_string()))
+            .unwrap();
+        assert!(all.iter().any(|p| p == "target/debug/build.rs"));
+        assert!(all.iter().any(|p| p == "node_modules/pkg/index.js"));
+
+        // Walking a subdirectory keeps outputs workspace-root-relative.
+        let mut sub = Vec::new();
+        backend
+            .walk(Path::new("src"), false, &mut |r| sub.push(r.to_string()))
+            .unwrap();
+        sub.sort();
+        assert_eq!(sub, vec!["src/main.rs", "src/util/helper.rs"]);
+    }
+
+    /// The default walk is resilient to an unreadable nested directory and
+    /// hard-errors only when the requested root itself is unreadable.
+    #[cfg(unix)]
+    #[test]
+    fn default_walk_is_resilient_to_unreadable_nested_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        fs::write(root.join("top.txt"), "x").unwrap();
+        let locked = root.join("locked");
+        fs::create_dir(&locked).unwrap();
+        fs::write(locked.join("inner.txt"), "y").unwrap();
+
+        struct Restore(PathBuf);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+            }
+        }
+        let _restore = Restore(locked.clone());
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let backend = ReadDirOnlyBackend { root: root.clone() };
+
+        // A nested unreadable dir is skipped, not fatal: the readable file is
+        // still listed.
+        let mut seen = Vec::new();
+        backend
+            .walk(Path::new("."), false, &mut |r| seen.push(r.to_string()))
+            .expect("default walk must tolerate an unreadable nested dir");
+        assert!(seen.iter().any(|s| s == "top.txt"), "got {seen:?}");
+
+        // But an unreadable REQUESTED root is a hard error.
+        let result = backend.walk(Path::new("locked"), false, &mut |_| {});
+        assert!(
+            result.is_err(),
+            "an unreadable requested root must surface as a hard error"
+        );
     }
 
     #[test]

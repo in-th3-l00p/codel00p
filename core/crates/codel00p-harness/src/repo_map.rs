@@ -13,7 +13,7 @@
 //! symbols' scores. It is deterministic and good enough to point the model at
 //! the right files fast; for exact navigation it pairs with `grep` / `read_file`.
 
-use std::{collections::HashMap, fs, sync::OnceLock};
+use std::{collections::HashMap, sync::OnceLock};
 
 use async_trait::async_trait;
 use codel00p_protocol::PermissionScope;
@@ -24,7 +24,7 @@ use crate::{
     errors::HarnessError,
     tool_result::ToolResult,
     tools::{Tool, optional_string},
-    walk::{GlobMatcher, walk_files},
+    walk::GlobMatcher,
     workspace::Workspace,
 };
 
@@ -102,9 +102,8 @@ impl Tool for RepoMapTool {
             None => None,
         };
 
-        let root = workspace.resolve(path)?;
         let mut relatives = Vec::new();
-        walk_files(workspace.root(), &root, include_ignored, &mut |relative| {
+        workspace.walk(path, include_ignored, &mut |relative| {
             if glob.as_ref().is_none_or(|g| g.is_match(relative))
                 && language_for(relative).is_some()
             {
@@ -121,14 +120,16 @@ impl Tool for RepoMapTool {
         let mut symbols_found = 0usize;
 
         for relative in &relatives {
-            let absolute = workspace.resolve(relative)?;
-            if fs::metadata(&absolute)
-                .map(|meta| meta.len() > MAX_SOURCE_FILE_BYTES)
-                .unwrap_or(true)
-            {
+            // Read through the workspace facade so a remote backend reads remote
+            // files. Unreadable, oversized, or non-UTF-8 files are skipped
+            // (assumed generated/minified), matching the historical behavior.
+            let Ok(bytes) = workspace.read_bytes(relative) else {
+                continue;
+            };
+            if bytes.len() as u64 > MAX_SOURCE_FILE_BYTES {
                 continue;
             }
-            let Ok(content) = fs::read_to_string(&absolute) else {
+            let Ok(content) = String::from_utf8(bytes) else {
                 continue;
             };
             files_scanned += 1;
@@ -447,6 +448,8 @@ fn build_languages() -> Languages {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     fn workspace_with(files: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
