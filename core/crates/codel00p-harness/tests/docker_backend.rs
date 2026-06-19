@@ -11,10 +11,15 @@
 //!      `codel00p-providers/tests/support`).
 //!
 //! To run them locally (requires Docker running and the `alpine` image
-//! pullable):
+//! pullable). These tests share one Docker daemon and assert on container
+//! presence/absence by name, and the warm-container tests keep a long-lived
+//! container up for the duration of a test — so they MUST run serially
+//! (`--test-threads=1`); running them in parallel makes one test observe
+//! another's still-running container and spuriously fail:
 //!
 //! ```sh
-//! CODEL00P_DOCKER_TESTS=1 cargo test -p codel00p-harness --test docker_backend -- --ignored
+//! CODEL00P_DOCKER_TESTS=1 cargo test -p codel00p-harness --test docker_backend \
+//!     -- --ignored --test-threads=1
 //! ```
 //!
 //! Set `CODEL00P_DOCKER_TEST_IMAGE` to run against an image other than `alpine`
@@ -79,8 +84,26 @@ fn test_image() -> String {
         .unwrap_or_else(|| "alpine".to_string())
 }
 
+/// An EPHEMERAL backend (the original per-command `docker run --rm` path), used
+/// by the legacy tests so they keep exercising that mechanism.
 fn backend(workspace: &std::path::Path) -> DockerBackend {
+    let mut config = DockerConfig::new(test_image());
+    config.reuse_container = false;
+    DockerBackend::new(workspace, config)
+}
+
+/// A WARM backend (the default reuse-container path).
+fn warm_backend(workspace: &std::path::Path) -> DockerBackend {
     DockerBackend::new(workspace, DockerConfig::new(test_image()))
+}
+
+/// `docker ps -a` names matching a filter, trimmed.
+fn ps_names(filter: &str) -> String {
+    let out = Command::new("docker")
+        .args(["ps", "-a", "--filter", filter, "--format", "{{.Names}}"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
 #[test]
@@ -286,4 +309,263 @@ fn file_created_in_container_appears_on_host_with_host_ownership() {
         );
     }
     std::fs::remove_file(&host_path).expect("host should be able to remove the file");
+}
+
+// === Warm (reuse_container = true) live tests ================================
+
+/// Two sequential foreground commands must run in the SAME warm container:
+/// a file written under `/tmp` (container-local, NOT the bind mount) by the
+/// first command is visible to the second, which only holds if the container is
+/// reused. Then Drop must remove it.
+#[test]
+#[ignore = "requires CODEL00P_DOCKER_TESTS=1 and a running Docker daemon"]
+fn warm_two_foreground_commands_reuse_same_container_then_drop_removes_it() {
+    require_docker!();
+    let ws = tempfile::tempdir().unwrap();
+    let backend = warm_backend(ws.path());
+
+    // Command 1 writes a marker file into the container's own /tmp (not the
+    // bind-mounted workspace), so its presence in command 2 proves reuse.
+    let first = backend
+        .run_foreground(
+            &CommandSpec::new(
+                "sh",
+                vec!["-c".into(), "echo warm > /tmp/codel00p_reuse_probe".into()],
+                ws.path().to_path_buf(),
+            ),
+            limits(30_000, 16_384),
+        )
+        .unwrap();
+    assert!(first.success, "stderr: {}", first.stderr);
+
+    // Command 2 reads it back; it only exists if the SAME container served both.
+    let second = backend
+        .run_foreground(
+            &CommandSpec::new(
+                "sh",
+                vec!["-c".into(), "cat /tmp/codel00p_reuse_probe".into()],
+                ws.path().to_path_buf(),
+            ),
+            limits(30_000, 16_384),
+        )
+        .unwrap();
+    assert!(
+        second.success && second.stdout == "warm\n",
+        "expected the warm container to be reused (probe file visible); got success={} stdout={:?} stderr={:?}",
+        second.success,
+        second.stdout,
+        second.stderr
+    );
+
+    // While alive, exactly one warm container labelled for this pid exists.
+    let alive = ps_names(&format!("label=codel00p.pid={}", std::process::id()));
+    assert!(
+        !alive.is_empty(),
+        "expected a live warm container before drop"
+    );
+
+    // Dropping the backend tears the container down (docker rm -f).
+    drop(backend);
+    std::thread::sleep(Duration::from_millis(1_500));
+    let after = ps_names(&format!("label=codel00p.pid={}", std::process::id()));
+    assert!(
+        after.is_empty(),
+        "expected Drop to remove the warm container, found: {after}"
+    );
+}
+
+/// A foreground timeout in the warm path must leave NO leaked process inside the
+/// still-alive container, and Drop must then clean the container up.
+#[test]
+#[ignore = "requires CODEL00P_DOCKER_TESTS=1 and a running Docker daemon"]
+fn warm_foreground_timeout_leaves_no_leaked_process_then_drop_cleans_up() {
+    require_docker!();
+    let ws = tempfile::tempdir().unwrap();
+    let backend = warm_backend(ws.path());
+
+    // A sleep far longer than the timeout: the in-container `timeout` wrapper
+    // must kill it, leaving no `sleep` process behind in the warm container.
+    let outcome = backend
+        .run_foreground(
+            &CommandSpec::new(
+                "sh",
+                vec!["-c".into(), "sleep 600".into()],
+                ws.path().to_path_buf(),
+            ),
+            limits(1_500, 16_384),
+        )
+        .unwrap();
+    assert!(outcome.timed_out);
+    assert!(!outcome.success);
+    assert_eq!(outcome.exit_code, None);
+
+    // Give the in-container timeout a beat to reap, then confirm no leaked
+    // `sleep 600` remains and the container is still alive (it is shared).
+    std::thread::sleep(Duration::from_millis(1_500));
+    let name = ps_names(&format!("label=codel00p.pid={}", std::process::id()));
+    assert!(!name.is_empty(), "warm container should survive a timeout");
+    let leaked = Command::new("docker")
+        .args([
+            "exec",
+            name.trim(),
+            "sh",
+            "-c",
+            "ps -A -o args= 2>/dev/null || ps -o args=",
+        ])
+        .output()
+        .unwrap();
+    let procs = String::from_utf8_lossy(&leaked.stdout);
+    assert!(
+        !procs.contains("sleep 600"),
+        "expected no leaked in-container process after timeout, saw:\n{procs}"
+    );
+
+    drop(backend);
+    std::thread::sleep(Duration::from_millis(1_500));
+    assert!(
+        ps_names(&format!("label=codel00p.pid={}", std::process::id())).is_empty(),
+        "expected Drop to remove the warm container after a timeout"
+    );
+}
+
+/// Background spawn → drain output → kill must kill ONLY the in-container
+/// process (the shared container survives), then Drop cleans the container up.
+#[test]
+#[ignore = "requires CODEL00P_DOCKER_TESTS=1 and a running Docker daemon"]
+fn warm_background_kill_kills_process_only_container_survives_then_drop() {
+    require_docker!();
+    use std::io::Read;
+    let ws = tempfile::tempdir().unwrap();
+    let backend = warm_backend(ws.path());
+
+    // Short-lived background command: drain stdout, confirm exit 0 and reuse.
+    let mut handle = backend
+        .spawn_background(&CommandSpec::new(
+            "sh",
+            vec!["-c".into(), "printf done".into()],
+            ws.path().to_path_buf(),
+        ))
+        .unwrap();
+    let mut stdout = handle.take_stdout().expect("stdout pipe");
+    let mut buf = String::new();
+    stdout.read_to_string(&mut buf).unwrap();
+    assert_eq!(buf, "done");
+    assert_eq!(handle.wait().unwrap(), Some(0));
+
+    // Long-lived background command: kill it; the container must stay alive.
+    let mut handle = backend
+        .spawn_background(&CommandSpec::new(
+            "sh",
+            vec!["-c".into(), "sleep 600".into()],
+            ws.path().to_path_buf(),
+        ))
+        .unwrap();
+    let mut out = handle.take_stdout().expect("stdout");
+    let reader = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = out.read_to_string(&mut s);
+    });
+    std::thread::sleep(Duration::from_millis(800));
+    assert!(handle.try_wait().unwrap().is_none());
+    handle.kill().unwrap();
+    let _ = handle.wait();
+    reader.join().unwrap();
+
+    // The shared container survives the per-process kill, and the killed
+    // `sleep 600` is gone from inside it.
+    std::thread::sleep(Duration::from_millis(1_000));
+    let name = ps_names(&format!("label=codel00p.pid={}", std::process::id()));
+    assert!(
+        !name.is_empty(),
+        "warm container must survive a background kill"
+    );
+    let leaked = Command::new("docker")
+        .args([
+            "exec",
+            name.trim(),
+            "sh",
+            "-c",
+            "ps -A -o args= 2>/dev/null || ps -o args=",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&leaked.stdout).contains("sleep 600"),
+        "expected the killed background process to be gone from the container"
+    );
+
+    drop(backend);
+    std::thread::sleep(Duration::from_millis(1_500));
+    assert!(
+        ps_names(&format!("label=codel00p.pid={}", std::process::id())).is_empty(),
+        "expected Drop to remove the warm container after a background kill"
+    );
+}
+
+/// The stale-orphan reaper removes a warm container whose `codel00p.pid` label
+/// refers to a DEAD process, while sparing a live one. We forge a stale
+/// container directly (labelled with a dead pid), then trigger a lazy start
+/// (which runs the reaper) and assert the stale one is gone.
+#[test]
+#[ignore = "requires CODEL00P_DOCKER_TESTS=1 and a running Docker daemon"]
+fn warm_stale_reaper_removes_container_of_dead_pid() {
+    require_docker!();
+    let ws = tempfile::tempdir().unwrap();
+    let image = test_image();
+
+    // A pid essentially guaranteed not to exist (so the reaper sees it as dead).
+    let dead_pid = 4_000_000_000u64;
+    let stale_name = format!("codel00p-stale-{}-{}", std::process::id(), dead_pid);
+    let started = Command::new("docker")
+        .args([
+            "run",
+            "-d",
+            "--name",
+            &stale_name,
+            "--label",
+            "codel00p.kind=warm",
+            "--label",
+            &format!("codel00p.pid={dead_pid}"),
+            &image,
+            "tail",
+            "-f",
+            "/dev/null",
+        ])
+        .status()
+        .unwrap();
+    assert!(started.success(), "could not seed the stale container");
+    assert!(
+        !ps_names(&format!("name={stale_name}")).is_empty(),
+        "stale container should exist before the reaper runs"
+    );
+
+    // Lazily start OUR warm container — this runs the reaper first.
+    let backend = warm_backend(ws.path());
+    backend
+        .run_foreground(
+            &CommandSpec::new(
+                "sh",
+                vec!["-c".into(), "true".into()],
+                ws.path().to_path_buf(),
+            ),
+            limits(30_000, 16_384),
+        )
+        .unwrap();
+
+    // The stale (dead-pid) container is reaped; ours (live pid) survives.
+    std::thread::sleep(Duration::from_millis(1_000));
+    assert!(
+        ps_names(&format!("name={stale_name}")).is_empty(),
+        "expected the reaper to remove the dead-pid warm container"
+    );
+    assert!(
+        !ps_names(&format!("label=codel00p.pid={}", std::process::id())).is_empty(),
+        "the reaper must NOT remove the live (our pid) warm container"
+    );
+
+    drop(backend);
+    // Defensive cleanup in case anything above failed mid-way.
+    let _ = Command::new("docker")
+        .args(["rm", "-f", &stale_name])
+        .status();
 }
