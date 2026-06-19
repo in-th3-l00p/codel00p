@@ -1,8 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use codel00p_protocol::PermissionScope;
@@ -49,16 +45,14 @@ impl Tool for CreateFileTool {
     ) -> Result<ToolResult, HarnessError> {
         let path = required_string(self.name(), &input, "path")?;
         let content = required_string(self.name(), &input, "content")?;
-        let destination = workspace.resolve_for_create(path)?;
-        if destination.exists() {
+        if workspace.exists(path)? {
             return Err(tool_failed(
                 self.name(),
                 format!("file already exists: {path}"),
             ));
         }
 
-        create_parent_dir(&destination)?;
-        fs::write(&destination, content)?;
+        workspace.write(path, content)?;
 
         Ok(ToolResult::json(json!({
             "path": path,
@@ -102,8 +96,8 @@ impl Tool for UpdateFileTool {
     ) -> Result<ToolResult, HarnessError> {
         let path = required_string(self.name(), &input, "path")?;
         let content = required_string(self.name(), &input, "content")?;
-        let destination = existing_file(workspace, self.name(), path)?;
-        fs::write(&destination, content)?;
+        require_existing_file(workspace, self.name(), path)?;
+        workspace.write(path, content)?;
 
         Ok(ToolResult::json(json!({
             "path": path,
@@ -145,8 +139,8 @@ impl Tool for DeleteFileTool {
         input: Value,
     ) -> Result<ToolResult, HarnessError> {
         let path = required_string(self.name(), &input, "path")?;
-        let destination = existing_file(workspace, self.name(), path)?;
-        fs::remove_file(destination)?;
+        require_existing_file(workspace, self.name(), path)?;
+        workspace.delete(path)?;
 
         Ok(ToolResult::json(json!({
             "path": path,
@@ -222,7 +216,12 @@ impl Tool for ApplyPatchTool {
         // Apply every change in memory before touching disk so the batch is atomic
         // (no partial writes on a later mismatch) and so multiple changes to the
         // same file compose: each change sees the result of the previous one.
-        let mut contents: BTreeMap<PathBuf, String> = BTreeMap::new();
+        //
+        // The map is keyed on each file's canonical real path so two changes to
+        // the same file (regardless of how the relative path is spelled) compose,
+        // exactly as before. Each entry remembers the relative path to write back
+        // through the workspace facade (which delegates I/O to the backend).
+        let mut contents: BTreeMap<PathBuf, (String, String)> = BTreeMap::new();
         let mut summaries = Vec::new();
         for change in changes {
             let path = required_string(self.name(), change, "path")?;
@@ -239,10 +238,10 @@ impl Tool for ApplyPatchTool {
                 });
             }
 
-            let destination = existing_file(workspace, self.name(), path)?;
-            let current = match contents.get(&destination) {
-                Some(existing) => existing.clone(),
-                None => fs::read_to_string(&destination)?,
+            let key = existing_file_key(workspace, self.name(), path)?;
+            let current = match contents.get(&key) {
+                Some((_, existing)) => existing.clone(),
+                None => workspace.read_utf8(path)?,
             };
 
             let outcome = apply_change(&current, find, replace, replace_all)
@@ -253,11 +252,11 @@ impl Tool for ApplyPatchTool {
                 "bytes_written": outcome.patched.len(),
                 "strategy": outcome.strategy,
             }));
-            contents.insert(destination, outcome.patched);
+            contents.insert(key, (path.to_string(), outcome.patched));
         }
 
-        for (destination, patched) in &contents {
-            fs::write(destination, patched)?;
+        for (rel_path, patched) in contents.values() {
+            workspace.write(rel_path, patched)?;
         }
 
         Ok(ToolResult::json(json!({
@@ -267,26 +266,42 @@ impl Tool for ApplyPatchTool {
     }
 }
 
-fn create_parent_dir(path: &Path) -> Result<(), HarnessError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    Ok(())
-}
-
-fn existing_file(
+/// Require that `path` names an existing regular file in the workspace,
+/// returning the same "file does not exist" error as before otherwise. I/O is
+/// routed through the workspace facade (and thus the backend).
+fn require_existing_file(
     workspace: &Workspace,
     tool_name: &str,
     path: &str,
-) -> Result<std::path::PathBuf, HarnessError> {
-    let destination = workspace.resolve_for_create(path)?;
-    if !destination.is_file() {
+) -> Result<(), HarnessError> {
+    if !workspace.is_file(path)? {
         return Err(tool_failed(
             tool_name,
             format!("file does not exist: {path}"),
         ));
     }
-    Ok(destination)
+    Ok(())
+}
+
+/// Require an existing file and return its canonical real path, used purely as a
+/// stable identity key so multiple patch changes to the same file (however the
+/// relative path is spelled) compose. Escape / unsafe-path errors propagate as
+/// before; a path that resolves but is not a regular file yields the same
+/// "file does not exist" error the tool reported previously.
+fn existing_file_key(
+    workspace: &Workspace,
+    tool_name: &str,
+    path: &str,
+) -> Result<PathBuf, HarnessError> {
+    let resolved = workspace.resolve_for_create(path)?;
+    if !workspace.is_file(path)? {
+        return Err(tool_failed(
+            tool_name,
+            format!("file does not exist: {path}"),
+        ));
+    }
+    // Canonicalize for a stable identity key (collapses `./a` vs `a`, symlinks).
+    Ok(resolved.canonicalize().unwrap_or(resolved))
 }
 
 fn tool_failed(name: &str, message: impl Into<String>) -> HarnessError {

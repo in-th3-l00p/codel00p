@@ -25,7 +25,14 @@ fn backend_from_setting(
     docker: &DockerSettings,
 ) -> CliResult<Arc<dyn TerminalBackend>> {
     match value {
-        None | Some("local") => Ok(Arc::new(LocalBackend::new())),
+        // Root the local backend at the (canonicalized) workspace so it can also
+        // serve workspace filesystem ops, not just command execution. Falls back
+        // to the raw path if canonicalization fails (e.g. a not-yet-created dir);
+        // `Workspace::new` performs the authoritative canonicalize/validate.
+        None | Some("local") => {
+            let root = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
+            Ok(Arc::new(LocalBackend::rooted(root)))
+        }
         Some("docker") => Ok(Arc::new(docker_backend_from_settings(workspace, docker)?)),
         Some(other) => Err(format!(
             "unknown agent.execution_backend `{other}`: supported values are `local` and `docker`"
@@ -372,17 +379,19 @@ pub(crate) async fn build_agent_harness_with(
         model_client.with_fallback_routes(options.fallback_routes.clone())
     };
 
-    let workspace = Workspace::new(&options.workspace).map_err(|error| error.to_string())?;
+    // Resolve where commands execute (`local` or an isolating `docker` backend)
+    // and route BOTH the command tools and the workspace filesystem through it,
+    // so file and command tools share one backend. Errors here surface an
+    // unknown backend config.
+    let execution_backend = resolve_execution_backend(&options.workspace)?;
+    let workspace = Workspace::with_backend(&options.workspace, execution_backend.clone())
+        .map_err(|error| error.to_string())?;
     let memory_provider = CliProjectMemoryProvider::new(config.clone()).with_limit(8);
     let memory_sink = CliMemoryCandidateSink::new(config.clone());
     let memory_extractor = ExplicitTurnMemoryExtractor::new(config.project.clone())
         .with_tag("agent")
         .with_tag("cli");
 
-    // Resolve where commands execute (`local` or an isolating `docker` backend)
-    // and route the command tools through it. Errors here surface an unknown
-    // backend config.
-    let execution_backend = resolve_execution_backend(&options.workspace)?;
     // Org policy (#7): an unattended/gateway turn that can run shell commands
     // must do so on an isolating backend when the policy is enabled. Fail-closed.
     let require_isolation = crate::settings::load_layered(&options.workspace)
