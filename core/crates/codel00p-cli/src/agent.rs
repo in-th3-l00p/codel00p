@@ -20,8 +20,8 @@ use codel00p_harness::{
     PermissionMode, PermissionPolicy, PermissionRequest, PermissionScope, ProcedureSkillExtractor,
     ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest,
     ProposedSkill, ProviderModelClient, SessionId, SkillContext, SkillPrompt, SkillProposalSink,
-    SkillProvider, SkillSelectionRequest, SubAgentSpawner, TerminalBackend, TokenSink,
-    ToolRegistry, UserMessage, Workspace, delegation_tools, learning_tools,
+    SkillProvider, SkillSelectionRequest, SshBackend, SshConfig, SubAgentSpawner, TerminalBackend,
+    TokenSink, ToolRegistry, UserMessage, Workspace, delegation_tools, learning_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
@@ -48,7 +48,7 @@ use crate::{
     },
     providers::build_provider_client_with,
     session::{session_message_summary, session_role_label},
-    settings::{AgentSettings, DockerSettings},
+    settings::{AgentSettings, DockerSettings, SshSettings},
 };
 
 mod chat;

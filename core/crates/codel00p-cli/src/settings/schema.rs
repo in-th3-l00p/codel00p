@@ -69,16 +69,22 @@ pub struct AgentSettings {
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remember_permissions: Option<bool>,
-    /// Where the agent's commands execute. `local` (the default) runs them in
-    /// the bare workspace; `docker` runs each command in an ephemeral container
-    /// with the workspace bind-mounted (configured via `[agent.docker]`). This
-    /// is the selection seam from initiative #7.
+    /// Where the agent's commands and filesystem ops execute. `local` (the
+    /// default) runs them in the bare workspace; `docker` runs each command in an
+    /// ephemeral container with the workspace bind-mounted (configured via
+    /// `[agent.docker]`); `ssh` runs both commands and filesystem ops on a remote
+    /// host where the workspace lives (remote-resident, configured via
+    /// `[agent.ssh]`). This is the selection seam from initiative #7.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_backend: Option<String>,
     /// Settings for the Docker execution backend (used when
     /// `execution_backend = "docker"`).
     #[serde(skip_serializing_if = "DockerSettings::is_empty")]
     pub docker: DockerSettings,
+    /// Settings for the SSH (remote-resident) execution backend (used when
+    /// `execution_backend = "ssh"`).
+    #[serde(skip_serializing_if = "SshSettings::is_empty")]
+    pub ssh: SshSettings,
     /// Org policy: when true, unattended turns (messaging gateway, scheduled
     /// jobs) that can execute shell commands must run on an isolating execution
     /// backend (e.g. `docker`). Fail-closed — such a turn is refused on a
@@ -125,6 +131,44 @@ impl DockerSettings {
         take(&mut self.cpus, other.cpus);
         take(&mut self.network, other.network);
         take(&mut self.map_host_user, other.map_host_user);
+    }
+}
+
+/// Configuration for the SSH (remote-resident) execution backend. The workspace
+/// lives on the remote host; both commands and filesystem ops run there over
+/// ssh. `host` and `workspace` are required when `execution_backend = "ssh"`;
+/// everything else is optional and may come from the user's `~/.ssh/config`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SshSettings {
+    /// Remote host (IP, DNS name, or `~/.ssh/config` alias). Required for ssh.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    /// Remote login user. Optional (defers to ssh config / current user).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    /// Remote port. Optional (defers to ssh config / 22).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// Identity (private key) file. Optional (defers to ssh config / agent).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_file: Option<String>,
+    /// Absolute path on the remote host where the workspace lives. Required.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+}
+
+impl SshSettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.host, other.host);
+        take(&mut self.user, other.user);
+        take(&mut self.port, other.port);
+        take(&mut self.identity_file, other.identity_file);
+        take(&mut self.workspace, other.workspace);
     }
 }
 
@@ -203,6 +247,7 @@ impl AgentSettings {
         take(&mut self.remember_permissions, other.remember_permissions);
         take(&mut self.execution_backend, other.execution_backend);
         self.docker.merge(other.docker);
+        self.ssh.merge(other.ssh);
         take(
             &mut self.require_isolation_for_unattended,
             other.require_isolation_for_unattended,

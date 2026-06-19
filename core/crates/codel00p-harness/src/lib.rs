@@ -89,7 +89,7 @@ pub use skills::{
 pub use subagent::HarnessSubAgentSpawner;
 pub use terminal::{
     ChildHandle, CommandOutcome, CommandSpec, DirEntry, DockerBackend, DockerConfig, FileKind,
-    LocalBackend, OutputLimits, TerminalBackend,
+    LocalBackend, OutputLimits, SshBackend, SshConfig, TerminalBackend,
 };
 pub use tool_registry::{TOOL_DESCRIBE, TOOL_SEARCH, ToolRegistry};
 pub use tool_result::ToolResult;

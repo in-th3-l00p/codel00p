@@ -11,7 +11,12 @@ fn resolve_execution_backend(workspace: &Path) -> CliResult<Arc<dyn TerminalBack
         .ok()
         .map(|resolved| resolved.merged.agent)
         .unwrap_or_default();
-    backend_from_setting(agent.execution_backend.as_deref(), workspace, &agent.docker)
+    backend_from_setting(
+        agent.execution_backend.as_deref(),
+        workspace,
+        &agent.docker,
+        &agent.ssh,
+    )
 }
 
 /// Map a resolved `agent.execution_backend` value to a backend. Absent or
@@ -23,6 +28,7 @@ fn backend_from_setting(
     value: Option<&str>,
     workspace: &Path,
     docker: &DockerSettings,
+    ssh: &SshSettings,
 ) -> CliResult<Arc<dyn TerminalBackend>> {
     match value {
         // Root the local backend at the (canonicalized) workspace so it can also
@@ -34,8 +40,9 @@ fn backend_from_setting(
             Ok(Arc::new(LocalBackend::rooted(root)))
         }
         Some("docker") => Ok(Arc::new(docker_backend_from_settings(workspace, docker)?)),
+        Some("ssh") => Ok(Arc::new(ssh_backend_from_settings(workspace, ssh)?)),
         Some(other) => Err(format!(
-            "unknown agent.execution_backend `{other}`: supported values are `local` and `docker`"
+            "unknown agent.execution_backend `{other}`: supported values are `local`, `docker`, and `ssh`"
         )),
     }
 }
@@ -77,6 +84,44 @@ fn docker_backend_from_settings(
     Ok(DockerBackend::new(workspace_root, config))
 }
 
+/// Build an [`SshBackend`] from the `[agent.ssh]` settings. The backend maps
+/// command cwds from the LOCAL workspace root (canonicalized so the mapping
+/// matches the paths the tools resolve under it) onto the REMOTE workspace.
+/// `host` and `workspace` are required; everything else is optional and may be
+/// supplied by the user's `~/.ssh/config`.
+fn ssh_backend_from_settings(workspace: &Path, ssh: &SshSettings) -> CliResult<SshBackend> {
+    let host = ssh
+        .host
+        .clone()
+        .filter(|host| !host.trim().is_empty())
+        .ok_or_else(|| {
+            "ssh backend: `agent.ssh.host` is required (a hostname/IP or ~/.ssh/config alias). \
+         Set it or use agent.execution_backend = \"local\"."
+                .to_string()
+        })?;
+    let remote_workspace = ssh
+        .workspace
+        .clone()
+        .filter(|ws| !ws.trim().is_empty())
+        .ok_or_else(|| {
+            "ssh backend: `agent.ssh.workspace` is required (the absolute path on the remote host \
+             where the workspace lives). Set it or use agent.execution_backend = \"local\"."
+                .to_string()
+        })?;
+
+    // The local workspace root the tools resolve cwds under. Canonicalize so the
+    // backend's strip_prefix matches; fall back to the raw path if it cannot be
+    // canonicalized (e.g. a not-yet-created dir).
+    let local_root = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
+
+    let mut config = SshConfig::new(host, remote_workspace);
+    config.user = ssh.user.clone();
+    config.port = ssh.port;
+    config.identity_file = ssh.identity_file.clone().map(Into::into);
+
+    Ok(SshBackend::new(local_root, config))
+}
+
 /// Org-policy guard (#7): when `require_isolation` is set, an `unattended` turn
 /// whose tool sets can execute shell commands must run on an isolating backend.
 /// Fail-closed — returns an actionable error otherwise. A no-op for interactive
@@ -113,21 +158,83 @@ mod tests {
         std::env::temp_dir()
     }
 
+    fn ssh_cfg() -> SshSettings {
+        SshSettings {
+            host: Some("example.com".into()),
+            workspace: Some("/srv/ws".into()),
+            ..SshSettings::default()
+        }
+    }
+
     #[test]
-    fn execution_backend_resolves_local_docker_and_rejects_unknown() {
+    fn execution_backend_resolves_local_docker_ssh_and_rejects_unknown() {
         let docker = DockerSettings::default();
+        let ssh = ssh_cfg();
         // Absent and explicit `local` both resolve to the local backend.
-        assert!(backend_from_setting(None, &ws(), &docker).is_ok());
-        assert!(backend_from_setting(Some("local"), &ws(), &docker).is_ok());
-        // `docker` is now a valid backend (previously an error in Phase 1).
-        assert!(backend_from_setting(Some("docker"), &ws(), &docker).is_ok());
+        assert!(backend_from_setting(None, &ws(), &docker, &ssh).is_ok());
+        assert!(backend_from_setting(Some("local"), &ws(), &docker, &ssh).is_ok());
+        // `docker` and `ssh` are both valid backends now.
+        assert!(backend_from_setting(Some("docker"), &ws(), &docker, &ssh).is_ok());
+        assert!(backend_from_setting(Some("ssh"), &ws(), &docker, &ssh).is_ok());
         // Anything else is a clear, actionable error naming the supported set.
-        let Err(error) = backend_from_setting(Some("ssh"), &ws(), &docker) else {
+        let Err(error) = backend_from_setting(Some("podman"), &ws(), &docker, &ssh) else {
             panic!("expected unknown backend to error");
         };
-        assert!(error.contains("ssh"));
+        assert!(error.contains("podman"));
         assert!(error.contains("`local`"));
         assert!(error.contains("`docker`"));
+        assert!(error.contains("`ssh`"));
+    }
+
+    #[test]
+    fn ssh_backend_requires_host_and_workspace() {
+        // Missing host: clear error naming the key.
+        let no_host = SshSettings {
+            host: None,
+            workspace: Some("/srv/ws".into()),
+            ..SshSettings::default()
+        };
+        let Err(error) = ssh_backend_from_settings(&ws(), &no_host) else {
+            panic!("expected an error when host is missing");
+        };
+        assert!(error.contains("agent.ssh.host"));
+
+        // Missing workspace: clear error naming the key.
+        let no_ws = SshSettings {
+            host: Some("example.com".into()),
+            workspace: None,
+            ..SshSettings::default()
+        };
+        let Err(error) = ssh_backend_from_settings(&ws(), &no_ws) else {
+            panic!("expected an error when workspace is missing");
+        };
+        assert!(error.contains("agent.ssh.workspace"));
+
+        // Both present: builds successfully and reports isolation.
+        let backend = ssh_backend_from_settings(&ws(), &ssh_cfg()).unwrap();
+        use codel00p_harness::TerminalBackend;
+        assert!(backend.is_isolated());
+    }
+
+    #[test]
+    fn ssh_settings_apply_to_config() {
+        let ssh = SshSettings {
+            host: Some("box".into()),
+            user: Some("deploy".into()),
+            port: Some(2222),
+            identity_file: Some("/home/u/.ssh/id".into()),
+            workspace: Some("/remote/ws".into()),
+        };
+        let backend = ssh_backend_from_settings(&ws(), &ssh).unwrap();
+        let config = backend.config();
+        assert_eq!(config.host, "box");
+        assert_eq!(config.user.as_deref(), Some("deploy"));
+        assert_eq!(config.port, Some(2222));
+        assert_eq!(
+            config.identity_file.as_deref(),
+            Some(std::path::Path::new("/home/u/.ssh/id"))
+        );
+        assert_eq!(config.workspace, std::path::PathBuf::from("/remote/ws"));
     }
 
     #[test]
