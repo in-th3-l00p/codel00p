@@ -59,6 +59,7 @@ pub(crate) enum AgentToolSet {
     Delegate,
     Learn,
     Pipeline,
+    Code,
     All,
 }
 
@@ -329,6 +330,7 @@ pub(super) fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
         "delegate" | "delegation" => Ok(AgentToolSet::Delegate),
         "learn" | "learning" => Ok(AgentToolSet::Learn),
         "pipeline" | "programmatic" => Ok(AgentToolSet::Pipeline),
+        "code" | "execute" | "code-execution" => Ok(AgentToolSet::Code),
         "all" => Ok(AgentToolSet::All),
         _ => Err(format!("unknown tool set: {value}")),
     }
@@ -450,6 +452,15 @@ mod tests {
             "default interactive run must advertise the editing tools, got {:?}",
             options.tool_sets
         );
+    }
+
+    #[test]
+    fn code_tool_set_aliases_parse() {
+        for alias in ["code", "execute", "code-execution", "CODE"] {
+            assert_eq!(parse_agent_tool_set(alias).unwrap(), AgentToolSet::Code);
+        }
+        let options = run_opts(&["script it", "--tool-set", "code"]);
+        assert!(options.tool_sets.contains(&AgentToolSet::Code));
     }
 
     #[test]

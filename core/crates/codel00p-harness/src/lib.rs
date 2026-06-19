@@ -2,6 +2,7 @@ pub mod agent;
 pub mod background;
 pub mod cancel;
 pub mod capability;
+pub mod code_exec;
 pub mod commands;
 pub mod context;
 pub mod delegation;
@@ -45,6 +46,7 @@ pub use capability::{
     PipelineCapabilityExtractor, ProposeCapabilityTool, VerificationOutcome, capability_tools,
     load_capabilities, verify_capability,
 };
+pub use code_exec::{CodeExecutionEngine, ExecuteCodeTool, code_execution_tools};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool};
 pub use delegation::{
@@ -74,7 +76,8 @@ pub use permissions::{
     PermissionRequest, PermissionScope,
 };
 pub use pipeline::{
-    PipelineEngine, PipelineRun, PipelineStep, RunPipelineTool, parse_steps, pipeline_tools,
+    DispatchOutcome, PipelineEngine, PipelineRun, PipelineStep, RunPipelineTool, dispatch_tool,
+    parse_steps, pipeline_tools,
 };
 pub use planning::{PlanItem, PlanStatus, PlanStore, UpdatePlanTool};
 pub use pr::PreparePrTool;

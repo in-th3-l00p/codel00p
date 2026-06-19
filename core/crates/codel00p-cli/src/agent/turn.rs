@@ -612,6 +612,13 @@ pub(crate) async fn build_agent_harness_with(
     {
         builder = builder.programmatic_tooling(true);
     }
+    if options
+        .tool_sets
+        .iter()
+        .any(|set| matches!(set, AgentToolSet::Code | AgentToolSet::All))
+    {
+        builder = builder.code_execution(true);
+    }
     // Forward the CLI tool-choice / response-format knobs onto every turn when
     // set; left unset, the default CLI path stays unchanged (provider defaults).
     if let Some(tool_choice) = &options.tool_choice {

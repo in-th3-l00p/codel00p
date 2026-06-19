@@ -90,6 +90,74 @@ pub struct PipelineRun {
     pub stopped_early: bool,
 }
 
+/// The outcome of one governed tool dispatch: whether it ran successfully and the
+/// JSON payload (the tool's result content on success, or a structured error
+/// object on denial/failure).
+pub struct DispatchOutcome {
+    pub ok: bool,
+    pub value: Value,
+}
+
+/// The single, canonical governed tool dispatch shared by `run_pipeline`,
+/// synthesized capabilities, and `execute_code`.
+///
+/// This is byte-identical to the governance the turn loop applies to a *direct*
+/// tool call: compute the tool's permission scope for this input, build a
+/// [`PermissionRequest`], ask the [`PermissionPolicy`] to decide, and only on an
+/// execution-allowing decision dispatch through the [`ToolRegistry`]. A denial
+/// never reaches the tool. Factoring it here guarantees the three programmatic
+/// surfaces cannot drift apart in how they enforce authority.
+///
+/// `request_id` labels the per-call permission request for audit. The returned
+/// [`DispatchOutcome`] reports success plus a JSON value: the tool's result
+/// content on success, or `{ "error", "error_kind"? }` on denial/failure. The
+/// function itself only errors if the *policy* errors (an infrastructure
+/// failure); tool failures and denials are reported in the outcome.
+pub async fn dispatch_tool(
+    sub_tools: &ToolRegistry,
+    policy: &dyn PermissionPolicy,
+    workspace: &Workspace,
+    tool: &str,
+    input: Value,
+    request_id: String,
+) -> Result<DispatchOutcome, HarnessError> {
+    let scope = sub_tools.permission_scope(tool, &input);
+    let request = PermissionRequest::new(
+        request_id,
+        SessionId::from_static("programmatic"),
+        TurnId::from_static("programmatic"),
+        tool,
+        input.clone(),
+        scope,
+    );
+    let decision = policy.decide(request).await?;
+
+    if !decision.allows_execution() {
+        let message = decision
+            .message()
+            .unwrap_or("tool execution denied by permission policy")
+            .to_string();
+        return Ok(DispatchOutcome {
+            ok: false,
+            value: json!({
+                "error": message,
+                "error_kind": RuntimeErrorKind::PermissionDenied,
+            }),
+        });
+    }
+
+    match sub_tools.execute(tool, workspace, input).await {
+        Ok(result) => Ok(DispatchOutcome {
+            ok: true,
+            value: result.content().clone(),
+        }),
+        Err(error) => Ok(DispatchOutcome {
+            ok: false,
+            value: json!({ "error": error.to_string() }),
+        }),
+    }
+}
+
 /// Executes a sequence of [`PipelineStep`]s against a tool registry, gating every
 /// step through a [`PermissionPolicy`] and threading earlier outputs into later
 /// steps via `{{...}}` references. Shared by `run_pipeline` and frozen
@@ -132,39 +200,24 @@ impl PipelineEngine {
         for (index, step) in steps.iter().enumerate() {
             let resolved_input = resolve_references(&step.input, &context);
 
+            // The scope is recomputed here only for the per-step report label; the
+            // authoritative gating happens inside `dispatch_tool`, the shared
+            // governed dispatch also used by `execute_code`.
             let scope = self.sub_tools.permission_scope(&step.tool, &resolved_input);
-            let request = PermissionRequest::new(
-                format!("{id_prefix}-step-{index}"),
-                SessionId::from_static("pipeline"),
-                TurnId::from_static("pipeline"),
+            let outcome = dispatch_tool(
+                &self.sub_tools,
+                self.policy.as_ref(),
+                workspace,
                 &step.tool,
                 resolved_input.clone(),
-                scope,
-            );
-            let decision = self.policy.decide(request).await?;
+                format!("{id_prefix}-step-{index}"),
+            )
+            .await?;
 
-            let (ok, output, error) = if !decision.allows_execution() {
-                let message = decision
-                    .message()
-                    .unwrap_or("tool execution denied by permission policy")
-                    .to_string();
-                (
-                    false,
-                    None,
-                    Some(json!({
-                        "error": message,
-                        "error_kind": RuntimeErrorKind::PermissionDenied,
-                    })),
-                )
+            let (ok, output, error) = if outcome.ok {
+                (true, Some(outcome.value), None)
             } else {
-                match self
-                    .sub_tools
-                    .execute(&step.tool, workspace, resolved_input.clone())
-                    .await
-                {
-                    Ok(result) => (true, Some(result.content().clone()), None),
-                    Err(error) => (false, None, Some(json!({ "error": error.to_string() }))),
-                }
+                (false, None, Some(outcome.value))
             };
 
             // Record this step's output into the reference context (null on

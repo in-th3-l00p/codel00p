@@ -16,10 +16,20 @@ reqwest = { version = "0.12.12", default-features = false, features = [
     "json",
     "rustls-tls",
 ] }
+# Pure-Rust, embeddable scripting runtime for the `execute_code` tool. Sandboxed
+# by construction: its default has no file/network/process APIs — only the
+# tool-bridge functions we register are reachable. `sync` makes `Engine` and
+# scripted values `Send + Sync` so the engine can be moved into a
+# `spawn_blocking` closure for the async/sync bridge.
+rhai = { version = "1.21", features = ["sync"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tempfile = "3.20.0"
 thiserror = "2.0.12"
+# The async/sync bridge for `execute_code` runs the synchronous Rhai engine on a
+# blocking thread (`spawn_blocking`) and drives the async governed dispatch with
+# the current runtime `Handle`. Needs the runtime + blocking-pool features.
+tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread"] }
 
 [target.'cfg(unix)'.dependencies]
 # Used only to read the host process's real uid/gid so containers can run
