@@ -56,6 +56,9 @@ pub struct FileKind {
     pub is_file: bool,
     /// Whether it is a directory.
     pub is_dir: bool,
+    /// Size in bytes for a regular file (0 for missing paths and directories).
+    /// Lets callers cheaply skip oversized files without reading them.
+    pub size: u64,
 }
 
 impl FileKind {
@@ -64,6 +67,7 @@ impl FileKind {
         exists: false,
         is_file: false,
         is_dir: false,
+        size: 0,
     };
 }
 
@@ -215,6 +219,9 @@ pub fn metadata(root: &Path, rel: &Path) -> Result<FileKind, HarnessError> {
                 exists: true,
                 is_file: meta.is_file(),
                 is_dir: meta.is_dir(),
+                // Size is meaningful only for regular files; report 0 otherwise so
+                // callers can stat-gate oversized files without reading them.
+                size: if meta.is_file() { meta.len() } else { 0 },
             })
         }
         // A not-found canonicalize is a legitimate "does not exist" answer.

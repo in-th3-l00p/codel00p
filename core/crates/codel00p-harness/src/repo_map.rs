@@ -120,15 +120,22 @@ impl Tool for RepoMapTool {
         let mut symbols_found = 0usize;
 
         for relative in &relatives {
+            // Stat through the facade first and skip oversized files WITHOUT
+            // reading them, so a pathological large file cannot be slurped into
+            // memory. Unreadable/missing files are skipped, matching historical
+            // behavior.
+            let Ok(meta) = workspace.metadata(relative) else {
+                continue;
+            };
+            if meta.size > MAX_SOURCE_FILE_BYTES {
+                continue;
+            }
             // Read through the workspace facade so a remote backend reads remote
-            // files. Unreadable, oversized, or non-UTF-8 files are skipped
-            // (assumed generated/minified), matching the historical behavior.
+            // files. Unreadable or non-UTF-8 files are skipped (assumed
+            // generated/minified), matching the historical behavior.
             let Ok(bytes) = workspace.read_bytes(relative) else {
                 continue;
             };
-            if bytes.len() as u64 > MAX_SOURCE_FILE_BYTES {
-                continue;
-            }
             let Ok(content) = String::from_utf8(bytes) else {
                 continue;
             };
@@ -552,6 +559,26 @@ mod tests {
             ("README.md", "# not code\n"),
             ("target/gen.rs", "fn generated() {}\n"),
         ]);
+        let map = run(&ws, json!({}));
+        let paths: Vec<&str> = map["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths, vec!["src/main.rs"]);
+        assert_eq!(map["files_scanned"], 1);
+    }
+
+    #[test]
+    fn skips_oversized_source_files_via_size_stat() {
+        // An oversized source file is skipped by the metadata size-gate without
+        // being read into memory; only the in-limit file is scanned.
+        let (dir, ws) = workspace_with(&[("src/main.rs", "fn main() {}\n")]);
+        let mut big = vec![b'x'; (MAX_SOURCE_FILE_BYTES + 16) as usize];
+        big[..13].copy_from_slice(b"fn huge() {}\n");
+        fs::write(dir.path().join("src/big.rs"), &big).unwrap();
+
         let map = run(&ws, json!({}));
         let paths: Vec<&str> = map["files"]
             .as_array()
