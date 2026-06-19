@@ -64,9 +64,12 @@ The agent loop and tool contracts stay identical across backends.
 ## Scope
 
 ### Phase 1 — Backend seam
-- [ ] `TerminalBackend` trait; refactor local executor behind it (no behavior
-      change; golden tests).
-- [ ] Per-project/session backend selection in layered config.
+- [x] `TerminalBackend` trait; refactor local executor behind it (no behavior
+      change; golden tests). Shipped: `LocalBackend` behind the trait, command
+      execution + filesystem (read/write/delete/metadata/read_dir/walk) routed
+      through it.
+- [x] Per-project/session backend selection in layered config
+      (`agent.execution_backend` = `local`/`docker`/`ssh`).
 
 ### Phase 2 — Docker
 - [x] Docker backend (`DockerBackend`) with workspace bind-mount, streamed I/O,
