@@ -33,9 +33,11 @@ use crate::{
 
 mod docker;
 pub(crate) mod local_fs;
+mod ssh;
 
 pub use docker::{DockerBackend, DockerConfig};
 pub use local_fs::{DirEntry, FileKind};
+pub use ssh::{SshBackend, SshConfig};
 
 const POLL_INTERVAL_MS: u64 = 10;
 

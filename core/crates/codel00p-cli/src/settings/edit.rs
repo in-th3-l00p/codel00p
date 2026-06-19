@@ -39,6 +39,11 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.docker.cpus", ValueKind::Str),
     ("agent.docker.network", ValueKind::Str),
     ("agent.docker.map_host_user", ValueKind::Bool),
+    ("agent.ssh.host", ValueKind::Str),
+    ("agent.ssh.user", ValueKind::Str),
+    ("agent.ssh.port", ValueKind::U32),
+    ("agent.ssh.identity_file", ValueKind::Str),
+    ("agent.ssh.workspace", ValueKind::Str),
     ("agent.require_isolation_for_unattended", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
@@ -90,6 +95,11 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.docker.cpus" => agent.docker.cpus.clone(),
         "agent.docker.network" => agent.docker.network.clone(),
         "agent.docker.map_host_user" => agent.docker.map_host_user.map(|value| value.to_string()),
+        "agent.ssh.host" => agent.ssh.host.clone(),
+        "agent.ssh.user" => agent.ssh.user.clone(),
+        "agent.ssh.port" => agent.ssh.port.map(|value| value.to_string()),
+        "agent.ssh.identity_file" => agent.ssh.identity_file.clone(),
+        "agent.ssh.workspace" => agent.ssh.workspace.clone(),
         "agent.require_isolation_for_unattended" => agent
             .require_isolation_for_unattended
             .map(|value| value.to_string()),
@@ -290,8 +300,8 @@ pub fn starter_template() -> String {
          # stream = true\n\
          # permission_mode = \"ask\"   # allow | ask | deny\n\
          # tool_sets = [\"read\"]       # read | edit | command | git | all\n\
-         # execution_backend = \"local\"  # local | docker\n\
-         # require_isolation_for_unattended = false  # force docker for unattended shell\n\
+         # execution_backend = \"local\"  # local | docker | ssh\n\
+         # require_isolation_for_unattended = false  # force docker/ssh for unattended shell\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\
@@ -299,6 +309,13 @@ pub fn starter_template() -> String {
          # network = \"none\"            # none | bridge | host\n\
          # memory = \"512m\"             # optional --memory limit\n\
          # cpus = \"1.5\"                # optional --cpus limit\n\
-         # map_host_user = true         # run as host uid:gid so files stay host-owned\n"
+         # map_host_user = true         # run as host uid:gid so files stay host-owned\n\
+         \n\
+         # [agent.ssh]                  # used when execution_backend = \"ssh\" (remote-resident)\n\
+         # host = \"myhost\"             # required: hostname/IP or ~/.ssh/config alias\n\
+         # workspace = \"/srv/codel00p\" # required: absolute remote path the workspace lives at\n\
+         # user = \"deploy\"             # optional: defers to ~/.ssh/config\n\
+         # port = 22                    # optional: defers to ~/.ssh/config\n\
+         # identity_file = \"~/.ssh/id_ed25519\"  # optional: defers to ~/.ssh/config / agent\n"
     )
 }

@@ -20,7 +20,7 @@ pub use loading::{load_env_file, load_file, load_layered};
 pub use paths::{
     discover_project_config, env_file_path, home_dir, project_config_path, user_config_path,
 };
-pub use schema::{AgentSettings, DockerSettings, ResolvedSettings};
+pub use schema::{AgentSettings, DockerSettings, ResolvedSettings, SshSettings};
 
 #[cfg(test)]
 mod tests;
