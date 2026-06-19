@@ -130,6 +130,7 @@ fn docker_nested_keys_round_trip() {
         set_value(&path, "agent.docker.image", "rust:1").expect("set image");
         set_value(&path, "agent.docker.memory", "512m").expect("set memory");
         set_value(&path, "agent.docker.map_host_user", "false").expect("set map_host_user");
+        set_value(&path, "agent.docker.reuse_container", "false").expect("set reuse_container");
 
         let resolved = load_layered(dir.path()).expect("reload");
         assert_eq!(
@@ -139,15 +140,21 @@ fn docker_nested_keys_round_trip() {
         assert_eq!(resolved.agent().docker.image.as_deref(), Some("rust:1"));
         assert_eq!(resolved.agent().docker.memory.as_deref(), Some("512m"));
         assert_eq!(resolved.agent().docker.map_host_user, Some(false));
+        assert_eq!(resolved.agent().docker.reuse_container, Some(false));
         assert_eq!(
             effective_value(&resolved.merged, "agent.docker.image").unwrap(),
             Some("rust:1".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.docker.reuse_container").unwrap(),
+            Some("false".to_string())
         );
 
         // Unsetting the last nested key prunes the [agent.docker] table.
         assert!(unset_value(&path, "agent.docker.image").expect("unset image"));
         assert!(unset_value(&path, "agent.docker.memory").expect("unset memory"));
         assert!(unset_value(&path, "agent.docker.map_host_user").expect("unset user"));
+        assert!(unset_value(&path, "agent.docker.reuse_container").expect("unset reuse"));
         let resolved = load_layered(dir.path()).expect("reload after unset");
         assert!(resolved.agent().docker.image.is_none());
         // The agent table still has execution_backend, so it survives.

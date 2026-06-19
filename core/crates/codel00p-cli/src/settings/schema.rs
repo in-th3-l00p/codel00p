@@ -117,6 +117,10 @@ pub struct DockerSettings {
     /// Run the container as the host uid:gid so workspace files stay host-owned.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map_host_user: Option<bool>,
+    /// Reuse one long-lived container per session (commands run via `docker
+    /// exec`) instead of a fresh `docker run` per command. Defaults to `true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reuse_container: Option<bool>,
 }
 
 impl DockerSettings {
@@ -131,6 +135,7 @@ impl DockerSettings {
         take(&mut self.cpus, other.cpus);
         take(&mut self.network, other.network);
         take(&mut self.map_host_user, other.map_host_user);
+        take(&mut self.reuse_container, other.reuse_container);
     }
 }
 

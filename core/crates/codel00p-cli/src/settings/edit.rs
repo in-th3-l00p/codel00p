@@ -39,6 +39,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.docker.cpus", ValueKind::Str),
     ("agent.docker.network", ValueKind::Str),
     ("agent.docker.map_host_user", ValueKind::Bool),
+    ("agent.docker.reuse_container", ValueKind::Bool),
     ("agent.ssh.host", ValueKind::Str),
     ("agent.ssh.user", ValueKind::Str),
     ("agent.ssh.port", ValueKind::U32),
@@ -95,6 +96,9 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.docker.cpus" => agent.docker.cpus.clone(),
         "agent.docker.network" => agent.docker.network.clone(),
         "agent.docker.map_host_user" => agent.docker.map_host_user.map(|value| value.to_string()),
+        "agent.docker.reuse_container" => {
+            agent.docker.reuse_container.map(|value| value.to_string())
+        }
         "agent.ssh.host" => agent.ssh.host.clone(),
         "agent.ssh.user" => agent.ssh.user.clone(),
         "agent.ssh.port" => agent.ssh.port.map(|value| value.to_string()),
@@ -310,6 +314,7 @@ pub fn starter_template() -> String {
          # memory = \"512m\"             # optional --memory limit\n\
          # cpus = \"1.5\"                # optional --cpus limit\n\
          # map_host_user = true         # run as host uid:gid so files stay host-owned\n\
+         # reuse_container = true        # one warm container per session (docker exec) vs run-per-command\n\
          \n\
          # [agent.ssh]                  # used when execution_backend = \"ssh\" (remote-resident)\n\
          # host = \"myhost\"             # required: hostname/IP or ~/.ssh/config alias\n\

@@ -80,6 +80,9 @@ fn docker_backend_from_settings(
     if let Some(map_host_user) = docker.map_host_user {
         config.map_host_user = map_host_user;
     }
+    if let Some(reuse_container) = docker.reuse_container {
+        config.reuse_container = reuse_container;
+    }
 
     Ok(DockerBackend::new(workspace_root, config))
 }
@@ -283,6 +286,7 @@ mod tests {
             cpus: Some("2".into()),
             network: Some("bridge".into()),
             map_host_user: Some(false),
+            reuse_container: Some(false),
         };
         let backend = docker_backend_from_settings(&ws(), &docker).unwrap();
         let expected = DockerConfig {
@@ -293,6 +297,7 @@ mod tests {
             network: Some("bridge".into()),
             map_host_user: false,
             env: Vec::new(),
+            reuse_container: false,
         };
         assert_eq!(backend.config(), &expected);
     }
