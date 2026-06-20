@@ -1,11 +1,9 @@
-//! Regression: the default interactive tool set must let the agent write files.
+//! The default interactive tool set makes the agent fully capable.
 //!
-//! codel00p is a coding agent. An `agent run` with **no `--tool-set` flag** used
-//! to resolve to an empty tool set, so the model was advertised only the
-//! read-only navigation tools and would tell the user to create the file
-//! themselves instead of calling `create_file`. These scenarios pin the fixed
-//! behavior: with no `--tool-set`, the editing tools are advertised AND a write
-//! actually lands on disk through the real binary.
+//! codel00p is a coding agent. An `agent run` with **no `--tool-set` flag** is
+//! fully capable: the model is advertised the read, edit, command, and git tools
+//! (and more) without the user opting in. `--tool-set` only *restricts*. These
+//! scenarios pin that behavior through the real binary.
 //!
 //! Fully hermetic: own `CODEL00P_HOME`, workspace tempdir, and `memory.sqlite`.
 
@@ -13,9 +11,9 @@ use codel00p_e2e::{AgentEvent, CodelRunner, MockProvider};
 use serde_json::json;
 
 #[test]
-fn default_run_advertises_editing_tools() {
+fn default_run_advertises_all_tools() {
     // No tool call needed — a single final-text turn exercises the manifest.
-    let provider = MockProvider::start().assistant_text("Ready to edit.");
+    let provider = MockProvider::start().assistant_text("Ready.");
 
     let runner = CodelRunner::new().with_provider(&provider);
     // Deliberately NO `--tool-set` argument: this is the default the user hits.
@@ -29,16 +27,19 @@ fn default_run_advertises_editing_tools() {
         advertised_tools, ..
     } = manifest
     {
-        // Read-only navigation is the always-present baseline.
-        assert!(
-            advertised_tools.iter().any(|t| t == "read_file"),
-            "default run should still advertise read_file, got: {advertised_tools:?}"
-        );
-        // The regression: the editing tools must be advertised by default.
-        for expected in &["create_file", "update_file", "delete_file", "apply_patch"] {
+        // The default is fully capable: read + edit + command + git, no flag.
+        for expected in &[
+            "read_file",
+            "create_file",
+            "update_file",
+            "delete_file",
+            "apply_patch",
+            "run_command",
+            "git_status",
+        ] {
             assert!(
                 advertised_tools.iter().any(|t| t == *expected),
-                "default run must advertise '{expected}' so the agent can write files, \
+                "default run must advertise '{expected}' (fully capable by default), \
                  got: {advertised_tools:?}"
             );
         }

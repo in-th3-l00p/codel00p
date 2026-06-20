@@ -232,16 +232,20 @@ fn parse_agent_flag_options(
                 .map(|value| parse_agent_tool_set(value))
                 .collect::<CliResult<Vec<_>>>()?,
             // codel00p is a coding agent: an interactive `agent run`/`agent chat`
-            // with no `--tool-set` (and no configured default) must be able to
-            // create, edit, and delete files, not just read them. Without this the
-            // model is never advertised `create_file`/`update_file`/`delete_file`
-            // and falls back to telling the user to write the file themselves.
-            // The read-only navigation tools are always present (see
-            // `build_tool_registry`), so this layers write access on top. Higher-
-            // risk sets (command, git, web) stay opt-in via `--tool-set`; the
-            // restricted unattended paths (gateway/cron) set their own `Read` set
-            // and are unaffected.
-            None => vec![AgentToolSet::Edit],
+            // with no `--tool-set` (and no configured default) is fully capable —
+            // it can read, edit, run commands, use git and the web, run pipelines
+            // and `execute_code`, delegate to sub-agents, and propose skills. The
+            // user never has to opt into capability with `--tool-set`; the flag is
+            // only for *restricting* the agent (e.g. `--tool-set read`). `All`
+            // expands to edit + command + git + web (and enables pipeline + code);
+            // `Delegate` and `Learn` are added explicitly since they are wired
+            // independently. The restricted unattended paths (gateway/cron) build
+            // their own tool sets directly and are unaffected.
+            None => vec![
+                AgentToolSet::All,
+                AgentToolSet::Delegate,
+                AgentToolSet::Learn,
+            ],
         }
     } else {
         tool_sets
@@ -442,16 +446,22 @@ mod tests {
     }
 
     #[test]
-    fn default_run_includes_editing_so_files_can_be_written() {
-        // A coding agent with no `--tool-set` and no config default must be able
-        // to create/edit/delete files. Regression: this used to resolve to an
-        // empty tool set, leaving the model with only read-only navigation.
-        let options = run_opts(&["write hello.txt"]);
-        assert!(
-            options.tool_sets.contains(&AgentToolSet::Edit),
-            "default interactive run must advertise the editing tools, got {:?}",
-            options.tool_sets
-        );
+    fn default_run_is_fully_capable() {
+        // A run with no `--tool-set` and no config default is fully capable: `All`
+        // (edit + command + git + web, and pipeline + code) plus Delegate + Learn.
+        // The user never has to opt into capability.
+        let options = run_opts(&["build the thing"]);
+        for expected in [
+            AgentToolSet::All,
+            AgentToolSet::Delegate,
+            AgentToolSet::Learn,
+        ] {
+            assert!(
+                options.tool_sets.contains(&expected),
+                "default interactive run must include {expected:?}, got {:?}",
+                options.tool_sets
+            );
+        }
     }
 
     #[test]

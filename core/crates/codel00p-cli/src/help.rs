@@ -322,7 +322,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: read+edit)
+  --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
@@ -347,7 +347,7 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: read+edit)
+  --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
@@ -369,7 +369,7 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
-  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: read+edit)
+  --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
@@ -405,7 +405,7 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations per turn
-  --tool-set <name>           Add a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: read+edit)
+  --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
   --tool-choice <choice>      Force tool use: auto, required, none, or a tool name
