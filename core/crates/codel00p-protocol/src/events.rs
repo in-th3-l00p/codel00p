@@ -137,6 +137,30 @@ pub enum AgentEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cost: Option<CostEstimate>,
     },
+    /// Incremental tool-call argument fragment streamed by the provider before
+    /// the call is fully assembled. Emitted only while streaming, and only by
+    /// transports that stream tool calls; it is additive and never replaces the
+    /// final [`AgentEvent::ToolCallRequested`]/`ToolCallCompleted` events, which
+    /// still describe the assembled call. Consumers that do not care about live
+    /// assembly can ignore it.
+    ToolCallArgsDelta {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        /// Position of the tool call within the streamed response (several may
+        /// be built in parallel).
+        index: usize,
+        /// Provider-assigned call id, when this fragment carried one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        /// Tool name, when this fragment carried one (typically the first
+        /// fragment of a given call).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// Raw JSON-argument text for this fragment (possibly empty when only
+        /// `id`/`name` arrived).
+        args_fragment: String,
+    },
     ToolCallRequested {
         event_id: EventId,
         session_id: SessionId,
@@ -417,6 +441,44 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn tool_call_args_delta_round_trip() {
+        let event = AgentEvent::ToolCallArgsDelta {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            index: 0,
+            id: Some("call_abc".to_string()),
+            name: Some("grep".to_string()),
+            args_fragment: "{\"pattern\":".to_string(),
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains("\"kind\":\"tool_call_args_delta\""));
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
+    }
+
+    #[test]
+    fn tool_call_args_delta_omits_absent_id_and_name() {
+        // Argument-only fragments (no id/name) skip those keys entirely.
+        let event = AgentEvent::ToolCallArgsDelta {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            index: 1,
+            id: None,
+            name: None,
+            args_fragment: "\"value\"}".to_string(),
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(!json.contains("\"id\""));
+        assert!(!json.contains("\"name\""));
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
     }
 
     #[test]

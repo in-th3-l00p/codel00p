@@ -223,6 +223,7 @@ pub(crate) fn agent_event_label(event: &AgentEvent) -> &'static str {
         AgentEvent::ContextCompacted { .. } => "context_compacted",
         AgentEvent::InferenceRequested { .. } => "inference_requested",
         AgentEvent::InferenceCompleted { .. } => "inference_completed",
+        AgentEvent::ToolCallArgsDelta { .. } => "tool_call_args_delta",
         AgentEvent::ToolCallRequested { .. } => "tool_call_requested",
         AgentEvent::ToolCallCompleted { .. } => "tool_call_completed",
         AgentEvent::ToolCallFailed { .. } => "tool_call_failed",

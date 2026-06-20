@@ -25,6 +25,7 @@ pub mod provider_adapter;
 pub mod repo_map;
 pub mod session;
 pub mod skills;
+mod streaming;
 pub mod subagent;
 pub mod terminal;
 pub mod tool_registry;

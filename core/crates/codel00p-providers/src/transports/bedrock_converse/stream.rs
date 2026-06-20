@@ -115,18 +115,24 @@ impl BedrockStreamAccumulator {
             "contentBlockStart" => {
                 let index = content_block_index(&value);
                 if let Some(tool) = value.get("start").and_then(|start| start.get("toolUse")) {
+                    let id = tool
+                        .get("toolUseId")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    let name = tool
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    // Surface the opening of a tool call (id + name, no args yet)
+                    // so callers can show it being assembled live. The final
+                    // assembled call (built in `finish`) is unchanged.
+                    sink.on_tool_call_delta(index, id.as_deref(), Some(&name), "");
                     self.tool_calls.insert(
                         index,
                         BedrockStreamToolCall {
-                            id: tool
-                                .get("toolUseId")
-                                .and_then(Value::as_str)
-                                .map(str::to_string),
-                            name: tool
-                                .get("name")
-                                .and_then(Value::as_str)
-                                .unwrap_or_default()
-                                .to_string(),
+                            id,
+                            name,
                             input: String::new(),
                         },
                     );
@@ -147,11 +153,9 @@ impl BedrockStreamAccumulator {
                         .and_then(|tool| tool.get("input"))
                         .and_then(Value::as_str)
                     {
-                        self.tool_calls
-                            .entry(index)
-                            .or_default()
-                            .input
-                            .push_str(input);
+                        let slot = self.tool_calls.entry(index).or_default();
+                        slot.input.push_str(input);
+                        sink.on_tool_call_delta(index, slot.id.as_deref(), None, input);
                     }
                 }
             }
