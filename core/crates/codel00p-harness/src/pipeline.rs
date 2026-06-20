@@ -302,7 +302,9 @@ impl Tool for RunPipelineTool {
          (so you can forward arrays/objects); embedded templates are stringified. \
          Every step is permission-checked and dispatched exactly like a direct \
          tool call. By default the pipeline stops at the first failing step; set \
-         `stop_on_error` to false to run the rest anyway."
+         `stop_on_error` to false to run the rest anyway. Use this for a fixed, \
+         ordered chain of calls; when the logic between calls is dynamic (loops, \
+         conditionals, filtering or aggregating results), prefer `execute_code`."
     }
 
     fn input_schema(&self) -> Value {

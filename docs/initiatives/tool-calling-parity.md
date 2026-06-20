@@ -135,8 +135,11 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       one in-progress at a time) in a `PlanStore` a UI can read — the planning
       aid of Claude Code's `TodoWrite` / Codex's `update_plan`. Always advertised
       by the CLI agent.
-- [ ] **Token-efficient tool results**: pagination/filter params and a
-      concise/detailed `response_format` on the heavy tools.
+- [x] **Token-efficient tool results** (shipped 2026-06-20): a concise/detailed
+      `verbosity` param on the heavy tools (`repo_map` names-only, `git_diff`
+      `--stat`, `git_log` oneline, `grep` match-only, `list_files` paths) — default
+      `detailed` keeps current output — plus real `offset`/`limit` pagination on
+      `list_files` (others already had paging/caps).
 
 ### Phase 3 — Advanced (SOTA)
 - [x] **Programmatic tool calling (`run_pipeline`)** (shipped 2026-06-16): the
@@ -171,8 +174,13 @@ broader matrix; this initiative tracks the tool-calling slice of it.
       parameterized capability), and `verify_capability` gates promotion by
       replaying the capability on a fresh workspace. Both the auto-extraction and
       the LLM generalization+verification are proven against a live model.
-- [ ] **Streaming tool-call arguments** (incremental parse) where the transport
-      supports it.
+- [x] **Streaming tool-call arguments** (shipped 2026-06-20): incremental
+      tool-call argument deltas are surfaced through the streaming sink
+      (`TokenSink::on_tool_call_delta`) and a new `ToolCallArgsDelta` event, wired
+      across the Chat Completions / Azure / Anthropic Messages / Bedrock Converse /
+      Gemini transports (the Responses transport only exposes tool calls at the
+      terminal body, so it is documented as unsupported). Final assembled tool
+      calls and non-streaming behavior are unchanged.
 
 ## Dependencies
 
