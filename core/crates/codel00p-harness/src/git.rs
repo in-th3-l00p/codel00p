@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use crate::{
     errors::HarnessError,
     tool_result::ToolResult,
-    tools::{Tool, required_string},
+    tools::{Tool, parse_verbosity, required_string, verbosity_schema},
     workspace::Workspace,
 };
 
@@ -66,14 +66,18 @@ impl Tool for GitDiffTool {
     }
 
     fn description(&self) -> &str {
-        "Show git diff output for tracked workspace changes."
+        "Show git diff output for tracked workspace changes. `verbosity` controls \
+         the shape: \"detailed\" (default) returns the full unified diff; \
+         \"concise\" returns the `--stat` summary (changed files with insertion/ \
+         deletion counts) instead, for a cheap overview of what changed."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "max_output_bytes": { "type": "integer" }
+                "max_output_bytes": { "type": "integer" },
+                "verbosity": verbosity_schema()
             }
         })
     }
@@ -89,7 +93,16 @@ impl Tool for GitDiffTool {
     ) -> Result<ToolResult, HarnessError> {
         let max_output_bytes =
             optional_usize(&input, "max_output_bytes", DEFAULT_DIFF_BYTES).min(MAX_DIFF_BYTES);
-        let diff = git_output(self.name(), workspace, &["diff", "--no-ext-diff"])?;
+        let verbosity = parse_verbosity(self.name(), &input)?;
+
+        // Concise asks git for the `--stat` summary; detailed (default) returns
+        // the full unified diff, byte-identical to the historical output.
+        let args: &[&str] = if verbosity.is_concise() {
+            &["diff", "--no-ext-diff", "--stat"]
+        } else {
+            &["diff", "--no-ext-diff"]
+        };
+        let diff = git_output(self.name(), workspace, args)?;
         let capped = cap_string(&diff, max_output_bytes);
 
         Ok(ToolResult::json(json!({
@@ -108,14 +121,18 @@ impl Tool for GitLogTool {
     }
 
     fn description(&self) -> &str {
-        "Show recent git commits."
+        "Show recent git commits. `verbosity` controls per-commit detail: \
+         \"detailed\" (default) returns `sha`, `author_name`, `author_email`, and \
+         `subject` for each commit; \"concise\" returns oneline entries (`sha` + \
+         `subject` only), dropping author fields for a cheaper history listing."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "limit": { "type": "integer" }
+                "limit": { "type": "integer" },
+                "verbosity": verbosity_schema()
             }
         })
     }
@@ -130,12 +147,16 @@ impl Tool for GitLogTool {
         input: Value,
     ) -> Result<ToolResult, HarnessError> {
         let limit = optional_usize(&input, "limit", DEFAULT_LOG_LIMIT).min(MAX_LOG_LIMIT);
+        let verbosity = parse_verbosity(self.name(), &input)?;
         let pretty = "--format=%H%x1f%an%x1f%ae%x1f%s";
         let limit_arg = format!("-n{limit}");
         let output = git_output(self.name(), workspace, &["log", &limit_arg, pretty])?;
+        // Concise: oneline (sha + subject only). Detailed (default): the full
+        // byte-identical historical shape with author fields.
+        let concise = verbosity.is_concise();
         let commits = output
             .lines()
-            .filter_map(parse_log_line)
+            .filter_map(|line| parse_log_line(line, concise))
             .collect::<Vec<_>>();
 
         Ok(ToolResult::json(json!({ "commits": commits })))
@@ -259,12 +280,19 @@ fn status_label(value: &str) -> &'static str {
     }
 }
 
-fn parse_log_line(line: &str) -> Option<Value> {
+fn parse_log_line(line: &str, concise: bool) -> Option<Value> {
     let mut parts = line.split('\x1f');
     let sha = parts.next()?;
     let author_name = parts.next()?;
     let author_email = parts.next()?;
     let subject = parts.next()?;
+
+    if concise {
+        return Some(json!({
+            "sha": sha,
+            "subject": subject,
+        }));
+    }
 
     Some(json!({
         "sha": sha,
@@ -329,5 +357,116 @@ fn tool_failed(name: &str, message: impl Into<String>) -> HarnessError {
     HarnessError::ToolFailed {
         name: name.to_string(),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::process::Command;
+
+    use super::*;
+
+    /// Initialize a git repo in a tempdir with one commit, then return a
+    /// workspace over it. `modify` optionally rewrites `file.txt` afterward so
+    /// `git diff` has something to report.
+    fn repo_with_commit(modify: Option<&str>) -> (tempfile::TempDir, Workspace) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let run = |args: &[&str]| {
+            let ok = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .output()
+                .unwrap()
+                .status
+                .success();
+            assert!(ok, "git {args:?} failed");
+        };
+        run(&["init", "-q"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "Test"]);
+        fs::write(root.join("file.txt"), "line one\nline two\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "initial commit"]);
+        if let Some(content) = modify {
+            fs::write(root.join("file.txt"), content).unwrap();
+        }
+        let workspace = Workspace::new(root).unwrap();
+        (dir, workspace)
+    }
+
+    #[tokio::test]
+    async fn git_diff_default_equals_detailed_full_diff() {
+        let (_dir, ws) = repo_with_commit(Some("line one\nCHANGED\n"));
+
+        let default = GitDiffTool.execute(&ws, json!({})).await.unwrap();
+        let detailed = GitDiffTool
+            .execute(&ws, json!({ "verbosity": "detailed" }))
+            .await
+            .unwrap();
+
+        assert_eq!(default.content(), detailed.content());
+        let diff = default.content()["diff"].as_str().unwrap();
+        // Full unified diff carries hunk headers and the changed lines.
+        assert!(diff.contains("@@"), "expected unified diff, got: {diff}");
+        assert!(diff.contains("CHANGED"));
+    }
+
+    #[tokio::test]
+    async fn git_diff_concise_returns_stat_summary() {
+        let (_dir, ws) = repo_with_commit(Some("line one\nCHANGED\n"));
+
+        let result = GitDiffTool
+            .execute(&ws, json!({ "verbosity": "concise" }))
+            .await
+            .unwrap();
+
+        let diff = result.content()["diff"].as_str().unwrap();
+        // `--stat` summary: file name + a changed-lines count, no hunk headers.
+        assert!(diff.contains("file.txt"), "expected file in stat: {diff}");
+        assert!(
+            diff.contains("changed") || diff.contains("+"),
+            "expected stat summary: {diff}"
+        );
+        assert!(
+            !diff.contains("@@"),
+            "stat must not include hunk headers: {diff}"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_log_default_equals_detailed_with_author_fields() {
+        let (_dir, ws) = repo_with_commit(None);
+
+        let default = GitLogTool.execute(&ws, json!({})).await.unwrap();
+        let detailed = GitLogTool
+            .execute(&ws, json!({ "verbosity": "detailed" }))
+            .await
+            .unwrap();
+
+        assert_eq!(default.content(), detailed.content());
+        let commit = &default.content()["commits"][0];
+        assert_eq!(commit["subject"], "initial commit");
+        assert!(commit["author_name"].is_string());
+        assert!(commit["author_email"].is_string());
+        assert!(commit["sha"].is_string());
+    }
+
+    #[tokio::test]
+    async fn git_log_concise_is_oneline() {
+        let (_dir, ws) = repo_with_commit(None);
+
+        let result = GitLogTool
+            .execute(&ws, json!({ "verbosity": "concise" }))
+            .await
+            .unwrap();
+
+        let commit = &result.content()["commits"][0];
+        assert_eq!(commit["subject"], "initial commit");
+        assert!(commit["sha"].is_string());
+        // Concise drops author fields.
+        assert!(commit.get("author_name").is_none());
+        assert!(commit.get("author_email").is_none());
     }
 }

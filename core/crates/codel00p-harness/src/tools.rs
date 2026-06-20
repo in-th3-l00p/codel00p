@@ -73,14 +73,22 @@ impl Tool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        "List files inside the workspace root."
+        "List files inside the workspace root. Page through results with `offset` \
+         (files to skip) and `limit` (max files to return). `verbosity` controls \
+         the result shape: \"detailed\" (default) returns the bare relative paths \
+         in a `files` array; \"concise\" returns the same paths but omits the \
+         pagination envelope (`offset`/`has_more`/`total`) when paging — useful \
+         when you only need the names."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string" }
+                "path": { "type": "string" },
+                "offset": { "type": "integer", "minimum": 0 },
+                "limit": { "type": "integer", "minimum": 1 },
+                "verbosity": verbosity_schema()
             }
         })
     }
@@ -99,6 +107,9 @@ impl Tool for ListFilesTool {
         input: Value,
     ) -> Result<ToolResult, HarnessError> {
         let path = optional_string(&input, "path").unwrap_or(".");
+        let verbosity = parse_verbosity(self.name(), &input)?;
+        let offset = optional_u64(&input, "offset");
+        let limit = optional_u64(&input, "limit");
         let mut files = Vec::new();
 
         // Ignore-aware and resilient: skips build/VCS sinks (`.git`, `target`,
@@ -109,12 +120,39 @@ impl Tool for ListFilesTool {
             files.push(relative.to_string());
         })?;
         files.sort();
-        files.truncate(MAX_LISTED_FILES);
 
-        Ok(ToolResult::json(json!({ "files": files })))
+        // A bare call (no paging) keeps the legacy `MAX_LISTED_FILES` truncation
+        // and the exact `{ "files": [...] }` shape — no behavior change.
+        if offset.is_none() && limit.is_none() {
+            files.truncate(MAX_LISTED_FILES);
+            return Ok(ToolResult::json(json!({ "files": files })));
+        }
+
+        // Real pagination: skip `offset`, take `limit` (still bounded so a single
+        // page cannot exceed the legacy cap), and report `has_more`/`total`.
+        let total = files.len();
+        let skip = offset.unwrap_or(0) as usize;
+        let want = (limit.map(|l| l as usize).unwrap_or(MAX_LISTED_FILES)).min(MAX_LISTED_FILES);
+        let page: Vec<String> = files.into_iter().skip(skip).take(want).collect();
+        let has_more = skip.saturating_add(page.len()) < total;
+
+        // Concise drops the pagination envelope; detailed includes it.
+        if verbosity.is_concise() {
+            return Ok(ToolResult::json(json!({ "files": page })));
+        }
+        Ok(ToolResult::json(json!({
+            "files": page,
+            "offset": skip,
+            "has_more": has_more,
+            "total": total,
+        })))
     }
 }
 
+// NOTE: `read_file` intentionally has no `verbosity` param. Its result is the
+// exact file content the caller asked for; there is no "summary" of a file that
+// is both cheaper and still that file. Callers who want fewer tokens use the
+// existing `offset`/`limit` line window instead.
 pub struct ReadFileTool;
 
 #[async_trait]
@@ -288,6 +326,49 @@ fn optional_u64(input: &Value, field: &str) -> Option<u64> {
     input.get(field).and_then(Value::as_u64)
 }
 
+/// Token-efficiency control shared by the heavy read/output tools.
+///
+/// `Detailed` is the default everywhere and is byte-identical to each tool's
+/// historical output. `Concise` trims a tool's result to a cheaper shape (the
+/// exact trimming is tool-specific and documented at each call site) so the
+/// model can ask for a summary instead of always paying for full output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Verbosity {
+    Concise,
+    Detailed,
+}
+
+impl Verbosity {
+    pub(crate) fn is_concise(self) -> bool {
+        matches!(self, Verbosity::Concise)
+    }
+}
+
+/// Parse the shared `verbosity` field. Accepts `"concise"` or `"detailed"`;
+/// an omitted field defaults to `Detailed` (no behavior change). Any other
+/// value is rejected so typos surface instead of silently falling back.
+pub(crate) fn parse_verbosity(tool: &str, input: &Value) -> Result<Verbosity, HarnessError> {
+    match optional_string(input, "verbosity") {
+        None => Ok(Verbosity::Detailed),
+        Some("detailed") => Ok(Verbosity::Detailed),
+        Some("concise") => Ok(Verbosity::Concise),
+        Some(other) => Err(HarnessError::InvalidToolInput {
+            name: tool.to_string(),
+            message: format!("`verbosity` must be \"concise\" or \"detailed\", got `{other}`"),
+        }),
+    }
+}
+
+/// The JSON Schema fragment for the shared `verbosity` field, so every tool that
+/// supports it advertises the same enum and default.
+pub(crate) fn verbosity_schema() -> Value {
+    json!({
+        "type": "string",
+        "enum": ["concise", "detailed"],
+        "default": "detailed"
+    })
+}
+
 pub(crate) fn required_string<'a>(
     tool: &str,
     input: &'a Value,
@@ -348,6 +429,76 @@ mod tests {
         assert!(!names.iter().any(|n| n.starts_with("target/")));
         assert!(!names.iter().any(|n| n.starts_with(".git/")));
         assert!(!names.iter().any(|n| n.starts_with("node_modules/")));
+    }
+
+    #[tokio::test]
+    async fn list_files_default_omits_pagination_envelope() {
+        // No paging, no verbosity: byte-identical to the historical shape —
+        // a bare `{ "files": [...] }` with no offset/has_more/total fields.
+        let (_dir, workspace) = workspace_with(&[("a.txt", ""), ("b.txt", ""), ("c.txt", "")]);
+
+        let result = ListFilesTool.execute(&workspace, json!({})).await.unwrap();
+
+        let content = result.content();
+        assert_eq!(file_names(&result), vec!["a.txt", "b.txt", "c.txt"]);
+        assert!(content.get("offset").is_none());
+        assert!(content.get("has_more").is_none());
+        assert!(content.get("total").is_none());
+    }
+
+    #[tokio::test]
+    async fn list_files_paginates_with_offset_and_limit() {
+        let (_dir, workspace) =
+            workspace_with(&[("a.txt", ""), ("b.txt", ""), ("c.txt", ""), ("d.txt", "")]);
+
+        let result = ListFilesTool
+            .execute(&workspace, json!({ "offset": 1, "limit": 2 }))
+            .await
+            .unwrap();
+
+        let content = result.content();
+        assert_eq!(file_names(&result), vec!["b.txt", "c.txt"]);
+        assert_eq!(content["offset"], 1);
+        assert_eq!(content["has_more"], true);
+        assert_eq!(content["total"], 4);
+    }
+
+    #[tokio::test]
+    async fn list_files_concise_drops_pagination_envelope() {
+        let (_dir, workspace) = workspace_with(&[("a.txt", ""), ("b.txt", ""), ("c.txt", "")]);
+
+        let result = ListFilesTool
+            .execute(
+                &workspace,
+                json!({ "offset": 0, "limit": 2, "verbosity": "concise" }),
+            )
+            .await
+            .unwrap();
+
+        let content = result.content();
+        assert_eq!(file_names(&result), vec!["a.txt", "b.txt"]);
+        // Concise pages without the envelope fields.
+        assert!(content.get("offset").is_none());
+        assert!(content.get("has_more").is_none());
+        assert!(content.get("total").is_none());
+    }
+
+    #[tokio::test]
+    async fn parse_verbosity_defaults_and_rejects_garbage() {
+        assert_eq!(
+            parse_verbosity("t", &json!({})).unwrap(),
+            Verbosity::Detailed
+        );
+        assert_eq!(
+            parse_verbosity("t", &json!({ "verbosity": "concise" })).unwrap(),
+            Verbosity::Concise
+        );
+        assert_eq!(
+            parse_verbosity("t", &json!({ "verbosity": "detailed" })).unwrap(),
+            Verbosity::Detailed
+        );
+        let err = parse_verbosity("t", &json!({ "verbosity": "loud" })).unwrap_err();
+        assert!(matches!(err, HarnessError::InvalidToolInput { .. }));
     }
 
     #[tokio::test]

@@ -144,6 +144,42 @@ fn git_diff_reflects_tracked_modification() {
     );
 }
 
+// ── git_diff: concise verbosity returns a --stat summary ───────────────────
+
+#[test]
+fn git_diff_concise_returns_stat_summary() {
+    let runner = CodelRunner::new()
+        .workspace_file("data.txt", "line one\n")
+        .git_init();
+
+    std::fs::write(
+        runner.workspace_path().join("data.txt"),
+        "line one\nline two\n",
+    )
+    .expect("append line to tracked file");
+
+    let provider = MockProvider::start()
+        .tool_call("git_diff", json!({ "verbosity": "concise" }))
+        .assistant_text("Stat looks good.");
+
+    let runner = runner.with_provider(&provider);
+    let result = runner.run(&["agent", "run", "Summarize the diff.", "--tool-set", "git"]);
+    result.assert_success();
+    result.assert_tool_called("git_diff");
+
+    let requests = provider.received_requests();
+    let combined = requests.join("\n");
+    // The --stat summary names the file but omits unified-diff hunk headers.
+    assert!(
+        combined.contains("data.txt"),
+        "expected data.txt in stat summary; got:\n{combined}"
+    );
+    assert!(
+        !combined.contains("@@"),
+        "concise diff must not contain hunk headers; got:\n{combined}"
+    );
+}
+
 // ── git_log: lists seeded commits ──────────────────────────────────────────
 
 #[test]

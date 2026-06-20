@@ -44,7 +44,7 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                             "type": "function",
                             "function": {
                                 "name": "grep",
-                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`.",
+                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`. `verbosity` controls how much each hit carries: \"detailed\" (default) returns each match with its `path`, `line`, `snippet`, and any requested context (`before`/`after`); \"concise\" returns only `path`/`line`/`snippet` and omits all context lines even when `context_lines` is set, for a cheap file:line+match listing.",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["pattern"],
@@ -56,7 +56,8 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                                         "context_lines": { "type": "integer", "minimum": 0, "maximum": 20 },
                                         "include_ignored": { "type": "boolean" },
                                         "offset": { "type": "integer", "minimum": 0 },
-                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
                                     }
                                 }
                             }
@@ -65,10 +66,15 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                             "type": "function",
                             "function": {
                                 "name": "list_files",
-                                "description": "List files inside the workspace root.",
+                                "description": "List files inside the workspace root. Page through results with `offset` (files to skip) and `limit` (max files to return). `verbosity` controls the result shape: \"detailed\" (default) returns the bare relative paths in a `files` array; \"concise\" returns the same paths but omits the pagination envelope (`offset`/`has_more`/`total`) when paging — useful when you only need the names.",
                                 "parameters": {
                                     "type": "object",
-                                    "properties": { "path": { "type": "string" } }
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer", "minimum": 0 },
+                                        "limit": { "type": "integer", "minimum": 1 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
+                                    }
                                 }
                             }
                         },
@@ -92,7 +98,7 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                             "type": "function",
                             "function": {
                                 "name": "repo_map",
-                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation.",
+                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation. `verbosity` controls per-symbol detail: \"detailed\" (default) lists each symbol with its `kind`, `line`, full `signature`, and `references`; \"concise\" lists symbol names only (dropping signatures) for a cheap name-level overview.",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -100,7 +106,8 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                                         "glob": { "type": "string" },
                                         "include_ignored": { "type": "boolean" },
                                         "max_files": { "type": "integer", "minimum": 1, "maximum": 500 },
-                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 }
+                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
                                     }
                                 }
                             }
@@ -207,7 +214,7 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "grep",
-                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`.",
+                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`. `verbosity` controls how much each hit carries: \"detailed\" (default) returns each match with its `path`, `line`, `snippet`, and any requested context (`before`/`after`); \"concise\" returns only `path`/`line`/`snippet` and omits all context lines even when `context_lines` is set, for a cheap file:line+match listing.",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["pattern"],
@@ -219,7 +226,8 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                         "context_lines": { "type": "integer", "minimum": 0, "maximum": 20 },
                                         "include_ignored": { "type": "boolean" },
                                         "offset": { "type": "integer", "minimum": 0 },
-                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
                                     }
                                 }
                             }
@@ -228,10 +236,15 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "list_files",
-                                "description": "List files inside the workspace root.",
+                                "description": "List files inside the workspace root. Page through results with `offset` (files to skip) and `limit` (max files to return). `verbosity` controls the result shape: \"detailed\" (default) returns the bare relative paths in a `files` array; \"concise\" returns the same paths but omits the pagination envelope (`offset`/`has_more`/`total`) when paging — useful when you only need the names.",
                                 "parameters": {
                                     "type": "object",
-                                    "properties": { "path": { "type": "string" } }
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer", "minimum": 0 },
+                                        "limit": { "type": "integer", "minimum": 1 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
+                                    }
                                 }
                             }
                         },
@@ -255,7 +268,7 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "repo_map",
-                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation.",
+                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation. `verbosity` controls per-symbol detail: \"detailed\" (default) lists each symbol with its `kind`, `line`, full `signature`, and `references`; \"concise\" lists symbol names only (dropping signatures) for a cheap name-level overview.",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -263,7 +276,8 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                         "glob": { "type": "string" },
                                         "include_ignored": { "type": "boolean" },
                                         "max_files": { "type": "integer", "minimum": 1, "maximum": 500 },
-                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 }
+                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
                                     }
                                 }
                             }
@@ -355,7 +369,7 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "grep",
-                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`.",
+                                "description": "Search file contents inside the workspace with a Rust regular expression (regex crate syntax). Optionally restrict the files searched with `glob` (same semantics as find_files), make the match case-insensitive, and emit `context_lines` of surrounding text on each side of every hit. Build and VCS directories are skipped unless `include_ignored` is true. Page through hits with `offset` and `limit`. `verbosity` controls how much each hit carries: \"detailed\" (default) returns each match with its `path`, `line`, `snippet`, and any requested context (`before`/`after`); \"concise\" returns only `path`/`line`/`snippet` and omits all context lines even when `context_lines` is set, for a cheap file:line+match listing.",
                                 "parameters": {
                                     "type": "object",
                                     "required": ["pattern"],
@@ -367,7 +381,8 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                         "context_lines": { "type": "integer", "minimum": 0, "maximum": 20 },
                                         "include_ignored": { "type": "boolean" },
                                         "offset": { "type": "integer", "minimum": 0 },
-                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                                        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
                                     }
                                 }
                             }
@@ -376,10 +391,15 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "list_files",
-                                "description": "List files inside the workspace root.",
+                                "description": "List files inside the workspace root. Page through results with `offset` (files to skip) and `limit` (max files to return). `verbosity` controls the result shape: \"detailed\" (default) returns the bare relative paths in a `files` array; \"concise\" returns the same paths but omits the pagination envelope (`offset`/`has_more`/`total`) when paging — useful when you only need the names.",
                                 "parameters": {
                                     "type": "object",
-                                    "properties": { "path": { "type": "string" } }
+                                    "properties": {
+                                        "path": { "type": "string" },
+                                        "offset": { "type": "integer", "minimum": 0 },
+                                        "limit": { "type": "integer", "minimum": 1 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
+                                    }
                                 }
                             }
                         },
@@ -403,7 +423,7 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                             "type": "function",
                             "function": {
                                 "name": "repo_map",
-                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation.",
+                                "description": "Produce a ranked map of the code symbols (functions, types, classes, …) across the workspace, so you can orient in an unfamiliar codebase without reading whole files. Symbols and files are ranked by how often they are referenced elsewhere, most-depended-on first. Restrict scope with `path` and/or a `glob` file filter, and bound output with `max_files` and `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation. `verbosity` controls per-symbol detail: \"detailed\" (default) lists each symbol with its `kind`, `line`, full `signature`, and `references`; \"concise\" lists symbol names only (dropping signatures) for a cheap name-level overview.",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -411,7 +431,8 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                         "glob": { "type": "string" },
                                         "include_ignored": { "type": "boolean" },
                                         "max_files": { "type": "integer", "minimum": 1, "maximum": 500 },
-                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 }
+                                        "max_symbols_per_file": { "type": "integer", "minimum": 1, "maximum": 100 },
+                                        "verbosity": { "type": "string", "enum": ["concise", "detailed"], "default": "detailed" }
                                     }
                                 }
                             }
