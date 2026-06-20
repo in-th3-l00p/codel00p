@@ -152,11 +152,37 @@ pub(crate) fn spawn_background_check() {
     });
 }
 
-fn checks_enabled() -> bool {
+/// Whether update checks are allowed by the global env kill switch. Set
+/// `CODEL00P_DISABLE_UPDATE_CHECK` to any non-empty value to disable all checks,
+/// regardless of the per-user `tui.check_updates` setting.
+pub(crate) fn checks_enabled() -> bool {
     std::env::var("CODEL00P_DISABLE_UPDATE_CHECK")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .is_none()
+}
+
+/// Performs a live (network) update check and returns the latest version string
+/// when it is strictly newer than the running binary, else `None`. This is the
+/// blocking core used by the TUI's background startup check; the caller is
+/// responsible for running it off the UI task (e.g. via `spawn_blocking`). The
+/// cache is refreshed as a side effect so a later run can nudge without a network
+/// call. Returns `None` on any network/parse error so a failed check never nags.
+pub(crate) fn fetch_newer_version() -> Option<String> {
+    let release = fetch_latest_release().ok()?;
+    let latest = release.tag_name.trim_start_matches('v').to_string();
+    write_cache(&UpdateCache {
+        last_check: now_secs(),
+        latest_version: Some(latest.clone()),
+    });
+    newer_or_none(&latest, current_version())
+}
+
+/// The version-newer decision a check makes: returns `Some(latest)` only when it
+/// is strictly newer than `current`. Factored out of [`fetch_newer_version`] so
+/// the decision is unit-testable without any network call.
+fn newer_or_none(latest: &str, current: &str) -> Option<String> {
+    is_newer(latest, current).then(|| latest.trim_start_matches('v').to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +488,15 @@ mod tests {
         // Unparseable inputs never trigger a nag.
         assert!(!is_newer("garbage", "0.1.0"));
         assert!(!is_newer("0.2.0", "garbage"));
+    }
+
+    #[test]
+    fn newer_or_none_returns_only_strictly_newer() {
+        assert_eq!(newer_or_none("0.9.0", "0.8.0").as_deref(), Some("0.9.0"));
+        assert_eq!(newer_or_none("v1.0.0", "0.9.9").as_deref(), Some("1.0.0"));
+        assert_eq!(newer_or_none("0.8.0", "0.8.0"), None);
+        assert_eq!(newer_or_none("0.7.0", "0.8.0"), None);
+        assert_eq!(newer_or_none("garbage", "0.8.0"), None);
     }
 
     #[test]

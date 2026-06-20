@@ -195,6 +195,37 @@ fn tui_show_advanced_round_trips_and_defaults_unset() {
 }
 
 #[test]
+fn tui_check_updates_round_trips_and_defaults_true() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config) leaves it unset; the TUI treats unset as enabled.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.merged.tui.check_updates.is_none());
+        assert_eq!(
+            effective_value(&resolved.merged, "tui.check_updates").unwrap(),
+            None
+        );
+
+        let path = user_config_path();
+        set_value(&path, "tui.check_updates", "false").expect("set check_updates");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.merged.tui.check_updates, Some(false));
+        assert_eq!(
+            effective_value(&resolved.merged, "tui.check_updates").unwrap(),
+            Some("false".to_string())
+        );
+
+        set_value(&path, "tui.check_updates", "true").expect("toggle on");
+        let resolved = load_layered(dir.path()).expect("reload after toggle");
+        assert_eq!(resolved.merged.tui.check_updates, Some(true));
+
+        assert!(unset_value(&path, "tui.check_updates").expect("unset"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.merged.tui.check_updates.is_none());
+    });
+}
+
+#[test]
 fn set_rejects_unknown_key() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

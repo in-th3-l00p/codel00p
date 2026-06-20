@@ -42,6 +42,12 @@ pub(crate) enum Msg {
     SessionList(Result<Vec<SessionSummary>, String>),
     /// A prior session was replayed and is ready to resume (state + message count).
     SessionResumed(Result<(Box<SessionState>, usize), String>),
+    /// The background startup check found a newer release (carries the version).
+    /// Opens the update-prompt panel unless already dismissed this session.
+    UpdateAvailable(String),
+    /// Start the background update check (dispatched once at startup). Produces an
+    /// `Effect::CheckUpdates` so the network call runs off the UI task.
+    CheckUpdates,
 }
 
 /// Side effects the event loop executes after an update.
@@ -69,6 +75,10 @@ pub(crate) enum Effect {
     /// Rename a prior session's title (blocking store write, off the UI task), then
     /// refresh the switcher list.
     RenameSession(codel00p_harness::SessionId, String),
+    /// Run a live update check in the background (off the UI task) and notify this
+    /// session via `Msg::UpdateAvailable` if a newer release is found. Dispatched
+    /// once at startup when checking is enabled; never blocks the first render.
+    CheckUpdates,
     /// Leave the TUI.
     Quit,
 }

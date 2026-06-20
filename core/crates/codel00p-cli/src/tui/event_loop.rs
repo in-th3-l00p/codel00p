@@ -51,13 +51,23 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
     let (session_state, persisted) = crate::agent::load_chat_session_state(&config, session_id)?;
     let cloud_configured = cloud_data::cloud_configured();
 
-    // Advanced status-bar info is hidden by default; honor the persisted
-    // `tui.show_advanced` preference if the user enabled it. A failed settings
-    // load (e.g. malformed config) falls back to the hidden default.
-    let show_advanced = crate::settings::load_layered(&options.workspace)
+    // The TUI display preferences load once at startup. A failed settings load
+    // (e.g. malformed config) falls back to defaults: advanced info hidden, the
+    // update check enabled.
+    let tui_settings = crate::settings::load_layered(&options.workspace)
         .ok()
-        .and_then(|resolved| resolved.merged.tui.show_advanced)
+        .map(|resolved| resolved.merged.tui);
+    // Advanced status-bar info is hidden by default; honor the persisted
+    // `tui.show_advanced` preference if the user enabled it.
+    let show_advanced = tui_settings
+        .as_ref()
+        .and_then(|tui| tui.show_advanced)
         .unwrap_or(false);
+    // The startup update check is on by default (unset); only `false` disables it.
+    let check_updates = tui_settings
+        .as_ref()
+        .and_then(|tui| tui.check_updates)
+        .unwrap_or(true);
 
     let mut app = App::new(
         config,
@@ -67,12 +77,24 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         persisted,
         cloud_configured,
         show_advanced,
+        check_updates,
     );
 
     let mut terminal =
         setup_terminal().map_err(|error| format!("terminal setup failed: {error}"))?;
     let result = event_loop(&mut app, &mut terminal).await;
     restore_terminal(&mut terminal);
+
+    // The self-update replaces the running binary, so it runs only here — after
+    // the terminal is fully restored (raw mode off, alternate screen left) and
+    // the TUI loop has exited. Its outcome message is returned to the caller.
+    if app.run_update_on_exit {
+        return Ok(match crate::update::run(&[]) {
+            Ok(message) => message,
+            Err(error) => format!("Update failed: {error}\n"),
+        });
+    }
+
     result.map(|_| String::new())
 }
 
@@ -80,6 +102,14 @@ async fn event_loop(app: &mut App, terminal: &mut Tui) -> CliResult<()> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Msg>();
     let mut reader = EventStream::new();
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(120));
+
+    // Kick off the background update check once at startup. It is fully
+    // non-blocking: the message is queued and the loop draws the first frame
+    // before the spawned check ever runs, so startup stays instant. The check
+    // only runs when the setting is on AND the env kill switch is unset.
+    if app.check_updates && crate::update::checks_enabled() {
+        let _ = tx.send(Msg::CheckUpdates);
+    }
 
     while !app.should_quit {
         terminal
@@ -152,8 +182,23 @@ fn execute_effect(
             spawn_rename_session(app.config.clone(), session_id, title, tx.clone())
         }
         Effect::SwitchOrg(org_id) => switch_org(app, terminal, org_id, tx)?,
+        Effect::CheckUpdates => spawn_update_check(tx.clone()),
     }
     Ok(())
+}
+
+/// Runs a live update check off the UI task (the blocking GitHub fetch wrapped in
+/// `spawn_blocking`) and, if a newer release is found, notifies this session via
+/// `Msg::UpdateAvailable`. The cache is refreshed as a side effect for next time.
+/// Fully non-blocking: the UI keeps rendering while this runs.
+fn spawn_update_check(tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        if let Ok(Some(version)) =
+            tokio::task::spawn_blocking(crate::update::fetch_newer_version).await
+        {
+            let _ = tx.send(Msg::UpdateAvailable(version));
+        }
+    });
 }
 
 fn switch_org(
