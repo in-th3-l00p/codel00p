@@ -11,11 +11,16 @@ Hermes-distinctive gaps as concrete, phased epics that slot into that roadmap.
 delegation, scheduling/cron, and the messaging gateway each landed core crates
 (`codel00p-plugin`, `codel00p-skill`, `codel00p-cron`, `codel00p-gateway`, and
 the harness `delegation`/`learning` modules), and the TUI shipped Phase 2 plus a
-Phase 3 Users tab. The 2026-06-16 wave then **completed Tool-Calling Parity
-(#10)** across all three phases — which also delivered programmatic tool calling
-(#8) — and opened **Capability Synthesis (#11)** with two shipped slices. Only
-**Execution Backends & Sandboxing (#7)** remains unstarted. The Status column
-below and each epic's Scope checklist track the detail.
+Phase 3 Users tab. Subsequent waves then **completed Tool-Calling Parity (#10)**
+across all phases and both tails (verbosity/pagination + streaming tool-call
+deltas), delivered **Programmatic Tool Calling (#8)** in full (`run_pipeline` +
+the sandboxed, governed `execute_code`), and shipped **Execution Backends &
+Sandboxing (#7)** — the `TerminalBackend` seam with local, Docker (ephemeral +
+warm), and SSH backends plus the require-isolation-for-unattended policy (only the
+vendor-dependent cloud-sandbox backend is deferred). **Capability Synthesis (#11)**
+has two shipped slices; its composition + org-propagation slices are the main
+remaining frontier. The Status column below and each epic's Scope checklist track
+the detail.
 
 Start with the [Hermes Gap Analysis](hermes-gap-analysis.md) for the full
 comparison and rationale. Each initiative below has its own plan with goal,
@@ -33,9 +38,9 @@ exit criteria.
 | 5 | [Scheduling / Cron](scheduling-cron.md) | Primitive | New | Phase 1 shipped (`codel00p-cron`) |
 | 6 | [Messaging Gateway](messaging-gateway.md) | Reach | New (alongside Stage 6 interfaces) | Phase 1 shipped (`codel00p-gateway`) |
 | 7 | [Execution Backends & Sandboxing](execution-backends-sandboxing.md) | Reach | Stage 8 (security/sandboxing) | Planned |
-| 8 | [Programmatic Tool Calling](programmatic-tool-calling.md) | Parity | Stage 1 (Agent parity) | Shipped (`run_pipeline`); `execute_code` waits on #7 |
+| 8 | [Programmatic Tool Calling](programmatic-tool-calling.md) | Parity | Stage 1 (Agent parity) | **Shipped** (`run_pipeline` + sandboxed `execute_code`) |
 | 9 | [Terminal UI (TUI)](tui.md) | Interface | Stage 6 (Interfaces) | Phase 2 shipped, Phase 3 started (`codel00p-cli/src/tui`) |
-| 10 | [Tool-Calling Parity](tool-calling-parity.md) | Parity | Stage 1 (Agent parity) | **Phases 1–3 shipped**; two tails remain |
+| 10 | [Tool-Calling Parity](tool-calling-parity.md) | Parity | Stage 1 (Agent parity) | **Complete** (all phases + both tails) |
 | 11 | [Capability Synthesis](capability-synthesis.md) | Differentiator | Stage 1 / Stage 3 (Memory) | Slices 1–2 shipped (`capability.rs`) |
 
 ## Sequencing

@@ -64,19 +64,33 @@ callable functions**, executed through the active
 
 ## Scope
 
-### Phase 1 — Sandboxed runtime
-- [ ] `execute_code` tool with a constrained scripting runtime, run through the
-      active terminal backend.
-- [ ] Bind a minimal set of read-only tools as in-script functions.
-- [ ] Per-call permission scoping + audit events identical to direct calls.
+### Phase 1 — Sandboxed runtime — **SHIPPED 2026-06-20**
+- [x] `execute_code` tool with a constrained scripting runtime (Rhai, sandboxed —
+      no fs/net/process access except the bound tools), resource-limited
+      (operations/recursion/string/array caps + a wall-clock deadline). In-script
+      `run_command` dispatches through the active terminal backend, so it inherits
+      local/Docker/SSH isolation.
+- [x] Bind a minimal set of read-only tools as in-script functions
+      (`read_file`/`list_files`/`search_text`/`find_files`/`grep`/`repo_map`),
+      plus a generic `call_tool(name, #{...})`.
+- [x] Per-call permission scoping + audit events identical to direct calls —
+      every in-script call goes through the shared `dispatch_tool` (scope →
+      `PermissionRequest` → policy decision → execute) and emits the same
+      `ToolCall*`/`Permission*` events a direct call does.
 
-### Phase 2 — Full tool surface
-- [ ] Expose write/command/git tools in-script under their scopes.
-- [ ] Structured result capture; size/time limits.
+### Phase 2 — Full tool surface — **SHIPPED 2026-06-20**
+- [x] Expose write/command/git tools in-script under their scopes
+      (`create_file`/`update_file`/`delete_file`/`apply_patch`/`run_command`/
+      `git_*`), each governed per-call.
+- [x] Structured result capture (the script return value as JSON + a per-call
+      summary); size/time limits (result cap, op/wall-clock bounds).
 
-### Phase 3 — Guidance
-- [ ] Prompt/affordance tuning so the model picks `execute_code` for pipelines
-      and direct calls otherwise; measure round-trip/token savings.
+### Phase 3 — Guidance — **SHIPPED 2026-06-20**
+- [x] Prompt/affordance tuning so the model picks `execute_code` for dynamic
+      logic and direct calls / `run_pipeline` otherwise: the `execute_code`
+      description steers it toward dynamic control flow, and `run_pipeline`'s
+      description now cross-references `execute_code` for non-fixed chains.
+      (Measuring round-trip/token savings remains a follow-up.)
 
 ## Risks & open questions
 
