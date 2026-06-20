@@ -66,6 +66,9 @@ pub(crate) enum Effect {
     ListSessions,
     /// Replay a prior session so it can be resumed inside the TUI.
     ResumeSession(codel00p_harness::SessionId),
+    /// Rename a prior session's title (blocking store write, off the UI task), then
+    /// refresh the switcher list.
+    RenameSession(codel00p_harness::SessionId, String),
     /// Leave the TUI.
     Quit,
 }

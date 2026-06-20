@@ -148,6 +148,9 @@ fn execute_effect(
         Effect::ResumeSession(session_id) => {
             spawn_resume_session(app.config.clone(), session_id, tx.clone())
         }
+        Effect::RenameSession(session_id, title) => {
+            spawn_rename_session(app.config.clone(), session_id, title, tx.clone())
+        }
         Effect::SwitchOrg(org_id) => switch_org(app, terminal, org_id, tx)?,
     }
     Ok(())
@@ -315,6 +318,38 @@ fn spawn_resume_session(
         .await
         .unwrap_or_else(|error| Err(error.to_string()));
         let _ = tx.send(Msg::SessionResumed(result));
+    });
+}
+
+/// Renames a prior session's title (a blocking store write on `spawn_blocking`),
+/// then surfaces the result as a notice and refreshes the switcher list so the new
+/// title shows immediately.
+fn spawn_rename_session(
+    config: CliConfig,
+    session_id: codel00p_harness::SessionId,
+    title: String,
+    tx: UnboundedSender<Msg>,
+) {
+    let list_config = config.clone();
+    tokio::spawn(async move {
+        let id = session_id.as_str().to_string();
+        let title_for_msg = title.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            use codel00p_session::SessionStore;
+            let mut store = crate::config::open_session_store(&config)?;
+            store
+                .set_session_title(&session_id, &title)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()));
+        let notice = match result {
+            Ok(()) => format!("Renamed session {id} to \"{title_for_msg}\"."),
+            Err(error) => format!("Could not rename {id}: {error}"),
+        };
+        let _ = tx.send(Msg::Notice(notice));
+        // Refresh the switcher so the new title is reflected if it is still open.
+        spawn_session_list(list_config, tx);
     });
 }
 

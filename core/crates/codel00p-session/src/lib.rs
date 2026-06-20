@@ -160,6 +160,15 @@ pub trait SessionStore {
 
     fn metadata(&self, session_id: &SessionId) -> Result<SessionMetadata, SessionStoreError>;
 
+    /// Sets (or clears) a session's human-readable title. An empty/whitespace-only
+    /// title clears it, matching [`SessionMetadata::with_title`] semantics. Returns
+    /// [`SessionStoreError::SessionNotFound`] if the session does not exist.
+    fn set_session_title(
+        &mut self,
+        session_id: &SessionId,
+        title: &str,
+    ) -> Result<(), SessionStoreError>;
+
     fn list_sessions(&self) -> Result<Vec<SessionMetadata>, SessionStoreError>;
 
     fn append_message(
@@ -285,6 +294,25 @@ where
             })?;
 
         Ok(serde_json::from_value(document.payload().clone())?)
+    }
+
+    fn set_session_title(
+        &mut self,
+        session_id: &SessionId,
+        title: &str,
+    ) -> Result<(), SessionStoreError> {
+        // Loading the metadata first surfaces a clear `SessionNotFound` for an
+        // unknown id instead of silently creating an orphan document.
+        let metadata = self.metadata(session_id)?.with_title(title);
+        let id = metadata.session_id().as_str().to_string();
+        let payload = serde_json::to_value(metadata)?;
+        self.storage.put_document(StorageDocument::new(
+            self.scope.clone(),
+            SESSION_METADATA_COLLECTION,
+            id,
+            payload,
+        ))?;
+        Ok(())
     }
 
     fn list_sessions(&self) -> Result<Vec<SessionMetadata>, SessionStoreError> {

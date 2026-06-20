@@ -78,14 +78,31 @@ pub(super) fn persist_session_records(
     let mut store = open_session_store(config)?;
     let mut metadata = SessionMetadata::new(session_state.session_id().clone(), source)
         .with_created_at(now_millis());
-    if let Some(title) = crate::session::session_title_from_messages(session_state.messages()) {
+    let auto_title = crate::session::session_title_from_messages(session_state.messages());
+    if let Some(title) = auto_title.clone() {
         metadata = metadata.with_title(title);
     }
     if let Some(parent) = parent {
         metadata = metadata.with_parent(parent);
     }
     match store.create_session(metadata) {
-        Ok(()) | Err(SessionStoreError::SessionAlreadyExists { .. }) => {}
+        Ok(()) => {}
+        // The session already exists (a follow-up turn). Apply the auto-title only
+        // if it still has none, so a user rename (set via `sessions rename` or the
+        // TUI switcher) is never clobbered by re-deriving from the first message.
+        Err(SessionStoreError::SessionAlreadyExists { .. }) => {
+            if let Some(title) = auto_title {
+                let has_title = store
+                    .metadata(session_state.session_id())
+                    .map(|existing| existing.title().is_some())
+                    .unwrap_or(false);
+                if !has_title {
+                    store
+                        .set_session_title(session_state.session_id(), &title)
+                        .map_err(|error| error.to_string())?;
+                }
+            }
+        }
         Err(error) => return Err(error.to_string()),
     }
 
@@ -189,5 +206,38 @@ mod tests {
             .metadata(session_state.session_id())
             .expect("metadata");
         assert_eq!(metadata.title(), Some("Explain release readiness"));
+    }
+
+    #[test]
+    fn persist_session_records_keeps_a_user_rename_across_turns() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = test_config(dir.path());
+        let session_id = SessionId::from_static("chat-renamed");
+
+        // First turn auto-titles the session from the first user message.
+        let mut first = SessionState::new(session_id.clone());
+        first.push_user(UserMessage::new("Original question"));
+        first.push_assistant("answer one");
+        persist_session_records(&config, &first, &[], 0, "cli", None).expect("persist first");
+
+        // The user renames the session.
+        {
+            let mut store = open_session_store(&config).expect("open store");
+            store
+                .set_session_title(&session_id, "My pinned chat")
+                .expect("rename");
+        }
+
+        // A follow-up turn must not re-derive (and clobber) the title.
+        let mut second = SessionState::new(session_id.clone());
+        second.push_user(UserMessage::new("Original question"));
+        second.push_assistant("answer one");
+        second.push_user(UserMessage::new("A follow-up"));
+        second.push_assistant("answer two");
+        persist_session_records(&config, &second, &[], 2, "cli", None).expect("persist second");
+
+        let store = open_session_store(&config).expect("open store");
+        let metadata = store.metadata(&session_id).expect("metadata");
+        assert_eq!(metadata.title(), Some("My pinned chat"));
     }
 }
