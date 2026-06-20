@@ -49,6 +49,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
+    ("tui.check_updates", ValueKind::Bool),
 ];
 
 pub fn known_keys() -> Vec<&'static str> {
@@ -114,6 +115,7 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
             .max_concurrent_children
             .map(|value| value.to_string()),
         "tui.show_advanced" => settings.tui.show_advanced.map(|value| value.to_string()),
+        "tui.check_updates" => settings.tui.check_updates.map(|value| value.to_string()),
         _ => None,
     };
     Ok(value)
@@ -326,6 +328,7 @@ pub fn starter_template() -> String {
          # identity_file = \"~/.ssh/id_ed25519\"  # optional: defers to ~/.ssh/config / agent\n\
          \n\
          # [tui]\n\
-         # show_advanced = false        # show model, token usage, and context meter in the TUI status bar\n"
+         # show_advanced = false        # show model, token usage, and context meter in the TUI status bar\n\
+         # check_updates = true         # check for a newer codel00p release on startup and prompt to update\n"
     )
 }

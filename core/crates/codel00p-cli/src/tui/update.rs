@@ -9,7 +9,7 @@ use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
     CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
-    SettingsOverlay, SettingsPref,
+    SettingsOverlay, SettingsPref, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
 
@@ -162,6 +162,20 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
+        Msg::UpdateAvailable(version) => {
+            // Always record the version (drives the header chip), but only open the
+            // prompt once per session — a later cache read / re-entry must not
+            // reopen it after the user dismissed it.
+            app.update_available = Some(version.clone());
+            if !app.update_prompt_dismissed && !app.overlay.is_open() {
+                app.overlay = Overlay::UpdatePrompt(UpdatePrompt {
+                    current: crate::update::current_version().to_string(),
+                    latest: version,
+                });
+            }
+            Vec::new()
+        }
+        Msg::CheckUpdates => vec![Effect::CheckUpdates],
     }
 }
 
@@ -245,6 +259,7 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         Overlay::Sessions(switcher) => handle_sessions_key(app, switcher, key),
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
         Overlay::Settings(settings) => handle_settings_key(app, settings, key),
+        Overlay::UpdatePrompt(prompt) => handle_update_prompt_key(app, prompt, key),
         Overlay::Command(mut palette) => match palette.on_key(key) {
             PickerOutcome::Selected => match palette.selected_item() {
                 Some(item) => run_command(app, item.action),
@@ -392,16 +407,71 @@ fn toggle_setting(app: &mut App, pref: SettingsPref) {
         SettingsPref::ShowAdvanced => {
             app.show_advanced = !app.show_advanced;
             let value = if app.show_advanced { "true" } else { "false" };
-            let path = crate::settings::user_config_path();
-            match crate::settings::set_value(&path, "tui.show_advanced", value) {
-                Ok(()) => app.conversation.push_notice(format!(
+            persist_setting(
+                app,
+                "tui.show_advanced",
+                value,
+                &format!(
                     "Advanced info {}.",
                     if app.show_advanced { "shown" } else { "hidden" }
-                )),
-                Err(error) => app.conversation.push_notice(format!(
-                    "Toggled advanced info, but could not save it: {error}"
-                )),
-            }
+                ),
+                "advanced info",
+            );
+        }
+        SettingsPref::CheckUpdates => {
+            app.check_updates = !app.check_updates;
+            let value = if app.check_updates { "true" } else { "false" };
+            persist_setting(
+                app,
+                "tui.check_updates",
+                value,
+                &format!(
+                    "Update checks {}.",
+                    if app.check_updates {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                ),
+                "update checks",
+            );
+        }
+    }
+}
+
+/// Persists a single dotted setting to the user config, surfacing success or a
+/// failed write as a conversation notice. The in-session toggle takes effect
+/// regardless of whether the write succeeds.
+fn persist_setting(app: &mut App, key: &str, value: &str, ok_message: &str, what: &str) {
+    let path = crate::settings::user_config_path();
+    match crate::settings::set_value(&path, key, value) {
+        Ok(()) => app.conversation.push_notice(ok_message.to_string()),
+        Err(error) => app
+            .conversation
+            .push_notice(format!("Toggled {what}, but could not save it: {error}")),
+    }
+}
+
+/// Handles keys in the update-prompt panel: Enter runs the self-update (queued to
+/// run after the terminal is restored, then quits), Esc dismisses (closing the
+/// panel and marking it dismissed so it does not reopen this session). Any other
+/// key leaves the panel open.
+fn handle_update_prompt_key(app: &mut App, prompt: UpdatePrompt, key: KeyEvent) -> Vec<Effect> {
+    match key.code {
+        KeyCode::Enter => {
+            // The self-update replaces the running binary, so it must not run while
+            // the TUI owns the terminal: flag it and quit; the event loop restores
+            // the terminal first, then runs the update.
+            app.run_update_on_exit = true;
+            vec![Effect::Quit]
+        }
+        KeyCode::Esc => {
+            app.update_prompt_dismissed = true;
+            Vec::new() // close the overlay; the header chip keeps it discoverable
+        }
+        _ => {
+            app.overlay = Overlay::UpdatePrompt(prompt);
+            Vec::new()
         }
     }
 }
@@ -1382,6 +1452,81 @@ mod tests {
             update(&mut app, key(KeyCode::Esc));
             assert!(matches!(app.overlay, Overlay::None));
         });
+    }
+
+    #[test]
+    fn settings_overlay_lists_and_toggles_check_updates() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert!(app.check_updates); // default on
+            update(&mut app, ctrl(KeyCode::Char('p')));
+            type_str(&mut app, "settings");
+            update(&mut app, key(KeyCode::Enter));
+            // Move to the "Check for updates" row (second preference) and toggle it.
+            update(&mut app, key(KeyCode::Down));
+            match &app.overlay {
+                Overlay::Settings(settings) => {
+                    assert_eq!(settings.current(), SettingsPref::CheckUpdates);
+                }
+                _ => panic!("expected settings overlay"),
+            }
+            update(&mut app, key(KeyCode::Enter));
+            assert!(!app.check_updates);
+            // The change was written to the isolated config.
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.tui.check_updates, Some(false));
+            // Space toggles it back on.
+            update(&mut app, key(KeyCode::Char(' ')));
+            assert!(app.check_updates);
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.tui.check_updates, Some(true));
+        });
+    }
+
+    #[test]
+    fn update_available_opens_prompt_and_sets_version() {
+        let mut app = test_app();
+        assert!(app.update_available.is_none());
+        update(&mut app, Msg::UpdateAvailable("9.9.9".to_string()));
+        assert_eq!(app.update_available.as_deref(), Some("9.9.9"));
+        match &app.overlay {
+            Overlay::UpdatePrompt(prompt) => assert_eq!(prompt.latest, "9.9.9"),
+            _ => panic!("expected the update prompt to open"),
+        }
+    }
+
+    #[test]
+    fn dismissing_update_prompt_closes_and_blocks_reopen() {
+        let mut app = test_app();
+        update(&mut app, Msg::UpdateAvailable("9.9.9".to_string()));
+        assert!(matches!(app.overlay, Overlay::UpdatePrompt(_)));
+        // Esc dismisses: the overlay closes, the dismissed flag is set, and the
+        // version (header chip) is retained.
+        let effects = update(&mut app, key(KeyCode::Esc));
+        assert!(effects.is_empty());
+        assert!(matches!(app.overlay, Overlay::None));
+        assert!(app.update_prompt_dismissed);
+        assert_eq!(app.update_available.as_deref(), Some("9.9.9"));
+        // A second notification does not reopen the prompt after dismissal.
+        update(&mut app, Msg::UpdateAvailable("9.9.9".to_string()));
+        assert!(matches!(app.overlay, Overlay::None));
+    }
+
+    #[test]
+    fn update_now_sets_run_on_exit_flag_and_quits() {
+        let mut app = test_app();
+        update(&mut app, Msg::UpdateAvailable("9.9.9".to_string()));
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(effects.as_slice(), [Effect::Quit]));
+        assert!(app.run_update_on_exit);
+    }
+
+    #[test]
+    fn start_update_check_produces_check_effect() {
+        let mut app = test_app();
+        let effects = update(&mut app, Msg::CheckUpdates);
+        assert!(matches!(effects.as_slice(), [Effect::CheckUpdates]));
     }
 
     #[test]

@@ -81,6 +81,7 @@ pub(crate) mod test_support {
             0,
             false, // cloud_configured
             false, // show_advanced (advanced status info hidden by default)
+            true,  // check_updates (background update check enabled by default)
         )
     }
 }

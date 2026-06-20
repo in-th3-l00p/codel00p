@@ -11,6 +11,7 @@ use super::app::App;
 use super::conversation::{Block as ChatBlock, ToolState};
 use super::overlay::{
     EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher, SettingsOverlay, SettingsPref,
+    UpdatePrompt,
 };
 use super::picker::{Picker, PickerItem};
 use super::theme::Theme;
@@ -54,6 +55,7 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
         Overlay::Command(palette) => draw_command(app, frame, palette),
         Overlay::Settings(settings) => draw_settings(app, frame, settings),
+        Overlay::UpdatePrompt(prompt) => draw_update_prompt(app, frame, prompt),
     }
 }
 
@@ -514,7 +516,7 @@ fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
         Line::from("  F2 (in sessions)  rename the highlighted conversation"),
         Line::from("  /sessions /memory /history /tools /reset"),
-        Line::from("  Ctrl+P → Settings  toggle advanced status info (model · tokens · context)"),
+        Line::from("  Ctrl+P → Settings  advanced status info · update checks"),
         Line::from("  Esc          close overlay · clear input · quit"),
         Line::from("  Ctrl-C       quit"),
         Line::from(""),
@@ -776,6 +778,7 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
         .map(|(index, pref)| {
             let on = match pref {
                 SettingsPref::ShowAdvanced => app.show_advanced,
+                SettingsPref::CheckUpdates => app.check_updates,
             };
             let is_selected = index == selected;
             let prefix = if is_selected { "› " } else { "  " };
@@ -795,6 +798,44 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
         })
         .collect();
     frame.render_widget(List::new(items), rows[1]);
+}
+
+/// Draws the update-prompt panel: the current → latest version and the two
+/// choices (Update now / Dismiss). Mirrors the other centered overlays.
+fn draw_update_prompt(app: &App, frame: &mut Frame, prompt: &UpdatePrompt) {
+    let area = centered_rect(56, 30, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.notice))
+        .title(" update available ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let lines = vec![
+        Line::from(Span::styled(
+            "A new codel00p is available",
+            app.theme.accent(),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("  v"),
+            Span::styled(prompt.current.clone(), app.theme.muted()),
+            Span::raw("  →  v"),
+            Span::styled(
+                prompt.latest.clone(),
+                Style::default()
+                    .fg(app.theme.notice)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  [Enter] update now    [Esc] dismiss",
+            app.theme.muted(),
+        )),
+    ];
+    frame.render_widget(Paragraph::new(lines).block(Block::default()), inner);
 }
 
 fn draw_picker<T: PickerItem>(
@@ -1106,6 +1147,32 @@ mod tests {
         assert!(rendered.contains("Show advanced info"));
         // Default is off, so the checkbox is empty.
         assert!(rendered.contains("[ ] Show advanced info"));
+    }
+
+    #[test]
+    fn settings_overlay_lists_check_updates() {
+        use crate::tui::overlay::{Overlay, SettingsOverlay};
+        let mut app = test_app();
+        app.overlay = Overlay::Settings(SettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 80, 24);
+        assert!(rendered.contains("Check for updates on start"));
+        // Default is on, so the checkbox is checked.
+        assert!(rendered.contains("[x] Check for updates on start"));
+    }
+
+    #[test]
+    fn renders_update_prompt_overlay() {
+        use crate::tui::overlay::{Overlay, UpdatePrompt};
+        let mut app = test_app();
+        app.overlay = Overlay::UpdatePrompt(UpdatePrompt {
+            current: "0.8.0".to_string(),
+            latest: "0.9.0".to_string(),
+        });
+        let rendered = render_to_string(&mut app, 80, 24);
+        assert!(rendered.contains("update available"));
+        assert!(rendered.contains("v0.8.0"));
+        assert!(rendered.contains("v0.9.0"));
+        assert!(rendered.contains("update now"));
     }
 
     #[test]

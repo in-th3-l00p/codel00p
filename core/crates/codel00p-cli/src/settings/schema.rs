@@ -227,6 +227,11 @@ pub struct TuiSettings {
     /// context window meter). Unset (the default) hides it for a minimal bar.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_advanced: Option<bool>,
+    /// Check for a newer codel00p release in the background on TUI startup,
+    /// prompting to update if one is found. Unset (the default) means enabled;
+    /// set to `false` to disable the check entirely.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_updates: Option<bool>,
 }
 
 impl TuiSettings {
@@ -236,6 +241,7 @@ impl TuiSettings {
 
     fn merge(&mut self, other: Self) {
         take(&mut self.show_advanced, other.show_advanced);
+        take(&mut self.check_updates, other.check_updates);
     }
 }
 

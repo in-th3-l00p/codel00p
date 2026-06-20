@@ -90,14 +90,26 @@ pub(crate) struct App {
     /// Show advanced status-bar info (model name, real tokens, context meter).
     /// Loaded from `tui.show_advanced` at startup; toggled in the Settings overlay.
     pub(crate) show_advanced: bool,
+    /// Whether to run the background update check on startup. Loaded from
+    /// `tui.check_updates` (default true) at startup; toggled in the Settings
+    /// overlay. The check also requires the env kill switch to be unset.
+    pub(crate) check_updates: bool,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
-    /// A newer release version if one is already known (from the update cache),
-    /// shown as a header chip. Read once at startup; never blocks.
+    /// A newer release version if one is already known (from the update cache or a
+    /// live background check), shown as a header chip. Never blocks.
     pub(crate) update_available: Option<String>,
+    /// Set once the user dismisses the update prompt this session, so a later
+    /// cache read / re-entry doesn't reopen the panel repeatedly.
+    pub(crate) update_prompt_dismissed: bool,
+    /// Set when the user chose "Update now" in the update prompt. The event loop
+    /// quits, restores the terminal, then runs the self-update — never while the
+    /// TUI owns the terminal.
+    pub(crate) run_update_on_exit: bool,
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: CliConfig,
         options: AgentRunOptions,
@@ -106,6 +118,7 @@ impl App {
         persisted_message_count: usize,
         cloud_configured: bool,
         show_advanced: bool,
+        check_updates: bool,
     ) -> Self {
         Self {
             config,
@@ -128,9 +141,12 @@ impl App {
             },
             theme: Theme::default(),
             show_advanced,
+            check_updates,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),
+            update_prompt_dismissed: false,
+            run_update_on_exit: false,
         }
     }
 

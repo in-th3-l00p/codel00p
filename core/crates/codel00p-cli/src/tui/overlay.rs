@@ -393,21 +393,26 @@ pub(crate) fn command_items() -> Vec<CommandItem> {
 pub(crate) enum SettingsPref {
     /// Show advanced status-bar info (model, real tokens, context meter).
     ShowAdvanced,
+    /// Check for a newer codel00p release in the background on startup.
+    CheckUpdates,
 }
 
 impl SettingsPref {
     /// All preferences, in display order. Add new rows here.
-    pub(crate) const ORDER: [SettingsPref; 1] = [SettingsPref::ShowAdvanced];
+    pub(crate) const ORDER: [SettingsPref; 2] =
+        [SettingsPref::ShowAdvanced, SettingsPref::CheckUpdates];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             SettingsPref::ShowAdvanced => "Show advanced info",
+            SettingsPref::CheckUpdates => "Check for updates on start",
         }
     }
 
     pub(crate) fn hint(self) -> &'static str {
         match self {
             SettingsPref::ShowAdvanced => "model · token usage · context size",
+            SettingsPref::CheckUpdates => "notify when a newer release is available",
         }
     }
 }
@@ -442,6 +447,15 @@ impl SettingsOverlay {
     }
 }
 
+/// The update-prompt panel shown when a live background check finds a newer
+/// release: it offers "Update now" (Enter) and "Dismiss" (Esc), carrying the
+/// running and latest versions for the message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UpdatePrompt {
+    pub(crate) current: String,
+    pub(crate) latest: String,
+}
+
 // There is only ever one live `Overlay` (the open panel), so the size spread
 // between variants is irrelevant; boxing would just add indirection for no gain.
 #[allow(clippy::large_enum_variant)]
@@ -454,6 +468,7 @@ pub(crate) enum Overlay {
     Entities(EntityBrowser),
     Command(CommandPalette),
     Settings(SettingsOverlay),
+    UpdatePrompt(UpdatePrompt),
 }
 
 impl Overlay {
