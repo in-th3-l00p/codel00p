@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use crate::{
     errors::HarnessError,
     tool_result::ToolResult,
-    tools::{Tool, optional_string, required_string},
+    tools::{Tool, optional_string, parse_verbosity, required_string, verbosity_schema},
     walk::GlobMatcher,
     workspace::Workspace,
 };
@@ -126,7 +126,11 @@ impl Tool for GrepTool {
          (same semantics as find_files), make the match case-insensitive, and emit \
          `context_lines` of surrounding text on each side of every hit. Build and \
          VCS directories are skipped unless `include_ignored` is true. Page through \
-         hits with `offset` and `limit`."
+         hits with `offset` and `limit`. `verbosity` controls how much each hit \
+         carries: \"detailed\" (default) returns each match with its `path`, `line`, \
+         `snippet`, and any requested context (`before`/`after`); \"concise\" returns \
+         only `path`/`line`/`snippet` and omits all context lines even when \
+         `context_lines` is set, for a cheap file:line+match listing."
     }
 
     fn input_schema(&self) -> Value {
@@ -141,7 +145,8 @@ impl Tool for GrepTool {
                 "context_lines": { "type": "integer", "minimum": 0, "maximum": MAX_CONTEXT_LINES },
                 "include_ignored": { "type": "boolean" },
                 "offset": { "type": "integer", "minimum": 0 },
-                "limit": { "type": "integer", "minimum": 1, "maximum": MAX_GREP_LIMIT }
+                "limit": { "type": "integer", "minimum": 1, "maximum": MAX_GREP_LIMIT },
+                "verbosity": verbosity_schema()
             }
         })
     }
@@ -163,9 +168,16 @@ impl Tool for GrepTool {
         let path = optional_string(&input, "path").unwrap_or(".");
         let case_insensitive = optional_bool(&input, "case_insensitive");
         let include_ignored = optional_bool(&input, "include_ignored");
-        let context_lines = optional_usize(&input, "context_lines")
-            .unwrap_or(0)
-            .min(MAX_CONTEXT_LINES);
+        let verbosity = parse_verbosity(self.name(), &input)?;
+        // Concise drops surrounding context entirely (file:line + match only),
+        // even if `context_lines` was requested. Detailed keeps it (default).
+        let context_lines = if verbosity.is_concise() {
+            0
+        } else {
+            optional_usize(&input, "context_lines")
+                .unwrap_or(0)
+                .min(MAX_CONTEXT_LINES)
+        };
         let skip = optional_usize(&input, "offset").unwrap_or(0);
         let want = optional_usize(&input, "limit")
             .unwrap_or(DEFAULT_GREP_LIMIT)
@@ -428,6 +440,56 @@ mod tests {
             .unwrap();
 
         let m = &result.content()["matches"][0];
+        assert_eq!(m["before"], json!(["two"]));
+        assert_eq!(m["after"], json!(["four"]));
+        assert_eq!(m["before_start_line"], 2);
+    }
+
+    #[tokio::test]
+    async fn grep_concise_omits_context_even_when_requested() {
+        let (_dir, workspace) = workspace_with(&[("a.rs", "one\ntwo\nTARGET\nfour\nfive\n")]);
+
+        let result = GrepTool
+            .execute(
+                &workspace,
+                json!({ "pattern": "TARGET", "context_lines": 2, "verbosity": "concise" }),
+            )
+            .await
+            .unwrap();
+
+        let m = &result.content()["matches"][0];
+        assert_eq!(m["path"], "a.rs");
+        assert_eq!(m["line"], 3);
+        assert_eq!(m["snippet"], "TARGET");
+        // Concise drops surrounding context even though context_lines was set.
+        assert!(m.get("before").is_none());
+        assert!(m.get("after").is_none());
+        assert!(m.get("before_start_line").is_none());
+    }
+
+    #[tokio::test]
+    async fn grep_default_matches_detailed_context() {
+        // Omitted verbosity == detailed == the historical shape: context lines
+        // are present byte-for-byte as before.
+        let (_dir, workspace) = workspace_with(&[("a.rs", "one\ntwo\nTARGET\nfour\nfive\n")]);
+
+        let default = GrepTool
+            .execute(
+                &workspace,
+                json!({ "pattern": "TARGET", "context_lines": 1 }),
+            )
+            .await
+            .unwrap();
+        let detailed = GrepTool
+            .execute(
+                &workspace,
+                json!({ "pattern": "TARGET", "context_lines": 1, "verbosity": "detailed" }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(default.content(), detailed.content());
+        let m = &default.content()["matches"][0];
         assert_eq!(m["before"], json!(["two"]));
         assert_eq!(m["after"], json!(["four"]));
         assert_eq!(m["before_start_line"], 2);

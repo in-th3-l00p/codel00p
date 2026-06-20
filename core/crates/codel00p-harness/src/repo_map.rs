@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use crate::{
     errors::HarnessError,
     tool_result::ToolResult,
-    tools::{Tool, optional_string},
+    tools::{Tool, Verbosity, optional_string, parse_verbosity, verbosity_schema},
     walk::GlobMatcher,
     workspace::Workspace,
 };
@@ -54,7 +54,11 @@ impl Tool for RepoMapTool {
          referenced elsewhere, most-depended-on first. Restrict scope with `path` \
          and/or a `glob` file filter, and bound output with `max_files` and \
          `max_symbols_per_file`. Supports Rust, Python, JavaScript/TypeScript, Go, \
-         Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation."
+         Java, Ruby, and C/C++. Pair with `grep`/`read_file` for exact navigation. \
+         `verbosity` controls per-symbol detail: \"detailed\" (default) lists each \
+         symbol with its `kind`, `line`, full `signature`, and `references`; \
+         \"concise\" lists symbol names only (dropping signatures) for a cheap \
+         name-level overview."
     }
 
     fn input_schema(&self) -> Value {
@@ -67,7 +71,8 @@ impl Tool for RepoMapTool {
                 "max_files": { "type": "integer", "minimum": 1, "maximum": MAX_MAX_FILES },
                 "max_symbols_per_file": {
                     "type": "integer", "minimum": 1, "maximum": MAX_MAX_SYMBOLS_PER_FILE
-                }
+                },
+                "verbosity": verbosity_schema()
             }
         })
     }
@@ -86,6 +91,7 @@ impl Tool for RepoMapTool {
         input: Value,
     ) -> Result<ToolResult, HarnessError> {
         let path = optional_string(&input, "path").unwrap_or(".");
+        let verbosity = parse_verbosity(self.name(), &input)?;
         let include_ignored = input
             .get("include_ignored")
             .and_then(Value::as_bool)
@@ -189,13 +195,20 @@ impl Tool for RepoMapTool {
                     .into_iter()
                     .take(max_symbols_per_file)
                     .map(|symbol| {
-                        json!({
-                            "name": symbol.name,
-                            "kind": symbol.kind,
-                            "line": symbol.line,
-                            "signature": symbol.signature,
-                            "references": symbol.score,
-                        })
+                        // Concise: symbol names only (no signatures), a cheap
+                        // name-level overview. Detailed (default): the full,
+                        // byte-identical historical shape.
+                        if verbosity == Verbosity::Concise {
+                            json!({ "name": symbol.name })
+                        } else {
+                            json!({
+                                "name": symbol.name,
+                                "kind": symbol.kind,
+                                "line": symbol.line,
+                                "signature": symbol.signature,
+                                "references": symbol.score,
+                            })
+                        }
                     })
                     .collect();
                 json!({
@@ -602,6 +615,42 @@ mod tests {
             .map(|f| f["path"].as_str().unwrap())
             .collect();
         assert_eq!(paths, vec!["src/a.rs"]);
+    }
+
+    #[test]
+    fn concise_lists_symbol_names_only() {
+        let (_dir, ws) = workspace_with(&[("src/lib.rs", "pub fn alpha() {}\npub struct Beta;\n")]);
+        let map = run(&ws, json!({ "verbosity": "concise" }));
+        let symbols = map["files"][0]["symbols"].as_array().unwrap();
+        for symbol in symbols {
+            assert!(symbol["name"].is_string());
+            // Concise drops signatures and the other per-symbol detail.
+            assert!(symbol.get("signature").is_none());
+            assert!(symbol.get("kind").is_none());
+            assert!(symbol.get("line").is_none());
+            assert!(symbol.get("references").is_none());
+        }
+        let names: Vec<&str> = symbols
+            .iter()
+            .map(|s| s["name"].as_str().unwrap())
+            .collect();
+        assert!(names.contains(&"alpha"));
+        assert!(names.contains(&"Beta"));
+    }
+
+    #[test]
+    fn default_equals_detailed_with_signatures() {
+        // Omitted verbosity == detailed == the historical shape (full
+        // signatures and per-symbol detail).
+        let (_dir, ws) = workspace_with(&[("src/lib.rs", "pub fn alpha() {}\npub struct Beta;\n")]);
+        let default = run(&ws, json!({}));
+        let detailed = run(&ws, json!({ "verbosity": "detailed" }));
+        assert_eq!(default, detailed);
+        let first = &default["files"][0]["symbols"][0];
+        assert!(first["signature"].is_string());
+        assert!(first["kind"].is_string());
+        assert!(first["line"].is_number());
+        assert!(first["references"].is_number());
     }
 
     #[test]
