@@ -245,12 +245,23 @@ impl EntityBrowser {
     }
 }
 
+/// An in-progress rename inside the session switcher: the id of the session being
+/// renamed and the editable title buffer (a single line, cursor parked at the end).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SessionRename {
+    pub(crate) session_id: String,
+    pub(crate) input: String,
+}
+
 /// The session switcher: a read-only list of prior conversations plus a status line
-/// (loading / error). Selecting a row resumes that session in place.
+/// (loading / error). Selecting a row resumes that session in place; pressing the
+/// rename key (F2) on a row enters an inline rename mode.
 #[derive(Clone, Debug)]
 pub(crate) struct SessionSwitcher {
     pub(crate) sessions: Picker<SessionSummary>,
     pub(crate) status: Option<String>,
+    /// `Some` while the user is editing a session's title inline.
+    pub(crate) rename: Option<SessionRename>,
 }
 
 impl SessionSwitcher {
@@ -258,6 +269,7 @@ impl SessionSwitcher {
         Self {
             sessions: Picker::new(Vec::new()),
             status: Some("Loading…".to_string()),
+            rename: None,
         }
     }
 
@@ -272,6 +284,21 @@ impl SessionSwitcher {
 
     pub(crate) fn selected_item(&self) -> Option<&SessionSummary> {
         self.sessions.selected_item()
+    }
+
+    /// Enters rename mode for the highlighted session, seeding the input with its
+    /// current title (falling back to the id). No-op if no row is highlighted.
+    pub(crate) fn begin_rename(&mut self) {
+        if let Some(session) = self.sessions.selected_item() {
+            let input = session
+                .title
+                .clone()
+                .unwrap_or_else(|| session.session_id.clone());
+            self.rename = Some(SessionRename {
+                session_id: session.session_id.clone(),
+                input,
+            });
+        }
     }
 }
 

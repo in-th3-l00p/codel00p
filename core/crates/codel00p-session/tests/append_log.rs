@@ -203,6 +203,41 @@ fn title_round_trips_through_the_store() {
 }
 
 #[test]
+fn set_session_title_updates_and_clears_the_title() {
+    let mut store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "project-1"),
+        InMemoryStorage::default(),
+    );
+    let session_id = SessionId::from_static("session-rename");
+    store
+        .create_session(SessionMetadata::new(session_id.clone(), "cli"))
+        .expect("create session");
+
+    store
+        .set_session_title(&session_id, "Renamed conversation")
+        .expect("set title");
+    assert_eq!(
+        store.metadata(&session_id).expect("metadata").title(),
+        Some("Renamed conversation")
+    );
+
+    // An empty/whitespace title clears it (mirrors `with_title` semantics).
+    store
+        .set_session_title(&session_id, "   ")
+        .expect("clear title");
+    assert_eq!(store.metadata(&session_id).expect("metadata").title(), None);
+}
+
+#[test]
+fn set_session_title_on_unknown_session_fails() {
+    let mut store = InMemorySessionStore::default();
+    let error = store
+        .set_session_title(&SessionId::from_static("session-missing"), "Nope")
+        .expect_err("unknown session should fail");
+    assert!(matches!(error, SessionStoreError::SessionNotFound { .. }));
+}
+
+#[test]
 fn metadata_without_created_at_deserializes_to_none() {
     // A session persisted before `created_at` existed has no such field.
     let legacy = serde_json::json!({

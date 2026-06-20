@@ -242,27 +242,7 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
                 }
             }
         }
-        Overlay::Sessions(mut switcher) => match switcher.on_key(key) {
-            PickerOutcome::Selected => match switcher.selected_item() {
-                Some(session) => {
-                    let id = session.session_id.clone();
-                    match crate::config::parse_session_id(&id) {
-                        Ok(session_id) => vec![Effect::ResumeSession(session_id)],
-                        Err(error) => {
-                            app.conversation
-                                .push_error(format!("Cannot resume {id}: {error}"));
-                            Vec::new()
-                        }
-                    }
-                }
-                None => Vec::new(),
-            },
-            PickerOutcome::Cancelled => Vec::new(),
-            PickerOutcome::Pending => {
-                app.overlay = Overlay::Sessions(switcher);
-                Vec::new()
-            }
-        },
+        Overlay::Sessions(switcher) => handle_sessions_key(app, switcher, key),
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
         Overlay::Settings(settings) => handle_settings_key(app, settings, key),
         Overlay::Command(mut palette) => match palette.on_key(key) {
@@ -277,6 +257,101 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
             }
         },
         Overlay::None => Vec::new(),
+    }
+}
+
+/// Handles keys in the session switcher. In normal (list) mode, F2 enters an inline
+/// rename for the highlighted row, Enter resumes it, Esc closes. In rename mode the
+/// key edits the title buffer: Enter confirms (dispatching a rename), Esc cancels
+/// back to the list, and printable characters / Backspace edit.
+fn handle_sessions_key(app: &mut App, mut switcher: SessionSwitcher, key: KeyEvent) -> Vec<Effect> {
+    if switcher.rename.is_some() {
+        return handle_session_rename_key(app, switcher, key);
+    }
+    // F2 begins an inline rename of the highlighted session.
+    if key.code == KeyCode::F(2) {
+        switcher.begin_rename();
+        app.overlay = Overlay::Sessions(switcher);
+        return Vec::new();
+    }
+    match switcher.on_key(key) {
+        PickerOutcome::Selected => match switcher.selected_item() {
+            Some(session) => {
+                let id = session.session_id.clone();
+                match crate::config::parse_session_id(&id) {
+                    Ok(session_id) => vec![Effect::ResumeSession(session_id)],
+                    Err(error) => {
+                        app.conversation
+                            .push_error(format!("Cannot resume {id}: {error}"));
+                        Vec::new()
+                    }
+                }
+            }
+            None => Vec::new(),
+        },
+        PickerOutcome::Cancelled => Vec::new(),
+        PickerOutcome::Pending => {
+            app.overlay = Overlay::Sessions(switcher);
+            Vec::new()
+        }
+    }
+}
+
+/// Handles keys while inline-renaming a session: Enter confirms, Esc cancels, and
+/// printable characters / Backspace edit the title buffer.
+fn handle_session_rename_key(
+    app: &mut App,
+    mut switcher: SessionSwitcher,
+    key: KeyEvent,
+) -> Vec<Effect> {
+    let Some(rename) = switcher.rename.as_mut() else {
+        app.overlay = Overlay::Sessions(switcher);
+        return Vec::new();
+    };
+    match key.code {
+        KeyCode::Esc => {
+            // Cancel the rename but keep the switcher open on the list.
+            switcher.rename = None;
+            app.overlay = Overlay::Sessions(switcher);
+            Vec::new()
+        }
+        KeyCode::Enter => {
+            let title = rename
+                .input
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let id = rename.session_id.clone();
+            switcher.rename = None;
+            app.overlay = Overlay::Sessions(switcher);
+            if title.is_empty() {
+                app.conversation
+                    .push_notice("Rename needs a non-empty title.");
+                return Vec::new();
+            }
+            match crate::config::parse_session_id(&id) {
+                Ok(session_id) => vec![Effect::RenameSession(session_id, title)],
+                Err(error) => {
+                    app.conversation
+                        .push_error(format!("Cannot rename {id}: {error}"));
+                    Vec::new()
+                }
+            }
+        }
+        KeyCode::Backspace => {
+            rename.input.pop();
+            app.overlay = Overlay::Sessions(switcher);
+            Vec::new()
+        }
+        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            rename.input.push(c);
+            app.overlay = Overlay::Sessions(switcher);
+            Vec::new()
+        }
+        _ => {
+            app.overlay = Overlay::Sessions(switcher);
+            Vec::new()
+        }
     }
 }
 
@@ -1096,6 +1171,70 @@ mod tests {
         match effects.as_slice() {
             [Effect::ResumeSession(id)] => assert_eq!(id.as_str(), "chat-42"),
             other => panic!("expected ResumeSession, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn f2_in_switcher_enters_rename_and_enter_produces_rename_effect() {
+        use crate::tui::overlay::SessionSummary;
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(5)));
+        update(
+            &mut app,
+            Msg::SessionList(Ok(vec![SessionSummary {
+                session_id: "chat-7".to_string(),
+                title: Some("Old name".to_string()),
+                source: "cli".to_string(),
+                message_count: 1,
+            }])),
+        );
+        // F2 enters rename mode seeded with the current title.
+        update(&mut app, key(KeyCode::F(2)));
+        match &app.overlay {
+            Overlay::Sessions(switcher) => {
+                let rename = switcher.rename.as_ref().expect("rename mode");
+                assert_eq!(rename.session_id, "chat-7");
+                assert_eq!(rename.input, "Old name");
+            }
+            _ => panic!("expected session switcher"),
+        }
+        // Clear it and type a new title.
+        for _ in 0.."Old name".len() {
+            update(&mut app, key(KeyCode::Backspace));
+        }
+        type_str(&mut app, "Fresh title");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        match effects.as_slice() {
+            [Effect::RenameSession(id, title)] => {
+                assert_eq!(id.as_str(), "chat-7");
+                assert_eq!(title, "Fresh title");
+            }
+            other => panic!("expected RenameSession, got {} effects", other.len()),
+        }
+        // The switcher stays open (rename cleared) so the refreshed list can land.
+        assert!(matches!(app.overlay, Overlay::Sessions(_)));
+    }
+
+    #[test]
+    fn esc_cancels_rename_without_leaving_the_switcher() {
+        use crate::tui::overlay::SessionSummary;
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(5)));
+        update(
+            &mut app,
+            Msg::SessionList(Ok(vec![SessionSummary {
+                session_id: "chat-7".to_string(),
+                title: Some("Keep me".to_string()),
+                source: "cli".to_string(),
+                message_count: 1,
+            }])),
+        );
+        update(&mut app, key(KeyCode::F(2)));
+        let effects = update(&mut app, key(KeyCode::Esc));
+        assert!(effects.is_empty());
+        match &app.overlay {
+            Overlay::Sessions(switcher) => assert!(switcher.rename.is_none()),
+            _ => panic!("expected session switcher to stay open"),
         }
     }
 

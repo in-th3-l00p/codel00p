@@ -169,6 +169,67 @@ fn session_list_is_empty_without_sessions() {
 }
 
 #[test]
+fn session_rename_sets_a_new_title() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_session(
+        &db_path,
+        "session-a",
+        "cli",
+        Some(1_000),
+        Some("Old title"),
+        &["hello"],
+    );
+
+    let output = run_codel00p(
+        &db_path,
+        &["session", "rename", "session-a", "Brand", "new", "title"],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        stdout(&output).contains("Renamed session session-a to \"Brand new title\"."),
+        "stdout: {}",
+        stdout(&output)
+    );
+
+    // The new title is reflected in `session list`.
+    let listing = stdout(&run_codel00p(&db_path, &["session", "list"]));
+    assert!(
+        listing.contains("session-a\tBrand new title\tcli"),
+        "stdout: {listing}"
+    );
+}
+
+#[test]
+fn session_rename_requires_a_title() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_session(&db_path, "session-a", "cli", Some(1_000), None, &["hi"]);
+
+    let output = run_codel00p(&db_path, &["session", "rename", "session-a"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("session rename expects"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn session_rename_reports_unknown_session() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+
+    let output = run_codel00p(&db_path, &["session", "rename", "missing", "Title"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("session not found"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn session_list_rejects_unknown_flags() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");

@@ -23,6 +23,7 @@ pub fn run(config: CliConfig, agent_defaults: AgentSettings, args: &[String]) ->
     match command.as_str() {
         "list" => session_list(config, rest),
         "show" => session_show(config, rest),
+        "rename" => session_rename(config, rest),
         _ => Err(format!("unknown session command: {command}")),
     }
 }
@@ -150,6 +151,27 @@ fn session_show(config: CliConfig, args: &[String]) -> CliResult<String> {
     }
 
     Ok(output)
+}
+
+/// `sessions rename <session_id> <new title...>`: the remaining args are joined
+/// (whitespace-normalized) into the new title and written to the session store.
+fn session_rename(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some((id, title_parts)) = args.split_first() else {
+        return Err("session rename expects: <session_id> <new title>".to_string());
+    };
+    let title = title_parts.join(" ");
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    if title.is_empty() {
+        return Err("session rename expects a non-empty title".to_string());
+    }
+
+    let session_id = parse_session_id(id)?;
+    let mut store = open_session_store(&config)?;
+    store
+        .set_session_title(&session_id, &title)
+        .map_err(|error| error.to_string())?;
+
+    Ok(format!("Renamed session {id} to \"{title}\".\n"))
 }
 
 pub(crate) fn session_role_label(role: SessionRole) -> &'static str {

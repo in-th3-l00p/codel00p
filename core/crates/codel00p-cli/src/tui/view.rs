@@ -512,6 +512,7 @@ fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  PgUp/PgDn    scroll the transcript · wheel scrolls too"),
         Line::from("  F1           this help"),
         Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
+        Line::from("  F2 (in sessions)  rename the highlighted conversation"),
         Line::from("  /sessions /memory /history /tools /reset"),
         Line::from("  Ctrl+P → Settings  toggle advanced status info (model · tokens · context)"),
         Line::from("  Esc          close overlay · clear input · quit"),
@@ -691,14 +692,27 @@ fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
 
-    let status = switcher
-        .status
-        .clone()
-        .unwrap_or_else(|| "Enter to resume · Esc to close".to_string());
-    frame.render_widget(
-        Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
-        rows[0],
-    );
+    // In rename mode the status line becomes an inline title editor; otherwise it
+    // shows the usual hint (now including the rename key).
+    if let Some(rename) = &switcher.rename {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  rename: ", app.theme.accent()),
+                Span::styled(format!("{}▏", rename.input), Style::default()),
+                Span::styled("  Enter to save · Esc to cancel", app.theme.muted()),
+            ])),
+            rows[0],
+        );
+    } else {
+        let status = switcher
+            .status
+            .clone()
+            .unwrap_or_else(|| "Enter to resume · F2 to rename · Esc to close".to_string());
+        frame.render_widget(
+            Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
+            rows[0],
+        );
+    }
     draw_picker(
         frame,
         rows[1],
