@@ -171,17 +171,30 @@ impl StreamingAccumulator {
                         .resize_with(index + 1, StreamingToolCall::default);
                 }
                 let slot = &mut self.tool_calls[index];
+                let mut delta_name: Option<String> = None;
+                let mut delta_args = String::new();
                 if let Some(id) = delta.id {
                     slot.id = Some(id);
                 }
                 if let Some(function) = delta.function {
                     if let Some(name) = function.name {
                         slot.name.push_str(&name);
+                        delta_name = Some(name);
                     }
                     if let Some(arguments) = function.arguments {
                         slot.arguments.push_str(&arguments);
+                        delta_args = arguments;
                     }
                 }
+                // Surface the increment to the sink so callers can show the tool
+                // call being assembled live. The final assembled call (built in
+                // `finish`) is unchanged.
+                sink.on_tool_call_delta(
+                    index,
+                    slot.id.as_deref(),
+                    delta_name.as_deref(),
+                    &delta_args,
+                );
             }
         }
 

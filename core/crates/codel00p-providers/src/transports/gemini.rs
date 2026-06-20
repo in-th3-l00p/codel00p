@@ -590,7 +590,24 @@ impl GeminiStreamAccumulator {
                         }
                     }
                     GeminiResponsePart::FunctionCall { function_call } => {
-                        self.tool_calls.push(function_call.normalize());
+                        // Gemini delivers each function call atomically (the full
+                        // argument object arrives in one part rather than as
+                        // incremental fragments). Surface it as a single delta so
+                        // callers still observe the call live; the assembled call
+                        // pushed below is unchanged.
+                        let call = function_call.normalize();
+                        let index = self.tool_calls.len();
+                        let args_fragment = match &call.arguments {
+                            Value::String(text) => text.clone(),
+                            other => other.to_string(),
+                        };
+                        sink.on_tool_call_delta(
+                            index,
+                            call.id.as_deref(),
+                            Some(&call.name),
+                            &args_fragment,
+                        );
+                        self.tool_calls.push(call);
                     }
                     GeminiResponsePart::Other {} => {}
                 }

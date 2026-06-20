@@ -5,9 +5,10 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use codel00p_harness::{
     AgentEventSink, AgentHarness, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
-    HarnessInferenceResponse, MemoryRepositoryCandidateSink, MemoryRepositoryProjectMemoryProvider,
-    SessionId, SessionMessage, SessionState, ToolRegistry, TurnMemoryExtractionRequest,
-    TurnMemoryExtractor, UserMessage, Workspace,
+    HarnessInferenceRequest, HarnessInferenceResponse, MemoryRepositoryCandidateSink,
+    MemoryRepositoryProjectMemoryProvider, ModelClient, SessionId, SessionMessage, SessionState,
+    TokenSink, ToolRegistry, TurnMemoryExtractionRequest, TurnMemoryExtractor, UserMessage,
+    Workspace,
 };
 use codel00p_memory::{
     InMemoryMemoryStore, MemoryCandidateInput, MemoryListFilter, MemoryRepository, ReviewDecision,
@@ -15,6 +16,9 @@ use codel00p_memory::{
 use codel00p_protocol::{MemoryKind, MemorySource, MemoryStatus, ProjectRef, TurnId};
 use support::ScriptedModelClient;
 use tempfile::tempdir;
+
+/// A recorded tool-call delta: (index, id, name, args_fragment).
+type RecordedDelta = (usize, Option<String>, Option<String>, String);
 
 #[tokio::test]
 async fn run_turn_returns_final_assistant_message_without_tools() {
@@ -559,4 +563,136 @@ async fn run_turn_streams_assistant_text_to_the_token_sink() {
         Some("Streamed answer.")
     );
     assert_eq!(collected.lock().unwrap().as_str(), "Streamed answer.");
+}
+
+/// A model client whose streaming path emits a sequence of tool-call argument
+/// deltas to the sink before returning a (plain) assistant message, mimicking a
+/// provider that streams a tool call being assembled.
+#[derive(Clone)]
+struct StreamingDeltaModelClient;
+
+#[async_trait]
+impl ModelClient for StreamingDeltaModelClient {
+    async fn infer(
+        &self,
+        _request: HarnessInferenceRequest,
+    ) -> Result<HarnessInferenceResponse, HarnessError> {
+        Ok(HarnessInferenceResponse::assistant(
+            "github", "gpt-4o", "Done.",
+        ))
+    }
+
+    async fn infer_streaming(
+        &self,
+        request: HarnessInferenceRequest,
+        sink: &dyn TokenSink,
+    ) -> Result<HarnessInferenceResponse, HarnessError> {
+        sink.on_tool_call_delta(0, Some("call_1"), Some("read_file"), "");
+        sink.on_tool_call_delta(0, Some("call_1"), None, "{\"path\"");
+        sink.on_tool_call_delta(0, Some("call_1"), None, ":\"a.txt\"}");
+        self.infer(request).await
+    }
+}
+
+#[tokio::test]
+async fn run_turn_surfaces_tool_call_deltas_to_token_sink_and_event_stream() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let session_id = SessionId::from_static("session-tool-delta");
+
+    // Token sink records every tool-call delta fragment it receives.
+    #[derive(Clone, Default)]
+    struct DeltaTokenSink {
+        deltas: Arc<Mutex<Vec<RecordedDelta>>>,
+    }
+    impl TokenSink for DeltaTokenSink {
+        fn on_token(&self, _token: &str) {}
+        fn on_tool_call_delta(
+            &self,
+            index: usize,
+            id: Option<&str>,
+            name: Option<&str>,
+            args_fragment: &str,
+        ) {
+            self.deltas.lock().unwrap().push((
+                index,
+                id.map(str::to_string),
+                name.map(str::to_string),
+                args_fragment.to_string(),
+            ));
+        }
+    }
+
+    let token_sink = DeltaTokenSink::default();
+    let recorded = token_sink.deltas.clone();
+    let event_sink = RecordingEventSink::default();
+
+    let outcome = AgentHarness::builder()
+        .model_client(StreamingDeltaModelClient)
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        .token_sink(token_sink)
+        .event_sink(event_sink.clone())
+        .build()
+        .expect("build harness")
+        .run_turn(session_id, UserMessage::new("Read a.txt."))
+        .await
+        .expect("run turn");
+
+    assert_eq!(outcome.assistant_message.as_deref(), Some("Done."));
+
+    // The token sink saw the fragments incrementally and in order.
+    let deltas = recorded.lock().unwrap();
+    assert_eq!(
+        *deltas,
+        vec![
+            (
+                0,
+                Some("call_1".to_string()),
+                Some("read_file".to_string()),
+                String::new()
+            ),
+            (0, Some("call_1".to_string()), None, "{\"path\"".to_string()),
+            (
+                0,
+                Some("call_1".to_string()),
+                None,
+                ":\"a.txt\"}".to_string()
+            ),
+        ]
+    );
+
+    // The event stream carried matching `ToolCallArgsDelta` events.
+    let args_deltas: Vec<RecordedDelta> = event_sink
+        .events()
+        .into_iter()
+        .filter_map(|event| match event {
+            HarnessEvent::ToolCallArgsDelta {
+                index,
+                id,
+                name,
+                args_fragment,
+                ..
+            } => Some((index, id, name, args_fragment)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        args_deltas,
+        vec![
+            (
+                0,
+                Some("call_1".to_string()),
+                Some("read_file".to_string()),
+                String::new()
+            ),
+            (0, Some("call_1".to_string()), None, "{\"path\"".to_string()),
+            (
+                0,
+                Some("call_1".to_string()),
+                None,
+                ":\"a.txt\"}".to_string()
+            ),
+        ]
+    );
 }

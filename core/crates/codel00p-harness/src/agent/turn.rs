@@ -179,9 +179,32 @@ impl AgentHarness {
 
             let response = match &self.token_sink {
                 Some(sink) => {
-                    self.model_client
-                        .infer_streaming(request, sink.as_ref())
-                        .await?
+                    // Stream assistant text to the caller's sink, and fan
+                    // tool-call argument deltas out both to that sink and (when
+                    // an event sink is wired) onto the event stream as live
+                    // `ToolCallArgsDelta` events. The forwarder drains buffered
+                    // deltas concurrently with the inference call; the final
+                    // assembled response is unchanged.
+                    let (streaming_sink, forwarder) = crate::streaming::StreamingSink::new(
+                        Some(sink.clone()),
+                        self.event_sink.clone(),
+                        session_state.session_id().clone(),
+                        turn_id.clone(),
+                    );
+                    // Drop the sink once inference finishes so the forwarder's
+                    // channel closes and `forward` returns after draining.
+                    let (response, ()) = futures::join!(
+                        async {
+                            let response = self
+                                .model_client
+                                .infer_streaming(request, &streaming_sink)
+                                .await;
+                            drop(streaming_sink);
+                            response
+                        },
+                        forwarder.forward(),
+                    );
+                    response?
                 }
                 None => self.model_client.infer(request).await?,
             };

@@ -469,11 +469,16 @@ impl AnthropicStreamAccumulator {
                 if let (Some(index), Some(block)) = (event.index, event.content_block)
                     && block.kind == "tool_use"
                 {
+                    let name = block.name.unwrap_or_default();
+                    // Surface the opening of a tool call (id + name, no args yet)
+                    // so callers can show it being assembled live. The final
+                    // assembled call (built in `finish`) is unchanged.
+                    sink.on_tool_call_delta(index, block.id.as_deref(), Some(&name), "");
                     self.tool_calls.insert(
                         index,
                         AnthropicStreamToolCall {
                             id: block.id,
-                            name: block.name.unwrap_or_default(),
+                            name,
                             arguments: String::new(),
                         },
                     );
@@ -492,6 +497,7 @@ impl AnthropicStreamAccumulator {
                         && let Some(slot) = self.tool_calls.get_mut(&index)
                     {
                         slot.arguments.push_str(&partial);
+                        sink.on_tool_call_delta(index, slot.id.as_deref(), None, &partial);
                     }
                 }
             }

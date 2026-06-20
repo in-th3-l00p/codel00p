@@ -1,10 +1,41 @@
 use codel00p_providers::{
     ChatMessage, Credential, InferenceClient, InferenceRequest, ProviderError, ResponseFormat,
-    ToolCall, ToolChoice, ToolDefinition, default_registry,
+    TokenSink, ToolCall, ToolChoice, ToolDefinition, default_registry,
 };
 use httpmock::Method::POST;
 use httpmock::prelude::*;
 use serde_json::json;
+use std::sync::Mutex;
+
+/// A recorded tool-call delta: (index, id, name, args_fragment).
+type RecordedDelta = (usize, Option<String>, Option<String>, String);
+
+/// A test sink that records every tool-call argument delta it receives, so a
+/// test can assert the fragments arrive incrementally and in order. Text tokens
+/// are ignored.
+#[derive(Default)]
+struct RecordingSink {
+    deltas: Mutex<Vec<RecordedDelta>>,
+}
+
+impl TokenSink for RecordingSink {
+    fn on_token(&self, _token: &str) {}
+
+    fn on_tool_call_delta(
+        &self,
+        index: usize,
+        id: Option<&str>,
+        name: Option<&str>,
+        args_fragment: &str,
+    ) {
+        self.deltas.lock().unwrap().push((
+            index,
+            id.map(str::to_string),
+            name.map(str::to_string),
+            args_fragment.to_string(),
+        ));
+    }
+}
 
 #[tokio::test]
 async fn chat_completions_serializes_json_schema_response_format() {
@@ -483,6 +514,78 @@ async fn chat_completions_streams_and_assembles_tool_call_deltas() {
         .unwrap();
 
     chat.assert_async().await;
+    assert_eq!(response.tool_calls.len(), 1);
+    let call: &ToolCall = &response.tool_calls[0];
+    assert_eq!(call.id.as_deref(), Some("call_1"));
+    assert_eq!(call.name, "read_file");
+    assert_eq!(call.arguments, json!({ "path": "a.txt" }));
+    assert_eq!(response.finish_reason.as_deref(), Some("tool_calls"));
+}
+
+#[tokio::test]
+async fn chat_completions_surfaces_tool_call_argument_deltas_to_sink() {
+    let server = MockServer::start_async().await;
+    let sse = concat!(
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"path\\\"\"}}]}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":\\\"a.txt\\\"}\"}}]}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+        "data: [DONE]\n\n",
+    );
+    let chat = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/chat/completions");
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        })
+        .await;
+
+    let client = InferenceClient::builder()
+        .registry(default_registry())
+        .credential("custom", Credential::api_key("test-key"))
+        .build();
+
+    let sink = RecordingSink::default();
+    let response = client
+        .complete_streaming(
+            InferenceRequest::builder("custom", "test-model")
+                .base_url(server.base_url())
+                .message(ChatMessage::user("Read a.txt."))
+                .build(),
+            &sink,
+        )
+        .await
+        .unwrap();
+
+    chat.assert_async().await;
+
+    // The sink saw the call assembled incrementally: the opening fragment with
+    // id+name, then two argument-only fragments, in order.
+    let deltas = sink.deltas.lock().unwrap();
+    assert_eq!(
+        *deltas,
+        vec![
+            (
+                0,
+                Some("call_1".to_string()),
+                Some("read_file".to_string()),
+                String::new()
+            ),
+            (0, Some("call_1".to_string()), None, "{\"path\"".to_string()),
+            (
+                0,
+                Some("call_1".to_string()),
+                None,
+                ":\"a.txt\"}".to_string()
+            ),
+        ]
+    );
+    // Concatenating the fragments reconstructs the raw argument JSON.
+    let reconstructed: String = deltas.iter().map(|(_, _, _, frag)| frag.as_str()).collect();
+    assert_eq!(reconstructed, "{\"path\":\"a.txt\"}");
+
+    // The final assembled tool call is unchanged.
     assert_eq!(response.tool_calls.len(), 1);
     let call: &ToolCall = &response.tool_calls[0];
     assert_eq!(call.id.as_deref(), Some("call_1"));

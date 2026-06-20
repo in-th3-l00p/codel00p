@@ -668,6 +668,10 @@ fn apply_event(app: &mut App, event: &HarnessEvent) {
         TurnCompleted { iterations, .. } => {
             app.turn.iterations = *iterations;
         }
+        // `ToolCallArgsDelta` reaches the bridge here (via `ChannelEventSink`)
+        // but is intentionally not rendered into the transcript: it is a live
+        // signal, and the assembled call is surfaced by `ToolCallRequested`
+        // below it. Other consumers (e.g. `--stream-events`) observe the delta.
         _ => {}
     }
 }
