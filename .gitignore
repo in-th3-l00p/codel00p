@@ -5,6 +5,7 @@ apps/*/.next/
 apps/*/out/
 apps/*/dist/
 packages/*/dist/
+/dist/
 *.tsbuildinfo
 .turbo/
 .env
