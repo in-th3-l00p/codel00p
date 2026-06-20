@@ -51,6 +51,14 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
     let (session_state, persisted) = crate::agent::load_chat_session_state(&config, session_id)?;
     let cloud_configured = cloud_data::cloud_configured();
 
+    // Advanced status-bar info is hidden by default; honor the persisted
+    // `tui.show_advanced` preference if the user enabled it. A failed settings
+    // load (e.g. malformed config) falls back to the hidden default.
+    let show_advanced = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .and_then(|resolved| resolved.merged.tui.show_advanced)
+        .unwrap_or(false);
+
     let mut app = App::new(
         config,
         options,
@@ -58,6 +66,7 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         session_state,
         persisted,
         cloud_configured,
+        show_advanced,
     );
 
     let mut terminal =

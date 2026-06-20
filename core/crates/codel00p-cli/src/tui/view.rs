@@ -9,7 +9,9 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs};
 
 use super::app::App;
 use super::conversation::{Block as ChatBlock, ToolState};
-use super::overlay::{EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher};
+use super::overlay::{
+    EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher, SettingsOverlay, SettingsPref,
+};
 use super::picker::{Picker, PickerItem};
 use super::theme::Theme;
 
@@ -51,6 +53,7 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Sessions(switcher) => draw_sessions(app, frame, switcher),
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
         Overlay::Command(palette) => draw_command(app, frame, palette),
+        Overlay::Settings(settings) => draw_settings(app, frame, settings),
     }
 }
 
@@ -403,30 +406,84 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
         .map(|org| org.name().to_string())
         .unwrap_or_else(|| "no org".to_string());
 
-    let line = Line::from(vec![
-        Span::styled(format!(" {} ", app.options.provider), theme.selection()),
-        Span::styled(
+    // The status bar has two modes. The default (minimal) bar keeps only the
+    // turn spinner/status, org, and help — the model name and usage/context
+    // meters are hidden until the user opts in via the Settings overlay. The
+    // advanced bar additionally shows provider + model, real token usage, and a
+    // context-used/size meter.
+    let mut spans = Vec::new();
+    if app.show_advanced {
+        spans.push(Span::styled(
+            format!(" {} ", app.options.provider),
+            theme.selection(),
+        ));
+        spans.push(Span::styled(
             format!(" {} ", app.options.model),
             Style::default().fg(theme.accent),
-        ),
-        Span::styled(format!("  {turn}"), Style::default().fg(theme.tool)),
-        Span::styled(format!("   {}", usage_label(app)), theme.muted()),
-        Span::styled(format!("   org: {org}"), theme.muted()),
-        Span::styled("    Ctrl+P menu · Enter send", theme.muted()),
-    ]);
-    frame.render_widget(Paragraph::new(line), area);
+        ));
+    }
+    spans.push(Span::styled(
+        format!("  {turn}"),
+        Style::default().fg(theme.tool),
+    ));
+    if app.show_advanced {
+        spans.push(Span::styled(
+            format!("   {}", usage_label(app)),
+            theme.muted(),
+        ));
+        spans.push(Span::styled(
+            format!("   {}", context_label(app)),
+            theme.muted(),
+        ));
+    }
+    spans.push(Span::styled(format!("   org: {org}"), theme.muted()));
+    spans.push(Span::styled("    Ctrl+P menu · Enter send", theme.muted()));
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// The status-bar usage meter: message count and an estimated-token total for the
-/// current conversation. The token figure is an approximation (see
-/// [`super::app::SessionUsage`]), so it is rendered with a leading `~`.
+/// The status-bar usage meter: message count and a token total for the current
+/// conversation. Prefers the real provider total (no `~`) when an inference has
+/// reported usage; otherwise falls back to the char-count estimate (with a
+/// leading `~`; see [`super::app::SessionUsage`]).
 fn usage_label(app: &App) -> String {
-    let usage = &app.usage;
-    format!(
-        "{} msg · ~{} tok",
-        usage.messages,
-        format_count(usage.estimated_tokens)
-    )
+    match &app.last_usage {
+        Some(usage) => format!(
+            "{} msg · {} tok",
+            app.usage.messages,
+            format_count(usage.total_tokens())
+        ),
+        None => format!(
+            "{} msg · ~{} tok",
+            app.usage.messages,
+            format_count(app.usage.estimated_tokens)
+        ),
+    }
+}
+
+/// The context meter: how much of the model's context window is in use. Context
+/// used is the latest request's prompt-side tokens (input + cache), which is the
+/// closest proxy for "tokens currently in context"; it falls back to the
+/// char-count estimate before any usage arrives. The window size comes from the
+/// static [`super::app::context_window`] table — rendered as `ctx 12.3k/200k
+/// (6%)` when known, or `ctx 12.3k` when the window is unknown.
+fn context_label(app: &App) -> String {
+    let used = app
+        .last_usage
+        .as_ref()
+        .map(|usage| usage.prompt_tokens())
+        .unwrap_or(app.usage.estimated_tokens);
+    match super::app::context_window(&app.options.provider, &app.options.model) {
+        Some(window) if window > 0 => {
+            let percent = ((used as f64 / window as f64) * 100.0).round() as u64;
+            format!(
+                "ctx {}/{} ({}%)",
+                format_count(used),
+                format_count(window as u64),
+                percent
+            )
+        }
+        _ => format!("ctx {}", format_count(used)),
+    }
 }
 
 /// Formats a token count compactly: `1234` stays as-is, larger values use a `k`
@@ -456,6 +513,7 @@ fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  F1           this help"),
         Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
         Line::from("  /sessions /memory /history /tools /reset"),
+        Line::from("  Ctrl+P → Settings  toggle advanced status info (model · tokens · context)"),
         Line::from("  Esc          close overlay · clear input · quit"),
         Line::from("  Ctrl-C       quit"),
         Line::from(""),
@@ -673,6 +731,56 @@ fn draw_command(app: &App, frame: &mut Frame, palette: &super::overlay::CommandP
         rows[0],
     );
     draw_picker(frame, rows[1], &app.theme, &palette.picker, "Commands");
+}
+
+fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
+    let area = centered_rect(50, 40, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" settings ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  ↑/↓ move · Enter/Space toggle · Esc to close",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+
+    let selected = settings.selected;
+    let items: Vec<ListItem> = SettingsPref::ORDER
+        .iter()
+        .enumerate()
+        .map(|(index, pref)| {
+            let on = match pref {
+                SettingsPref::ShowAdvanced => app.show_advanced,
+            };
+            let is_selected = index == selected;
+            let prefix = if is_selected { "› " } else { "  " };
+            let checkbox = if on { "[x]" } else { "[ ]" };
+            ListItem::new(Line::from(vec![
+                Span::styled(prefix, Style::default().fg(app.theme.accent)),
+                Span::styled(
+                    format!("{checkbox} {}", pref.label()),
+                    if is_selected {
+                        app.theme.selection()
+                    } else {
+                        Style::default()
+                    },
+                ),
+                Span::styled(format!("  {}", pref.hint()), app.theme.muted()),
+            ]))
+        })
+        .collect();
+    frame.render_widget(List::new(items), rows[1]);
 }
 
 fn draw_picker<T: PickerItem>(
@@ -901,8 +1009,9 @@ mod tests {
     }
 
     #[test]
-    fn status_bar_renders_usage_meter() {
+    fn status_bar_renders_usage_meter_when_advanced() {
         let mut app = test_app();
+        app.show_advanced = true;
         app.usage = crate::tui::app::SessionUsage {
             estimated_tokens: 1234,
             messages: 5,
@@ -913,14 +1022,76 @@ mod tests {
     }
 
     #[test]
-    fn usage_meter_abbreviates_large_token_counts() {
+    fn usage_meter_abbreviates_large_token_counts_when_advanced() {
         let mut app = test_app();
+        app.show_advanced = true;
         app.usage = crate::tui::app::SessionUsage {
             estimated_tokens: 12_345,
             messages: 40,
         };
         let rendered = render_to_string(&mut app, 120, 12);
         assert!(rendered.contains("~12.3k tok"));
+    }
+
+    #[test]
+    fn status_bar_hides_advanced_info_by_default() {
+        let mut app = test_app(); // show_advanced = false
+        app.usage = crate::tui::app::SessionUsage {
+            estimated_tokens: 1234,
+            messages: 5,
+        };
+        let rendered = render_to_string(&mut app, 120, 12);
+        // The model name and token/context meters are absent on the minimal bar,
+        // but the org chip stays.
+        assert!(!rendered.contains("claude-opus-4-8"));
+        assert!(!rendered.contains("tok"));
+        assert!(!rendered.contains("ctx "));
+        assert!(rendered.contains("org:"));
+    }
+
+    #[test]
+    fn advanced_status_bar_shows_model_and_context_meter() {
+        use codel00p_protocol::TokenUsage;
+        let mut app = test_app();
+        app.show_advanced = true;
+        // A real usage figure drives both the token total and the context meter.
+        app.last_usage = Some(TokenUsage {
+            input_tokens: 12_300,
+            output_tokens: 500,
+            ..TokenUsage::default()
+        });
+        let rendered = render_to_string(&mut app, 200, 12);
+        assert!(rendered.contains("claude-opus-4-8"));
+        // claude-opus-4-8 has a known 200k window: ctx 12.3k/200.0k (...%).
+        assert!(rendered.contains("ctx 12.3k/200.0k"));
+    }
+
+    #[test]
+    fn advanced_context_meter_shows_used_only_for_unknown_window() {
+        use codel00p_protocol::TokenUsage;
+        let mut app = test_app();
+        app.show_advanced = true;
+        app.options.model = "mystery-model-9000".to_string();
+        app.last_usage = Some(TokenUsage {
+            input_tokens: 12_300,
+            ..TokenUsage::default()
+        });
+        let rendered = render_to_string(&mut app, 160, 12);
+        assert!(rendered.contains("ctx 12.3k"));
+        // No window known, so no "/<size>" suffix.
+        assert!(!rendered.contains("ctx 12.3k/"));
+    }
+
+    #[test]
+    fn renders_settings_overlay() {
+        use crate::tui::overlay::{Overlay, SettingsOverlay};
+        let mut app = test_app();
+        app.overlay = Overlay::Settings(SettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 80, 24);
+        assert!(rendered.contains("settings"));
+        assert!(rendered.contains("Show advanced info"));
+        // Default is off, so the checkbox is empty.
+        assert!(rendered.contains("[ ] Show advanced info"));
     }
 
     #[test]

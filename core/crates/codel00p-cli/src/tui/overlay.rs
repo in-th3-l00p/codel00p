@@ -286,6 +286,7 @@ pub(crate) enum CommandAction {
     SwitchOrg,
     History,
     Tools,
+    Settings,
     Help,
     Quit,
 }
@@ -346,6 +347,7 @@ pub(crate) fn command_items() -> Vec<CommandItem> {
         ("Switch organization", "re-auth into another org", SwitchOrg),
         ("Show history", "this conversation's messages", History),
         ("Show tools", "enabled tool sets", Tools),
+        ("Settings", "TUI preferences", Settings),
         ("Help", "keys and commands", Help),
         ("Quit", "exit codel00p", Quit),
     ]
@@ -356,6 +358,61 @@ pub(crate) fn command_items() -> Vec<CommandItem> {
         action,
     })
     .collect()
+}
+
+/// A single toggleable preference shown in the Settings overlay. The set of
+/// preferences is a fixed, ordered list so it is easy to add more later.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SettingsPref {
+    /// Show advanced status-bar info (model, real tokens, context meter).
+    ShowAdvanced,
+}
+
+impl SettingsPref {
+    /// All preferences, in display order. Add new rows here.
+    pub(crate) const ORDER: [SettingsPref; 1] = [SettingsPref::ShowAdvanced];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            SettingsPref::ShowAdvanced => "Show advanced info",
+        }
+    }
+
+    pub(crate) fn hint(self) -> &'static str {
+        match self {
+            SettingsPref::ShowAdvanced => "model · token usage · context size",
+        }
+    }
+}
+
+/// The Settings overlay: a small list of toggleable TUI preferences. Up/Down
+/// move the selection, Enter/Space toggle the highlighted preference, Esc closes.
+#[derive(Clone, Debug)]
+pub(crate) struct SettingsOverlay {
+    pub(crate) selected: usize,
+}
+
+impl SettingsOverlay {
+    pub(crate) fn new() -> Self {
+        Self { selected: 0 }
+    }
+
+    pub(crate) fn up(&mut self) {
+        if self.selected == 0 {
+            self.selected = SettingsPref::ORDER.len().saturating_sub(1);
+        } else {
+            self.selected -= 1;
+        }
+    }
+
+    pub(crate) fn down(&mut self) {
+        self.selected = (self.selected + 1) % SettingsPref::ORDER.len().max(1);
+    }
+
+    /// The currently highlighted preference.
+    pub(crate) fn current(&self) -> SettingsPref {
+        SettingsPref::ORDER[self.selected.min(SettingsPref::ORDER.len() - 1)]
+    }
 }
 
 // There is only ever one live `Overlay` (the open panel), so the size spread
@@ -369,6 +426,7 @@ pub(crate) enum Overlay {
     Sessions(SessionSwitcher),
     Entities(EntityBrowser),
     Command(CommandPalette),
+    Settings(SettingsOverlay),
 }
 
 impl Overlay {

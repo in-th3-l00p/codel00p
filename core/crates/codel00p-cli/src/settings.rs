@@ -24,3 +24,37 @@ pub use schema::{AgentSettings, DockerSettings, ResolvedSettings, SshSettings};
 
 #[cfg(test)]
 mod tests;
+
+/// Test-only helpers shared across modules that mutate `CODEL00P_HOME`. Path
+/// resolution reads process env, so any test touching the home dir must hold the
+/// same lock to avoid racing concurrent tests (e.g. the settings layering tests
+/// and the TUI settings-overlay persist test).
+#[cfg(test)]
+pub(crate) mod test_env {
+    use std::path::Path;
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(crate) fn lock() -> MutexGuard<'static, ()> {
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Runs `test` with `CODEL00P_HOME` pointed at `dir`, restoring the prior
+    /// value afterward. Serialized via [`lock`].
+    pub(crate) fn with_home<T>(dir: &Path, test: impl FnOnce() -> T) -> T {
+        let _guard = lock();
+        let previous = std::env::var_os("CODEL00P_HOME");
+        unsafe { std::env::set_var("CODEL00P_HOME", dir) };
+        let result = test();
+        unsafe {
+            match previous {
+                Some(value) => std::env::set_var("CODEL00P_HOME", value),
+                None => std::env::remove_var("CODEL00P_HOME"),
+            }
+        }
+        result
+    }
+}

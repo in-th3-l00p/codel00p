@@ -9,6 +9,7 @@ use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
     CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
+    SettingsOverlay, SettingsPref,
 };
 use super::picker::PickerOutcome;
 
@@ -263,6 +264,7 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
             }
         },
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
+        Overlay::Settings(settings) => handle_settings_key(app, settings, key),
         Overlay::Command(mut palette) => match palette.on_key(key) {
             PickerOutcome::Selected => match palette.selected_item() {
                 Some(item) => run_command(app, item.action),
@@ -284,6 +286,51 @@ fn open_command_palette(app: &mut App) -> Vec<Effect> {
     Vec::new()
 }
 
+/// Opens the Settings overlay (TUI preferences such as advanced-info display).
+fn open_settings(app: &mut App) -> Vec<Effect> {
+    app.overlay = Overlay::Settings(SettingsOverlay::new());
+    Vec::new()
+}
+
+/// Handles keys in the Settings overlay: Up/Down move, Enter/Space toggle the
+/// highlighted preference (flipping app state and persisting it to the user
+/// config), Esc closes. Any other key leaves the overlay open.
+fn handle_settings_key(app: &mut App, mut settings: SettingsOverlay, key: KeyEvent) -> Vec<Effect> {
+    match key.code {
+        KeyCode::Esc => return Vec::new(), // close
+        KeyCode::Up => settings.up(),
+        KeyCode::Down => settings.down(),
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            toggle_setting(app, settings.current());
+        }
+        _ => {}
+    }
+    app.overlay = Overlay::Settings(settings);
+    Vec::new()
+}
+
+/// Flips the given preference in app state and persists the new value to the
+/// user config. A failed write is surfaced as a notice but the in-session toggle
+/// still takes effect.
+fn toggle_setting(app: &mut App, pref: SettingsPref) {
+    match pref {
+        SettingsPref::ShowAdvanced => {
+            app.show_advanced = !app.show_advanced;
+            let value = if app.show_advanced { "true" } else { "false" };
+            let path = crate::settings::user_config_path();
+            match crate::settings::set_value(&path, "tui.show_advanced", value) {
+                Ok(()) => app.conversation.push_notice(format!(
+                    "Advanced info {}.",
+                    if app.show_advanced { "shown" } else { "hidden" }
+                )),
+                Err(error) => app.conversation.push_notice(format!(
+                    "Toggled advanced info, but could not save it: {error}"
+                )),
+            }
+        }
+    }
+}
+
 /// Dispatches a palette selection to the existing action handlers.
 fn run_command(app: &mut App, action: CommandAction) -> Vec<Effect> {
     match action {
@@ -295,6 +342,7 @@ fn run_command(app: &mut App, action: CommandAction) -> Vec<Effect> {
         CommandAction::SwitchOrg => open_entities(app, EntityTab::Org),
         CommandAction::History => handle_slash(app, "history"),
         CommandAction::Tools => handle_slash(app, "tools"),
+        CommandAction::Settings => open_settings(app),
         CommandAction::Help => {
             app.overlay = Overlay::Help;
             Vec::new()
@@ -662,11 +710,26 @@ fn apply_event(app: &mut App, event: &HarnessEvent) {
         } => app.conversation.push_notice(format!(
             "Context compacted: {before_message_count} → {after_message_count} messages."
         )),
-        InferenceCompleted { finish_reason, .. } => {
+        InferenceCompleted {
+            finish_reason,
+            usage,
+            ..
+        } => {
             app.turn.finish_reason = finish_reason.clone();
+            // Capture real provider token usage when reported; this is preferred
+            // over the char-count estimate in the advanced status bar.
+            if let Some(usage) = usage {
+                app.last_usage = Some(usage.clone());
+            }
         }
-        TurnCompleted { iterations, .. } => {
+        TurnCompleted {
+            iterations, usage, ..
+        } => {
             app.turn.iterations = *iterations;
+            // The turn-total usage supersedes the last per-inference figure.
+            if let Some(usage) = usage {
+                app.last_usage = Some(usage.clone());
+            }
         }
         // `ToolCallArgsDelta` reaches the bridge here (via `ChannelEventSink`)
         // but is intentionally not rendered into the transcript: it is a live
@@ -1137,5 +1200,71 @@ mod tests {
         type_str(&mut app, "quit");
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(matches!(effects.as_slice(), [Effect::Quit]));
+    }
+
+    #[test]
+    fn settings_palette_action_opens_settings_overlay() {
+        let mut app = test_app();
+        update(&mut app, ctrl(KeyCode::Char('p')));
+        // Filter down to "Settings" and run it.
+        type_str(&mut app, "settings");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(effects.is_empty());
+        assert!(matches!(app.overlay, Overlay::Settings(_)));
+    }
+
+    #[test]
+    fn toggling_setting_flips_show_advanced_and_persists() {
+        // The toggle persists to the user config; isolate CODEL00P_HOME so the
+        // write lands in a tempdir rather than the real home (serialized with the
+        // other env-touching tests via the shared lock).
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert!(!app.show_advanced);
+            update(&mut app, ctrl(KeyCode::Char('p')));
+            type_str(&mut app, "settings");
+            update(&mut app, key(KeyCode::Enter));
+            // Enter on the highlighted preference flips it on (and stays open).
+            update(&mut app, key(KeyCode::Enter));
+            assert!(app.show_advanced);
+            assert!(matches!(app.overlay, Overlay::Settings(_)));
+            // The change was written to the isolated config.
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.tui.show_advanced, Some(true));
+
+            // Space toggles it back off.
+            update(&mut app, key(KeyCode::Char(' ')));
+            assert!(!app.show_advanced);
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.tui.show_advanced, Some(false));
+
+            // Esc closes the overlay.
+            update(&mut app, key(KeyCode::Esc));
+            assert!(matches!(app.overlay, Overlay::None));
+        });
+    }
+
+    #[test]
+    fn inference_completed_captures_real_usage() {
+        use codel00p_protocol::{AgentEvent, EventId, SessionId as PSessionId, TokenUsage, TurnId};
+        let mut app = test_app();
+        assert!(app.last_usage.is_none());
+        let event = AgentEvent::InferenceCompleted {
+            event_id: EventId::new(),
+            session_id: PSessionId::new(),
+            turn_id: TurnId::new(),
+            finish_reason: Some("stop".to_string()),
+            usage: Some(TokenUsage {
+                input_tokens: 1000,
+                output_tokens: 200,
+                ..TokenUsage::default()
+            }),
+            cost: None,
+        };
+        update(&mut app, Msg::Event(event));
+        let usage = app.last_usage.expect("usage captured");
+        assert_eq!(usage.input_tokens, 1000);
+        assert_eq!(usage.total_tokens(), 1200);
     }
 }

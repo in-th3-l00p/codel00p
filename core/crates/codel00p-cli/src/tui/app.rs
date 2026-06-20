@@ -1,7 +1,7 @@
 //! The application model: all TUI state in one place, mutated only by `update`.
 
 use codel00p_harness::SessionState;
-use codel00p_protocol::Viewer;
+use codel00p_protocol::{TokenUsage, Viewer};
 use tokio::sync::oneshot;
 
 use crate::agent::{AgentRunOptions, McpServerSpec};
@@ -80,8 +80,16 @@ pub(crate) struct App {
     pub(crate) pending_permission: Option<oneshot::Sender<codel00p_harness::PermissionDecision>>,
     pub(crate) turn: TurnStatus,
     pub(crate) usage: SessionUsage,
+    /// The most recent provider-reported token usage, captured from
+    /// `InferenceCompleted`/`TurnCompleted` events. Preferred over the char-count
+    /// estimate in [`SessionUsage`] when present; `None` until the first inference
+    /// reports usage. Drives the advanced status bar's token + context meters.
+    pub(crate) last_usage: Option<TokenUsage>,
     pub(crate) cloud: CloudState,
     pub(crate) theme: Theme,
+    /// Show advanced status-bar info (model name, real tokens, context meter).
+    /// Loaded from `tui.show_advanced` at startup; toggled in the Settings overlay.
+    pub(crate) show_advanced: bool,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
     /// A newer release version if one is already known (from the update cache),
@@ -97,6 +105,7 @@ impl App {
         session_state: SessionState,
         persisted_message_count: usize,
         cloud_configured: bool,
+        show_advanced: bool,
     ) -> Self {
         Self {
             config,
@@ -112,11 +121,13 @@ impl App {
             pending_permission: None,
             turn: TurnStatus::default(),
             usage: SessionUsage::default(),
+            last_usage: None,
             cloud: CloudState {
                 configured: cloud_configured,
                 ..CloudState::default()
             },
             theme: Theme::default(),
+            show_advanced,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),
@@ -164,6 +175,34 @@ impl App {
     }
 }
 
+/// Best-effort context-window lookup for known models, used to render the
+/// `ctx used/size` meter in the advanced status bar. This is a static, hand-
+/// maintained table (there is no per-model window in [`MODEL_CATALOG`]); it is
+/// keyed by `(provider, model)` and returns the window size in tokens. Returns
+/// `None` for anything not listed, in which case the meter shows just the used
+/// count without a percentage. Provider-neutral and intentionally conservative.
+pub(crate) fn context_window(provider: &str, model: &str) -> Option<u32> {
+    // Normalize an OpenRouter-style `vendor/model` id to its bare model name so
+    // routes like `anthropic/claude-opus-4-8` match the same window.
+    let bare = model.rsplit('/').next().unwrap_or(model);
+    let key = bare.to_ascii_lowercase();
+    let window = match key.as_str() {
+        // Anthropic Claude family.
+        "claude-opus-4-8" | "claude-sonnet-4-6" | "claude-haiku-4-5" => 200_000,
+        // OpenAI family.
+        "gpt-4o" | "gpt-4o-mini" => 128_000,
+        "o3" => 200_000,
+        // Google Gemini family.
+        "gemini-2.0-flash" => 1_000_000,
+        "gemini-1.5-pro" => 2_000_000,
+        _ => return None,
+    };
+    // `provider` is accepted for future provider-specific disambiguation; today
+    // the bare model name is sufficient for the catalog entries.
+    let _ = provider;
+    Some(window)
+}
+
 /// A small, hand-maintained catalog of common models per provider. Suggestions
 /// only — any model id remains reachable by switching providers via config.
 const MODEL_CATALOG: &[(&str, &str)] = &[
@@ -178,3 +217,26 @@ const MODEL_CATALOG: &[(&str, &str)] = &[
     ("openrouter", "anthropic/claude-opus-4-8"),
     ("openrouter", "openai/gpt-4o"),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::context_window;
+
+    #[test]
+    fn context_window_returns_known_and_unknown() {
+        // Known catalog models resolve to their window.
+        assert_eq!(
+            context_window("anthropic", "claude-opus-4-8"),
+            Some(200_000)
+        );
+        assert_eq!(context_window("openai", "gpt-4o"), Some(128_000));
+        assert_eq!(context_window("gemini", "gemini-1.5-pro"), Some(2_000_000));
+        // OpenRouter-style `vendor/model` ids normalize to the bare model.
+        assert_eq!(
+            context_window("openrouter", "anthropic/claude-opus-4-8"),
+            Some(200_000)
+        );
+        // Unknown models return None so the meter shows "unknown" size.
+        assert_eq!(context_window("acme", "mystery-model-9000"), None);
+    }
+}
