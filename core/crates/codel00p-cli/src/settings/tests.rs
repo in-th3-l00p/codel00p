@@ -1,33 +1,7 @@
 use super::paths::default_memory_db;
+use super::test_env::with_home;
 use super::*;
-use std::{
-    env, fs,
-    path::Path,
-    sync::{Mutex, MutexGuard},
-};
-
-// Path resolution reads process env; serialize tests that touch it.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-fn lock_env() -> MutexGuard<'static, ()> {
-    ENV_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn with_home<T>(dir: &Path, test: impl FnOnce() -> T) -> T {
-    let _guard = lock_env();
-    let previous = env::var_os("CODEL00P_HOME");
-    unsafe { env::set_var("CODEL00P_HOME", dir) };
-    let result = test();
-    unsafe {
-        match previous {
-            Some(value) => env::set_var("CODEL00P_HOME", value),
-            None => env::remove_var("CODEL00P_HOME"),
-        }
-    }
-    result
-}
+use std::{env, fs};
 
 #[test]
 fn home_honors_codel00p_home_override() {
@@ -186,6 +160,37 @@ fn require_isolation_for_unattended_round_trips_as_bool() {
         );
         let resolved = load_layered(dir.path()).expect("reload after unset");
         assert!(resolved.agent().require_isolation_for_unattended.is_none());
+    });
+}
+
+#[test]
+fn tui_show_advanced_round_trips_and_defaults_unset() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config) leaves it unset, which the TUI treats as hidden.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.merged.tui.show_advanced.is_none());
+        assert_eq!(
+            effective_value(&resolved.merged, "tui.show_advanced").unwrap(),
+            None
+        );
+
+        let path = user_config_path();
+        set_value(&path, "tui.show_advanced", "true").expect("set show_advanced");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.merged.tui.show_advanced, Some(true));
+        assert_eq!(
+            effective_value(&resolved.merged, "tui.show_advanced").unwrap(),
+            Some("true".to_string())
+        );
+
+        set_value(&path, "tui.show_advanced", "false").expect("toggle off");
+        let resolved = load_layered(dir.path()).expect("reload after toggle");
+        assert_eq!(resolved.merged.tui.show_advanced, Some(false));
+
+        assert!(unset_value(&path, "tui.show_advanced").expect("unset"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.merged.tui.show_advanced.is_none());
     });
 }
 

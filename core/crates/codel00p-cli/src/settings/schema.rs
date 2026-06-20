@@ -22,6 +22,8 @@ pub struct Settings {
     pub plugins: PluginSettings,
     #[serde(skip_serializing_if = "DelegationSettings::is_empty")]
     pub delegation: DelegationSettings,
+    #[serde(skip_serializing_if = "TuiSettings::is_empty")]
+    pub tui: TuiSettings,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -216,6 +218,27 @@ impl DelegationSettings {
     }
 }
 
+/// Preferences for the interactive terminal UI (the agent TUI). These never
+/// affect agent behavior — only what the status bar and overlays display.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TuiSettings {
+    /// Show advanced status-bar info (model name, real token usage, and the
+    /// context window meter). Unset (the default) hides it for a minimal bar.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_advanced: Option<bool>,
+}
+
+impl TuiSettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.show_advanced, other.show_advanced);
+    }
+}
+
 impl WorkspaceSettings {
     fn is_empty(&self) -> bool {
         *self == Self::default()
@@ -267,6 +290,7 @@ impl Settings {
         self.agent.merge(other.agent);
         self.plugins.merge(other.plugins);
         self.delegation.merge(other.delegation);
+        self.tui.merge(other.tui);
     }
 }
 

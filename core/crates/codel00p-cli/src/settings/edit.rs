@@ -48,6 +48,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.require_isolation_for_unattended", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
+    ("tui.show_advanced", ValueKind::Bool),
 ];
 
 pub fn known_keys() -> Vec<&'static str> {
@@ -112,6 +113,7 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
             .delegation
             .max_concurrent_children
             .map(|value| value.to_string()),
+        "tui.show_advanced" => settings.tui.show_advanced.map(|value| value.to_string()),
         _ => None,
     };
     Ok(value)
@@ -321,6 +323,9 @@ pub fn starter_template() -> String {
          # workspace = \"/srv/codel00p\" # required: absolute remote path the workspace lives at\n\
          # user = \"deploy\"             # optional: defers to ~/.ssh/config\n\
          # port = 22                    # optional: defers to ~/.ssh/config\n\
-         # identity_file = \"~/.ssh/id_ed25519\"  # optional: defers to ~/.ssh/config / agent\n"
+         # identity_file = \"~/.ssh/id_ed25519\"  # optional: defers to ~/.ssh/config / agent\n\
+         \n\
+         # [tui]\n\
+         # show_advanced = false        # show model, token usage, and context meter in the TUI status bar\n"
     )
 }

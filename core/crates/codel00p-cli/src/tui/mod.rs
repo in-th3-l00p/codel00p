@@ -79,7 +79,8 @@ pub(crate) mod test_support {
             Vec::new(),
             SessionState::new(SessionId::from_static("session-test")),
             0,
-            false,
+            false, // cloud_configured
+            false, // show_advanced (advanced status info hidden by default)
         )
     }
 }
