@@ -708,5 +708,18 @@ pub(crate) async fn build_agent_harness_with(
         test_command: behavior.test_command_value(),
     });
 
+    // In-turn error self-correction (perfect-coding-agent #12 T0.4): classify
+    // tool failures and attach an actionable hint (error_hints), and bound
+    // repeated same-operation failures with a step-back/replan nudge once the
+    // failure budget is hit (replan_on_failure). Both default on; this is about
+    // TOOL-CALL failures during the turn, composing with — but distinct from —
+    // the end-of-turn verify loop above. With both off (and budget 0) behavior
+    // is exactly as before.
+    builder = builder.self_correct_config(codel00p_harness::SelfCorrectConfig {
+        error_hints: behavior.error_hints_enabled(),
+        replan_on_failure: behavior.replan_on_failure_enabled(),
+        failure_budget: behavior.failure_budget_value(),
+    });
+
     builder.build().map_err(|error| error.to_string())
 }

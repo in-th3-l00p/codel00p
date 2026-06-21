@@ -10,6 +10,7 @@ pub mod commands;
 pub mod context;
 pub mod delegation;
 pub mod editing;
+pub mod error_classify;
 pub mod errors;
 pub mod event_sink;
 pub mod events;
@@ -42,7 +43,7 @@ mod walk;
 pub mod web;
 pub mod workspace;
 
-pub use agent::{AgentHarness, AgentHarnessBuilder, VerifyConfig};
+pub use agent::{AgentHarness, AgentHarnessBuilder, SelfCorrectConfig, VerifyConfig};
 pub use background::BackgroundProcesses;
 pub use base_prompt::base_prompt;
 pub use cancel::CancelSignal;
@@ -64,6 +65,7 @@ pub use delegation::{
     AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner, TaskIsolation,
     delegation_tools,
 };
+pub use error_classify::{ToolErrorKind, classify};
 pub use errors::HarnessError;
 pub use event_sink::AgentEventSink;
 pub use events::HarnessEvent;

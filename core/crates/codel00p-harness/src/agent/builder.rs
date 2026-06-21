@@ -45,6 +45,7 @@ pub struct AgentHarnessBuilder {
     capability_proposals: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
     capability_extractor: Option<Arc<dyn crate::capability::CapabilityExtractor>>,
     verify: super::VerifyConfig,
+    self_correct: super::SelfCorrectConfig,
 }
 
 impl AgentHarnessBuilder {
@@ -305,6 +306,15 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Configure in-turn error self-correction (classification hints +
+    /// repeated-failure budget / replan nudge). Without this the harness uses
+    /// [`SelfCorrectConfig::default`] (bare errors, no nudge — exactly today's
+    /// behavior). The CLI builds this from the `[agent.behavior]` toggles.
+    pub fn self_correct_config(mut self, self_correct: super::SelfCorrectConfig) -> Self {
+        self.self_correct = self_correct;
+        self
+    }
+
     /// Streams assistant text to `token_sink` as it is generated. Without a sink
     /// the harness uses the non-streaming inference path.
     pub fn token_sink<T>(mut self, token_sink: T) -> Self
@@ -413,6 +423,7 @@ impl AgentHarnessBuilder {
             response_format: self.response_format,
             cancel: self.cancel.unwrap_or_default(),
             verify: self.verify,
+            self_correct: self.self_correct,
         })
     }
 }

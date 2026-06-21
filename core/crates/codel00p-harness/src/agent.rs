@@ -83,6 +83,54 @@ pub struct AgentHarness {
     /// behavior off" so a harness with no explicit config behaves exactly as
     /// before; the CLI wires the `[agent.behavior]` toggles onto it.
     verify: VerifyConfig,
+    /// In-turn error self-correction configuration (classification hints +
+    /// repeated-failure budget / replan nudge). Default is "today's behavior" so
+    /// an unconfigured harness emits bare errors and never nudges; the CLI wires
+    /// the `[agent.behavior]` toggles onto it.
+    self_correct: SelfCorrectConfig,
+}
+
+/// Configuration for in-turn error self-correction (#12 T0.4).
+///
+/// Two independent levers, both toggleable:
+///
+/// * [`error_hints`](Self::error_hints) — when a tool call fails (an `Err`, or a
+///   result whose `error`/non-zero exit signals failure), classify the failure
+///   via [`crate::error_classify::classify`] and enrich the error payload fed
+///   back to the model with `error_kind` + an actionable `hint`. Off ⇒ bare
+///   `{ "error": ... }` exactly as before.
+/// * [`replan_on_failure`](Self::replan_on_failure) — track consecutive failures
+///   of the *same operation* (tool name + program/args for command tools, else
+///   the tool name) within a turn; when one operation fails
+///   [`failure_budget`](Self::failure_budget) times in a row, inject a stronger
+///   "step back and reconsider / replan" nudge (a user message) so the agent
+///   stops looping on the same broken call. The nudge never aborts the turn —
+///   the iteration budget still bounds it.
+///
+/// The default is **off / disabled** at the harness layer so an unconfigured
+/// harness behaves exactly as before; the CLI defaults the user-facing toggles
+/// to on.
+#[derive(Clone, Debug)]
+pub struct SelfCorrectConfig {
+    /// Attach classification (`error_kind`) + `hint` to failed tool results.
+    pub error_hints: bool,
+    /// Emit the step-back/replan nudge when the failure budget is hit.
+    pub replan_on_failure: bool,
+    /// Consecutive same-operation failures before the replan nudge fires. A
+    /// value of 0 disables the budget entirely (no nudge ever).
+    pub failure_budget: u32,
+}
+
+impl Default for SelfCorrectConfig {
+    fn default() -> Self {
+        // Off at the harness layer: bare errors, no nudge — exactly today's
+        // behavior. The CLI opts users in with on-by-default toggles.
+        Self {
+            error_hints: false,
+            replan_on_failure: false,
+            failure_budget: 3,
+        }
+    }
 }
 
 /// Configuration for the verify-before-done loop and the self-critique step.
