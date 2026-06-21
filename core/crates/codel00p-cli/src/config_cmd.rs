@@ -4,7 +4,11 @@ use std::{
     process::Command,
 };
 
-use crate::{config::CliResult, providers, settings};
+use crate::{
+    config::CliResult,
+    providers,
+    settings::{self, ProfileSettings},
+};
 
 pub fn run(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     let (command, rest) = match args.split_first() {
@@ -20,6 +24,7 @@ pub fn run(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         "init" => config_init(workspace_start, rest),
         "edit" => config_edit(workspace_start, rest),
         "reset" => config_reset(rest),
+        "profiles" => config_profiles(workspace_start, rest),
         "setup" => providers::setup(workspace_start),
         "migrate" => config_migrate(rest),
         _ => Err(format!("unknown config command: {command}")),
@@ -187,6 +192,84 @@ fn config_edit(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         return Err(format!("{editor} exited with status {status}"));
     }
     Ok(String::new())
+}
+
+/// `config profiles list` / `config profiles show <name>`. Profiles are the
+/// `[agent.profiles.<name>]` bundles plus the built-in presets; a user profile
+/// shadows a built-in of the same name.
+fn config_profiles(workspace_start: &Path, args: &[String]) -> CliResult<String> {
+    let (command, rest) = match args.split_first() {
+        Some((command, rest)) => (command.as_str(), rest),
+        None => ("list", &[][..]),
+    };
+    match command {
+        "list" => config_profiles_list(workspace_start),
+        "show" => config_profiles_show(workspace_start, rest),
+        _ => Err(format!(
+            "unknown config profiles command: {command} (try `list` or `show <name>`)"
+        )),
+    }
+}
+
+fn config_profiles_list(workspace_start: &Path) -> CliResult<String> {
+    let resolved = settings::load_layered(workspace_start)?;
+    let agent = resolved.agent();
+    let builtin = settings::builtin_profiles();
+    let mut output = String::from("agent profiles\n");
+    if let Some(active) = &agent.profile {
+        output.push_str(&format!("  active default (agent.profile): {active}\n"));
+    }
+    output.push('\n');
+    for name in agent.available_profile_names() {
+        // A user profile shadows a built-in of the same name.
+        let (profile, origin): (&ProfileSettings, &str) = match agent.profiles.get(&name) {
+            Some(profile) if builtin.contains_key(&name) => (profile, "user, shadows preset"),
+            Some(profile) => (profile, "user"),
+            None => (&builtin[&name], "preset"),
+        };
+        let description = profile.description.as_deref().unwrap_or("(no description)");
+        output.push_str(&format!("  {name} [{origin}]\n"));
+        output.push_str(&format!("    {description}\n"));
+        let overrides = profile.overrides_summary();
+        if !overrides.is_empty() {
+            output.push_str(&format!("    overrides: {overrides}\n"));
+        }
+    }
+    output.push_str("\nSelect with `--profile <name>` or `config set agent.profile <name>`.\n");
+    Ok(output)
+}
+
+fn config_profiles_show(workspace_start: &Path, args: &[String]) -> CliResult<String> {
+    let name = args
+        .first()
+        .ok_or_else(|| "usage: config profiles show <name>".to_string())?;
+    let resolved = settings::load_layered(workspace_start)?;
+    let agent = resolved.agent();
+    // `resolve_profile` already errors with the available names if unknown.
+    let profile = agent.resolve_profile(name)?;
+    let origin = if agent.profiles.contains_key(name) {
+        if settings::builtin_profiles().contains_key(name) {
+            "user-defined (shadows built-in preset)"
+        } else {
+            "user-defined"
+        }
+    } else {
+        "built-in preset"
+    };
+    let mut output = format!("profile {name} [{origin}]\n");
+    if let Some(description) = &profile.description {
+        output.push_str(&format!("  {description}\n"));
+    }
+    let overrides = profile.overrides_summary();
+    if overrides.is_empty() {
+        output.push_str("  (sets no overrides)\n");
+    } else {
+        output.push_str("  overrides:\n");
+        for part in overrides.split(", ") {
+            output.push_str(&format!("    {part}\n"));
+        }
+    }
+    Ok(output)
 }
 
 fn config_reset(_args: &[String]) -> CliResult<String> {

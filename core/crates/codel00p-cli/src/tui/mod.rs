@@ -72,6 +72,7 @@ pub(crate) mod test_support {
             fallback_routes: Vec::new(),
             gateway_approval: None,
             unattended: false,
+            profile: None,
         };
         App::new(
             config,

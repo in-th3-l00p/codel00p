@@ -515,3 +515,188 @@ fn env_file_seeds_only_missing_vars() {
         }
     });
 }
+
+// ---- [agent.profiles] custom-profiles layer (#12) ----
+
+#[test]
+fn profile_table_round_trips_through_toml() {
+    use super::schema::Settings;
+    let toml = "\
+[agent.profiles.tdd]
+description = \"Test-driven\"
+tool_sets = [\"read\", \"edit\", \"command\"]
+execution_backend = \"docker\"
+permission_mode = \"ask\"
+self_verify = true
+auto_plan = false
+verify_iterations = 4
+";
+    let settings: Settings = toml::from_str(toml).expect("deserialize profile");
+    let profile = settings
+        .agent
+        .profiles
+        .get("tdd")
+        .expect("tdd profile present");
+    assert_eq!(profile.description.as_deref(), Some("Test-driven"));
+    assert_eq!(
+        profile.tool_sets.as_deref(),
+        Some(
+            [
+                "read".to_string(),
+                "edit".to_string(),
+                "command".to_string()
+            ]
+            .as_slice()
+        )
+    );
+    assert_eq!(profile.execution_backend.as_deref(), Some("docker"));
+    assert_eq!(profile.permission_mode.as_deref(), Some("ask"));
+    assert_eq!(profile.self_verify, Some(true));
+    assert_eq!(profile.auto_plan, Some(false));
+    assert_eq!(profile.verify_iterations, Some(4));
+
+    // Re-serialize and re-parse: the bundle survives a round trip as
+    // `[agent.profiles.tdd]`.
+    let serialized = toml::to_string(&settings).expect("serialize");
+    assert!(
+        serialized.contains("[agent.profiles.tdd]"),
+        "expected an [agent.profiles.tdd] table, got:\n{serialized}"
+    );
+    let reparsed: Settings = toml::from_str(&serialized).expect("re-deserialize");
+    assert_eq!(reparsed.agent.profiles, settings.agent.profiles);
+}
+
+#[test]
+fn profile_merge_project_overrides_user_and_distinct_profiles_coexist() {
+    use super::schema::{AgentSettings, Settings};
+    let user: Settings = toml::from_str(
+        "[agent.profiles.tdd]\npermission_mode = \"allow\"\nself_verify = true\n\
+         [agent.profiles.review]\ntool_sets = [\"read\"]\n",
+    )
+    .expect("user");
+    let project: Settings = toml::from_str(
+        "[agent.profiles.tdd]\npermission_mode = \"ask\"\n\
+         [agent.profiles.docs]\ntool_sets = [\"read\", \"edit\"]\n",
+    )
+    .expect("project");
+
+    let mut merged = user;
+    merged.merge(project);
+    let agent: &AgentSettings = &merged.agent;
+
+    // Project wins per field on the shared `tdd` profile; the user-only field
+    // (self_verify) is preserved.
+    let tdd = agent.profiles.get("tdd").expect("tdd");
+    assert_eq!(tdd.permission_mode.as_deref(), Some("ask"));
+    assert_eq!(tdd.self_verify, Some(true));
+    // Distinct profiles from both layers coexist.
+    assert!(agent.profiles.contains_key("review"));
+    assert!(agent.profiles.contains_key("docs"));
+}
+
+#[test]
+fn resolve_profile_prefers_user_over_preset_and_errors_on_unknown() {
+    use super::schema::AgentSettings;
+    let mut agent = AgentSettings::default();
+    // Shadow the built-in `careful` preset with a user profile.
+    agent.profiles.insert(
+        "careful".to_string(),
+        ProfileSettings {
+            permission_mode: Some("allow".to_string()),
+            ..ProfileSettings::default()
+        },
+    );
+
+    // User profile shadows the preset.
+    let careful = agent.resolve_profile("careful").expect("careful");
+    assert_eq!(careful.permission_mode.as_deref(), Some("allow"));
+    // A built-in still resolves when not shadowed.
+    let autonomous = agent.resolve_profile("autonomous").expect("autonomous");
+    assert_eq!(
+        autonomous.tool_sets.as_deref(),
+        Some(["all".to_string()].as_slice())
+    );
+    // Unknown name errors and lists the available profiles.
+    let error = agent.resolve_profile("nope").expect_err("unknown errors");
+    assert!(
+        error.contains("nope"),
+        "error names the bad profile: {error}"
+    );
+    assert!(error.contains("autonomous"), "error lists presets: {error}");
+    assert!(error.contains("careful"));
+    assert!(error.contains("manual"));
+}
+
+#[test]
+fn apply_profile_fills_gaps_but_config_scalars_win() {
+    use super::schema::AgentSettings;
+    let mut agent = AgentSettings {
+        // Config already pins the permission mode; the profile must not override.
+        permission_mode: Some("deny".to_string()),
+        ..AgentSettings::default()
+    };
+    let profile = ProfileSettings {
+        permission_mode: Some("ask".to_string()),
+        tool_sets: Some(vec!["read".to_string()]),
+        self_verify: Some(false),
+        ..ProfileSettings::default()
+    };
+    agent.apply_profile(&profile);
+    // Config scalar wins over the profile.
+    assert_eq!(agent.permission_mode.as_deref(), Some("deny"));
+    // Profile fills fields config left unset.
+    assert_eq!(
+        agent.tool_sets.as_deref(),
+        Some(["read".to_string()].as_slice())
+    );
+    assert_eq!(agent.behavior.self_verify, Some(false));
+}
+
+#[test]
+fn agent_profile_default_and_nested_profile_key_round_trip() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        let path = user_config_path();
+        // The active-default selector.
+        set_value(&path, "agent.profile", "careful").expect("set agent.profile");
+        // A nested profile field via the dynamic key machinery.
+        set_value(&path, "agent.profiles.review.tool_sets", "read, edit")
+            .expect("set nested profile tool_sets");
+        set_value(&path, "agent.profiles.review.self_verify", "false")
+            .expect("set nested profile bool");
+
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().profile.as_deref(), Some("careful"));
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.profile").unwrap(),
+            Some("careful".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.profiles.review.tool_sets").unwrap(),
+            Some("read,edit".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.profiles.review.self_verify").unwrap(),
+            Some("false".to_string())
+        );
+
+        // Unset prunes the nested key.
+        assert!(unset_value(&path, "agent.profiles.review.self_verify").expect("unset nested"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(
+            effective_value(&resolved.merged, "agent.profiles.review.self_verify")
+                .unwrap()
+                .is_none()
+        );
+    });
+}
+
+#[test]
+fn unknown_profile_field_key_is_rejected() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        let path = user_config_path();
+        let error = set_value(&path, "agent.profiles.review.bogus", "x").expect_err("rejected");
+        assert!(error.contains("unknown config key"), "got: {error}");
+    });
+}

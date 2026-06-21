@@ -676,7 +676,7 @@ pub(crate) async fn build_agent_harness_with(
     .with_tool_sets(tool_set_labels)
     .with_backend(backend_label, backend_isolated)
     .with_permission_mode(options.permission_mode.as_str())
-    .with_profile(None)
+    .with_profile(options.profile.clone())
     .with_toggles(
         behavior.self_knowledge_enabled(),
         behavior.self_state_enabled(),

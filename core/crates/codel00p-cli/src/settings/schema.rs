@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -97,6 +98,222 @@ pub struct AgentSettings {
     /// the self-awareness facets; more behavior knobs are added here over time.
     #[serde(skip_serializing_if = "BehaviorSettings::is_empty")]
     pub behavior: BehaviorSettings,
+    /// The active profile to apply this run (`agent.profile`). Names a bundle of
+    /// settings defined under `[agent.profiles.<name>]` or one of the built-in
+    /// presets (`autonomous`/`careful`/`manual`). A `--profile` flag overrides it
+    /// for a single run. The capstone of the customizability layer (#12).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Named bundles of agent settings, serialized as `[agent.profiles.<name>]`.
+    /// Each profile overrides only the subset of fields it sets; selecting one
+    /// (via `agent.profile` or `--profile`) folds its values in as the baseline
+    /// the existing config/flag layering then refines. A user profile with the
+    /// same name as a built-in preset shadows it. The first table-of-tables in
+    /// the settings schema.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profiles: BTreeMap<String, ProfileSettings>,
+}
+
+/// A named bundle of agent settings — the `[agent.profiles.<name>]` table. Every
+/// field is optional so a profile overrides only the subset it sets; the rest
+/// fall through to the existing per-setting layering. Fields mirror the agent
+/// scalars a run resolves plus the full set of `[agent.behavior]` toggles.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProfileSettings {
+    /// Human-readable summary shown by `config profiles list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    // --- agent scalars a profile can override ---
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_sets: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_backend: Option<String>,
+    // --- behavior toggles (mirror BehaviorSettings) ---
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_knowledge: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_state: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_prompt: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_plan: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_verify: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_test: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lint_and_fix: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_critique: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verify_iterations: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_hints: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replan_on_failure: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_budget: Option<u32>,
+}
+
+impl ProfileSettings {
+    /// Per-key overwrite merge (project layer wins per profile field).
+    fn merge(&mut self, other: Self) {
+        take(&mut self.description, other.description);
+        take(&mut self.provider, other.provider);
+        take(&mut self.model, other.model);
+        take(&mut self.base_url, other.base_url);
+        take(&mut self.max_iterations, other.max_iterations);
+        take(&mut self.permission_mode, other.permission_mode);
+        take(&mut self.tool_sets, other.tool_sets);
+        take(&mut self.execution_backend, other.execution_backend);
+        take(&mut self.self_knowledge, other.self_knowledge);
+        take(&mut self.self_state, other.self_state);
+        take(&mut self.base_prompt, other.base_prompt);
+        take(&mut self.auto_plan, other.auto_plan);
+        take(&mut self.self_verify, other.self_verify);
+        take(&mut self.auto_test, other.auto_test);
+        take(&mut self.lint_and_fix, other.lint_and_fix);
+        take(&mut self.self_critique, other.self_critique);
+        take(&mut self.verify_iterations, other.verify_iterations);
+        take(&mut self.test_command, other.test_command);
+        take(&mut self.error_hints, other.error_hints);
+        take(&mut self.replan_on_failure, other.replan_on_failure);
+        take(&mut self.failure_budget, other.failure_budget);
+    }
+
+    /// A one-line summary of the overrides this profile sets, for `profiles list`
+    /// / `show`. Skips `description` (shown separately).
+    pub fn overrides_summary(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(value) = &self.provider {
+            parts.push(format!("provider={value}"));
+        }
+        if let Some(value) = &self.model {
+            parts.push(format!("model={value}"));
+        }
+        if let Some(value) = &self.base_url {
+            parts.push(format!("base_url={value}"));
+        }
+        if let Some(value) = self.max_iterations {
+            parts.push(format!("max_iterations={value}"));
+        }
+        if let Some(value) = &self.permission_mode {
+            parts.push(format!("permission_mode={value}"));
+        }
+        if let Some(value) = &self.tool_sets {
+            parts.push(format!("tool_sets=[{}]", value.join(",")));
+        }
+        if let Some(value) = &self.execution_backend {
+            parts.push(format!("execution_backend={value}"));
+        }
+        for (label, value) in [
+            ("self_knowledge", self.self_knowledge),
+            ("self_state", self.self_state),
+            ("base_prompt", self.base_prompt),
+            ("auto_plan", self.auto_plan),
+            ("self_verify", self.self_verify),
+            ("auto_test", self.auto_test),
+            ("lint_and_fix", self.lint_and_fix),
+            ("self_critique", self.self_critique),
+            ("error_hints", self.error_hints),
+            ("replan_on_failure", self.replan_on_failure),
+        ] {
+            if let Some(value) = value {
+                parts.push(format!("{label}={value}"));
+            }
+        }
+        if let Some(value) = self.verify_iterations {
+            parts.push(format!("verify_iterations={value}"));
+        }
+        if let Some(value) = &self.test_command {
+            parts.push(format!("test_command={value:?}"));
+        }
+        if let Some(value) = self.failure_budget {
+            parts.push(format!("failure_budget={value}"));
+        }
+        parts.join(", ")
+    }
+}
+
+/// The built-in profile presets, defined in code and selectable by name. A user
+/// `[agent.profiles.<same-name>]` shadows the preset of that name. Kept as a
+/// small table so they are easy to read and extend.
+///
+/// - `autonomous` — everything on, higher verify budget, full tool set: trust
+///   the agent to drive end-to-end.
+/// - `careful` — verify on, `ask` permission mode, lint-and-fix on, lower
+///   autonomy: a human stays in the loop on privileged actions.
+/// - `manual` — most autonomous behaviors off (no auto-plan/self-verify/
+///   self-critique), read+edit only: "do exactly what I say."
+pub fn builtin_profiles() -> BTreeMap<String, ProfileSettings> {
+    let mut map = BTreeMap::new();
+    map.insert(
+        "autonomous".to_string(),
+        ProfileSettings {
+            description: Some(
+                "Full autonomy: every behavior on, full tool set, higher verify budget."
+                    .to_string(),
+            ),
+            permission_mode: Some("allow".to_string()),
+            tool_sets: Some(vec!["all".to_string()]),
+            self_knowledge: Some(true),
+            self_state: Some(true),
+            base_prompt: Some(true),
+            auto_plan: Some(true),
+            self_verify: Some(true),
+            auto_test: Some(true),
+            lint_and_fix: Some(true),
+            self_critique: Some(true),
+            verify_iterations: Some(5),
+            error_hints: Some(true),
+            replan_on_failure: Some(true),
+            ..ProfileSettings::default()
+        },
+    );
+    map.insert(
+        "careful".to_string(),
+        ProfileSettings {
+            description: Some(
+                "Human in the loop: ask before privileged actions, verify + lint-and-fix on."
+                    .to_string(),
+            ),
+            permission_mode: Some("ask".to_string()),
+            self_verify: Some(true),
+            auto_test: Some(true),
+            lint_and_fix: Some(true),
+            self_critique: Some(true),
+            verify_iterations: Some(3),
+            error_hints: Some(true),
+            replan_on_failure: Some(true),
+            ..ProfileSettings::default()
+        },
+    );
+    map.insert(
+        "manual".to_string(),
+        ProfileSettings {
+            description: Some("Do exactly what I say: autonomy off (no auto-plan/verify/critique), read+edit only.".to_string()),
+            tool_sets: Some(vec!["read".to_string(), "edit".to_string()]),
+            auto_plan: Some(false),
+            self_verify: Some(false),
+            self_critique: Some(false),
+            replan_on_failure: Some(false),
+            ..ProfileSettings::default()
+        },
+    );
+    map
 }
 
 /// Toggles that shape how the agent reasons about itself and its run — the start
@@ -461,6 +678,85 @@ impl AgentSettings {
             other.require_isolation_for_unattended,
         );
         self.behavior.merge(other.behavior);
+        take(&mut self.profile, other.profile);
+        // Per-profile merge: a profile present in both layers is merged field by
+        // field (project wins per field); a profile only in `other` is inserted.
+        // Distinct profiles thus coexist across layers.
+        for (name, profile) in other.profiles {
+            self.profiles.entry(name).or_default().merge(profile);
+        }
+    }
+}
+
+impl AgentSettings {
+    /// Resolve the named profile against this settings' user-defined profiles and
+    /// the built-in presets. A user `[agent.profiles.<name>]` shadows a built-in
+    /// of the same name. Returns the resolved bundle, or an error listing the
+    /// available names when `name` matches nothing.
+    pub fn resolve_profile(&self, name: &str) -> SettingsResult<ProfileSettings> {
+        if let Some(profile) = self.profiles.get(name) {
+            return Ok(profile.clone());
+        }
+        if let Some(profile) = builtin_profiles().get(name) {
+            return Ok(profile.clone());
+        }
+        Err(format!(
+            "unknown agent profile `{name}`. Available profiles: {}",
+            self.available_profile_names().join(", ")
+        ))
+    }
+
+    /// All selectable profile names — user-defined plus built-in presets, sorted
+    /// and de-duplicated (a user profile shadows a preset of the same name).
+    pub fn available_profile_names(&self) -> Vec<String> {
+        let mut names: std::collections::BTreeSet<String> =
+            builtin_profiles().into_keys().collect();
+        names.extend(self.profiles.keys().cloned());
+        names.into_iter().collect()
+    }
+
+    /// Fold a resolved profile's values into this `AgentSettings` as the baseline
+    /// the existing config/flag layering then refines. Only fields the profile
+    /// actually sets are applied, and only over fields not already set by config
+    /// (so a project-config scalar still wins over the profile). This is the
+    /// "profile < config" rung of the precedence ladder.
+    pub fn apply_profile(&mut self, profile: &ProfileSettings) {
+        fill(&mut self.provider, &profile.provider);
+        fill(&mut self.model, &profile.model);
+        fill(&mut self.base_url, &profile.base_url);
+        fill_copy(&mut self.max_iterations, profile.max_iterations);
+        fill(&mut self.permission_mode, &profile.permission_mode);
+        fill(&mut self.tool_sets, &profile.tool_sets);
+        fill(&mut self.execution_backend, &profile.execution_backend);
+        let b = &mut self.behavior;
+        fill_copy(&mut b.self_knowledge, profile.self_knowledge);
+        fill_copy(&mut b.self_state, profile.self_state);
+        fill_copy(&mut b.base_prompt, profile.base_prompt);
+        fill_copy(&mut b.auto_plan, profile.auto_plan);
+        fill_copy(&mut b.self_verify, profile.self_verify);
+        fill_copy(&mut b.auto_test, profile.auto_test);
+        fill_copy(&mut b.lint_and_fix, profile.lint_and_fix);
+        fill_copy(&mut b.self_critique, profile.self_critique);
+        fill_copy(&mut b.verify_iterations, profile.verify_iterations);
+        fill(&mut b.test_command, &profile.test_command);
+        fill_copy(&mut b.error_hints, profile.error_hints);
+        fill_copy(&mut b.replan_on_failure, profile.replan_on_failure);
+        fill_copy(&mut b.failure_budget, profile.failure_budget);
+    }
+}
+
+/// Set `slot` to `value` only when `slot` is unset and `value` is present —
+/// "profile fills a gap config left open". Clone form for non-Copy values.
+fn fill<T: Clone>(slot: &mut Option<T>, value: &Option<T>) {
+    if slot.is_none() && value.is_some() {
+        *slot = value.clone();
+    }
+}
+
+/// Copy form of [`fill`] for `Copy` values.
+fn fill_copy<T: Copy>(slot: &mut Option<T>, value: Option<T>) {
+    if slot.is_none() && value.is_some() {
+        *slot = value;
     }
 }
 

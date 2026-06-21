@@ -115,6 +115,139 @@ fn agent_run_uses_configured_provider_model_and_base_url() {
 }
 
 #[test]
+fn config_profiles_list_shows_presets_and_user_profiles() {
+    let home = tempdir().expect("tempdir");
+
+    // A user profile (also shadowing the `careful` preset is not needed here).
+    assert!(
+        run(
+            home.path(),
+            &["config", "set", "agent.profiles.review.tool_sets", "read"],
+        )
+        .status
+        .success()
+    );
+    assert!(
+        run(
+            home.path(),
+            &[
+                "config",
+                "set",
+                "agent.profiles.review.description",
+                "Read-only review"
+            ],
+        )
+        .status
+        .success()
+    );
+    assert!(
+        run(home.path(), &["config", "set", "agent.profile", "careful"])
+            .status
+            .success()
+    );
+
+    let list = run(home.path(), &["config", "profiles", "list"]);
+    assert!(list.status.success(), "stderr: {}", stderr(&list));
+    let text = stdout(&list);
+    // Built-in presets are listed.
+    assert!(text.contains("autonomous"), "{text}");
+    assert!(text.contains("careful"), "{text}");
+    assert!(text.contains("manual"), "{text}");
+    // The user profile and its description appear.
+    assert!(text.contains("review"), "{text}");
+    assert!(text.contains("Read-only review"), "{text}");
+    // The active default is surfaced.
+    assert!(
+        text.contains("active default (agent.profile): careful"),
+        "{text}"
+    );
+}
+
+#[test]
+fn config_profiles_show_renders_preset_overrides() {
+    let home = tempdir().expect("tempdir");
+    let show = run(home.path(), &["config", "profiles", "show", "manual"]);
+    assert!(show.status.success(), "stderr: {}", stderr(&show));
+    let text = stdout(&show);
+    assert!(text.contains("manual"), "{text}");
+    assert!(text.contains("built-in preset"), "{text}");
+    // The manual preset turns autonomy off and restricts to read+edit.
+    assert!(text.contains("auto_plan=false"), "{text}");
+    assert!(text.contains("tool_sets=[read,edit]"), "{text}");
+}
+
+#[test]
+fn config_profiles_show_unknown_errors_listing_available() {
+    let home = tempdir().expect("tempdir");
+    let show = run(home.path(), &["config", "profiles", "show", "nope"]);
+    assert!(!show.status.success());
+    let err = stderr(&show);
+    assert!(err.contains("nope"), "{err}");
+    assert!(err.contains("autonomous"), "{err}");
+}
+
+#[test]
+fn agent_run_applies_configured_profile() {
+    let home = tempdir().expect("tempdir");
+
+    let server = MockServer::start();
+    let provider = server.mock(|when, then| {
+        when.method(POST).path("/chat/completions");
+        then.status(200).json_body(json!({
+            "choices": [{
+                "message": { "role": "assistant", "content": "ok" },
+                "finish_reason": "stop"
+            }]
+        }));
+    });
+
+    for (key, value) in [
+        ("agent.provider", "custom"),
+        ("agent.model", "test-model"),
+        ("agent.base_url", &server.base_url()[..]),
+        // Select the `manual` preset as the default profile.
+        ("agent.profile", "manual"),
+    ] {
+        assert!(
+            run(home.path(), &["config", "set", key, value])
+                .status
+                .success()
+        );
+    }
+
+    // The run succeeds with the profile applied (manual => read+edit only). We
+    // assert it does not error out resolving the profile.
+    let output = Command::new(env!("CARGO_BIN_EXE_codel00p"))
+        .env("CODEL00P_HOME", home.path())
+        .env("CODEL00P_PROVIDER_CUSTOM_API_KEY", "test-token")
+        .current_dir(home.path())
+        .args(["agent", "run", "hi"])
+        .output()
+        .expect("run codel00p");
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    provider.assert();
+}
+
+#[test]
+fn agent_run_with_unknown_profile_errors() {
+    let home = tempdir().expect("tempdir");
+    for (key, value) in [("agent.provider", "custom"), ("agent.model", "m")] {
+        assert!(
+            run(home.path(), &["config", "set", key, value])
+                .status
+                .success()
+        );
+    }
+    let output = run(home.path(), &["agent", "run", "hi", "--profile", "bogus"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("bogus"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn agent_run_without_model_reports_friendly_error() {
     let home = tempdir().expect("tempdir");
     let output = run(home.path(), &["agent", "run", "hi", "--provider", "custom"]);
