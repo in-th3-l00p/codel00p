@@ -436,6 +436,42 @@ fn toggle_setting(app: &mut App, pref: SettingsPref) {
                 "update checks",
             );
         }
+        SettingsPref::SelfKnowledge => {
+            app.self_knowledge = !app.self_knowledge;
+            let value = if app.self_knowledge { "true" } else { "false" };
+            persist_setting(
+                app,
+                "agent.behavior.self_knowledge",
+                value,
+                &format!(
+                    "Self-knowledge {}.",
+                    if app.self_knowledge {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                ),
+                "self-knowledge",
+            );
+        }
+        SettingsPref::SelfState => {
+            app.self_state = !app.self_state;
+            let value = if app.self_state { "true" } else { "false" };
+            persist_setting(
+                app,
+                "agent.behavior.self_state",
+                value,
+                &format!(
+                    "Self run-state {}.",
+                    if app.self_state {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                ),
+                "self run-state",
+            );
+        }
     }
 }
 

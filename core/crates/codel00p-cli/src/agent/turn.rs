@@ -516,9 +516,26 @@ pub(crate) async fn build_agent_harness_with(
         &options.tool_sets,
         execution_backend.is_isolated(),
     )?;
+    // Capture self-awareness facts that depend on the backend before it is moved
+    // into `build_tool_registry`. The label mirrors the `agent.execution_backend`
+    // setting (defaulting to `local`); isolation comes from the live backend.
+    let backend_isolated = execution_backend.is_isolated();
+    let backend_label = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .and_then(|resolved| resolved.merged.agent.execution_backend)
+        .unwrap_or_else(|| "local".to_string());
+    let behavior = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .map(|resolved| resolved.merged.agent.behavior)
+        .unwrap_or_default();
     let mut tools = plugins.apply_to_tool_registry(
         build_tool_registry(&options.tool_sets, mcp_servers, execution_backend).await?,
     );
+    // Back the always-present `update_plan` tool with a plan store the harness
+    // also holds, so self-awareness run-state can report plan progress. This
+    // replaces the internal store from `planning_defaults()` (last-writer-wins).
+    let plan_store = PlanStore::new();
+    tools = tools.with_tool(UpdatePlanTool::new(plan_store.clone()));
     if options.tool_sets.contains(&AgentToolSet::Delegate) {
         let max_children = crate::settings::load_layered(&options.workspace)
             .ok()
@@ -628,6 +645,33 @@ pub(crate) async fn build_agent_harness_with(
         builder = builder.response_format(response_format.clone());
     }
     builder = builder.cancel_signal(cancel);
+
+    // Self-awareness: build the static identity/capabilities context from the
+    // resolved run config (never a hardcoded capability string — the tool sets,
+    // backend, and permission mode are the real ones), apply the
+    // `[agent.behavior]` toggles, and share the plan store so run-state can
+    // report plan progress. Always installed so the `self_describe` tool is
+    // available even with both toggles off (an explicit query still answers).
+    let tool_set_labels: Vec<String> = options
+        .tool_sets
+        .iter()
+        .map(|set| set.as_str().to_string())
+        .collect();
+    let self_context = AgentSelfContext::new(
+        "codel00p",
+        crate::update::current_version(),
+        &options.provider,
+        &options.model,
+    )
+    .with_tool_sets(tool_set_labels)
+    .with_backend(backend_label, backend_isolated)
+    .with_permission_mode(options.permission_mode.as_str())
+    .with_profile(None)
+    .with_toggles(
+        behavior.self_knowledge_enabled(),
+        behavior.self_state_enabled(),
+    );
+    builder = builder.agent_self(self_context).plan_store(plan_store);
 
     builder.build().map_err(|error| error.to_string())
 }

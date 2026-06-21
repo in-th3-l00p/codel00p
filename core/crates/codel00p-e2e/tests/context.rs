@@ -445,6 +445,70 @@ fn context_manifest_hash_changes_when_instruction_sources_change() {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario 6 — Agent self-awareness (self/capability block injection)
+// ---------------------------------------------------------------------------
+
+/// By default (`agent.behavior.self_knowledge` unset = on), a plain `agent run`
+/// injects a self block whose first line identifies the agent. We assert the
+/// identity line ("You are codel00p v…") is present in the system prompt the
+/// model was shown, along with a capabilities line.
+#[test]
+fn default_run_injects_self_identity_block() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    let result = runner.run(&["agent", "run", "Say hi.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    assert_eq!(requests.len(), 1, "expected a single model round-trip");
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        system.contains("You are codel00p v"),
+        "default run should inject the self identity line, got:\n{system}"
+    );
+    assert!(
+        system.contains("Capabilities:"),
+        "default run should inject the capabilities line, got:\n{system}"
+    );
+}
+
+/// Setting `agent.behavior.self_knowledge=false` drops the identity/capabilities
+/// block — the system prompt the model sees no longer contains the identity line.
+#[test]
+fn self_knowledge_off_omits_self_identity_block() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    // Disable the self-knowledge facet via the real config surface.
+    let set = runner.run(&["config", "set", "agent.behavior.self_knowledge", "false"]);
+    assert!(
+        set.success(),
+        "config set should succeed\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        set.stdout(),
+        set.stderr()
+    );
+
+    let result = runner.run(&["agent", "run", "Say hi.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        !system.contains("You are codel00p v"),
+        "self_knowledge=false should omit the identity line, got:\n{system}"
+    );
+    assert!(
+        !system.contains("Capabilities:"),
+        "self_knowledge=false should omit the capabilities line, got:\n{system}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Scenario 5 — Context compaction (documented as not feasible headlessly)
 // ---------------------------------------------------------------------------
 //

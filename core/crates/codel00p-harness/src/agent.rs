@@ -16,6 +16,7 @@ use crate::{
         TurnMemoryExtractionRequest, TurnMemoryExtractor, TurnMemoryRecommendationRequest,
     },
     permissions::{AllowAllPermissionPolicy, PermissionPolicy, PermissionRequest},
+    self_context::{AgentSelfHandle, AgentSelfState, SelfPromptAssembler},
     session::{SessionId, SessionMessage, SessionState, TurnId, UserMessage},
     skills::{SkillProvider, SkillSelectionRequest},
     tool_registry::ToolRegistry,
@@ -59,6 +60,14 @@ pub struct AgentHarness {
     capability_extractor: Option<Arc<dyn crate::capability::CapabilityExtractor>>,
     capability_proposal_sink: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
     context_window: Option<ContextWindowState>,
+    /// Shared self-awareness handle: the static identity/capabilities plus a live
+    /// run-state snapshot the run loop refreshes each iteration. Read both to
+    /// render the injected self block and by the `self_describe` tool. `None`
+    /// disables self-awareness entirely.
+    agent_self: Option<AgentSelfHandle>,
+    /// Shared handle to the `update_plan` plan store, so the self-awareness
+    /// run-state can report plan progress. `None` omits plan progress.
+    plan_store: Option<crate::planning::PlanStore>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: u32,
     tool_output_truncation: ToolOutputTruncation,

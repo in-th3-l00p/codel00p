@@ -50,6 +50,10 @@ pub struct HarnessInferenceRequest {
     /// Optional structured-output request (JSON mode).
     response_format: Option<ResponseFormat>,
     context_window: Option<ContextWindowState>,
+    /// The pre-rendered agent "self" block (identity, capabilities, run-state).
+    /// Placed first in the system prompt so the model reads "who am I" before the
+    /// project instructions, memory, and skills.
+    agent_self: Option<String>,
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
     skills: Option<SkillContext>,
@@ -65,6 +69,7 @@ impl HarnessInferenceRequest {
             tool_choice: None,
             response_format: None,
             context_window: None,
+            agent_self: None,
             project_instructions: None,
             project_memory: None,
             skills: None,
@@ -84,6 +89,12 @@ impl HarnessInferenceRequest {
 
     pub fn with_context_window(mut self, context_window: ContextWindowState) -> Self {
         self.context_window = Some(context_window);
+        self
+    }
+
+    /// Attach the pre-rendered agent "self" block (see [`crate::self_context`]).
+    pub fn with_agent_self(mut self, agent_self: impl Into<String>) -> Self {
+        self.agent_self = Some(agent_self.into());
         self
     }
 
@@ -141,6 +152,11 @@ impl HarnessInferenceRequest {
 
     pub fn context_window(&self) -> Option<&ContextWindowState> {
         self.context_window.as_ref()
+    }
+
+    /// The pre-rendered agent "self" block, if any.
+    pub fn agent_self(&self) -> Option<&str> {
+        self.agent_self.as_deref()
     }
 
     pub fn project_instructions(&self) -> Option<&ProjectInstructions> {

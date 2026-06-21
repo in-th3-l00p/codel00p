@@ -68,6 +68,15 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         .as_ref()
         .and_then(|tui| tui.check_updates)
         .unwrap_or(true);
+    // Self-awareness facets default on; honor the persisted `agent.behavior.*`
+    // preferences. These are display + persistence in the overlay — the harness
+    // reads the same config when it builds each turn.
+    let behavior = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .map(|resolved| resolved.merged.agent.behavior)
+        .unwrap_or_default();
+    let self_knowledge = behavior.self_knowledge_enabled();
+    let self_state = behavior.self_state_enabled();
 
     let mut app = App::new(
         config,
@@ -78,6 +87,8 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         cloud_configured,
         show_advanced,
         check_updates,
+        self_knowledge,
+        self_state,
     );
 
     let mut terminal =

@@ -63,6 +63,12 @@ impl ProviderModelClient {
     ) -> InferenceRequest {
         let mut builder = InferenceRequest::builder(provider, model);
 
+        // Inject the agent "self" block first, so the model reads "who am I"
+        // (identity, capabilities, run-state) before instructions/memory/skills.
+        if let Some(agent_self) = request.agent_self() {
+            builder = builder.message(ChatMessage::system(agent_self.to_string()));
+        }
+
         if let Some(project_instructions) = request.project_instructions() {
             builder = builder.message(ChatMessage::system(project_instructions.as_prompt()));
         }
