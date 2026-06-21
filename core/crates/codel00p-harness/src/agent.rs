@@ -65,6 +65,10 @@ pub struct AgentHarness {
     /// render the injected self block and by the `self_describe` tool. `None`
     /// disables self-awareness entirely.
     agent_self: Option<AgentSelfHandle>,
+    /// The agent's durable persona ("who I am" — the deepest identity), injected
+    /// FIRST each turn ahead of the self block, base prompt, and instructions.
+    /// `None` for the default agent (no persona file / persona toggle off).
+    persona: Option<String>,
     /// The pre-rendered base operating prompt ("how I work"): rigor guidance plus
     /// (when `auto_plan` is on) planning guidance. Injected each turn after the
     /// self block and before project instructions. `None` injects nothing (back

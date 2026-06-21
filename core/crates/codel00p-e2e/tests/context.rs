@@ -673,6 +673,136 @@ fn workspace_context_off_omits_workspace_state_block() {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario 9 — Per-agent persona injection (multi-agent personas #13 phase 2)
+// ---------------------------------------------------------------------------
+
+/// With an active agent that has a non-empty `persona.md`, an `agent run` injects
+/// the persona text as the FIRST system block — ahead of the self block — and the
+/// self block names the active agent ("You are `coder`, a codel00p agent …").
+/// The default agent (no persona) injects no persona block and names the product.
+#[test]
+fn active_agent_persona_is_injected_first_and_self_block_names_agent() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    // Create + activate an agent with a distinctive persona.
+    let persona = "# Persona: coder\nYou are a meticulous Rust reviewer who insists on tests.";
+    // Management commands (`create`/`use`) are base-scoped and reject the
+    // provider flags `run` appends to `agent` subcommands, so use `run_plain`.
+    let created = runner.run_plain(&["agent", "create", "coder", "--persona", persona]);
+    assert!(created.success(), "create: {}", created.stderr());
+    let used = runner.run_plain(&["agent", "use", "coder"]);
+    assert!(used.success(), "use: {}", used.stderr());
+
+    let result = runner.run(&["agent", "run", "Review this.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    assert_eq!(requests.len(), 1, "expected a single model round-trip");
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+
+    // Persona text reached the model.
+    assert!(
+        system.contains("meticulous Rust reviewer who insists on tests"),
+        "active agent's persona.md should be injected into the system prompt, got:\n{system}"
+    );
+    // The self block names the active agent, not the product.
+    assert!(
+        system.contains("You are `coder`, a codel00p agent"),
+        "self block should name the active agent, got:\n{system}"
+    );
+    assert!(
+        !system.contains("You are codel00p v"),
+        "named agent should not render the product identity line, got:\n{system}"
+    );
+
+    // Persona is the FIRST system block — it precedes the self identity line.
+    let persona_idx = system
+        .find("meticulous Rust reviewer")
+        .expect("persona present");
+    let self_idx = system.find("You are `coder`").expect("self block present");
+    assert!(
+        persona_idx < self_idx,
+        "persona must be injected ahead of the self block, got:\n{system}"
+    );
+}
+
+/// The default agent (no agent active, no persona) behaves exactly as today: no
+/// persona block, and the self block names the product ("You are codel00p v…").
+#[test]
+fn default_agent_injects_no_persona_block() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    let result = runner.run(&["agent", "run", "Say hi.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        system.contains("You are codel00p v"),
+        "default agent should render the product identity, got:\n{system}"
+    );
+    assert!(
+        !system.contains("a codel00p agent"),
+        "default agent should not render an agent identity, got:\n{system}"
+    );
+}
+
+/// Setting `agent.behavior.persona=false` drops the persona block even when an
+/// agent with a non-empty `persona.md` is active — the persona text no longer
+/// reaches the model.
+#[test]
+fn persona_toggle_off_omits_persona_block() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    let persona = "# Persona: coder\nUNIQUE_PERSONA_MARKER_xyz.";
+    // Management commands (`create`/`use`) are base-scoped and reject the
+    // provider flags `run` appends to `agent` subcommands, so use `run_plain`.
+    let created = runner.run_plain(&["agent", "create", "coder", "--persona", persona]);
+    assert!(created.success(), "create: {}", created.stderr());
+    let used = runner.run_plain(&["agent", "use", "coder"]);
+    assert!(used.success(), "use: {}", used.stderr());
+
+    // Disable persona injection in the AGENT's config (home is the agent home for
+    // non-base-scoped commands; `config set` is base-scoped, so target the agent
+    // home directly via a config file write through the agent's config command).
+    // `config set` writes to the resolved user config under CODEL00P_HOME; since
+    // it is base-scoped it writes to the BASE home, so instead write the toggle
+    // into the agent's own config.toml directly.
+    let agent_config = runner
+        .home_path()
+        .join("agents")
+        .join("coder")
+        .join("config.toml");
+    let mut text = std::fs::read_to_string(&agent_config).unwrap_or_default();
+    text.push_str("\n[agent.behavior]\npersona = false\n");
+    std::fs::write(&agent_config, text).expect("write agent config");
+
+    let result = runner.run(&["agent", "run", "Review this.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        !system.contains("UNIQUE_PERSONA_MARKER_xyz"),
+        "persona=false should omit the persona block, got:\n{system}"
+    );
+    // The self block still names the agent (identity is independent of the toggle).
+    assert!(
+        system.contains("You are `coder`, a codel00p agent"),
+        "self block should still name the active agent, got:\n{system}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Scenario 5 — Context compaction (documented as not feasible headlessly)
 // ---------------------------------------------------------------------------
 //

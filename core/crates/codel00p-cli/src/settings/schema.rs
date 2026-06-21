@@ -396,6 +396,13 @@ pub struct BehaviorSettings {
     /// memory by configured filters only (prior behavior).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proactive_memory: Option<bool>,
+    /// Inject the active agent's `persona.md` as the first ("who I am") system
+    /// block each turn, ahead of the self block, base prompt, and project
+    /// instructions. Unset (the default) means enabled; set to `false` to never
+    /// inject the persona block. Only applies when an agent with a non-empty
+    /// `persona.md` is active — the default agent has no persona regardless.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persona: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -419,6 +426,7 @@ impl BehaviorSettings {
         take(&mut self.failure_budget, other.failure_budget);
         take(&mut self.workspace_context, other.workspace_context);
         take(&mut self.proactive_memory, other.proactive_memory);
+        take(&mut self.persona, other.persona);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -496,6 +504,12 @@ impl BehaviorSettings {
     /// Whether proactive task-aware memory recall is enabled. Defaults to on.
     pub fn proactive_memory_enabled(&self) -> bool {
         self.proactive_memory.unwrap_or(true)
+    }
+
+    /// Whether the active agent's persona block is injected. Defaults to on (the
+    /// block only appears when an agent with a non-empty `persona.md` is active).
+    pub fn persona_enabled(&self) -> bool {
+        self.persona.unwrap_or(true)
     }
 }
 

@@ -50,8 +50,13 @@ pub struct HarnessInferenceRequest {
     /// Optional structured-output request (JSON mode).
     response_format: Option<ResponseFormat>,
     context_window: Option<ContextWindowState>,
+    /// The agent's durable persona ("who I am" — the deepest identity). Placed
+    /// FIRST in the system prompt, ahead of the self block, so the model reads its
+    /// persona before its capabilities, the base prompt, and project instructions.
+    /// `None` for the default agent (no persona file / persona toggle off).
+    persona: Option<String>,
     /// The pre-rendered agent "self" block (identity, capabilities, run-state).
-    /// Placed first in the system prompt so the model reads "who am I" before the
+    /// Placed after the persona block so the model reads "who am I" before the
     /// project instructions, memory, and skills.
     agent_self: Option<String>,
     /// The base operating prompt ("how I work"): rigor + (optionally) planning
@@ -78,6 +83,7 @@ impl HarnessInferenceRequest {
             tool_choice: None,
             response_format: None,
             context_window: None,
+            persona: None,
             agent_self: None,
             base_prompt: None,
             project_instructions: None,
@@ -100,6 +106,13 @@ impl HarnessInferenceRequest {
 
     pub fn with_context_window(mut self, context_window: ContextWindowState) -> Self {
         self.context_window = Some(context_window);
+        self
+    }
+
+    /// Attach the agent's durable persona block ("who I am"). Injected FIRST in
+    /// the system prompt, ahead of the self block, base prompt, and instructions.
+    pub fn with_persona(mut self, persona: impl Into<String>) -> Self {
+        self.persona = Some(persona.into());
         self
     }
 
@@ -177,6 +190,11 @@ impl HarnessInferenceRequest {
 
     pub fn context_window(&self) -> Option<&ContextWindowState> {
         self.context_window.as_ref()
+    }
+
+    /// The agent's durable persona block, if any.
+    pub fn persona(&self) -> Option<&str> {
+        self.persona.as_deref()
     }
 
     /// The pre-rendered agent "self" block, if any.
