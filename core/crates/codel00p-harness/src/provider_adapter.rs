@@ -69,6 +69,13 @@ impl ProviderModelClient {
             builder = builder.message(ChatMessage::system(agent_self.to_string()));
         }
 
+        // Inject the base operating prompt ("how I work") after the self block and
+        // before project instructions, so precedence is: who I am (self) -> how I
+        // work (base) -> this project's instructions -> memory -> skills.
+        if let Some(base_prompt) = request.base_prompt() {
+            builder = builder.message(ChatMessage::system(base_prompt.to_string()));
+        }
+
         if let Some(project_instructions) = request.project_instructions() {
             builder = builder.message(ChatMessage::system(project_instructions.as_prompt()));
         }

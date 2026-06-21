@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Default per-turn iteration ceiling when a caller sets no explicit
+/// `max_iterations`. Autonomous coding routinely needs many read/edit/run/verify
+/// cycles, so the default is generous; `--max-iterations` / `agent.max_iterations`
+/// still override it.
+pub const DEFAULT_MAX_ITERATIONS: u32 = 25;
+
 impl AgentHarness {
     pub fn builder() -> AgentHarnessBuilder {
         AgentHarnessBuilder::default()
@@ -25,6 +31,7 @@ pub struct AgentHarnessBuilder {
     skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
     context_window: Option<ContextWindowState>,
     agent_self: Option<crate::self_context::AgentSelfContext>,
+    base_prompt: Option<String>,
     plan_store: Option<crate::planning::PlanStore>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
@@ -102,6 +109,16 @@ impl AgentHarnessBuilder {
     /// no tool).
     pub fn agent_self(mut self, agent_self: crate::self_context::AgentSelfContext) -> Self {
         self.agent_self = Some(agent_self);
+        self
+    }
+
+    /// Inject the base operating prompt ("how I work") as a system block each
+    /// turn, placed after the self block and before project instructions. Pass the
+    /// already-rendered prompt (see [`crate::base_prompt::base_prompt`]); the
+    /// caller decides whether planning guidance is included. Without this, no base
+    /// block is injected (pre-base-prompt behavior).
+    pub fn base_prompt(mut self, base_prompt: impl Into<String>) -> Self {
+        self.base_prompt = Some(base_prompt.into());
         self
     }
 
@@ -374,9 +391,10 @@ impl AgentHarnessBuilder {
             skill_proposal_sink: self.skill_proposal_sink,
             context_window: self.context_window,
             agent_self,
+            base_prompt: self.base_prompt,
             plan_store: self.plan_store,
             token_sink: self.token_sink,
-            max_iterations: self.max_iterations.unwrap_or(4),
+            max_iterations: self.max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS),
             tool_output_truncation: match self.max_tool_result_bytes {
                 Some(0) => ToolOutputTruncation::disabled(),
                 Some(bytes) => ToolOutputTruncation::new(bytes),

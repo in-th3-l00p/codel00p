@@ -65,6 +65,11 @@ pub struct AgentHarness {
     /// render the injected self block and by the `self_describe` tool. `None`
     /// disables self-awareness entirely.
     agent_self: Option<AgentSelfHandle>,
+    /// The pre-rendered base operating prompt ("how I work"): rigor guidance plus
+    /// (when `auto_plan` is on) planning guidance. Injected each turn after the
+    /// self block and before project instructions. `None` injects nothing (back
+    /// to pre-base-prompt behavior).
+    base_prompt: Option<String>,
     /// Shared handle to the `update_plan` plan store, so the self-awareness
     /// run-state can report plan progress. `None` omits plan progress.
     plan_store: Option<crate::planning::PlanStore>,

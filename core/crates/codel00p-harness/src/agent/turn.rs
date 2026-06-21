@@ -147,6 +147,12 @@ impl AgentHarness {
                     request = request.with_agent_self(block);
                 }
             }
+            // Inject the base operating prompt ("how I work") after the self block
+            // and before project instructions, so a project's CODEL00P.md can
+            // augment/override it in spirit.
+            if let Some(base_prompt) = &self.base_prompt {
+                request = request.with_base_prompt(base_prompt.clone());
+            }
             let project_instructions = ProjectInstructionLoader.load(&self.workspace)?;
             if !project_instructions.is_empty() {
                 request = request.with_project_instructions(project_instructions);

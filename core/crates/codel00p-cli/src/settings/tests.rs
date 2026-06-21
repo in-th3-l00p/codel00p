@@ -203,6 +203,46 @@ fn behavior_self_awareness_toggles_round_trip_and_default_on() {
 }
 
 #[test]
+fn behavior_base_prompt_and_auto_plan_round_trip_and_default_on() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config): both toggles unset, which the helpers treat as on.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.agent().behavior.base_prompt.is_none());
+        assert!(resolved.agent().behavior.auto_plan.is_none());
+        assert!(resolved.agent().behavior.base_prompt_enabled());
+        assert!(resolved.agent().behavior.auto_plan_enabled());
+
+        // Set both: round-trip the literal values and the effective view.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.base_prompt", "false").expect("set base_prompt");
+        set_value(&path, "agent.behavior.auto_plan", "false").expect("set auto_plan");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().behavior.base_prompt, Some(false));
+        assert_eq!(resolved.agent().behavior.auto_plan, Some(false));
+        assert!(!resolved.agent().behavior.base_prompt_enabled());
+        assert!(!resolved.agent().behavior.auto_plan_enabled());
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.base_prompt").unwrap(),
+            Some("false".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.auto_plan").unwrap(),
+            Some("false".to_string())
+        );
+
+        // Unsetting the nested keys prunes the [agent.behavior] table.
+        assert!(unset_value(&path, "agent.behavior.base_prompt").expect("unset base_prompt"));
+        assert!(unset_value(&path, "agent.behavior.auto_plan").expect("unset auto_plan"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.agent().behavior.base_prompt.is_none());
+        assert!(resolved.agent().behavior.auto_plan.is_none());
+        assert!(resolved.agent().behavior.base_prompt_enabled());
+        assert!(resolved.agent().behavior.auto_plan_enabled());
+    });
+}
+
+#[test]
 fn tui_show_advanced_round_trips_and_defaults_unset() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod background;
+pub mod base_prompt;
 pub mod cancel;
 pub mod capability;
 pub mod code_exec;
@@ -41,6 +42,7 @@ pub mod workspace;
 
 pub use agent::{AgentHarness, AgentHarnessBuilder};
 pub use background::BackgroundProcesses;
+pub use base_prompt::base_prompt;
 pub use cancel::CancelSignal;
 pub use capability::{
     Capability, CapabilityCandidateCall, CapabilityExtractionRequest, CapabilityExtractor,

@@ -247,6 +247,63 @@ Always run pnpm verify."
 }
 
 #[test]
+fn provider_request_places_base_prompt_after_self_and_before_instructions() {
+    let mut state = SessionState::new(SessionId::from_static("session-base"));
+    state.push_user(UserMessage::new("Do the work."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_agent_self("You are codel00p v0.0.0 (provider: x, model: y).")
+        .with_base_prompt("How you work:\n- Verify before you declare done.")
+        .with_project_instructions(ProjectInstructions::new(vec![ProjectInstruction::new(
+            "CODEL00P.md",
+            "Always run pnpm verify.",
+        )]));
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    // self -> base prompt -> project instructions -> user message.
+    assert_eq!(provider_request.messages.len(), 4);
+    assert_eq!(provider_request.messages[0].role, MessageRole::System);
+    assert!(
+        provider_request.messages[0]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("You are codel00p")
+    );
+    assert_eq!(provider_request.messages[1].role, MessageRole::System);
+    assert!(
+        provider_request.messages[1]
+            .content
+            .as_deref()
+            .unwrap()
+            .contains("Verify before you declare done")
+    );
+    assert_eq!(provider_request.messages[2].role, MessageRole::System);
+    assert!(
+        provider_request.messages[2]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("Project instructions:")
+    );
+    assert_eq!(provider_request.messages[3].role, MessageRole::User);
+}
+
+#[test]
+fn no_base_prompt_adds_no_provider_message() {
+    let mut state = SessionState::new(SessionId::from_static("session-no-base"));
+    state.push_user(UserMessage::new("Do the work."));
+    let request = HarnessInferenceRequest::new(state);
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    assert_eq!(provider_request.messages.len(), 1);
+    assert_eq!(provider_request.messages[0].role, MessageRole::User);
+}
+
+#[test]
 fn empty_project_memory_adds_no_provider_message() {
     let mut state = SessionState::new(SessionId::from_static("session-provider"));
     state.push_user(UserMessage::new("Inspect the project."));

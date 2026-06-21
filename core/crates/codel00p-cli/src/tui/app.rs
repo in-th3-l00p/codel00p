@@ -103,6 +103,15 @@ pub(crate) struct App {
     /// `agent.behavior.self_state` (default true) at startup; toggled in the
     /// Settings overlay.
     pub(crate) self_state: bool,
+    /// Whether the base operating prompt is injected each turn. Loaded from
+    /// `agent.behavior.base_prompt` (default true) at startup; toggled in the
+    /// Settings overlay. Display + persistence only — the harness reads the
+    /// persisted config when it builds each turn.
+    pub(crate) base_prompt: bool,
+    /// Whether the base prompt's planning guidance is included. Loaded from
+    /// `agent.behavior.auto_plan` (default true) at startup; toggled in the
+    /// Settings overlay.
+    pub(crate) auto_plan: bool,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
     /// A newer release version if one is already known (from the update cache or a
@@ -130,6 +139,8 @@ impl App {
         check_updates: bool,
         self_knowledge: bool,
         self_state: bool,
+        base_prompt: bool,
+        auto_plan: bool,
     ) -> Self {
         Self {
             config,
@@ -155,6 +166,8 @@ impl App {
             check_updates,
             self_knowledge,
             self_state,
+            base_prompt,
+            auto_plan,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),

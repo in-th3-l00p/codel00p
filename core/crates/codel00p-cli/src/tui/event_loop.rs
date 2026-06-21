@@ -77,6 +77,8 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         .unwrap_or_default();
     let self_knowledge = behavior.self_knowledge_enabled();
     let self_state = behavior.self_state_enabled();
+    let base_prompt = behavior.base_prompt_enabled();
+    let auto_plan = behavior.auto_plan_enabled();
 
     let mut app = App::new(
         config,
@@ -89,6 +91,8 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         check_updates,
         self_knowledge,
         self_state,
+        base_prompt,
+        auto_plan,
     );
 
     let mut terminal =

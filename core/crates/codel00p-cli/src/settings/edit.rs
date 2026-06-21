@@ -48,6 +48,8 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.require_isolation_for_unattended", ValueKind::Bool),
     ("agent.behavior.self_knowledge", ValueKind::Bool),
     ("agent.behavior.self_state", ValueKind::Bool),
+    ("agent.behavior.base_prompt", ValueKind::Bool),
+    ("agent.behavior.auto_plan", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
@@ -115,6 +117,8 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
             agent.behavior.self_knowledge.map(|value| value.to_string())
         }
         "agent.behavior.self_state" => agent.behavior.self_state.map(|value| value.to_string()),
+        "agent.behavior.base_prompt" => agent.behavior.base_prompt.map(|value| value.to_string()),
+        "agent.behavior.auto_plan" => agent.behavior.auto_plan.map(|value| value.to_string()),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -320,6 +324,8 @@ pub fn starter_template() -> String {
          # [agent.behavior]             # how the agent reasons about itself (default on)\n\
          # self_knowledge = true        # inject the identity/capabilities block + self_describe tool\n\
          # self_state = true            # include the live run-state line (iteration, context, plan)\n\
+         # base_prompt = true           # inject the base operating prompt (understand, plan, verify-before-done)\n\
+         # auto_plan = true             # include the base prompt's planning guidance\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

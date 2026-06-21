@@ -84,6 +84,8 @@ pub(crate) mod test_support {
             true,  // check_updates (background update check enabled by default)
             true,  // self_knowledge (self-awareness on by default)
             true,  // self_state (run-state line on by default)
+            true,  // base_prompt (base operating prompt on by default)
+            true,  // auto_plan (planning guidance on by default)
         )
     }
 }

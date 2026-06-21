@@ -673,5 +673,14 @@ pub(crate) async fn build_agent_harness_with(
     );
     builder = builder.agent_self(self_context).plan_store(plan_store);
 
+    // Base operating prompt ("how I work"): default on, injected after the self
+    // block and before project instructions. The planning guidance is included
+    // unless `auto_plan` is off. With `base_prompt` off, no base block is added.
+    if behavior.base_prompt_enabled() {
+        builder = builder.base_prompt(codel00p_harness::base_prompt::base_prompt(
+            behavior.auto_plan_enabled(),
+        ));
+    }
+
     builder.build().map_err(|error| error.to_string())
 }

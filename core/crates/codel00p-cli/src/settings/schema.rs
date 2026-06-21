@@ -116,6 +116,16 @@ pub struct BehaviorSettings {
     /// drop the run-state line.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub self_state: Option<bool>,
+    /// Inject the default base operating prompt ("how I work": understand first,
+    /// plan, change carefully, verify before declaring done) each turn. Unset (the
+    /// default) means enabled; set to `false` to inject no base block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_prompt: Option<bool>,
+    /// Include the base prompt's planning guidance (lay out a plan up front and
+    /// keep it updated). Unset (the default) means enabled; set to `false` to omit
+    /// the planning line so a minimal/manual profile stays quieter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_plan: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -126,6 +136,8 @@ impl BehaviorSettings {
     fn merge(&mut self, other: Self) {
         take(&mut self.self_knowledge, other.self_knowledge);
         take(&mut self.self_state, other.self_state);
+        take(&mut self.base_prompt, other.base_prompt);
+        take(&mut self.auto_plan, other.auto_plan);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -136,6 +148,16 @@ impl BehaviorSettings {
     /// Whether the live run-state line is included. Defaults to on.
     pub fn self_state_enabled(&self) -> bool {
         self.self_state.unwrap_or(true)
+    }
+
+    /// Whether the base operating prompt is injected. Defaults to on.
+    pub fn base_prompt_enabled(&self) -> bool {
+        self.base_prompt.unwrap_or(true)
+    }
+
+    /// Whether the base prompt's planning guidance is included. Defaults to on.
+    pub fn auto_plan_enabled(&self) -> bool {
+        self.auto_plan.unwrap_or(true)
     }
 }
 

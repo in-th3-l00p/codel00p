@@ -20,6 +20,55 @@ use tempfile::tempdir;
 /// A recorded tool-call delta: (index, id, name, args_fragment).
 type RecordedDelta = (usize, Option<String>, Option<String>, String);
 
+/// A model client that always asks for the same read-only tool call, so the run
+/// loop never reaches a final assistant message and exhausts its iteration
+/// budget — used to observe the *default* iteration ceiling.
+#[derive(Clone)]
+struct AlwaysToolCallModel;
+
+#[async_trait]
+impl ModelClient for AlwaysToolCallModel {
+    async fn infer(
+        &self,
+        _request: HarnessInferenceRequest,
+    ) -> Result<HarnessInferenceResponse, HarnessError> {
+        Ok(HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![codel00p_harness::ModelToolCall::new(
+                "call-loop",
+                "read_file",
+                serde_json::json!({ "path": "README.md" }),
+            )],
+        ))
+    }
+}
+
+#[tokio::test]
+async fn harness_without_explicit_max_uses_the_default_iteration_ceiling() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+
+    // No `.max_iterations(...)` call: the build must fall back to the default.
+    let error = AgentHarness::builder()
+        .model_client(AlwaysToolCallModel)
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-default-iters"),
+            UserMessage::new("Loop forever."),
+        )
+        .await
+        .expect_err("loop should hit the iteration limit");
+
+    assert!(
+        matches!(error, HarnessError::IterationLimit { limit } if limit == 25),
+        "expected the default iteration ceiling of 25, got: {error:?}"
+    );
+}
+
 #[tokio::test]
 async fn run_turn_returns_final_assistant_message_without_tools() {
     let dir = tempdir().expect("tempdir");
