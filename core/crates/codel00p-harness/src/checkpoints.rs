@@ -10,11 +10,13 @@
 //! snapshots the real working tree — including untracked files — **without ever
 //! creating or touching a `.git` inside the workspace**. If the workspace is
 //! itself a real git repo, its `.git` is never read or written by these
-//! operations: the separate git-dir + work-tree is the isolation boundary, and
-//! the workspace's `.git` is simply one more set of files in the work-tree that
-//! the shadow repo is told (via `core.excludesFile`-style `.gitignore`-free
-//! `add -A`) to capture as-is. We never run `git` *inside* the workspace's own
-//! repo, so its HEAD/branches/index/reflog are untouched.
+//! operations: the separate git-dir + work-tree is the isolation boundary. The
+//! shadow repo's `info/exclude` lists `.git/`, so any `.git` directory in the
+//! work-tree (the real repo, or nested ones) is **never staged by `add -A` and
+//! never removed by `clean -fd` on restore** — restoring a checkpoint can roll
+//! back the working tree but can never revert or delete real git history. We
+//! also never run `git` *inside* the workspace's own repo, so its
+//! HEAD/branches/index/reflog are untouched.
 //!
 //! Restoring (`restore(id, mode)`) checks the snapshot's tree out into the
 //! work-tree via the shadow git-dir, affecting only the workspace's files on
