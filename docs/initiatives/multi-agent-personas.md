@@ -88,7 +88,7 @@ The plan below assumes **Option A**.
 - [ ] A **curator** pass (codel00p already has staleness/quality scoring): add opt-in consolidation of near-duplicate learned skills/memories per agent (shingle similarity from #107), archive-not-delete, behind review — fights skill/memory sprawl.
 
 ### Phase 4 — Sharing, orchestration, advanced memory (later)
-- [ ] **Agent distributions**: package an agent (persona + config + skills) as a shareable artifact (git), **excluding keys + memory/sessions** (Hermes' hard exclusion). `agent install <ref>` / `export`.
+- [x] **Agent distributions**: package an agent (persona + config + skills) as a shareable artifact, **excluding keys + memory/sessions** (Hermes' hard exclusion). Shipped as `agent export <name> [--output <path>]` / `agent import <path> [--name <newname>]` (`agent/distribution.rs`). Artifact is a single std-only USTAR `.tar` (no new dep): INCLUDES `agent.toml` manifest (+ distribution `version`), `config.toml`, `persona.md`, `skills/`; HARD-EXCLUDES `memory.sqlite`(+wal/shm), sessions, `.env`, `active_agent`, logs/caches via an allow-list. Import materializes a NEW agent with fresh (empty) memory/sessions and no creds; refuses an existing name; validates the name; `--name` override. Round-trip + safety (no private data shipped, malicious-artifact rejection) covered by tests.
 - [ ] **Routing/orchestration**: use each agent's `description` to route delegated tasks to the right specialist agent (pairs with sub-agent fan-out in #12 / kanban).
 - [ ] **Pluggable external memory provider seam** (Honcho-style running user-model) behind the `MemoryRanker`/provider seam from #107 — optional, additive, governance-gated (sends content out).
 
