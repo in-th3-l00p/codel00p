@@ -66,6 +66,9 @@ pub use delegation::{
     AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner, TaskIsolation,
     delegation_tools,
 };
+pub use editing::{
+    ApplyPatchTool, CopyFileTool, CreateFileTool, DeleteFileTool, MoveFileTool, UpdateFileTool,
+};
 pub use error_classify::{ToolErrorKind, classify};
 pub use errors::HarnessError;
 pub use event_sink::AgentEventSink;
