@@ -50,6 +50,12 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.self_state", ValueKind::Bool),
     ("agent.behavior.base_prompt", ValueKind::Bool),
     ("agent.behavior.auto_plan", ValueKind::Bool),
+    ("agent.behavior.self_verify", ValueKind::Bool),
+    ("agent.behavior.auto_test", ValueKind::Bool),
+    ("agent.behavior.lint_and_fix", ValueKind::Bool),
+    ("agent.behavior.self_critique", ValueKind::Bool),
+    ("agent.behavior.verify_iterations", ValueKind::U32),
+    ("agent.behavior.test_command", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
@@ -119,6 +125,17 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.behavior.self_state" => agent.behavior.self_state.map(|value| value.to_string()),
         "agent.behavior.base_prompt" => agent.behavior.base_prompt.map(|value| value.to_string()),
         "agent.behavior.auto_plan" => agent.behavior.auto_plan.map(|value| value.to_string()),
+        "agent.behavior.self_verify" => agent.behavior.self_verify.map(|value| value.to_string()),
+        "agent.behavior.auto_test" => agent.behavior.auto_test.map(|value| value.to_string()),
+        "agent.behavior.lint_and_fix" => agent.behavior.lint_and_fix.map(|value| value.to_string()),
+        "agent.behavior.self_critique" => {
+            agent.behavior.self_critique.map(|value| value.to_string())
+        }
+        "agent.behavior.verify_iterations" => agent
+            .behavior
+            .verify_iterations
+            .map(|value| value.to_string()),
+        "agent.behavior.test_command" => agent.behavior.test_command.clone(),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -326,6 +343,12 @@ pub fn starter_template() -> String {
          # self_state = true            # include the live run-state line (iteration, context, plan)\n\
          # base_prompt = true           # inject the base operating prompt (understand, plan, verify-before-done)\n\
          # auto_plan = true             # include the base prompt's planning guidance\n\
+         # self_verify = true           # run the project's checks before completing a mutating turn\n\
+         # auto_test = true             # run the `test` check during verification\n\
+         # lint_and_fix = false         # also run `lint` and feed failures back (opt-in; can be noisy)\n\
+         # self_critique = true         # one reflection turn to catch unverified/over-claimed work\n\
+         # verify_iterations = 3        # max verify->fix attempts before completing as unverified\n\
+         # test_command = \"cargo test\"  # explicit verification command override (bypasses detection)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

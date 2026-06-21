@@ -254,6 +254,8 @@ pub(crate) fn agent_event_label(event: &AgentEvent) -> &'static str {
         AgentEvent::ToolProgress { .. } => "tool_progress",
         AgentEvent::LifecycleHookFailed { .. } => "lifecycle_hook_failed",
         AgentEvent::ContextManifest { .. } => "context_manifest",
+        AgentEvent::VerificationCompleted { .. } => "verification_completed",
+        AgentEvent::SelfCritiqueCompleted { .. } => "self_critique_completed",
         AgentEvent::TurnCompleted { .. } => "turn_completed",
     }
 }

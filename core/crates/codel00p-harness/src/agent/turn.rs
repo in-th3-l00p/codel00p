@@ -3,6 +3,9 @@
 use super::*;
 
 mod hooks;
+mod verify;
+
+use verify::{DonePhase, VerifyState};
 
 impl AgentHarness {
     pub async fn run_turn(
@@ -62,6 +65,10 @@ impl AgentHarness {
         // (no-usage) shape for providers that don't surface it.
         let mut turn_usage: Option<TokenUsage> = None;
         let mut turn_cost: Option<CostEstimate> = None;
+
+        // Verify-before-done + self-critique state, threaded across iterations so
+        // the verify→fix cycle is bounded and the reflection step runs once.
+        let mut verify_state = VerifyState::new();
 
         let budget = IterationBudget::new(self.max_iterations);
         while budget.consume() {
@@ -300,6 +307,43 @@ impl AgentHarness {
                     session_state.push_assistant(content);
                 }
 
+                // A self-critique reflection was injected last iteration and the
+                // model answered with text (not tool calls) — record that the
+                // reflection completed without further action before we decide.
+                if verify_state.critique_pending {
+                    verify_state.critique_pending = false;
+                    self.record_event(
+                        &mut events,
+                        HarnessEvent::SelfCritiqueCompleted {
+                            event_id: EventId::new(),
+                            session_id: session_state.session_id().clone(),
+                            turn_id: turn_id.clone(),
+                            produced_tool_calls: false,
+                        },
+                    )
+                    .await;
+                }
+
+                // Verify-before-done + self-critique gate: if the turn mutated the
+                // workspace, run the project's checks (via the registered
+                // `run_checks` tool) and the reflection step BEFORE completing. A
+                // `Continue` means feedback/reflection was appended to the session
+                // and we must run another inference; `Complete` carries the
+                // verification verdict for `TurnCompleted`.
+                let verified = match self
+                    .verify_before_done(
+                        &mut session_state,
+                        &turn_id,
+                        &executed_tool_calls,
+                        &mut verify_state,
+                        &mut events,
+                    )
+                    .await
+                {
+                    DonePhase::Continue => continue,
+                    DonePhase::Complete { verified } => verified,
+                };
+
                 self.extract_memory_candidates(
                     session_state.session_id().clone(),
                     turn_id.clone(),
@@ -377,6 +421,7 @@ impl AgentHarness {
                         iterations: iteration,
                         usage: turn_usage,
                         cost: turn_cost,
+                        verified,
                     },
                 )
                 .await;
@@ -405,6 +450,23 @@ impl AgentHarness {
                         turn_cost,
                     )
                     .await;
+            }
+
+            // A self-critique reflection was injected last iteration and the model
+            // chose to act on it (tool calls) — record that the reflection
+            // produced further work; the calls run normally below.
+            if verify_state.critique_pending {
+                verify_state.critique_pending = false;
+                self.record_event(
+                    &mut events,
+                    HarnessEvent::SelfCritiqueCompleted {
+                        event_id: EventId::new(),
+                        session_id: session_state.session_id().clone(),
+                        turn_id: turn_id.clone(),
+                        produced_tool_calls: true,
+                    },
+                )
+                .await;
             }
 
             session_state.push_assistant_tool_calls(response.tool_calls().to_vec());
@@ -692,6 +754,7 @@ impl AgentHarness {
                 iterations,
                 usage,
                 cost,
+                verified: None,
             },
         )
         .await;

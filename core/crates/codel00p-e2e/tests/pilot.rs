@@ -76,8 +76,19 @@ fn pilot_full_stack_tool_loop_with_side_effects_memory_and_replay() {
         );
     }
 
-    // The mock served the expected number of model round-trips (4 turns).
-    assert_eq!(provider.hits(), 4, "expected 4 model round-trips");
+    // The mock served the expected number of model round-trips. The four
+    // scripted turns (create_file -> run_command -> git_commit -> final text)
+    // plus one extra: verify-before-done is on by default, so after this
+    // *mutating* turn signalled done the harness ran a single self-critique
+    // reflection inference before completing. (There is no detectable test
+    // command in this git-only workspace, so the verification check itself is a
+    // graceful skip; only the reflection adds a round-trip.) That fifth
+    // round-trip is exactly the new default behavior this initiative introduces.
+    assert_eq!(
+        provider.hits(),
+        5,
+        "expected 4 scripted turns + 1 self-critique reflection round-trip"
+    );
 
     // 5. Side-effect assertions: the file exists with the scripted contents, and
     //    git history shows the commit.

@@ -79,4 +79,53 @@ pub struct AgentHarness {
     tool_choice: Option<ToolChoice>,
     response_format: Option<ResponseFormat>,
     cancel: CancelSignal,
+    /// Verify-before-done + self-critique configuration. Defaults are "today's
+    /// behavior off" so a harness with no explicit config behaves exactly as
+    /// before; the CLI wires the `[agent.behavior]` toggles onto it.
+    verify: VerifyConfig,
+}
+
+/// Configuration for the verify-before-done loop and the self-critique step.
+///
+/// The done-point of a turn (model emits no tool calls) is the hook: when
+/// [`self_verify`](Self::self_verify) is on and the turn made **mutating**
+/// changes, the harness runs the project's checks via the registered
+/// `run_checks` tool *before* completing. On failure it feeds the failure back
+/// into the conversation and keeps looping (bounded by
+/// [`verify_iterations`](Self::verify_iterations)); on pass (or when there is
+/// nothing to verify) it proceeds. When [`self_critique`](Self::self_critique)
+/// is on, the model then gets one reflection turn before final completion.
+///
+/// The default is **off** (`Default`) so an unconfigured harness behaves exactly
+/// as it did before this feature; the CLI defaults the user-facing toggles to on.
+#[derive(Clone, Debug)]
+pub struct VerifyConfig {
+    /// Master switch for the verify-before-done phase.
+    pub self_verify: bool,
+    /// Run the `test` check during verification.
+    pub auto_test: bool,
+    /// Also run `lint` and feed failures back (opt-in; lint can be noisy).
+    pub lint_and_fix: bool,
+    /// Run the metacognition / self-critique reflection step before completion.
+    pub self_critique: bool,
+    /// Max verify→fix attempts before completing with a not-verified signal.
+    pub verify_iterations: u32,
+    /// Explicit command override passed to `run_checks` instead of detection.
+    pub test_command: Option<String>,
+}
+
+impl Default for VerifyConfig {
+    fn default() -> Self {
+        // Off by default at the harness layer: an unconfigured harness keeps the
+        // pre-feature behavior (complete immediately on no-tool-calls). The CLI
+        // opts users in with on-by-default `[agent.behavior]` toggles.
+        Self {
+            self_verify: false,
+            auto_test: true,
+            lint_and_fix: false,
+            self_critique: false,
+            verify_iterations: 3,
+            test_command: None,
+        }
+    }
 }

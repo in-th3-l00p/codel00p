@@ -126,6 +126,32 @@ pub struct BehaviorSettings {
     /// the planning line so a minimal/manual profile stays quieter.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_plan: Option<bool>,
+    /// Master switch for the verify-before-done phase: when the agent signals it
+    /// is done after a mutating turn, run the project's checks and do not complete
+    /// until they pass (bounded by `verify_iterations`). Unset (the default) means
+    /// enabled; set to `false` to complete immediately as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_verify: Option<bool>,
+    /// Run the project's `test` check during the verify-before-done phase. Unset
+    /// (the default) means enabled; set to `false` to skip the test check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_test: Option<bool>,
+    /// Also run the project's `lint` check during verification and feed failures
+    /// back. Default OFF (lint can be noisy); set to `true` to opt in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lint_and_fix: Option<bool>,
+    /// Run the metacognition / self-critique reflection step before final
+    /// completion. Unset (the default) means enabled; set to `false` to skip it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_critique: Option<bool>,
+    /// Max verify→fix attempts before completing with a not-verified signal.
+    /// Unset defaults to 3.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verify_iterations: Option<u32>,
+    /// Explicit command override passed to the verification `run_checks` call
+    /// instead of detection (e.g. `"cargo test -p mycrate"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_command: Option<String>,
 }
 
 impl BehaviorSettings {
@@ -138,6 +164,12 @@ impl BehaviorSettings {
         take(&mut self.self_state, other.self_state);
         take(&mut self.base_prompt, other.base_prompt);
         take(&mut self.auto_plan, other.auto_plan);
+        take(&mut self.self_verify, other.self_verify);
+        take(&mut self.auto_test, other.auto_test);
+        take(&mut self.lint_and_fix, other.lint_and_fix);
+        take(&mut self.self_critique, other.self_critique);
+        take(&mut self.verify_iterations, other.verify_iterations);
+        take(&mut self.test_command, other.test_command);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -158,6 +190,37 @@ impl BehaviorSettings {
     /// Whether the base prompt's planning guidance is included. Defaults to on.
     pub fn auto_plan_enabled(&self) -> bool {
         self.auto_plan.unwrap_or(true)
+    }
+
+    /// Whether the verify-before-done phase runs. Defaults to on.
+    pub fn self_verify_enabled(&self) -> bool {
+        self.self_verify.unwrap_or(true)
+    }
+
+    /// Whether the `test` check runs during verification. Defaults to on.
+    pub fn auto_test_enabled(&self) -> bool {
+        self.auto_test.unwrap_or(true)
+    }
+
+    /// Whether the `lint` check also runs and feeds failures back. Defaults OFF.
+    pub fn lint_and_fix_enabled(&self) -> bool {
+        self.lint_and_fix.unwrap_or(false)
+    }
+
+    /// Whether the self-critique reflection step runs. Defaults to on.
+    pub fn self_critique_enabled(&self) -> bool {
+        self.self_critique.unwrap_or(true)
+    }
+
+    /// Max verify→fix attempts before completing with a not-verified signal.
+    /// Defaults to 3.
+    pub fn verify_iterations_value(&self) -> u32 {
+        self.verify_iterations.unwrap_or(3)
+    }
+
+    /// Explicit `run_checks` command override for verification, if configured.
+    pub fn test_command_value(&self) -> Option<String> {
+        self.test_command.clone()
     }
 }
 

@@ -76,11 +76,14 @@ fn multi_iteration_loop_runs_expected_round_trips() {
     let result = runner.run(&["agent", "run", "Create three files.", "--tool-set", "all"]);
     result.assert_success();
 
-    // One round-trip per scripted turn: 3 tool turns + 1 final text turn.
+    // One round-trip per scripted turn (3 tool turns + 1 final text turn) plus
+    // one for the default-on self-critique reflection after this mutating turn
+    // (verification finds no test command here, so the check is a graceful skip —
+    // only the reflection adds a round-trip).
     assert_eq!(
         provider.hits(),
-        4,
-        "expected exactly four model round-trips, got {}",
+        5,
+        "expected four scripted round-trips + one self-critique reflection, got {}",
         provider.hits()
     );
 
@@ -88,8 +91,9 @@ fn multi_iteration_loop_runs_expected_round_trips() {
     result.assert_tool_called("create_file");
     result.assert_turn_completed();
 
-    // The final text arrived on the 4th iteration; `TurnCompleted.iterations`
-    // reports that (1-based, per `IterationBudget::used()`).
+    // The final text arrived on iteration 4 and the self-critique reflection ran
+    // on iteration 5; `TurnCompleted.iterations` reports the latter (1-based, per
+    // `IterationBudget::used()`).
     let iterations = result
         .events()
         .iter()
@@ -99,8 +103,8 @@ fn multi_iteration_loop_runs_expected_round_trips() {
         })
         .expect("a TurnCompleted event");
     assert_eq!(
-        iterations, 4,
-        "final text turn arrived on iteration 4, got {iterations}"
+        iterations, 5,
+        "final text on iteration 4 + self-critique reflection on iteration 5, got {iterations}"
     );
 
     // Side effect: all three files exist.
@@ -202,9 +206,17 @@ fn tool_result_truncation_caps_model_visible_output() {
     result.assert_tool_called("run_command");
 
     // The request that carried the recorded tool result back to the model is the
-    // second one (index 1): it includes the `role:"tool"` message.
+    // second one (index 1): it includes the `role:"tool"` message. A third
+    // round-trip follows: `run_command` is treated as a (potentially) mutating
+    // tool, so the default-on self-critique reflection runs once after the turn
+    // (the workspace has no detectable test command, so verification itself is a
+    // graceful skip). Both follow-ups carry the same recorded tool result.
     let requests = provider.received_requests();
-    assert_eq!(requests.len(), 2, "expected two model round-trips");
+    assert_eq!(
+        requests.len(),
+        3,
+        "two scripted round-trips + one self-critique reflection"
+    );
     let follow_up = &requests[1];
 
     // The model-visible result was truncated: the head+tail marker is present and
@@ -247,9 +259,10 @@ fn stream_events_emits_more_event_lines_than_buffered_only() {
     streamed.assert_success();
 
     // Same model round-trips either way: streaming changes output shape, not the
-    // protocol conversation.
-    assert_eq!(buffered_provider.hits(), 2);
-    assert_eq!(streamed_provider.hits(), 2);
+    // protocol conversation. Three round-trips: the tool turn, the final text,
+    // and the default-on self-critique reflection after this mutating turn.
+    assert_eq!(buffered_provider.hits(), 3);
+    assert_eq!(streamed_provider.hits(), 3);
 
     // The streamed run emits events twice (live during the turn + the buffered
     // end-of-turn dump), so it has strictly more parsed event lines.

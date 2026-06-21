@@ -243,6 +243,81 @@ fn behavior_base_prompt_and_auto_plan_round_trip_and_default_on() {
 }
 
 #[test]
+fn behavior_verify_toggles_round_trip_and_defaults() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Defaults: verify/test/critique default ON, lint_and_fix OFF,
+        // verify_iterations 3, test_command unset.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        let behavior = &resolved.agent().behavior;
+        assert!(behavior.self_verify.is_none());
+        assert!(behavior.auto_test.is_none());
+        assert!(behavior.lint_and_fix.is_none());
+        assert!(behavior.self_critique.is_none());
+        assert!(behavior.verify_iterations.is_none());
+        assert!(behavior.test_command.is_none());
+        assert!(behavior.self_verify_enabled());
+        assert!(behavior.auto_test_enabled());
+        assert!(!behavior.lint_and_fix_enabled());
+        assert!(behavior.self_critique_enabled());
+        assert_eq!(behavior.verify_iterations_value(), 3);
+        assert_eq!(behavior.test_command_value(), None);
+
+        // Round-trip explicit values.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.self_verify", "false").expect("set self_verify");
+        set_value(&path, "agent.behavior.auto_test", "false").expect("set auto_test");
+        set_value(&path, "agent.behavior.lint_and_fix", "true").expect("set lint_and_fix");
+        set_value(&path, "agent.behavior.self_critique", "false").expect("set self_critique");
+        set_value(&path, "agent.behavior.verify_iterations", "5").expect("set verify_iterations");
+        set_value(&path, "agent.behavior.test_command", "cargo test -p x")
+            .expect("set test_command");
+        let resolved = load_layered(dir.path()).expect("reload");
+        let behavior = &resolved.agent().behavior;
+        assert_eq!(behavior.self_verify, Some(false));
+        assert_eq!(behavior.auto_test, Some(false));
+        assert_eq!(behavior.lint_and_fix, Some(true));
+        assert_eq!(behavior.self_critique, Some(false));
+        assert_eq!(behavior.verify_iterations, Some(5));
+        assert_eq!(behavior.test_command.as_deref(), Some("cargo test -p x"));
+        assert!(!behavior.self_verify_enabled());
+        assert!(!behavior.auto_test_enabled());
+        assert!(behavior.lint_and_fix_enabled());
+        assert!(!behavior.self_critique_enabled());
+        assert_eq!(behavior.verify_iterations_value(), 5);
+        assert_eq!(
+            behavior.test_command_value().as_deref(),
+            Some("cargo test -p x")
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.verify_iterations").unwrap(),
+            Some("5".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.test_command").unwrap(),
+            Some("cargo test -p x".to_string())
+        );
+
+        // Unsetting prunes back to defaults.
+        for key in [
+            "agent.behavior.self_verify",
+            "agent.behavior.auto_test",
+            "agent.behavior.lint_and_fix",
+            "agent.behavior.self_critique",
+            "agent.behavior.verify_iterations",
+            "agent.behavior.test_command",
+        ] {
+            unset_value(&path, key).expect("unset key");
+        }
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        let behavior = &resolved.agent().behavior;
+        assert!(behavior.self_verify.is_none());
+        assert!(behavior.self_verify_enabled());
+        assert_eq!(behavior.verify_iterations_value(), 3);
+    });
+}
+
+#[test]
 fn tui_show_advanced_round_trips_and_defaults_unset() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {
