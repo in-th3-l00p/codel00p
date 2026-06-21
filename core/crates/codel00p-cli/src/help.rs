@@ -229,6 +229,7 @@ Commands:
   setup                 Guided first-run setup (provider, key, model)
   providers <command>   Inference providers and API keys (try `--help`)
   plugins <command>     Enable or disable agent plugins (try `--help`)
+  profiles <command>    List/show agent profiles (list | show <name>)
   path [--project]      Print the config file path
   edit [--project]      Open the config file in $EDITOR
   init [--force]        Write a starter config file
@@ -243,7 +244,8 @@ Advanced (raw key access):
 Keys: workspace.{organization_id,project_id,project_name,memory_db},
       agent.{provider,model,base_url,provider_policy_preset,max_iterations,
       permission_mode,tool_sets,tool_choice,response_format,stream,
-      remember_permissions}
+      remember_permissions,profile},
+      agent.profiles.<name>.<field>  (named setting bundles; see `config profiles`)
 ";
 
 const PROVIDERS_HELP: &str = "\
@@ -322,6 +324,9 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations
+  --profile <name>            Apply a settings bundle: a built-in preset
+                              (autonomous, careful, manual) or one of your
+                              [agent.profiles.<name>]. Explicit flags still win.
   --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
@@ -347,6 +352,9 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
+  --profile <name>            Apply a settings bundle: a built-in preset
+                              (autonomous, careful, manual) or one of your
+                              [agent.profiles.<name>]. Explicit flags still win.
   --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
@@ -369,6 +377,9 @@ Options:
                               Built-in provider policy preset id
   --base-url <url>            Override provider base URL
   --max-iterations <n>        Maximum model/tool iterations
+  --profile <name>            Apply a settings bundle: a built-in preset
+                              (autonomous, careful, manual) or one of your
+                              [agent.profiles.<name>]. Explicit flags still win.
   --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny
@@ -405,6 +416,9 @@ Options:
   --base-url <url>            Override provider base URL
   --session-id <id>           Persist under a stable session id
   --max-iterations <n>        Maximum model/tool iterations per turn
+  --profile <name>            Apply a settings bundle: a built-in preset
+                              (autonomous, careful, manual) or one of your
+                              [agent.profiles.<name>]. Explicit flags still win.
   --tool-set <name>           Restrict to a tool set: read, edit, command, git, web, delegate, learn, pipeline, code, all (default: all — every tool)
   --mcp-server <id=command>   Attach an MCP stdio server executable
   --permission-mode <mode>    Tool permission mode: allow, ask, deny

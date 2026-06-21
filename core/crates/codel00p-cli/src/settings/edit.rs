@@ -60,6 +60,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.replan_on_failure", ValueKind::Bool),
     ("agent.behavior.failure_budget", ValueKind::U32),
     ("agent.behavior.workspace_context", ValueKind::Bool),
+    ("agent.profile", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
@@ -71,15 +72,79 @@ pub fn known_keys() -> Vec<&'static str> {
 }
 
 fn key_kind(key: &str) -> Option<ValueKind> {
-    KEY_SPECS
+    if let Some(kind) = KEY_SPECS
         .iter()
         .find(|(name, _)| *name == key)
         .map(|(_, kind)| *kind)
+    {
+        return Some(kind);
+    }
+    // Dynamic `agent.profiles.<name>.<field>` keys: the profile alias is
+    // arbitrary, so the kind is determined by the trailing field name.
+    profile_field_kind(key)
+}
+
+/// The value kind of an `agent.profiles.<name>.<field>` key, or `None` if `key`
+/// is not a (well-formed) profile key. The `<name>` segment is dynamic; the
+/// field set mirrors [`super::schema::ProfileSettings`].
+fn profile_field_kind(key: &str) -> Option<ValueKind> {
+    let rest = key.strip_prefix("agent.profiles.")?;
+    // Expect exactly `<name>.<field>`; reject deeper/shallower paths.
+    let (name, field) = rest.split_once('.')?;
+    if name.is_empty() || field.contains('.') {
+        return None;
+    }
+    match field {
+        "description" | "provider" | "model" | "base_url" | "permission_mode"
+        | "execution_backend" | "test_command" => Some(ValueKind::Str),
+        "tool_sets" => Some(ValueKind::StrList),
+        "max_iterations" | "verify_iterations" | "failure_budget" => Some(ValueKind::U32),
+        "self_knowledge" | "self_state" | "base_prompt" | "auto_plan" | "self_verify"
+        | "auto_test" | "lint_and_fix" | "self_critique" | "error_hints" | "replan_on_failure" => {
+            Some(ValueKind::Bool)
+        }
+        _ => None,
+    }
+}
+
+/// Read the effective value of an `agent.profiles.<name>.<field>` key from the
+/// merged profiles map. Returns `None` if the profile or field is unset.
+fn profile_effective_value(agent: &super::schema::AgentSettings, key: &str) -> Option<String> {
+    let rest = key.strip_prefix("agent.profiles.")?;
+    let (name, field) = rest.split_once('.')?;
+    let profile = agent.profiles.get(name)?;
+    match field {
+        "description" => profile.description.clone(),
+        "provider" => profile.provider.clone(),
+        "model" => profile.model.clone(),
+        "base_url" => profile.base_url.clone(),
+        "permission_mode" => profile.permission_mode.clone(),
+        "execution_backend" => profile.execution_backend.clone(),
+        "test_command" => profile.test_command.clone(),
+        "tool_sets" => profile.tool_sets.as_ref().map(|sets| sets.join(",")),
+        "max_iterations" => profile.max_iterations.map(|value| value.to_string()),
+        "verify_iterations" => profile.verify_iterations.map(|value| value.to_string()),
+        "failure_budget" => profile.failure_budget.map(|value| value.to_string()),
+        "self_knowledge" => profile.self_knowledge.map(|value| value.to_string()),
+        "self_state" => profile.self_state.map(|value| value.to_string()),
+        "base_prompt" => profile.base_prompt.map(|value| value.to_string()),
+        "auto_plan" => profile.auto_plan.map(|value| value.to_string()),
+        "self_verify" => profile.self_verify.map(|value| value.to_string()),
+        "auto_test" => profile.auto_test.map(|value| value.to_string()),
+        "lint_and_fix" => profile.lint_and_fix.map(|value| value.to_string()),
+        "self_critique" => profile.self_critique.map(|value| value.to_string()),
+        "error_hints" => profile.error_hints.map(|value| value.to_string()),
+        "replan_on_failure" => profile.replan_on_failure.map(|value| value.to_string()),
+        _ => None,
+    }
 }
 
 fn unknown_key_error(key: &str) -> String {
     format!(
-        "unknown config key: {key}\nvalid keys:\n  {}",
+        "unknown config key: {key}\nvalid keys:\n  {}\n  \
+         agent.profiles.<name>.<field>  (field: description, provider, model, base_url, \
+         max_iterations, permission_mode, tool_sets, execution_backend, or any \
+         [agent.behavior] toggle)",
         known_keys().join("\n  ")
     )
 }
@@ -152,6 +217,8 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
             .behavior
             .workspace_context
             .map(|value| value.to_string()),
+        "agent.profile" => agent.profile.clone(),
+        key if key.starts_with("agent.profiles.") => profile_effective_value(agent, key),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -353,6 +420,16 @@ pub fn starter_template() -> String {
          # tool_sets = [\"read\"]       # read | edit | command | git | all\n\
          # execution_backend = \"local\"  # local | docker | ssh\n\
          # require_isolation_for_unattended = false  # force docker/ssh for unattended shell\n\
+         # profile = \"careful\"         # default profile to apply (preset or [agent.profiles.<name>]); --profile overrides\n\
+         \n\
+         # [agent.profiles.<name>]      # a named bundle of overrides; select with --profile <name> or agent.profile\n\
+         # built-in presets: autonomous (everything on), careful (ask + verify + lint), manual (read+edit, autonomy off)\n\
+         # a user profile with a preset's name shadows it. Run `codel00p config profiles list`.\n\
+         # [agent.profiles.review]\n\
+         # description = \"Read-only code review\"\n\
+         # tool_sets = [\"read\"]\n\
+         # permission_mode = \"deny\"\n\
+         # self_verify = false\n\
          \n\
          # [agent.behavior]             # how the agent reasons about itself (default on)\n\
          # self_knowledge = true        # inject the identity/capabilities block + self_describe tool\n\

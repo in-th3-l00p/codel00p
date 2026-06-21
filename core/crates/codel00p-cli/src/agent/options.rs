@@ -36,6 +36,9 @@ pub(crate) struct AgentRunOptions {
     /// `agent.require_isolation_for_unattended` org policy: such a turn may not
     /// run shell-capable tool sets on a non-isolating execution backend.
     pub(crate) unattended: bool,
+    /// The resolved active profile name (`--profile` > `agent.profile`), if any.
+    /// Surfaced to the agent's self-awareness so the self block reflects it.
+    pub(crate) profile: Option<String>,
 }
 
 /// Routes a gateway turn's privileged-tool permissions through a remote chat
@@ -148,10 +151,15 @@ fn parse_agent_flag_options(
     let mut remember_permissions = None;
     let mut mcp_servers = Vec::new();
     let mut fallback_routes = Vec::new();
+    let mut profile_flag = None;
     let mut index = start;
 
     while index < args.len() {
         match args[index].as_str() {
+            "--profile" => {
+                profile_flag = Some(required_value(args, index, "--profile")?);
+                index += 2;
+            }
             "--workspace" => {
                 workspace = PathBuf::from(required_value(args, index, "--workspace")?);
                 index += 2;
@@ -233,6 +241,29 @@ fn parse_agent_flag_options(
             flag => return Err(format!("unknown agent {context} option: {flag}")),
         }
     }
+
+    // Resolution precedence (most specific wins): built-in/default < selected
+    // profile's values < project config scalar values < explicit CLI flags.
+    //
+    // We implement the profile rung HERE by folding the resolved profile into a
+    // local clone of `defaults` BEFORE the existing flag-vs-default resolution
+    // below. `apply_profile` only fills fields config left unset (so a config
+    // scalar still beats the profile), and the flag-vs-default logic below still
+    // lets an explicit `--provider`/`--tool-set`/`--permission-mode`/etc. win
+    // over the profile. With no profile selected, `defaults` is unchanged and
+    // resolution is identical to before.
+    let active_profile = profile_flag.or_else(|| defaults.profile.clone());
+    let folded;
+    let defaults: &AgentSettings = match &active_profile {
+        Some(name) => {
+            let profile = defaults.resolve_profile(name)?;
+            let mut clone = defaults.clone();
+            clone.apply_profile(&profile);
+            folded = clone;
+            &folded
+        }
+        None => defaults,
+    };
 
     let provider = provider
         .or_else(|| defaults.provider.clone())
@@ -337,6 +368,7 @@ fn parse_agent_flag_options(
         // Interactive `agent run`/`chat`/`resume`/`continue` runs with an
         // operator present; only gateway/cron turns set this.
         unattended: false,
+        profile: active_profile,
     })
 }
 
@@ -668,6 +700,117 @@ mod tests {
     fn no_fallback_configured_yields_empty_routes() {
         let options = run_opts(&["do it"]);
         assert!(options.fallback_routes.is_empty());
+    }
+
+    #[test]
+    fn profile_flag_applies_the_bundle() {
+        // `--profile autonomous` pulls in the preset's permission mode + tool set.
+        let options = run_opts(&["go", "--profile", "autonomous"]);
+        assert_eq!(options.permission_mode, CliPermissionMode::Allow);
+        assert!(options.tool_sets.contains(&AgentToolSet::All));
+        assert_eq!(options.profile.as_deref(), Some("autonomous"));
+    }
+
+    #[test]
+    fn explicit_flag_overrides_the_profile() {
+        // The `careful` preset sets ask mode; an explicit `--permission-mode allow`
+        // still wins (flags beat the profile).
+        let options = run_opts(&[
+            "go",
+            "--profile",
+            "careful",
+            "--permission-mode",
+            "allow",
+            "--tool-set",
+            "read",
+        ]);
+        assert_eq!(options.permission_mode, CliPermissionMode::Allow);
+        assert_eq!(options.tool_sets, vec![AgentToolSet::Read]);
+        assert_eq!(options.profile.as_deref(), Some("careful"));
+    }
+
+    #[test]
+    fn agent_profile_config_default_applies_without_a_flag() {
+        let defaults = AgentSettings {
+            profile: Some("careful".to_string()),
+            ..test_defaults()
+        };
+        let args = vec!["go".to_string()];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        // The configured default profile (`careful`) is applied: ask mode.
+        assert_eq!(options.permission_mode, CliPermissionMode::Ask);
+        assert_eq!(options.profile.as_deref(), Some("careful"));
+    }
+
+    #[test]
+    fn profile_flag_overrides_agent_profile_default() {
+        let defaults = AgentSettings {
+            profile: Some("careful".to_string()),
+            ..test_defaults()
+        };
+        let args = vec![
+            "go".to_string(),
+            "--profile".to_string(),
+            "manual".to_string(),
+        ];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        // `--profile manual` overrides the `agent.profile = careful` default.
+        assert_eq!(options.profile.as_deref(), Some("manual"));
+        assert_eq!(
+            options.tool_sets,
+            vec![AgentToolSet::Read, AgentToolSet::Edit]
+        );
+    }
+
+    #[test]
+    fn unknown_profile_errors_listing_available() {
+        let args = vec![
+            "go".to_string(),
+            "--profile".to_string(),
+            "nope".to_string(),
+        ];
+        let Err(error) = parse_agent_run_options(&test_defaults(), &args) else {
+            panic!("unknown profile must error");
+        };
+        assert!(error.contains("nope"));
+        assert!(error.contains("autonomous"));
+        assert!(error.contains("careful"));
+        assert!(error.contains("manual"));
+    }
+
+    #[test]
+    fn user_profile_shadows_a_same_named_preset() {
+        use std::collections::BTreeMap;
+        let mut profiles = BTreeMap::new();
+        profiles.insert(
+            "careful".to_string(),
+            crate::settings::ProfileSettings {
+                tool_sets: Some(vec!["git".to_string()]),
+                ..crate::settings::ProfileSettings::default()
+            },
+        );
+        let defaults = AgentSettings {
+            profiles,
+            ..test_defaults()
+        };
+        let args = vec![
+            "go".to_string(),
+            "--profile".to_string(),
+            "careful".to_string(),
+        ];
+        let options = parse_agent_run_options(&defaults, &args).expect("parse");
+        // The user `careful` profile (tool_sets=[git]) shadows the preset
+        // (which would have left permission_mode=ask without touching tool_sets).
+        assert_eq!(options.tool_sets, vec![AgentToolSet::Git]);
+    }
+
+    #[test]
+    fn no_profile_leaves_resolution_unchanged() {
+        // With no profile selected, the default run is identical to before.
+        let options = run_opts(&["go"]);
+        assert!(options.profile.is_none());
+        assert_eq!(options.permission_mode, CliPermissionMode::Allow);
+        assert!(options.tool_sets.contains(&AgentToolSet::All));
     }
 
     #[test]

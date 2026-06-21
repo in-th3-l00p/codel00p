@@ -74,6 +74,7 @@ pub(crate) fn run_scheduled_job(
         gateway_approval: None,
         // Scheduled/cron job: no operator present.
         unattended: true,
+        profile: None,
     };
 
     run_agent_turn(config, options, AgentSessionMode::Fresh)
@@ -219,6 +220,7 @@ fn gateway_turn(
         }),
         // Messaging-gateway turn: driven by a remote chat user, no local operator.
         unattended: true,
+        profile: None,
     };
     let reply = run_agent_turn(config, options, mode)?;
 
