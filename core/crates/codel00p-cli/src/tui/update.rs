@@ -8,9 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
-    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, CommandAction, CommandPalette,
-    EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher, SettingsOverlay, SettingsPref,
-    SettingsRow, UpdatePrompt,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentSwitcher,
+    CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
+    SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
 
@@ -142,6 +142,15 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
+        Msg::AgentList(result) => {
+            if let Overlay::AgentSwitcher(switcher) = &mut app.overlay {
+                match result {
+                    Ok(agents) => switcher.set_agents(agents, None),
+                    Err(error) => switcher.status = Some(error),
+                }
+            }
+            Vec::new()
+        }
         Msg::SessionResumed(result) => {
             match result {
                 Ok((session_state, persisted)) => {
@@ -261,6 +270,8 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
         Overlay::Settings(settings) => handle_settings_key(app, settings, key),
         Overlay::AdvancedSettings(advanced) => handle_advanced_settings_key(app, advanced, key),
+        Overlay::AgentSwitcher(switcher) => handle_agent_switcher_key(app, switcher, key),
+        Overlay::AgentCreate(form) => handle_agent_create_key(app, form, key),
         Overlay::UpdatePrompt(prompt) => handle_update_prompt_key(app, prompt, key),
         Overlay::Command(mut palette) => match palette.on_key(key) {
             PickerOutcome::Selected => match palette.selected_item() {
@@ -643,6 +654,8 @@ fn run_command(app: &mut App, action: CommandAction) -> Vec<Effect> {
         CommandAction::Model => open_model_picker(app),
         CommandAction::Sessions => open_sessions(app),
         CommandAction::NewConversation => handle_slash(app, "reset"),
+        CommandAction::SwitchAgent => open_agent_switcher(app),
+        CommandAction::CreateAgent => open_agent_creator(app),
         CommandAction::Browse => open_entities(app, EntityTab::Projects),
         CommandAction::Users => open_entities(app, EntityTab::Users),
         CommandAction::SwitchOrg => open_entities(app, EntityTab::Org),
@@ -902,6 +915,10 @@ fn handle_slash(app: &mut App, command: &str) -> Vec<Effect> {
     let name = command.split_whitespace().next().unwrap_or("");
     match name {
         "model" => open_model_picker(app),
+        // Local multi-agent personas (#13): switch / create the active agent.
+        "agent" | "switch-agent" => open_agent_switcher(app),
+        "new-agent" | "create-agent" => open_agent_creator(app),
+        // `/agents` (plural) stays the cloud org agent browser.
         "agents" => open_entities(app, EntityTab::Agents),
         "org" => open_entities(app, EntityTab::Org),
         "entities" | "projects" => open_entities(app, EntityTab::Projects),
@@ -966,6 +983,124 @@ fn open_model_picker(app: &mut App) -> Vec<Effect> {
 fn open_sessions(app: &mut App) -> Vec<Effect> {
     app.overlay = Overlay::Sessions(SessionSwitcher::new());
     vec![Effect::ListSessions]
+}
+
+/// Opens the local-agent switcher (multi-agent personas, #13) and kicks off the
+/// registry scan that fills it. Refuses mid-turn: switching re-points the home,
+/// which must only happen between turns.
+fn open_agent_switcher(app: &mut App) -> Vec<Effect> {
+    if app.turn.running {
+        app.conversation
+            .push_notice("Can't switch agents while a turn is running — wait for it to finish.");
+        return Vec::new();
+    }
+    app.overlay = Overlay::AgentSwitcher(AgentSwitcher::new());
+    vec![Effect::ListAgents]
+}
+
+/// Opens the create-agent form (multi-agent personas, #13).
+fn open_agent_creator(app: &mut App) -> Vec<Effect> {
+    app.overlay = Overlay::AgentCreate(AgentCreateForm::new());
+    Vec::new()
+}
+
+/// Handles keys in the agent switcher: Enter live-switches to the highlighted
+/// agent (re-pointing the running TUI's home + memory via `Effect::SwitchAgent`),
+/// Esc closes. Selecting the already-active agent is a no-op notice.
+fn handle_agent_switcher_key(
+    app: &mut App,
+    mut switcher: AgentSwitcher,
+    key: KeyEvent,
+) -> Vec<Effect> {
+    // Guard: never switch mid-turn (the home re-point must happen between turns).
+    if key.code == KeyCode::Enter && app.turn.running {
+        app.conversation
+            .push_notice("Can't switch agents while a turn is running — wait for it to finish.");
+        app.overlay = Overlay::AgentSwitcher(switcher);
+        return Vec::new();
+    }
+    match switcher.on_key(key) {
+        PickerOutcome::Selected => match switcher.selected_item() {
+            Some(agent) if agent.active => {
+                app.conversation
+                    .push_notice(format!("Already using agent “{}”.", agent.name));
+                Vec::new()
+            }
+            Some(agent) => vec![Effect::SwitchAgent(agent.name.clone())],
+            None => Vec::new(),
+        },
+        PickerOutcome::Cancelled => Vec::new(),
+        PickerOutcome::Pending => {
+            app.overlay = Overlay::AgentSwitcher(switcher);
+            Vec::new()
+        }
+    }
+}
+
+/// Handles keys in the create-agent form: Tab moves between fields, printable
+/// chars / Backspace edit the focused field, Enter validates the name and creates
+/// the agent via the registry (then offers to switch to it), Esc cancels.
+fn handle_agent_create_key(app: &mut App, mut form: AgentCreateForm, key: KeyEvent) -> Vec<Effect> {
+    match key.code {
+        KeyCode::Esc => Vec::new(), // close
+        KeyCode::Tab | KeyCode::Down | KeyCode::Up => {
+            form.focus_next();
+            app.overlay = Overlay::AgentCreate(form);
+            Vec::new()
+        }
+        KeyCode::Backspace => {
+            form.backspace();
+            app.overlay = Overlay::AgentCreate(form);
+            Vec::new()
+        }
+        KeyCode::Char(c) => {
+            form.push(c);
+            app.overlay = Overlay::AgentCreate(form);
+            Vec::new()
+        }
+        KeyCode::Enter => submit_agent_create(app, form),
+        _ => {
+            app.overlay = Overlay::AgentCreate(form);
+            Vec::new()
+        }
+    }
+}
+
+/// Validates + creates the agent from the form, then live-switches to it. On a
+/// validation or creation error, keeps the form open with the message shown.
+fn submit_agent_create(app: &mut App, mut form: AgentCreateForm) -> Vec<Effect> {
+    let name = form.name.trim().to_string();
+    if let Err(error) = crate::agent::registry::validate_name(&name) {
+        form.error = Some(error);
+        app.overlay = Overlay::AgentCreate(form);
+        return Vec::new();
+    }
+    let base = app.base_home.clone();
+    let description = {
+        let trimmed = form.description.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    };
+    let opts = crate::agent::registry::CreateOptions {
+        description,
+        ..Default::default()
+    };
+    match crate::agent::registry::create_agent(&base, &name, &opts) {
+        Ok(_) => {
+            app.conversation
+                .push_notice(format!("Created agent “{name}”. Switching to it…"));
+            // Offer-to-switch: a fresh agent is most useful live, so switch now.
+            vec![Effect::SwitchAgent(name)]
+        }
+        Err(error) => {
+            form.error = Some(error);
+            app.overlay = Overlay::AgentCreate(form);
+            Vec::new()
+        }
+    }
 }
 
 fn open_entities(app: &mut App, tab: EntityTab) -> Vec<Effect> {
@@ -1976,6 +2111,136 @@ mod tests {
                 resolved.merged.agent.profile.as_deref(),
                 Some(app.profile_names[1].as_str())
             );
+        });
+    }
+
+    // ---- Multi-agent personas (#13) phase 3: switch / create from the menu ----
+
+    #[test]
+    fn palette_lists_switch_and_create_agent_rows() {
+        use crate::tui::overlay::command_items;
+        let labels: Vec<_> = command_items().into_iter().map(|item| item.label).collect();
+        assert!(labels.iter().any(|l| l == "Switch agent"));
+        assert!(labels.iter().any(|l| l == "Create agent"));
+    }
+
+    #[test]
+    fn switch_agent_command_opens_switcher_and_lists() {
+        let mut app = test_app();
+        update(&mut app, ctrl(KeyCode::Char('p')));
+        type_str(&mut app, "switch agent");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::AgentSwitcher(_)));
+        assert!(matches!(effects.as_slice(), [Effect::ListAgents]));
+    }
+
+    #[test]
+    fn slash_agent_opens_switcher() {
+        let mut app = test_app();
+        type_str(&mut app, "/agent");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::AgentSwitcher(_)));
+        assert!(matches!(effects.as_slice(), [Effect::ListAgents]));
+    }
+
+    #[test]
+    fn agent_list_populates_switcher_and_selecting_emits_switch() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        update(&mut app, key(KeyCode::F(1))); // any non-agent overlay; reset below
+        app.overlay = Overlay::None;
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![
+                AgentChoice {
+                    name: "default".to_string(),
+                    description: None,
+                    active: true,
+                },
+                AgentChoice {
+                    name: "scout".to_string(),
+                    description: Some("recon".to_string()),
+                    active: false,
+                },
+            ])),
+        );
+        // First row (default) is active → moving down to scout then Enter switches.
+        update(&mut app, key(KeyCode::Down));
+        let effects = update(&mut app, key(KeyCode::Enter));
+        match effects.as_slice() {
+            [Effect::SwitchAgent(name)] => assert_eq!(name, "scout"),
+            other => panic!("expected SwitchAgent, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn selecting_the_active_agent_is_a_noop_notice() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![AgentChoice {
+                name: "default".to_string(),
+                description: None,
+                active: true,
+            }])),
+        );
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(effects.is_empty());
+    }
+
+    #[test]
+    fn cannot_open_switcher_mid_turn() {
+        let mut app = test_app();
+        app.turn.running = true;
+        let effects = open_agent_switcher(&mut app);
+        assert!(effects.is_empty());
+        assert!(matches!(app.overlay, Overlay::None));
+    }
+
+    #[test]
+    fn create_agent_form_rejects_invalid_name() {
+        let mut app = test_app();
+        let _ = open_agent_creator(&mut app);
+        assert!(matches!(app.overlay, Overlay::AgentCreate(_)));
+        // A name with a slash is rejected; the form stays open with an error.
+        type_str(&mut app, "bad/name");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(effects.is_empty());
+        match &app.overlay {
+            Overlay::AgentCreate(form) => assert!(form.error.is_some()),
+            _ => panic!("expected the create form to stay open"),
+        }
+    }
+
+    #[test]
+    fn create_agent_form_creates_and_switches() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            // The create path resolves the registry base from `app.base_home`.
+            app.base_home = dir.path().to_path_buf();
+            let _ = open_agent_creator(&mut app);
+            type_str(&mut app, "scribe");
+            // Tab to the description field and add a description.
+            update(&mut app, key(KeyCode::Tab));
+            type_str(&mut app, "writes things");
+            let effects = update(&mut app, key(KeyCode::Enter));
+            // Creation succeeds → it offers to switch to the new agent.
+            match effects.as_slice() {
+                [Effect::SwitchAgent(name)] => assert_eq!(name, "scribe"),
+                other => panic!("expected SwitchAgent, got {} effects", other.len()),
+            }
+            // The agent dir exists and appears in the registry list.
+            let base = dir.path();
+            assert!(crate::agent::registry::agent_exists(base, "scribe"));
+            let names: Vec<_> = crate::agent::registry::list_agents(base)
+                .into_iter()
+                .map(|info| info.name)
+                .collect();
+            assert!(names.contains(&"scribe".to_string()));
         });
     }
 }

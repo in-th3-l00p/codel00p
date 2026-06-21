@@ -302,12 +302,136 @@ impl SessionSwitcher {
     }
 }
 
+/// A selectable local agent (multi-agent personas, #13) shown in the agent
+/// switcher overlay. `name` is the registry name (`default` for the base home);
+/// `active` marks the agent the running TUI is currently pointed at.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AgentChoice {
+    /// Registry name, or `default` for the base home.
+    pub(crate) name: String,
+    pub(crate) description: Option<String>,
+    /// `true` for the agent the TUI is currently using (its memory + sessions).
+    pub(crate) active: bool,
+}
+
+impl PickerItem for AgentChoice {
+    fn label(&self) -> String {
+        if self.active {
+            format!("{} ✓", self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+    fn detail(&self) -> Option<String> {
+        match (&self.description, self.active) {
+            (Some(description), true) => Some(format!("active · {description}")),
+            (Some(description), false) => Some(description.clone()),
+            (None, true) => Some("active".to_string()),
+            (None, false) => None,
+        }
+    }
+}
+
+/// The agent switcher overlay: a read-only list of local agents (default + every
+/// `<base>/agents/<name>`). Selecting one performs a LIVE switch — it re-points
+/// the running TUI at that agent's home so subsequent turns use its memory and
+/// sessions. Mirrors [`SessionSwitcher`]'s shape.
+#[derive(Clone, Debug)]
+pub(crate) struct AgentSwitcher {
+    pub(crate) agents: Picker<AgentChoice>,
+    pub(crate) status: Option<String>,
+}
+
+impl AgentSwitcher {
+    pub(crate) fn new() -> Self {
+        Self {
+            agents: Picker::new(Vec::new()),
+            status: Some("Loading…".to_string()),
+        }
+    }
+
+    pub(crate) fn set_agents(&mut self, agents: Vec<AgentChoice>, status: Option<String>) {
+        self.agents.set_items(agents);
+        self.status = status;
+    }
+
+    pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
+        self.agents.on_key(key)
+    }
+
+    pub(crate) fn selected_item(&self) -> Option<&AgentChoice> {
+        self.agents.selected_item()
+    }
+}
+
+/// Which field of the create-agent form is focused. The form is intentionally
+/// small: a required name and an optional one-line description. Richer creation
+/// (clone, model, persona file) lives in the `agent create` CLI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AgentCreateField {
+    Name,
+    Description,
+}
+
+/// The create-agent form overlay: a name field (required, validated via
+/// `registry::validate_name`) and an optional description. Enter on a valid name
+/// creates the agent via the registry and offers to switch to it; Tab moves
+/// between fields; Esc cancels.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AgentCreateForm {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) field: AgentCreateField,
+    /// A validation / error message shown under the form (e.g. invalid name).
+    pub(crate) error: Option<String>,
+}
+
+impl AgentCreateForm {
+    pub(crate) fn new() -> Self {
+        Self {
+            name: String::new(),
+            description: String::new(),
+            field: AgentCreateField::Name,
+            error: None,
+        }
+    }
+
+    /// The buffer for the currently focused field.
+    fn current_mut(&mut self) -> &mut String {
+        match self.field {
+            AgentCreateField::Name => &mut self.name,
+            AgentCreateField::Description => &mut self.description,
+        }
+    }
+
+    pub(crate) fn push(&mut self, c: char) {
+        self.current_mut().push(c);
+        self.error = None;
+    }
+
+    pub(crate) fn backspace(&mut self) {
+        self.current_mut().pop();
+        self.error = None;
+    }
+
+    pub(crate) fn focus_next(&mut self) {
+        self.field = match self.field {
+            AgentCreateField::Name => AgentCreateField::Description,
+            AgentCreateField::Description => AgentCreateField::Name,
+        };
+    }
+}
+
 /// An action reachable from the command palette. Each maps to an existing handler.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandAction {
     Model,
     Sessions,
     NewConversation,
+    /// Open the local-agent switcher (multi-agent personas, #13).
+    SwitchAgent,
+    /// Open the create-agent form (multi-agent personas, #13).
+    CreateAgent,
     Browse,
     Users,
     SwitchOrg,
@@ -365,6 +489,12 @@ pub(crate) fn command_items() -> Vec<CommandItem> {
         ("Switch model", "pick a provider / model", Model),
         ("Switch session", "resume a prior conversation", Sessions),
         ("New conversation", "start a fresh chat", NewConversation),
+        (
+            "Switch agent",
+            "live-switch the active agent + memory",
+            SwitchAgent,
+        ),
+        ("Create agent", "define a new local agent", CreateAgent),
         (
             "Browse organization",
             "projects · agents · MCP · memory",
@@ -654,6 +784,10 @@ pub(crate) enum Overlay {
     Settings(SettingsOverlay),
     AdvancedSettings(AdvancedSettingsOverlay),
     UpdatePrompt(UpdatePrompt),
+    /// The local-agent switcher (multi-agent personas, #13).
+    AgentSwitcher(AgentSwitcher),
+    /// The create-agent form (multi-agent personas, #13).
+    AgentCreate(AgentCreateForm),
 }
 
 impl Overlay {

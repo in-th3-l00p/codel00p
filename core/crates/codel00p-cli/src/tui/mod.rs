@@ -8,6 +8,7 @@
 //! executes the [`Effect`]s an update returns. [`bridge`] connects the async harness
 //! turn to the UI channel.
 
+pub(crate) mod agents;
 pub(crate) mod app;
 pub(crate) mod bridge;
 pub(crate) mod cloud_data;
@@ -96,6 +97,8 @@ pub(crate) mod test_support {
             crate::settings::builtin_profiles()
                 .into_keys()
                 .collect::<Vec<_>>(),
+            None,                       // active_agent (default/base home by default)
+            PathBuf::from("/tmp/base"), // base_home (overridden by env-isolated tests)
         )
     }
 }

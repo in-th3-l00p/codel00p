@@ -139,6 +139,18 @@ pub(crate) struct App {
     /// All selectable profile names: built-in presets ∪ user-defined
     /// `[agent.profiles.*]`, sorted. Cycled by the Settings profile switcher.
     pub(crate) profile_names: Vec<String>,
+    /// The active local agent (multi-agent personas, #13), or `None` when the
+    /// base home (the implicit `default` agent) is in use. Resolved from the
+    /// sticky registry pointer at startup and updated on a live switch; shown in
+    /// the header banner so the user always knows which memory is live.
+    pub(crate) active_agent: Option<String>,
+    /// The TRUE base home (`<os-home>/.codel00p` or the launch-time
+    /// `CODEL00P_HOME`), captured ONCE at startup before any agent switch mutates
+    /// the env. The registry's `base_home()` reads `CODEL00P_HOME` live, so after
+    /// a switch points the env at an agent's home it would no longer return the
+    /// base — we keep the captured value to resolve agent homes + the sticky
+    /// pointer correctly across switches. Multi-agent personas, #13.
+    pub(crate) base_home: std::path::PathBuf,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
     /// A newer release version if one is already known (from the update cache or a
@@ -173,6 +185,8 @@ impl App {
         failure_budget: u32,
         active_profile: Option<String>,
         profile_names: Vec<String>,
+        active_agent: Option<String>,
+        base_home: std::path::PathBuf,
     ) -> Self {
         Self {
             config,
@@ -207,6 +221,8 @@ impl App {
             failure_budget,
             active_profile,
             profile_names,
+            active_agent,
+            base_home,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),

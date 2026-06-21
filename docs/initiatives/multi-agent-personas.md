@@ -77,9 +77,10 @@ The plan below assumes **Option A**.
 - [ ] **Default agent on launch**: with no `--agent`/sticky selection, use the base home (the default agent) — exactly today's behavior, so this is back-compatible.
 
 ### Phase 2 — TUI menu (create / switch / default-on-open)
-- [ ] Wire the existing **Entity Browser "Agents" tab** to the local registry: list agents, show active, **switch** on select.
-- [ ] Ctrl+P palette: `CommandAction::SwitchAgent` and `CommandAction::CreateAgent` (a small form: name, persona, model, base profile).
-- [ ] Load the **active/default agent at TUI startup** (`event_loop.rs`/`app.rs`), show it in the banner/status (the self-block already renders identity), and scope the session switcher to the active agent.
+- [x] A dedicated **agent switcher overlay** wired to the local registry (lists `default` + every `<base>/agents/<name>`, marks active, **live-switches** on select). Reachable via Ctrl+P → "Switch agent" and `/agent`. (The Entity Browser "Agents" tab stays the cloud org-agent picker.)
+- [x] Ctrl+P palette: `CommandAction::SwitchAgent` and `CommandAction::CreateAgent` (a small name + description form; richer creation stays in `agent create`).
+- [x] Load the **active/default agent at TUI startup** (`event_loop.rs`/`app.rs`), show it in the header banner (`agent: <name>` / `agent: default`), and scope the session switcher to the active agent (sessions resolve from the active home's `memory.sqlite`).
+- [x] **Live memory switch**: selecting an agent re-points the running TUI's `CODEL00P_HOME` + rebuilds `App.config` so the next harness build uses the new agent's `memory.sqlite` and sessions, resetting to a fresh session under it (delivered in #13 phase 3).
 
 ### Phase 3 — Per-agent growing memory + learning (mostly free under Option A)
 - [ ] Confirm the memory recommender + skill/capability extractors write into the **active agent's home** (they already write to `CODEL00P_HOME`'s memory DB / skills dir), so each agent learns independently. Add tests proving isolation (agent A's memories/skills don't appear for agent B).
