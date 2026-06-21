@@ -1,32 +1,37 @@
 # codel00p — Project Status
 
-_Last updated: 2026-06-20 · Milestone: **Tooling-Complete (v0.7.0)**_
+_Last updated: 2026-06-21 · Milestone: **Autonomous Coding Agent (v0.10.0)**_
 
 This is the at-a-glance project-management view: where the product stands, what
 the current milestone covers, and what remains. Per-initiative detail lives under
 [`docs/initiatives/`](docs/initiatives/); active ordering lives in the roadmap and
 agentic-backlog docs.
 
-## Milestone: Tooling-Complete (v0.7.0)
+## Milestone: Autonomous Coding Agent (v0.10.0)
 
-The agent's **tool-calling, programmatic execution, execution backends, and
-end-to-end testing** are complete and released. This milestone marks the point
-where the floor every mature coding agent ships — plus several differentiators —
-is in place, tested, and governed.
+Building on Tooling-Complete (v0.7.0), this milestone closes the **autonomy
+discipline** gap — codel00p now plans, knows itself and its run-state, **verifies
+its own work and won't claim done without checking**, classifies failures and
+stops flailing, snapshots/rolls back safely, and understands code via real ASTs.
+Every smart behavior is individually toggleable and bundleable into **custom
+profiles** (`autonomous`/`careful`/`manual` presets), tunable from a Ctrl+P
+advanced-settings submenu. This is the "assistant → engineer" jump
+([initiative #12](docs/initiatives/perfect-coding-agent.md)).
 
 | Metric | Value |
 |---|---|
-| Latest release | **v0.7.0** |
-| Releases shipped | v0.1.0 → v0.7.0 |
+| Latest release | **v0.10.0** |
+| Releases shipped | v0.1.0 → v0.10.0 |
 | Workspace crates | 14 |
-| Rust tests | ~1,300 |
-| E2E scenario files | 21 |
+| Rust tests | ~1,450 |
+| E2E scenario files | 24 |
 
 ## Initiative status
 
 | # | Initiative | Status |
 |---|---|---|
-| — | End-to-end testing (`codel00p-e2e`) | ✅ Complete — 21 hermetic scenario files + coverage matrix |
+| 12 | [The Perfect Coding Agent](docs/initiatives/perfect-coding-agent.md) | 🟢 **Tier 0 complete** (verify-before-done loop, metacognition, base prompt + planning, error self-correction) + self-awareness, tree-sitter repo map, shadow-git checkpoints, workspace-awareness, custom profiles. Tier 1–3 frontier (LSP, hybrid retrieval, browser-verify, fan-out, …) remains |
+| — | End-to-end testing (`codel00p-e2e`) | ✅ Complete — 24 hermetic scenario files + coverage matrix |
 | 10 | Tool-Calling Parity | ✅ Complete — schema/validation/truncation, `tool_choice`/`response_format`, MCP progressive disclosure, sub-agents, nav/grep/repo_map, background commands, plans, verbosity/pagination, streaming tool-call deltas |
 | 8 | Programmatic Tool Calling | ✅ Complete — `run_pipeline` + sandboxed, governed `execute_code` |
 | 7 | Execution Backends & Sandboxing | ✅ Core complete — `TerminalBackend` seam; local, Docker (ephemeral + warm), SSH backends; require-isolation-for-unattended policy. ⏸️ Cloud-sandbox backend deferred (needs a vendor + credentials) |
