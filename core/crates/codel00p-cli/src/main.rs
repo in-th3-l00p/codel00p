@@ -99,6 +99,13 @@ fn run(args: Vec<String>) -> CliResult<String> {
             .is_some_and(|sub| agent::management::is_management(sub)));
     if !base_scoped {
         let base = agent::registry::base_home();
+        // Preserve the TRUE base home before the override below clobbers
+        // `CODEL00P_HOME`. The TUI's live agent switch (#13) reads this to resolve
+        // agent homes + the sticky pointer correctly even after it re-points
+        // `CODEL00P_HOME` at an agent home. `base_home()` itself reads
+        // `CODEL00P_HOME`, so it is only the true base if captured before this.
+        // SAFETY: single-threaded startup, before any worker thread is spawned.
+        unsafe { env::set_var("CODEL00P_BASE_HOME", &base) };
         if let Some(name) = agent::registry::resolve_active(&base, overrides.agent.as_deref()) {
             agent::registry::validate_name(&name)?;
             let home = agent::registry::agent_home(&base, &name);

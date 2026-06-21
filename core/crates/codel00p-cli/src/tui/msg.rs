@@ -8,7 +8,7 @@ use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRef, Projec
 use crossterm::event::KeyEvent;
 use tokio::sync::oneshot;
 
-use super::overlay::{ModelChoice, SessionSummary};
+use super::overlay::{AgentChoice, ModelChoice, SessionSummary};
 
 /// Inbound events: terminal input, streamed turn output, and async results.
 pub(crate) enum Msg {
@@ -40,6 +40,9 @@ pub(crate) enum Msg {
     Models(Result<Vec<ModelChoice>, String>),
     /// Prior sessions for the session switcher overlay.
     SessionList(Result<Vec<SessionSummary>, String>),
+    /// Local agents (default + registry) for the agent switcher overlay
+    /// (multi-agent personas, #13).
+    AgentList(Result<Vec<AgentChoice>, String>),
     /// A prior session was replayed and is ready to resume (state + message count).
     SessionResumed(Result<(Box<SessionState>, usize), String>),
     /// The background startup check found a newer release (carries the version).
@@ -70,6 +73,16 @@ pub(crate) enum Effect {
     FetchModels(String),
     /// List prior sessions for the switcher (blocking store read, off the UI task).
     ListSessions,
+    /// List local agents for the switcher (blocking registry scan, off the UI
+    /// task). Multi-agent personas, #13.
+    ListAgents,
+    /// Live-switch the active agent (multi-agent personas, #13): persist the
+    /// sticky pointer, re-point the running TUI's `CODEL00P_HOME` + rebuild
+    /// `App.config` so the next harness build uses the new agent's memory +
+    /// sessions, reset to a fresh session under it, and reload the session
+    /// switcher. Runs synchronously on the UI task (only when idle / between
+    /// turns), so the env mutation is single-threaded with no harness in flight.
+    SwitchAgent(String),
     /// Replay a prior session so it can be resumed inside the TUI.
     ResumeSession(codel00p_harness::SessionId),
     /// Rename a prior session's title (blocking store write, off the UI task), then

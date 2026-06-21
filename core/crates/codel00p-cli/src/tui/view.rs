@@ -10,8 +10,9 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs};
 use super::app::App;
 use super::conversation::{Block as ChatBlock, ToolState};
 use super::overlay::{
-    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, EntityBrowser, EntityTab, ModelPicker,
-    Overlay, SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateField, AgentCreateForm,
+    AgentSwitcher, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
+    SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::{Picker, PickerItem};
 use super::theme::Theme;
@@ -57,6 +58,8 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Settings(settings) => draw_settings(app, frame, settings),
         Overlay::AdvancedSettings(advanced) => draw_advanced_settings(app, frame, advanced),
         Overlay::UpdatePrompt(prompt) => draw_update_prompt(app, frame, prompt),
+        Overlay::AgentSwitcher(switcher) => draw_agent_switcher(app, frame, switcher),
+        Overlay::AgentCreate(form) => draw_agent_create(app, frame, form),
     }
 }
 
@@ -66,9 +69,16 @@ fn composer_text_width(area_width: u16) -> usize {
 }
 
 fn draw_header(app: &App, frame: &mut Frame, area: Rect) {
+    // The active local agent (multi-agent personas, #13): the banner always names
+    // which agent — and thus which memory — is live. `None` is the base/default
+    // agent.
+    let agent_label = app
+        .active_agent
+        .as_deref()
+        .unwrap_or(super::agents::DEFAULT_AGENT_LABEL);
     let mut spans = vec![
         Span::styled("codel00p", app.theme.accent()),
-        Span::styled("  agent", app.theme.muted()),
+        Span::styled(format!("  agent: {agent_label}"), app.theme.accent()),
         Span::styled(
             format!("  ·  session {}", app.session_label()),
             app.theme.muted(),
@@ -573,6 +583,7 @@ fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
         Line::from("  F2 (in sessions)  rename the highlighted conversation"),
         Line::from("  /sessions /memory /history /tools /reset"),
+        Line::from("  /agent /new-agent  switch · create a local agent (also in Ctrl+P)"),
         Line::from("  Ctrl+P → Settings  advanced status info · update checks"),
         Line::from("  Esc          close overlay · clear input · quit"),
         Line::from("  Ctrl-C       quit"),
@@ -779,6 +790,112 @@ fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
         &switcher.sessions,
         "Prior conversations",
     );
+}
+
+/// Draws the local-agent switcher (multi-agent personas, #13): the list of
+/// agents (default + registry) with the active one marked.
+fn draw_agent_switcher(app: &App, frame: &mut Frame, switcher: &AgentSwitcher) {
+    let area = centered_rect(60, 60, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" switch agent ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+    let status = switcher
+        .status
+        .clone()
+        .unwrap_or_else(|| "Enter to switch (live) · Esc to close".to_string());
+    frame.render_widget(
+        Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
+        rows[0],
+    );
+    draw_picker(frame, rows[1], &app.theme, &switcher.agents, "Agents");
+}
+
+/// Draws the create-agent form (multi-agent personas, #13): a required name and
+/// an optional description, with the focused field highlighted.
+fn draw_agent_create(app: &App, frame: &mut Frame, form: &AgentCreateForm) {
+    let area = centered_rect(56, 36, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" create agent ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // hint
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // name
+            Constraint::Length(1), // description
+            Constraint::Length(1), // spacer
+            Constraint::Min(1),    // error / help
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  Tab to switch field · Enter to create + switch · Esc to cancel",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+
+    let field_line = |label: &str, value: &str, focused: bool| {
+        let marker = if focused { "› " } else { "  " };
+        let cursor = if focused { "▏" } else { "" };
+        Line::from(vec![
+            Span::styled(marker, Style::default().fg(app.theme.accent)),
+            Span::styled(format!("{label:<13}"), app.theme.muted()),
+            Span::styled(
+                format!("{value}{cursor}"),
+                if focused {
+                    app.theme.selection()
+                } else {
+                    Style::default()
+                },
+            ),
+        ])
+    };
+
+    frame.render_widget(
+        Paragraph::new(field_line(
+            "name:",
+            &form.name,
+            form.field == AgentCreateField::Name,
+        )),
+        rows[2],
+    );
+    frame.render_widget(
+        Paragraph::new(field_line(
+            "description:",
+            &form.description,
+            form.field == AgentCreateField::Description,
+        )),
+        rows[3],
+    );
+
+    let footer = match &form.error {
+        Some(error) => Line::from(Span::styled(
+            format!("  {error}"),
+            Style::default().fg(app.theme.error),
+        )),
+        None => Line::from(Span::styled(
+            "  name: letters, digits, - _ . (no spaces or slashes)",
+            app.theme.muted(),
+        )),
+    };
+    frame.render_widget(Paragraph::new(footer), rows[5]);
 }
 
 /// Draws the command palette: a filterable list of every CLI action.
@@ -1467,5 +1584,62 @@ mod tests {
         assert!(rendered.contains("switch session"));
         assert!(rendered.contains("Debug release packaging"));
         assert!(rendered.contains("chat-99"));
+    }
+
+    #[test]
+    fn header_shows_default_agent_when_none_active() {
+        let mut app = test_app();
+        assert!(app.active_agent.is_none());
+        let rendered = render_to_string(&mut app, 80, 20);
+        assert!(rendered.contains("agent: default"));
+    }
+
+    #[test]
+    fn header_shows_active_agent_name() {
+        let mut app = test_app();
+        app.active_agent = Some("scout".to_string());
+        let rendered = render_to_string(&mut app, 80, 20);
+        assert!(rendered.contains("agent: scout"));
+    }
+
+    #[test]
+    fn renders_agent_switcher_overlay() {
+        use crate::tui::overlay::{AgentChoice, AgentSwitcher};
+        let mut switcher = AgentSwitcher::new();
+        switcher.set_agents(
+            vec![
+                AgentChoice {
+                    name: "default".to_string(),
+                    description: None,
+                    active: true,
+                },
+                AgentChoice {
+                    name: "scout".to_string(),
+                    description: Some("recon agent".to_string()),
+                    active: false,
+                },
+            ],
+            None,
+        );
+        let mut app = test_app();
+        app.overlay = Overlay::AgentSwitcher(switcher);
+        let rendered = render_to_string(&mut app, 80, 20);
+        assert!(rendered.contains("switch agent"));
+        assert!(rendered.contains("scout"));
+        // The active agent is marked.
+        assert!(rendered.contains("default ✓"));
+    }
+
+    #[test]
+    fn renders_agent_create_form() {
+        use crate::tui::overlay::AgentCreateForm;
+        let mut form = AgentCreateForm::new();
+        form.name = "scribe".to_string();
+        let mut app = test_app();
+        app.overlay = Overlay::AgentCreate(form);
+        let rendered = render_to_string(&mut app, 80, 20);
+        assert!(rendered.contains("create agent"));
+        assert!(rendered.contains("scribe"));
+        assert!(rendered.contains("name:"));
     }
 }

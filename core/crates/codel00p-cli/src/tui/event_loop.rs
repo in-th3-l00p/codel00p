@@ -94,6 +94,15 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
     // (built-in presets ∪ user-defined `[agent.profiles.*]`) for the Settings
     // profile switcher. Falls back to no active profile + the built-in presets
     // when the config fails to load.
+    // The active local agent (multi-agent personas, #13). `main` already
+    // overrode `CODEL00P_HOME` to this agent's home before config loaded, so the
+    // process is already scoped to it; we read the sticky pointer purely to label
+    // the banner and seed the switcher's "active" mark. `None` == the base
+    // (default) agent, which is exactly today's single-home behavior. We resolve
+    // the TRUE base from `CODEL00P_BASE_HOME` (stashed by `main` before its
+    // override) so the pointer is read from the base, not an agent's home.
+    let base_home = crate::tui::agents::base_home();
+    let active_agent = crate::agent::registry::active_agent(&base_home);
     let active_profile = agent_settings.profile.clone();
     let profile_names = crate::settings::load_layered(&options.workspace)
         .ok()
@@ -122,6 +131,8 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         failure_budget,
         active_profile,
         profile_names,
+        active_agent,
+        base_home,
     );
 
     let mut terminal =
@@ -219,6 +230,10 @@ fn execute_effect(
         Effect::Local(query) => spawn_local(app.config.clone(), query, tx.clone()),
         Effect::FetchModels(provider) => spawn_models(provider, tx.clone()),
         Effect::ListSessions => spawn_session_list(app.config.clone(), tx.clone()),
+        Effect::ListAgents => {
+            spawn_agent_list(app.base_home.clone(), app.active_agent.clone(), tx.clone())
+        }
+        Effect::SwitchAgent(name) => switch_agent(app, name, tx)?,
         Effect::ResumeSession(session_id) => {
             spawn_resume_session(app.config.clone(), session_id, tx.clone())
         }
@@ -275,6 +290,68 @@ fn switch_org(
     }
 
     Ok(())
+}
+
+/// Live-switches the active agent (multi-agent personas, #13). Runs
+/// synchronously on the UI task — the caller (`update`) only emits
+/// `Effect::SwitchAgent` when idle (`!app.turn.running`), so there is no harness
+/// in flight and the `CODEL00P_HOME` mutation inside `switch_config` is
+/// single-threaded.
+///
+/// Re-points the running TUI at the new agent's home so the NEXT harness build
+/// (`spawn_turn` clones `app.config`) uses the new agent's `memory.sqlite` and
+/// sessions, then resets to a fresh session under the new agent and reloads the
+/// session switcher to that agent's sessions.
+fn switch_agent(app: &mut App, name: String, tx: &UnboundedSender<Msg>) -> CliResult<()> {
+    let workspace = app.options.workspace.clone();
+    let base = app.base_home.clone();
+    match super::agents::switch_config(&base, Some(&name), &workspace) {
+        Ok((config, active)) => {
+            // 1. Re-point config (memory + sessions resolve from config.memory_db).
+            app.config = config;
+            app.active_agent = active;
+
+            // 2. Reset to a fresh conversation under the new agent's home.
+            let id = crate::config::parse_session_id(&crate::agent::fresh_chat_session_id())
+                .unwrap_or_default();
+            app.session_state = codel00p_harness::SessionState::new(id);
+            app.persisted_message_count = 0;
+            app.conversation = super::conversation::Conversation::default();
+            app.scroll = super::app::ScrollState::default();
+            app.turn = super::app::TurnStatus::default();
+            app.refresh_usage();
+
+            let label = app
+                .active_agent
+                .clone()
+                .unwrap_or_else(|| super::agents::DEFAULT_AGENT_LABEL.to_string());
+            app.conversation.push_notice(format!(
+                "Switched to agent “{label}”. New turns use its memory + sessions ({}).",
+                app.session_label()
+            ));
+
+            // 3. Reload the session switcher to the new agent's sessions (if open).
+            spawn_session_list(app.config.clone(), tx.clone());
+        }
+        Err(error) => {
+            app.conversation
+                .push_error(format!("Could not switch agent: {error}"));
+        }
+    }
+    Ok(())
+}
+
+/// Lists local agents (default + registry) for the agent switcher overlay. A
+/// blocking registry scan run on `spawn_blocking`, like the session list.
+fn spawn_agent_list(base: std::path::PathBuf, active: Option<String>, tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            super::agents::list_agent_choices(&base, active.as_deref())
+        })
+        .await
+        .map_err(|error| error.to_string());
+        let _ = tx.send(Msg::AgentList(result));
+    });
 }
 
 /// Spawns the agent turn on a task so the UI keeps rendering. The turn's tokens,
