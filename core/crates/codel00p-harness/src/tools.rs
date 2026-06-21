@@ -193,17 +193,46 @@ impl Tool for ReadFileTool {
         input: Value,
     ) -> Result<ToolResult, HarnessError> {
         let path = required_string(self.name(), &input, "path")?;
-        let content = workspace.read_utf8(path)?;
+
+        // Read raw bytes and decode gracefully: a non-UTF-8 file must NOT abort
+        // the tool (previously `read_utf8` hard-errored with "invalid utf-8
+        // sequence …"). A binary file (NUL byte present) is reported as such
+        // rather than dumping garbage; other invalid-UTF-8 text (e.g. latin-1)
+        // is lossily decoded so the model still sees the content, with a flag.
+        let bytes = workspace.read_bytes(path)?;
+        let (content, non_utf8) = match String::from_utf8(bytes) {
+            Ok(text) => (text, false),
+            Err(error) => {
+                let raw = error.into_bytes();
+                if raw.contains(&0) {
+                    return Ok(ToolResult::json(json!({
+                        "path": path,
+                        "binary": true,
+                        "byte_size": raw.len(),
+                        "note": "File is not valid UTF-8 and appears to be binary; \
+                                 not shown as text. Use a command tool if you need \
+                                 to inspect its bytes.",
+                    })));
+                }
+                (String::from_utf8_lossy(&raw).into_owned(), true)
+            }
+        };
 
         let offset = optional_u64(&input, "offset");
         let limit = optional_u64(&input, "limit");
 
-        // Without a window, return the whole file (unchanged behavior).
+        // Without a window, return the whole file.
         if offset.is_none() && limit.is_none() {
-            return Ok(ToolResult::json(json!({
+            let mut result = json!({
                 "path": path,
                 "content": content,
-            })));
+            });
+            if non_utf8 {
+                result["non_utf8"] = json!(true);
+                result["note"] =
+                    json!("File was not valid UTF-8; decoded lossily (invalid bytes replaced).");
+            }
+            return Ok(ToolResult::json(result));
         }
 
         let lines: Vec<&str> = content.lines().collect();
@@ -215,14 +244,18 @@ impl Tool for ReadFileTool {
         let end = start.saturating_add(count).min(total_lines);
         let window = lines[start..end].join("\n");
 
-        Ok(ToolResult::json(json!({
+        let mut result = json!({
             "path": path,
             "content": window,
             "start_line": start + 1,
             "line_count": end - start,
             "total_lines": total_lines,
             "has_more": end < total_lines,
-        })))
+        });
+        if non_utf8 {
+            result["non_utf8"] = json!(true);
+        }
+        Ok(ToolResult::json(result))
     }
 }
 
@@ -410,6 +443,41 @@ mod tests {
             .iter()
             .map(|v| v.as_str().unwrap().to_string())
             .collect()
+    }
+
+    fn workspace_with_bytes(path: &str, bytes: &[u8]) -> (tempfile::TempDir, Workspace) {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(path), bytes).unwrap();
+        let workspace = Workspace::new(dir.path()).unwrap();
+        (dir, workspace)
+    }
+
+    #[tokio::test]
+    async fn read_file_reports_binary_non_utf8_gracefully() {
+        // A file with a NUL byte (classic binary signal) must not abort the tool
+        // with "invalid utf-8 sequence …"; it is reported as binary.
+        let (_dir, workspace) = workspace_with_bytes("blob.bin", &[0x00, 0xff, 0x10, 0x80]);
+        let result = ReadFileTool
+            .execute(&workspace, json!({ "path": "blob.bin" }))
+            .await
+            .expect("read_file must not error on a binary file");
+        assert_eq!(result.content()["binary"], json!(true));
+        assert_eq!(result.content()["byte_size"], json!(4));
+        assert!(result.content().get("content").is_none());
+    }
+
+    #[tokio::test]
+    async fn read_file_lossily_decodes_non_utf8_text() {
+        // Latin-1 "café" (0xe9 for é) is invalid UTF-8 but text (no NUL). It is
+        // decoded lossily so the model still sees content, flagged non_utf8.
+        let (_dir, workspace) = workspace_with_bytes("notes.txt", b"caf\xe9\n");
+        let result = ReadFileTool
+            .execute(&workspace, json!({ "path": "notes.txt" }))
+            .await
+            .expect("read_file must not error on lossy-decodable text");
+        assert_eq!(result.content()["non_utf8"], json!(true));
+        let content = result.content()["content"].as_str().unwrap();
+        assert!(content.starts_with("caf"), "got: {content:?}");
     }
 
     #[tokio::test]
