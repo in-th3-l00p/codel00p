@@ -250,7 +250,15 @@ fn approved_memory_is_injected_into_second_run() {
     let provider2 = MockProvider::start().assistant_text("done");
     let runner = runner.with_provider(&provider2);
 
-    let result2 = runner.run(&["agent", "run", "Say hi.", "--tool-set", "all"]);
+    // Proactive task-aware recall (default on) ranks approved memory against the
+    // turn's task text, so run 2's prompt overlaps the approved memory content.
+    let result2 = runner.run(&[
+        "agent",
+        "run",
+        "Should I prefer small functions over monoliths?",
+        "--tool-set",
+        "all",
+    ]);
     result2.assert_success();
 
     // The manifest must report at least one injected memory id.

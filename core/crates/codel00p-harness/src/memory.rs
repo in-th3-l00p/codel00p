@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use codel00p_memory::{
     ExplicitMemoryExtractor, MemoryCandidateExtractor, MemoryCandidateInput, MemoryExtractionInput,
-    MemoryQuery, MemoryRepository,
+    MemoryQuery, MemoryRepository, MemoryRetrievalQuery,
 };
 use codel00p_protocol::{MemoryKind, MemorySource, MemoryVisibility, ProjectRef};
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,11 @@ pub struct ProjectMemoryRequest {
     session_id: SessionId,
     turn_id: TurnId,
     message_count: usize,
+    /// The current task text (the latest user message), used to drive task-aware
+    /// proactive recall — memories relevant to the active goal surface
+    /// automatically. `None`/empty falls back to non-task retrieval. Mirrors
+    /// [`crate::skills::SkillSelectionRequest::query`].
+    latest_user_message: Option<String>,
 }
 
 impl ProjectMemoryRequest {
@@ -26,7 +31,20 @@ impl ProjectMemoryRequest {
             session_id,
             turn_id,
             message_count,
+            latest_user_message: None,
         }
+    }
+
+    /// Attaches the current task text so the provider can rank memory against the
+    /// active goal. An empty string is treated as absent.
+    pub fn with_latest_user_message(mut self, message: impl Into<String>) -> Self {
+        let message = message.into();
+        self.latest_user_message = if message.trim().is_empty() {
+            None
+        } else {
+            Some(message)
+        };
+        self
     }
 
     pub fn session_id(&self) -> &SessionId {
@@ -39,6 +57,11 @@ impl ProjectMemoryRequest {
 
     pub fn message_count(&self) -> usize {
         self.message_count
+    }
+
+    /// The current task text, if any, for proactive task-aware recall.
+    pub fn latest_user_message(&self) -> Option<&str> {
+        self.latest_user_message.as_deref()
     }
 }
 
@@ -579,6 +602,7 @@ pub struct MemoryRepositoryProjectMemoryProvider<R> {
     text: Option<String>,
     visibility: Option<MemoryVisibility>,
     limit: Option<usize>,
+    proactive: bool,
 }
 
 impl<R> MemoryRepositoryProjectMemoryProvider<R> {
@@ -591,11 +615,21 @@ impl<R> MemoryRepositoryProjectMemoryProvider<R> {
             text: None,
             visibility: None,
             limit: None,
+            proactive: true,
         }
     }
 
     pub fn with_kind(mut self, kind: MemoryKind) -> Self {
         self.kind = Some(kind);
+        self
+    }
+
+    /// Toggles proactive task-aware recall (default on). When on, the request's
+    /// task text drives the query so memories relevant to the current goal
+    /// surface automatically. When off, the request task is ignored and only the
+    /// statically configured filters/text apply (prior behavior).
+    pub fn with_proactive(mut self, proactive: bool) -> Self {
+        self.proactive = proactive;
         self
     }
 
@@ -629,8 +663,55 @@ where
 {
     async fn retrieve(
         &self,
-        _request: ProjectMemoryRequest,
+        request: ProjectMemoryRequest,
     ) -> Result<ProjectMemoryContext, HarnessError> {
+        // Proactive task-aware recall: when enabled and the turn carries task
+        // text, rank approved memory against the current goal with BM25 so the
+        // most relevant memories surface automatically. Configured kind/tag/
+        // visibility stay as additional constraints. Without task text (or with
+        // proactive recall off) we fall back to the prior filter-only retrieval.
+        let task_text = if self.proactive {
+            request.latest_user_message()
+        } else {
+            None
+        };
+
+        if let Some(task) = task_text {
+            let mut query = MemoryRetrievalQuery::new(self.project.clone(), task);
+            if let Some(kind) = self.kind {
+                query = query.with_kind(kind);
+            }
+            if let Some(tag) = &self.tag {
+                query = query.with_tag(tag);
+            }
+            if let Some(visibility) = self.visibility {
+                query = query.with_visibility(visibility);
+            }
+            if let Some(limit) = self.limit {
+                query = query.with_limit(limit);
+            }
+
+            let items = self
+                .repository
+                .retrieve_ranked(query)
+                .map_err(|error| HarnessError::InferenceFailed {
+                    message: format!("project memory retrieval failed: {error}"),
+                })?
+                .into_iter()
+                .map(|memory| {
+                    ProjectMemoryItem::new(
+                        memory.entry().id(),
+                        memory.entry().kind(),
+                        memory.entry().content(),
+                        memory.entry().tags().to_vec(),
+                        format!("proactive recall (relevance {})", memory.score()),
+                    )
+                })
+                .collect();
+
+            return Ok(ProjectMemoryContext::new(items));
+        }
+
         let mut query = MemoryQuery::new(self.project.clone());
         if let Some(kind) = self.kind {
             query = query.with_kind(kind);

@@ -86,6 +86,48 @@ fn ranked_retrieval_breaks_ties_by_memory_id() {
 }
 
 #[test]
+fn ranked_retrieval_bm25_weighs_rare_terms_above_common_ones() {
+    // "deploy" appears in every candidate (common ⇒ low idf); "kubernetes"
+    // appears in only one (rare ⇒ high idf). A query mentioning both must rank
+    // the rare-term match first, which plain token-overlap Jaccard would not
+    // guarantee. This exercises BM25 idf through the repository path.
+    let mut store = InMemoryMemoryStore::default();
+    approved(
+        &mut store,
+        "mem-rare",
+        MemoryKind::Deployment,
+        "Deploy the service to the kubernetes cluster.",
+        "deploy",
+    );
+    approved(
+        &mut store,
+        "mem-common-a",
+        MemoryKind::Deployment,
+        "Deploy the service to the staging environment first.",
+        "deploy",
+    );
+    approved(
+        &mut store,
+        "mem-common-b",
+        MemoryKind::Deployment,
+        "Deploy the service after the release notes are ready.",
+        "deploy",
+    );
+
+    let ranked = store
+        .retrieve_ranked(MemoryRetrievalQuery::new(project(), "deploy to kubernetes"))
+        .expect("retrieve ranked memory");
+
+    assert_eq!(ranked[0].entry().id(), "mem-rare");
+    assert!(
+        ranked[0].score() > ranked[1].score(),
+        "rare-term match {} should outrank common-only match {}",
+        ranked[0].score(),
+        ranked[1].score()
+    );
+}
+
+#[test]
 fn ranked_retrieval_applies_kind_filter_before_ranking() {
     let mut store = InMemoryMemoryStore::default();
     approved(

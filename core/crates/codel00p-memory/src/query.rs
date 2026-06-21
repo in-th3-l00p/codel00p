@@ -29,8 +29,9 @@ pub struct MemoryListFilter {
 }
 
 /// Free-text retrieval query: deterministic filters bound the candidate set,
-/// then the query string is ranked against each memory's content by lexical
-/// similarity. This is offline (no embeddings, no network).
+/// then the query string is ranked against each memory's content with BM25
+/// (term-frequency saturation + inverse-document-frequency over the filtered
+/// candidate corpus). This is offline (no embeddings, no network).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryRetrievalQuery {
     pub(crate) project: ProjectRef,

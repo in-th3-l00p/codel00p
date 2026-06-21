@@ -65,7 +65,9 @@ fn memory_similar_scores_active_near_duplicates() {
     );
     assert_eq!(
         stdout(&output),
-        "mem-original\tapproved\tworkflow\t75\tRun pnpm verify before pushing main.\n"
+        // Shingle (token-bigram) Jaccard scores the reworded duplicate at 83
+        // (was 75 under unigram Jaccard).
+        "mem-original\tapproved\tworkflow\t83\tRun pnpm verify before pushing main.\n"
     );
     let records: serde_json::Value =
         serde_json::from_str(&stdout(&output_json)).expect("similar json");
@@ -74,7 +76,7 @@ fn memory_similar_scores_active_near_duplicates() {
     assert_eq!(records[0]["id"], "mem-original");
     assert_eq!(records[0]["status"], "approved");
     assert_eq!(records[0]["kind"], "workflow");
-    assert_eq!(records[0]["score"], 75);
+    assert_eq!(records[0]["score"], 83);
     assert_eq!(
         records[0]["content"],
         "Run pnpm verify before pushing main."
@@ -144,7 +146,7 @@ fn memory_stale_lists_superseded_approved_memory() {
     );
     assert_eq!(
         stdout(&output),
-        "mem-original\tapproved\tworkflow\t75\tmem-newer\tRun pnpm verify before pushing main.\n"
+        "mem-original\tapproved\tworkflow\t83\tmem-newer\tRun pnpm verify before pushing main.\n"
     );
     let records: serde_json::Value =
         serde_json::from_str(&stdout(&output_json)).expect("stale json");
@@ -153,7 +155,7 @@ fn memory_stale_lists_superseded_approved_memory() {
     assert_eq!(records[0]["id"], "mem-original");
     assert_eq!(records[0]["status"], "approved");
     assert_eq!(records[0]["kind"], "workflow");
-    assert_eq!(records[0]["score"], 75);
+    assert_eq!(records[0]["score"], 83);
     assert_eq!(records[0]["newer"]["id"], "mem-newer");
     assert_eq!(records[0]["newer"]["status"], "candidate");
     assert_eq!(

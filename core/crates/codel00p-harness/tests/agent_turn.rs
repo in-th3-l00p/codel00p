@@ -305,7 +305,10 @@ async fn run_turn_sends_approved_project_memory_to_model_client() {
         .workspace(workspace)
         .tools(ToolRegistry::read_only_defaults())
         .project_memory_provider(
+            // Proactive recall disabled: this case asserts the static filter-only
+            // retrieval path (configured kind/tag/text + the legacy reason string).
             MemoryRepositoryProjectMemoryProvider::new(project, store)
+                .with_proactive(false)
                 .with_kind(MemoryKind::Architecture)
                 .with_tag("harness")
                 .with_text("tool execution")
@@ -335,6 +338,105 @@ async fn run_turn_sends_approved_project_memory_to_model_client() {
         memory.items()[0].reason(),
         "matched kind architecture and tag harness and text tool execution"
     );
+}
+
+/// Seeds two approved memories so a task-aware query can pick the relevant one.
+fn seed_recall_memories(project: &ProjectRef) -> InMemoryMemoryStore {
+    let source = MemorySource::turn(
+        SessionId::from_static("recall-source"),
+        TurnId::from_static("recall-turn"),
+    );
+    let mut store = InMemoryMemoryStore::default();
+    for (id, content) in [
+        (
+            "mem-deploy",
+            "Deploy the service to the kubernetes cluster.",
+        ),
+        ("mem-style", "Indent with four spaces, never tabs."),
+    ] {
+        store
+            .create_candidate(MemoryCandidateInput::new(
+                id,
+                project.clone(),
+                MemoryKind::Workflow,
+                content,
+                source.clone(),
+            ))
+            .expect("create candidate");
+        store
+            .review(id, ReviewDecision::approve("alice"))
+            .expect("approve candidate");
+    }
+    store
+}
+
+#[tokio::test]
+async fn run_turn_proactively_recalls_memory_matching_the_task() {
+    // Proactive recall is ON by default: the provider must USE the turn's task
+    // text (previously the request was ignored) to surface the relevant memory.
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github", "gpt-4o", "Done.",
+    )]);
+    let project = ProjectRef::new("project-1", "codel00p");
+    let store = seed_recall_memories(&project);
+
+    AgentHarness::builder()
+        .model_client(model.clone())
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        // No static text configured — recall is driven purely by the task.
+        .project_memory_provider(MemoryRepositoryProjectMemoryProvider::new(project, store))
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-recall"),
+            UserMessage::new("How do I deploy to kubernetes?"),
+        )
+        .await
+        .expect("run turn");
+
+    let requests = model.requests();
+    let memory = requests[0].project_memory().expect("project memory");
+    assert_eq!(memory.items().len(), 1);
+    assert_eq!(memory.items()[0].id(), "mem-deploy");
+}
+
+#[tokio::test]
+async fn run_turn_ignores_task_when_proactive_recall_disabled() {
+    // With proactive recall OFF, the task text is ignored: retrieval falls back
+    // to the static filter-only path, returning every approved memory (no text
+    // filter configured) regardless of the task.
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github", "gpt-4o", "Done.",
+    )]);
+    let project = ProjectRef::new("project-1", "codel00p");
+    let store = seed_recall_memories(&project);
+
+    AgentHarness::builder()
+        .model_client(model.clone())
+        .workspace(workspace)
+        .tools(ToolRegistry::read_only_defaults())
+        .project_memory_provider(
+            MemoryRepositoryProjectMemoryProvider::new(project, store).with_proactive(false),
+        )
+        .build()
+        .expect("build harness")
+        .run_turn(
+            SessionId::from_static("session-no-recall"),
+            UserMessage::new("How do I deploy to kubernetes?"),
+        )
+        .await
+        .expect("run turn");
+
+    let requests = model.requests();
+    let memory = requests[0].project_memory().expect("project memory");
+    // Both memories returned (task ignored), sorted by id.
+    let ids: Vec<&str> = memory.items().iter().map(|item| item.id()).collect();
+    assert_eq!(ids, ["mem-deploy", "mem-style"]);
 }
 
 #[tokio::test]

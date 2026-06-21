@@ -172,11 +172,18 @@ impl AgentHarness {
             }
             if let Some(project_memory_provider) = &self.project_memory_provider {
                 let project_memory = project_memory_provider
-                    .retrieve(ProjectMemoryRequest::new(
-                        session_state.session_id().clone(),
-                        turn_id.clone(),
-                        session_state.messages().len(),
-                    ))
+                    .retrieve(
+                        ProjectMemoryRequest::new(
+                            session_state.session_id().clone(),
+                            turn_id.clone(),
+                            session_state.messages().len(),
+                        )
+                        // Proactive task-aware recall: pass the current task text
+                        // (same source skills use) so memory relevant to the goal
+                        // surfaces automatically. Providers with proactive recall
+                        // off ignore it.
+                        .with_latest_user_message(latest_user_message(&session_state)),
+                    )
                     .await?;
                 if !project_memory.is_empty() {
                     request = request.with_project_memory(project_memory);

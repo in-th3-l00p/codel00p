@@ -28,7 +28,9 @@ use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,
     StdioServerCommand,
 };
-use codel00p_memory::{MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository};
+use codel00p_memory::{
+    MemoryCandidateInput, MemoryError, MemoryQuery, MemoryRepository, MemoryRetrievalQuery,
+};
 use codel00p_plugin::PluginRegistry;
 use codel00p_protocol::AgentEvent;
 use codel00p_providers::{InferenceFallbackRoute, ProviderRegistry, default_registry};
