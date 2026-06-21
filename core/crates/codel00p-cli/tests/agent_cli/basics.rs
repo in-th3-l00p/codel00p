@@ -300,11 +300,10 @@ fn native_provider_agent_run_supports_gemini_generate_content() {
 }
 
 #[test]
-fn agent_run_defaults_to_read_and_edit_tools() {
-    // codel00p is a coding agent: with no `--tool-set`, the default advertises
-    // the read-only navigation tools AND the editing tools (so the agent can
-    // create/edit/delete files), but still withholds the higher-risk command and
-    // git sets, which stay opt-in via `--tool-set`.
+fn agent_run_defaults_to_all_tools() {
+    // codel00p is a coding agent: with no `--tool-set`, the default is fully
+    // capable — read + edit + command + git (+ web/pipeline/code). The user never
+    // has to opt into capability; `--tool-set` only *restricts*.
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
     let workspace = dir.path().join("workspace");
@@ -315,19 +314,16 @@ fn agent_run_defaults_to_read_and_edit_tools() {
         when.method(POST)
             .path("/chat/completions")
             .body_includes(r#""name":"read_file""#)
-            .body_includes(r#""name":"search_text""#)
-            .body_includes(r#""name":"list_files""#)
             .body_includes(r#""name":"create_file""#)
-            .body_includes(r#""name":"update_file""#)
             .body_includes(r#""name":"delete_file""#)
-            .body_excludes(r#""name":"run_command""#)
-            .body_excludes(r#""name":"git_status""#);
+            .body_includes(r#""name":"run_command""#)
+            .body_includes(r#""name":"git_status""#);
         then.status(200).json_body(json!({
             "choices": [
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "Read and edit tools."
+                        "content": "All tools."
                     },
                     "finish_reason": "stop"
                 }
@@ -353,7 +349,7 @@ fn agent_run_defaults_to_read_and_edit_tools() {
     );
 
     assert!(output.status.success(), "stderr: {}", stderr(&output));
-    assert_eq!(stdout(&output), "Read and edit tools.\n");
+    assert_eq!(stdout(&output), "All tools.\n");
     provider.assert();
 }
 
