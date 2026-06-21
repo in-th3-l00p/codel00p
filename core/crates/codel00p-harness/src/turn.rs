@@ -54,6 +54,10 @@ pub struct HarnessInferenceRequest {
     /// Placed first in the system prompt so the model reads "who am I" before the
     /// project instructions, memory, and skills.
     agent_self: Option<String>,
+    /// The base operating prompt ("how I work"): rigor + (optionally) planning
+    /// guidance. Injected right after the self block and before project
+    /// instructions, so a project's `CODEL00P.md` can augment/override in spirit.
+    base_prompt: Option<String>,
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
     skills: Option<SkillContext>,
@@ -70,6 +74,7 @@ impl HarnessInferenceRequest {
             response_format: None,
             context_window: None,
             agent_self: None,
+            base_prompt: None,
             project_instructions: None,
             project_memory: None,
             skills: None,
@@ -95,6 +100,13 @@ impl HarnessInferenceRequest {
     /// Attach the pre-rendered agent "self" block (see [`crate::self_context`]).
     pub fn with_agent_self(mut self, agent_self: impl Into<String>) -> Self {
         self.agent_self = Some(agent_self.into());
+        self
+    }
+
+    /// Attach the base operating prompt (see [`crate::base_prompt`]). Injected
+    /// after the self block and before project instructions.
+    pub fn with_base_prompt(mut self, base_prompt: impl Into<String>) -> Self {
+        self.base_prompt = Some(base_prompt.into());
         self
     }
 
@@ -157,6 +169,11 @@ impl HarnessInferenceRequest {
     /// The pre-rendered agent "self" block, if any.
     pub fn agent_self(&self) -> Option<&str> {
         self.agent_self.as_deref()
+    }
+
+    /// The base operating prompt ("how I work") block, if any.
+    pub fn base_prompt(&self) -> Option<&str> {
+        self.base_prompt.as_deref()
     }
 
     pub fn project_instructions(&self) -> Option<&ProjectInstructions> {

@@ -399,15 +399,21 @@ pub(crate) enum SettingsPref {
     SelfKnowledge,
     /// Include the agent's live run-state line (iteration, context, plan).
     SelfState,
+    /// Inject the base operating prompt ("how I work") each turn.
+    BasePrompt,
+    /// Include the base prompt's planning guidance.
+    AutoPlan,
 }
 
 impl SettingsPref {
     /// All preferences, in display order. Add new rows here.
-    pub(crate) const ORDER: [SettingsPref; 4] = [
+    pub(crate) const ORDER: [SettingsPref; 6] = [
         SettingsPref::ShowAdvanced,
         SettingsPref::CheckUpdates,
         SettingsPref::SelfKnowledge,
         SettingsPref::SelfState,
+        SettingsPref::BasePrompt,
+        SettingsPref::AutoPlan,
     ];
 
     pub(crate) fn label(self) -> &'static str {
@@ -416,6 +422,8 @@ impl SettingsPref {
             SettingsPref::CheckUpdates => "Check for updates on start",
             SettingsPref::SelfKnowledge => "Self-knowledge",
             SettingsPref::SelfState => "Self run-state",
+            SettingsPref::BasePrompt => "Base operating prompt",
+            SettingsPref::AutoPlan => "Auto-plan guidance",
         }
     }
 
@@ -425,6 +433,8 @@ impl SettingsPref {
             SettingsPref::CheckUpdates => "notify when a newer release is available",
             SettingsPref::SelfKnowledge => "inject identity · capabilities each turn",
             SettingsPref::SelfState => "iteration · context · plan progress",
+            SettingsPref::BasePrompt => "understand · plan · verify before done",
+            SettingsPref::AutoPlan => "ask the agent to plan multi-step work",
         }
     }
 }

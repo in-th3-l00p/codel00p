@@ -472,6 +472,38 @@ fn toggle_setting(app: &mut App, pref: SettingsPref) {
                 "self run-state",
             );
         }
+        SettingsPref::BasePrompt => {
+            app.base_prompt = !app.base_prompt;
+            let value = if app.base_prompt { "true" } else { "false" };
+            persist_setting(
+                app,
+                "agent.behavior.base_prompt",
+                value,
+                &format!(
+                    "Base operating prompt {}.",
+                    if app.base_prompt {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                ),
+                "base operating prompt",
+            );
+        }
+        SettingsPref::AutoPlan => {
+            app.auto_plan = !app.auto_plan;
+            let value = if app.auto_plan { "true" } else { "false" };
+            persist_setting(
+                app,
+                "agent.behavior.auto_plan",
+                value,
+                &format!(
+                    "Auto-plan guidance {}.",
+                    if app.auto_plan { "enabled" } else { "disabled" }
+                ),
+                "auto-plan guidance",
+            );
+        }
     }
 }
 

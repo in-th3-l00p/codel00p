@@ -509,6 +509,90 @@ fn self_knowledge_off_omits_self_identity_block() {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario 7 — Base operating prompt ("how I work") injection
+// ---------------------------------------------------------------------------
+
+/// By default (`agent.behavior.base_prompt` unset = on), a plain `agent run`
+/// injects the base operating prompt. We assert its rigor guidance and the
+/// planning guidance (auto_plan defaults on) appear in the system prompt.
+#[test]
+fn default_run_injects_base_operating_prompt() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    let result = runner.run(&["agent", "run", "Do work.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        system.contains("Verify before you declare done"),
+        "default run should inject the base prompt rigor guidance, got:\n{system}"
+    );
+    assert!(
+        system.contains("lay out a short plan"),
+        "default run (auto_plan on) should include planning guidance, got:\n{system}"
+    );
+}
+
+/// Setting `agent.behavior.base_prompt=false` drops the base block entirely —
+/// the system prompt no longer contains its rigor guidance.
+#[test]
+fn base_prompt_off_omits_base_operating_prompt() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    let set = runner.run(&["config", "set", "agent.behavior.base_prompt", "false"]);
+    assert!(
+        set.success(),
+        "config set should succeed\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        set.stdout(),
+        set.stderr()
+    );
+
+    let result = runner.run(&["agent", "run", "Do work.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        !system.contains("Verify before you declare done"),
+        "base_prompt=false should omit the base operating prompt, got:\n{system}"
+    );
+}
+
+/// Setting `agent.behavior.auto_plan=false` keeps the base prompt but drops the
+/// planning guidance, so a minimal profile stays quieter.
+#[test]
+fn auto_plan_off_keeps_base_prompt_but_drops_planning_guidance() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new().with_provider(&provider);
+
+    let set = runner.run(&["config", "set", "agent.behavior.auto_plan", "false"]);
+    assert!(set.success(), "config set should succeed: {}", set.stderr());
+
+    let result = runner.run(&["agent", "run", "Do work.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        system.contains("Verify before you declare done"),
+        "auto_plan=false should keep the base prompt core, got:\n{system}"
+    );
+    assert!(
+        !system.contains("lay out a short plan"),
+        "auto_plan=false should drop planning guidance, got:\n{system}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Scenario 5 — Context compaction (documented as not feasible headlessly)
 // ---------------------------------------------------------------------------
 //

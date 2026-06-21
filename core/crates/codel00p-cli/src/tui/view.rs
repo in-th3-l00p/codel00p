@@ -781,6 +781,8 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
                 SettingsPref::CheckUpdates => app.check_updates,
                 SettingsPref::SelfKnowledge => app.self_knowledge,
                 SettingsPref::SelfState => app.self_state,
+                SettingsPref::BasePrompt => app.base_prompt,
+                SettingsPref::AutoPlan => app.auto_plan,
             };
             let is_selected = index == selected;
             let prefix = if is_selected { "› " } else { "  " };
