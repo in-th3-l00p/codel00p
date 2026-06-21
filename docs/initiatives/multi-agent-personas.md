@@ -70,11 +70,11 @@ The plan below assumes **Option A**.
 ## Phased plan
 
 ### Phase 1 — Local agent registry + lifecycle (CLI)
-- [ ] A **local agent model + registry**: agents live under `~/.codel00p/agents/<name>/`; list by scanning that dir; an `agent.toml` per agent (name, description, created_at). Reuse the cloud Agent field shape so cloud/local converge.
-- [ ] `codel00p agent create <name> [--clone | --clone-from <a>] [--description ..] [--model ..] [--persona-file ..]` — scaffold the home (config seeded from defaults/a profile, `persona.md`, fresh memory/sessions). `--clone` copies config/persona/skills but **fresh memory+sessions** (Hermes semantics).
-- [ ] `codel00p agent use <name>` (sticky default), `--agent <name>` / per-command, `agent list`, `agent show`, `agent rename`, `agent delete`. Switching resolves the agent's home as `CODEL00P_HOME`.
-- [ ] **Persona injection**: load `<agent home>/persona.md` and inject it as the first system block (ahead of base prompt / instructions), and set the self-context `name` to the agent name.
-- [ ] **Default agent on launch**: with no `--agent`/sticky selection, use the base home (the default agent) — exactly today's behavior, so this is back-compatible.
+- [x] A **local agent model + registry**: agents live under `~/.codel00p/agents/<name>/`; list by scanning that dir; an `agent.toml` per agent (name, description, created_at). Reuse the cloud Agent field shape so cloud/local converge.
+- [x] `codel00p agent create <name> [--clone | --clone-from <a>] [--description ..] [--model ..] [--persona-file ..]` — scaffold the home (config seeded from defaults/a profile, `persona.md`, fresh memory/sessions). `--clone` copies config/persona/skills but **fresh memory+sessions** (Hermes semantics).
+- [x] `codel00p agent use <name>` (sticky default), `--agent <name>` / per-command, `agent list`, `agent show`, `agent rename`, `agent delete`. Switching resolves the agent's home as `CODEL00P_HOME`.
+- [x] **Persona injection**: load `<agent home>/persona.md` and inject it as the first system block (ahead of base prompt / instructions), and set the self-context `name` to the agent name.
+- [x] **Default agent on launch**: with no `--agent`/sticky selection, use the base home (the default agent) — exactly today's behavior, so this is back-compatible.
 
 ### Phase 2 — TUI menu (create / switch / default-on-open)
 - [x] A dedicated **agent switcher overlay** wired to the local registry (lists `default` + every `<base>/agents/<name>`, marks active, **live-switches** on select). Reachable via Ctrl+P → "Switch agent" and `/agent`. (The Entity Browser "Agents" tab stays the cloud org-agent picker.)
@@ -83,7 +83,7 @@ The plan below assumes **Option A**.
 - [x] **Live memory switch**: selecting an agent re-points the running TUI's `CODEL00P_HOME` + rebuilds `App.config` so the next harness build uses the new agent's `memory.sqlite` and sessions, resetting to a fresh session under it (delivered in #13 phase 3).
 
 ### Phase 3 — Per-agent growing memory + learning (mostly free under Option A)
-- [ ] Confirm the memory recommender + skill/capability extractors write into the **active agent's home** (they already write to `CODEL00P_HOME`'s memory DB / skills dir), so each agent learns independently. Add tests proving isolation (agent A's memories/skills don't appear for agent B).
+- [x] Confirm the memory recommender + skill/capability extractors write into the **active agent's home** (they already write to `CODEL00P_HOME`'s memory DB / skills dir), so each agent learns independently. Add tests proving isolation (agent A's memories/skills don't appear for agent B).
 - [x] **Capped curated memory** à la Hermes MEMORY.md/USER.md: a small always-injected per-agent notes file (`NOTES.md`, ~2000 chars) + a user-profile file (`USER.md`, ~1200 chars), distinct from the searchable memory DB. Rendered as a system block after persona/self and before the base prompt; the agent curates it with the `note` tool (add/replace/remove, cap-enforced, never auto-truncated); inspectable via `codel00p memory note [--user] <text>` / `--show`; gated by the on-by-default `agent.behavior.curated_memory` toggle. (Differentiator; keeps a cheap "always-known" layer.)
 - [ ] A **curator** pass (codel00p already has staleness/quality scoring): add opt-in consolidation of near-duplicate learned skills/memories per agent (shingle similarity from #107), archive-not-delete, behind review — fights skill/memory sprawl.
 

@@ -20,8 +20,8 @@ advanced-settings submenu. This is the "assistant → engineer" jump
 
 | Metric | Value |
 |---|---|
-| Latest release | **v0.11.0** |
-| Releases shipped | v0.1.0 → v0.11.0 |
+| Latest release | **v0.12.0** |
+| Releases shipped | v0.1.0 → v0.12.0 |
 | Workspace crates | 14 |
 | Rust tests | ~1,450 |
 | E2E scenario files | 24 |

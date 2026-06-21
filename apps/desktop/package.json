@@ -1,6 +1,6 @@
 {
   "name": "@codel00p/desktop",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Electron control center for codel00p sessions and memory.",
   "author": "codel00p contributors",
   "private": true,
