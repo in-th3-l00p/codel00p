@@ -43,7 +43,7 @@ exit criteria.
 | 10 | [Tool-Calling Parity](tool-calling-parity.md) | Parity | Stage 1 (Agent parity) | **Complete** (all phases + both tails) |
 | 11 | [Capability Synthesis](capability-synthesis.md) | Differentiator | Stage 1 / Stage 3 (Memory) | Slices 1–2 shipped (`capability.rs`) |
 | 12 | [The Perfect Coding Agent](perfect-coding-agent.md) | Differentiator | Stage 1 (Agent parity) | Tier 0 complete + smart memory; Tier 1–3 frontier remains |
-| 13 | [Persistent Multi-Agent Personas](multi-agent-personas.md) | Differentiator | Stage 3 (Memory) / Stage 7 (Multi-Agent) | Planned — home-per-agent (Hermes-style), reuses `CODEL00P_HOME` + profiles + memory |
+| 13 | [Persistent Multi-Agent Personas](multi-agent-personas.md) | Differentiator | Stage 3 (Memory) / Stage 7 (Multi-Agent) | **Shipped (v0.12.0)** — registry + switch + per-agent memory/persona + TUI + distributions + curated memory |
 
 ## Sequencing
 
