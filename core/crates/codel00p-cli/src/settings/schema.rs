@@ -93,6 +93,50 @@ pub struct AgentSettings {
     /// non-isolating backend. Defaults to off (unset). Part of initiative #7.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_isolation_for_unattended: Option<bool>,
+    /// Agent behavior toggles (the customizability layer). The first entries are
+    /// the self-awareness facets; more behavior knobs are added here over time.
+    #[serde(skip_serializing_if = "BehaviorSettings::is_empty")]
+    pub behavior: BehaviorSettings,
+}
+
+/// Toggles that shape how the agent reasons about itself and its run — the start
+/// of the customizability layer. Both self-awareness facets default to **on**
+/// (smarter by default); set them `false` to opt out. New behavior knobs are
+/// added here as `Option<_>` fields so existing configs keep working.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BehaviorSettings {
+    /// Inject the agent's identity/capabilities ("who am I") block each turn and
+    /// expose it via `self_describe`. Unset (the default) means enabled; set to
+    /// `false` to drop the identity/capabilities block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_knowledge: Option<bool>,
+    /// Include the live run-state line (iteration, context usage, plan progress)
+    /// in the self block. Unset (the default) means enabled; set to `false` to
+    /// drop the run-state line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_state: Option<bool>,
+}
+
+impl BehaviorSettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.self_knowledge, other.self_knowledge);
+        take(&mut self.self_state, other.self_state);
+    }
+
+    /// Whether the identity/capabilities block is injected. Defaults to on.
+    pub fn self_knowledge_enabled(&self) -> bool {
+        self.self_knowledge.unwrap_or(true)
+    }
+
+    /// Whether the live run-state line is included. Defaults to on.
+    pub fn self_state_enabled(&self) -> bool {
+        self.self_state.unwrap_or(true)
+    }
 }
 
 /// Configuration for the Docker execution backend. All fields are optional; the
@@ -286,6 +330,7 @@ impl AgentSettings {
             &mut self.require_isolation_for_unattended,
             other.require_isolation_for_unattended,
         );
+        self.behavior.merge(other.behavior);
     }
 }
 

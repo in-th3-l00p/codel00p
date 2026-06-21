@@ -106,6 +106,47 @@ impl AgentHarness {
             if let Some(context_window) = &self.context_window {
                 request = request.with_context_window(context_window.clone());
             }
+            // Self-awareness: refresh the live run-state from the sources in scope
+            // here (iteration budget, accumulated usage, context window, plan) and
+            // render the compact "self" block. Updating the shared handle also
+            // makes the latest state visible to the `self_describe` tool.
+            if let Some(handle) = &self.agent_self {
+                let plan = self.plan_store.as_ref().map(|store| store.current());
+                let (plan_completed, plan_total) = match &plan {
+                    Some(items) if !items.is_empty() => (
+                        Some(
+                            items
+                                .iter()
+                                .filter(|item| {
+                                    item.status == crate::planning::PlanStatus::Completed
+                                })
+                                .count(),
+                        ),
+                        Some(items.len()),
+                    ),
+                    _ => (None, None),
+                };
+                let state = AgentSelfState {
+                    iteration: Some(iteration),
+                    max_iterations: Some(budget.max_total()),
+                    context_used_tokens: turn_usage.as_ref().map(|usage| {
+                        usage.input_tokens
+                            + usage.output_tokens
+                            + usage.cache_read_tokens
+                            + usage.cache_write_tokens
+                    }),
+                    context_window_tokens: self
+                        .context_window
+                        .as_ref()
+                        .map(|window| window.context_limit_tokens()),
+                    plan_completed,
+                    plan_total,
+                };
+                handle.set_state(state.clone());
+                if let Some(block) = SelfPromptAssembler.assemble(handle.context(), &state) {
+                    request = request.with_agent_self(block);
+                }
+            }
             let project_instructions = ProjectInstructionLoader.load(&self.workspace)?;
             if !project_instructions.is_empty() {
                 request = request.with_project_instructions(project_instructions);

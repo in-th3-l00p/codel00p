@@ -63,11 +63,41 @@ pub(crate) enum AgentToolSet {
     All,
 }
 
+impl AgentToolSet {
+    /// The canonical lowercase label, mirroring [`parse_agent_tool_set`]. Used to
+    /// describe the agent's capabilities to itself (self-awareness).
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            AgentToolSet::Read => "read",
+            AgentToolSet::Edit => "edit",
+            AgentToolSet::Command => "command",
+            AgentToolSet::Git => "git",
+            AgentToolSet::Web => "web",
+            AgentToolSet::Delegate => "delegate",
+            AgentToolSet::Learn => "learn",
+            AgentToolSet::Pipeline => "pipeline",
+            AgentToolSet::Code => "code",
+            AgentToolSet::All => "all",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CliPermissionMode {
     Allow,
     Ask,
     Deny,
+}
+
+impl CliPermissionMode {
+    /// The canonical lowercase label, mirroring [`parse_permission_mode`].
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            CliPermissionMode::Allow => "allow",
+            CliPermissionMode::Ask => "ask",
+            CliPermissionMode::Deny => "deny",
+        }
+    }
 }
 
 pub(super) enum AgentSessionMode {

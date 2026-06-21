@@ -46,6 +46,8 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.ssh.identity_file", ValueKind::Str),
     ("agent.ssh.workspace", ValueKind::Str),
     ("agent.require_isolation_for_unattended", ValueKind::Bool),
+    ("agent.behavior.self_knowledge", ValueKind::Bool),
+    ("agent.behavior.self_state", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
@@ -109,6 +111,10 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.require_isolation_for_unattended" => agent
             .require_isolation_for_unattended
             .map(|value| value.to_string()),
+        "agent.behavior.self_knowledge" => {
+            agent.behavior.self_knowledge.map(|value| value.to_string())
+        }
+        "agent.behavior.self_state" => agent.behavior.self_state.map(|value| value.to_string()),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -310,6 +316,10 @@ pub fn starter_template() -> String {
          # tool_sets = [\"read\"]       # read | edit | command | git | all\n\
          # execution_backend = \"local\"  # local | docker | ssh\n\
          # require_isolation_for_unattended = false  # force docker/ssh for unattended shell\n\
+         \n\
+         # [agent.behavior]             # how the agent reasons about itself (default on)\n\
+         # self_knowledge = true        # inject the identity/capabilities block + self_describe tool\n\
+         # self_state = true            # include the live run-state line (iteration, context, plan)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

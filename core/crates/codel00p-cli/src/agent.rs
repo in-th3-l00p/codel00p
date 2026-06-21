@@ -14,14 +14,15 @@ use codel00p_gateway::{
     approvals::{ApprovalOutcome, ApprovalStore},
 };
 use codel00p_harness::{
-    AgentEventSink, AgentHarness, AgentRole, CancelSignal, DelegatedTask, DelegationOutcome,
-    DockerBackend, DockerConfig, ExplicitTurnMemoryExtractor, HarnessError, HarnessEvent,
-    LocalBackend, MemoryCandidateSink, MemoryCandidateSinkOutcome, PermissionDecision,
-    PermissionMode, PermissionPolicy, PermissionRequest, PermissionScope, ProcedureSkillExtractor,
-    ProjectMemoryContext, ProjectMemoryItem, ProjectMemoryProvider, ProjectMemoryRequest,
-    ProposedSkill, ProviderModelClient, SessionId, SkillContext, SkillPrompt, SkillProposalSink,
-    SkillProvider, SkillSelectionRequest, SshBackend, SshConfig, SubAgentSpawner, TerminalBackend,
-    TokenSink, ToolRegistry, UserMessage, Workspace, delegation_tools, learning_tools,
+    AgentEventSink, AgentHarness, AgentRole, AgentSelfContext, CancelSignal, DelegatedTask,
+    DelegationOutcome, DockerBackend, DockerConfig, ExplicitTurnMemoryExtractor, HarnessError,
+    HarnessEvent, LocalBackend, MemoryCandidateSink, MemoryCandidateSinkOutcome,
+    PermissionDecision, PermissionMode, PermissionPolicy, PermissionRequest, PermissionScope,
+    PlanStore, ProcedureSkillExtractor, ProjectMemoryContext, ProjectMemoryItem,
+    ProjectMemoryProvider, ProjectMemoryRequest, ProposedSkill, ProviderModelClient, SessionId,
+    SkillContext, SkillPrompt, SkillProposalSink, SkillProvider, SkillSelectionRequest, SshBackend,
+    SshConfig, SubAgentSpawner, TerminalBackend, TokenSink, ToolRegistry, UpdatePlanTool,
+    UserMessage, Workspace, delegation_tools, learning_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,

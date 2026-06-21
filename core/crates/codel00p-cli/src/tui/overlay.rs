@@ -395,17 +395,27 @@ pub(crate) enum SettingsPref {
     ShowAdvanced,
     /// Check for a newer codel00p release in the background on startup.
     CheckUpdates,
+    /// Inject the agent's identity/capabilities ("who am I") block each turn.
+    SelfKnowledge,
+    /// Include the agent's live run-state line (iteration, context, plan).
+    SelfState,
 }
 
 impl SettingsPref {
     /// All preferences, in display order. Add new rows here.
-    pub(crate) const ORDER: [SettingsPref; 2] =
-        [SettingsPref::ShowAdvanced, SettingsPref::CheckUpdates];
+    pub(crate) const ORDER: [SettingsPref; 4] = [
+        SettingsPref::ShowAdvanced,
+        SettingsPref::CheckUpdates,
+        SettingsPref::SelfKnowledge,
+        SettingsPref::SelfState,
+    ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             SettingsPref::ShowAdvanced => "Show advanced info",
             SettingsPref::CheckUpdates => "Check for updates on start",
+            SettingsPref::SelfKnowledge => "Self-knowledge",
+            SettingsPref::SelfState => "Self run-state",
         }
     }
 
@@ -413,6 +423,8 @@ impl SettingsPref {
         match self {
             SettingsPref::ShowAdvanced => "model · token usage · context size",
             SettingsPref::CheckUpdates => "notify when a newer release is available",
+            SettingsPref::SelfKnowledge => "inject identity · capabilities each turn",
+            SettingsPref::SelfState => "iteration · context · plan progress",
         }
     }
 }

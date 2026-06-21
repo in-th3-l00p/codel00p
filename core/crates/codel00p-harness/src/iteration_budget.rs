@@ -59,4 +59,9 @@ impl IterationBudget {
     pub fn remaining(&self) -> u32 {
         self.max_total.saturating_sub(self.used())
     }
+
+    /// The maximum number of iterations this budget permits.
+    pub fn max_total(&self) -> u32 {
+        self.max_total
+    }
 }

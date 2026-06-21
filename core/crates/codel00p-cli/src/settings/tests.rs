@@ -164,6 +164,45 @@ fn require_isolation_for_unattended_round_trips_as_bool() {
 }
 
 #[test]
+fn behavior_self_awareness_toggles_round_trip_and_default_on() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config): both toggles unset, which the helpers treat as on.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.agent().behavior.self_knowledge.is_none());
+        assert!(resolved.agent().behavior.self_state.is_none());
+        assert!(resolved.agent().behavior.self_knowledge_enabled());
+        assert!(resolved.agent().behavior.self_state_enabled());
+
+        // Set both: round-trip the literal values and the effective view.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.self_knowledge", "false").expect("set self_knowledge");
+        set_value(&path, "agent.behavior.self_state", "true").expect("set self_state");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().behavior.self_knowledge, Some(false));
+        assert_eq!(resolved.agent().behavior.self_state, Some(true));
+        assert!(!resolved.agent().behavior.self_knowledge_enabled());
+        assert!(resolved.agent().behavior.self_state_enabled());
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.self_knowledge").unwrap(),
+            Some("false".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.self_state").unwrap(),
+            Some("true".to_string())
+        );
+
+        // Unsetting the last nested key prunes the [agent.behavior] table.
+        assert!(unset_value(&path, "agent.behavior.self_knowledge").expect("unset self_knowledge"));
+        assert!(unset_value(&path, "agent.behavior.self_state").expect("unset self_state"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.agent().behavior.self_knowledge.is_none());
+        assert!(resolved.agent().behavior.self_state.is_none());
+        assert!(resolved.agent().behavior.self_knowledge_enabled());
+    });
+}
+
+#[test]
 fn tui_show_advanced_round_trips_and_defaults_unset() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

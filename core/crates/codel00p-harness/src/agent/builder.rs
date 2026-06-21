@@ -24,6 +24,8 @@ pub struct AgentHarnessBuilder {
     skill_extractor: Option<Arc<dyn SkillExtractor>>,
     skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
     context_window: Option<ContextWindowState>,
+    agent_self: Option<crate::self_context::AgentSelfContext>,
+    plan_store: Option<crate::planning::PlanStore>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
     max_tool_result_bytes: Option<usize>,
@@ -88,6 +90,26 @@ impl AgentHarnessBuilder {
 
     pub fn context_window(mut self, context_window: ContextWindowState) -> Self {
         self.context_window = Some(context_window);
+        self
+    }
+
+    /// Make the agent self-aware: inject a compact "self" system block each turn
+    /// (identity, capabilities, live run-state per the context's toggles) and add
+    /// the read-only `self_describe` tool backed by the same shared handle. The
+    /// `self_describe` tool is always registered when a context is set, even with
+    /// both toggles off — an explicit query still answers (and reports the
+    /// toggles). Without a context the harness behaves as before (no self block,
+    /// no tool).
+    pub fn agent_self(mut self, agent_self: crate::self_context::AgentSelfContext) -> Self {
+        self.agent_self = Some(agent_self);
+        self
+    }
+
+    /// Share the plan store backing the `update_plan` tool so the self-awareness
+    /// run-state can report plan progress (steps done / total). Without it, plan
+    /// progress is simply omitted from the self block.
+    pub fn plan_store(mut self, plan_store: crate::planning::PlanStore) -> Self {
+        self.plan_store = Some(plan_store);
         self
     }
 
@@ -312,6 +334,17 @@ impl AgentHarnessBuilder {
             )?;
             tools = tools.with_registry(capabilities);
         }
+        // Self-awareness: build the shared handle once, register the read-only
+        // `self_describe` tool against it, and keep the handle on the harness so
+        // the run loop can refresh the live run-state each iteration. The tool is
+        // always available when a self context is configured.
+        let agent_self = self
+            .agent_self
+            .map(crate::self_context::AgentSelfHandle::new);
+        if let Some(handle) = &agent_self {
+            tools = tools.with_tool(crate::self_context::SelfDescribeTool::new(handle.clone()));
+        }
+
         // The proposal sink backs both the `propose_capability` tool and the
         // post-turn auto-extractor, so explicit and automatic proposals land in
         // the same review queue.
@@ -340,6 +373,8 @@ impl AgentHarnessBuilder {
             skill_extractor: self.skill_extractor,
             skill_proposal_sink: self.skill_proposal_sink,
             context_window: self.context_window,
+            agent_self,
+            plan_store: self.plan_store,
             token_sink: self.token_sink,
             max_iterations: self.max_iterations.unwrap_or(4),
             tool_output_truncation: match self.max_tool_result_bytes {

@@ -94,6 +94,15 @@ pub(crate) struct App {
     /// `tui.check_updates` (default true) at startup; toggled in the Settings
     /// overlay. The check also requires the env kill switch to be unset.
     pub(crate) check_updates: bool,
+    /// Whether the agent's self-knowledge block is injected each turn. Loaded
+    /// from `agent.behavior.self_knowledge` (default true) at startup; toggled in
+    /// the Settings overlay. Display + persistence only — the harness reads the
+    /// persisted config when it builds each turn.
+    pub(crate) self_knowledge: bool,
+    /// Whether the agent's live run-state line is included. Loaded from
+    /// `agent.behavior.self_state` (default true) at startup; toggled in the
+    /// Settings overlay.
+    pub(crate) self_state: bool,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
     /// A newer release version if one is already known (from the update cache or a
@@ -119,6 +128,8 @@ impl App {
         cloud_configured: bool,
         show_advanced: bool,
         check_updates: bool,
+        self_knowledge: bool,
+        self_state: bool,
     ) -> Self {
         Self {
             config,
@@ -142,6 +153,8 @@ impl App {
             theme: Theme::default(),
             show_advanced,
             check_updates,
+            self_knowledge,
+            self_state,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),

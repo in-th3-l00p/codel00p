@@ -23,6 +23,7 @@ pub mod planning;
 pub mod pr;
 pub mod provider_adapter;
 pub mod repo_map;
+pub mod self_context;
 pub mod session;
 pub mod skills;
 mod streaming;
@@ -84,6 +85,9 @@ pub use planning::{PlanItem, PlanStatus, PlanStore, UpdatePlanTool};
 pub use pr::PreparePrTool;
 pub use provider_adapter::ProviderModelClient;
 pub use repo_map::RepoMapTool;
+pub use self_context::{
+    AgentSelfContext, AgentSelfHandle, AgentSelfState, SelfDescribeTool, SelfPromptAssembler,
+};
 pub use session::{
     SessionCompactionRecord, SessionId, SessionMessage, SessionState, TurnId, UserMessage,
 };
