@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     background::BackgroundProcesses,
+    checks::RunChecksTool,
     commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool},
     editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
     errors::HarnessError,
@@ -77,10 +78,16 @@ impl ToolRegistry {
         // `process_list` / `process_kill` see what `run_command` spawned.
         let processes = BackgroundProcesses::with_backend(backend.clone());
         Self::new()
-            .with_tool(RunCommandTool::with_backend(processes.clone(), backend))
+            .with_tool(RunCommandTool::with_backend(
+                processes.clone(),
+                backend.clone(),
+            ))
             .with_tool(ProcessOutputTool::new(processes.clone()))
             .with_tool(ProcessListTool::new(processes.clone()))
             .with_tool(ProcessKillTool::new(processes))
+            // Project-aware test/build/lint runner — shares the same execution
+            // backend so checks run against the same target as run_command.
+            .with_tool(RunChecksTool::with_backend(backend))
     }
 
     pub fn git_defaults() -> Self {

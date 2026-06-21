@@ -3,6 +3,7 @@ pub mod background;
 pub mod base_prompt;
 pub mod cancel;
 pub mod capability;
+pub mod checks;
 pub mod code_exec;
 pub mod commands;
 pub mod context;
@@ -50,6 +51,7 @@ pub use capability::{
     PipelineCapabilityExtractor, ProposeCapabilityTool, VerificationOutcome, capability_tools,
     load_capabilities, verify_capability,
 };
+pub use checks::{CheckSummary, DetectedChecks, RunChecksTool, detect_checks, parse_summary};
 pub use code_exec::{CodeExecutionEngine, ExecuteCodeTool, code_execution_tools};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool};
