@@ -30,6 +30,17 @@ thiserror = "2.0.12"
 # blocking thread (`spawn_blocking`) and drives the async governed dispatch with
 # the current runtime `Handle`. Needs the runtime + blocking-pool features.
 tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread"] }
+# Tree-sitter AST parsing for accurate `repo_map` symbol extraction. The grammar
+# crates compile a small amount of generated C; these are the highest-value
+# languages. Languages without a grammar here fall back to the regex path so the
+# tool never regresses. The grammar crate versions are pinned to ones compatible
+# with the tree-sitter 0.25 ABI.
+tree-sitter = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-python = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-go = "0.23"
 
 [target.'cfg(unix)'.dependencies]
 # Used only to read the host process's real uid/gid so containers can run
