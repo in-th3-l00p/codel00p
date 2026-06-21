@@ -393,8 +393,21 @@ fn handle_settings_key(app: &mut App, mut settings: SettingsOverlay, key: KeyEve
         KeyCode::Esc => return Vec::new(), // close
         KeyCode::Up => settings.up(),
         KeyCode::Down => settings.down(),
+        // Left/Right cycle the profile switcher (back/forward); they are inert on
+        // the other rows.
+        KeyCode::Right | KeyCode::Char('+') | KeyCode::Char('=') => {
+            if matches!(settings.current(), SettingsRow::Profile) {
+                cycle_profile(app, true);
+            }
+        }
+        KeyCode::Left | KeyCode::Char('-') | KeyCode::Char('_') => {
+            if matches!(settings.current(), SettingsRow::Profile) {
+                cycle_profile(app, false);
+            }
+        }
         KeyCode::Enter | KeyCode::Char(' ') => match settings.current() {
             SettingsRow::Pref(pref) => toggle_setting(app, pref),
+            SettingsRow::Profile => cycle_profile(app, true),
             SettingsRow::Advanced => {
                 // Open the Advanced sub-overlay; Esc there returns to Settings.
                 app.overlay = Overlay::AdvancedSettings(AdvancedSettingsOverlay::new());
@@ -405,6 +418,39 @@ fn handle_settings_key(app: &mut App, mut settings: SettingsOverlay, key: KeyEve
     }
     app.overlay = Overlay::Settings(settings);
     Vec::new()
+}
+
+/// Cycles the active agent profile to the next (or previous) name in
+/// `app.profile_names`, persists it to `agent.profile`, and updates in-memory
+/// state. When no profile is active yet, the first cycle selects the first name.
+/// A no-op (with a notice) when no profiles are available.
+fn cycle_profile(app: &mut App, forward: bool) {
+    let names = &app.profile_names;
+    if names.is_empty() {
+        app.conversation
+            .push_notice("No agent profiles available to switch to.".to_string());
+        return;
+    }
+    let current = app
+        .active_profile
+        .as_ref()
+        .and_then(|name| names.iter().position(|candidate| candidate == name));
+    let next_index = match current {
+        Some(index) if forward => (index + 1) % names.len(),
+        Some(index) => (index + names.len() - 1) % names.len(),
+        // No active profile selected yet: forward picks the first, back the last.
+        None if forward => 0,
+        None => names.len() - 1,
+    };
+    let next = names[next_index].clone();
+    app.active_profile = Some(next.clone());
+    persist_setting(
+        app,
+        "agent.profile",
+        &next,
+        &format!("Agent profile set to {next}. Takes effect next run."),
+        "agent profile",
+    );
 }
 
 /// Handles keys in the Advanced settings sub-overlay: Up/Down move, Left/Right
@@ -973,6 +1019,7 @@ fn apply_event(app: &mut App, event: &HarnessEvent) {
         InferenceCompleted {
             finish_reason,
             usage,
+            cost,
             ..
         } => {
             app.turn.finish_reason = finish_reason.clone();
@@ -981,15 +1028,70 @@ fn apply_event(app: &mut App, event: &HarnessEvent) {
             if let Some(usage) = usage {
                 app.last_usage = Some(usage.clone());
             }
+            // Capture the cost estimate when the provider priced the call. Left
+            // untouched when absent so the HUD never shows a bogus `$0.00`.
+            if let Some(cost) = cost {
+                app.last_cost = Some(cost.clone());
+            }
         }
         TurnCompleted {
-            iterations, usage, ..
+            iterations,
+            usage,
+            cost,
+            ..
         } => {
             app.turn.iterations = *iterations;
             // The turn-total usage supersedes the last per-inference figure.
             if let Some(usage) = usage {
                 app.last_usage = Some(usage.clone());
             }
+            if let Some(cost) = cost {
+                app.last_cost = Some(cost.clone());
+            }
+        }
+        // The verify-before-done loop ran the project's checks and reached a
+        // verdict — surface it as a transcript line and a persistent status-bar
+        // signal so automated verification is visible (a trust signal).
+        VerificationCompleted {
+            check,
+            command,
+            success,
+            ..
+        } => {
+            if *success {
+                let line = format!("✓ Verified: {check} pass");
+                app.verification = Some(line.clone());
+                app.conversation.push_notice(line);
+            } else {
+                let line = format!("⚠ Verification failed: `{command}` — retrying");
+                app.verification = Some(format!("⚠ {check} failed — retrying"));
+                app.conversation.push_notice(line);
+            }
+        }
+        // The self-critique reflection step ran. If it produced more tool calls
+        // the loop continued (a gap was addressed); otherwise it confirmed done.
+        SelfCritiqueCompleted {
+            produced_tool_calls,
+            ..
+        } => {
+            let line = if *produced_tool_calls {
+                "○ Self-check found a gap — addressing it".to_string()
+            } else {
+                "○ Self-check done".to_string()
+            };
+            app.verification = Some(line.clone());
+            app.conversation.push_notice(line);
+        }
+        // The in-turn failure budget was hit: the same operation kept failing and
+        // a step-back/replan nudge was injected. Surface it as a visible signal.
+        FailureBudgetExceeded {
+            operation,
+            attempts,
+            ..
+        } => {
+            let line = format!("⚠ repeated failures ({operation} ×{attempts}) — replanning");
+            app.verification = Some("⚠ repeated failures — replanning".to_string());
+            app.conversation.push_notice(line);
         }
         // `ToolCallArgsDelta` reaches the bridge here (via `ChannelEventSink`)
         // but is intentionally not rendered into the transcript: it is a live
@@ -1753,5 +1855,127 @@ mod tests {
         let usage = app.last_usage.expect("usage captured");
         assert_eq!(usage.input_tokens, 1000);
         assert_eq!(usage.total_tokens(), 1200);
+    }
+
+    #[test]
+    fn inference_completed_captures_cost_when_present() {
+        use codel00p_protocol::{
+            AgentEvent, CostEstimate, EventId, SessionId as PSessionId, TurnId,
+        };
+        let mut app = test_app();
+        assert!(app.last_cost.is_none());
+        let event = AgentEvent::InferenceCompleted {
+            event_id: EventId::new(),
+            session_id: PSessionId::new(),
+            turn_id: TurnId::new(),
+            finish_reason: Some("stop".to_string()),
+            usage: None,
+            cost: Some(CostEstimate {
+                currency: "USD".to_string(),
+                total_nanos: 2_100_000,
+            }),
+        };
+        update(&mut app, Msg::Event(event));
+        let cost = app.last_cost.expect("cost captured");
+        assert_eq!(cost.total_nanos, 2_100_000);
+    }
+
+    #[test]
+    fn verification_completed_sets_status_for_pass_and_fail() {
+        use codel00p_protocol::{AgentEvent, EventId, SessionId as PSessionId, TurnId};
+        // A passing verification shows a clear ✓ verdict.
+        let mut app = test_app();
+        let pass = AgentEvent::VerificationCompleted {
+            event_id: EventId::new(),
+            session_id: PSessionId::new(),
+            turn_id: TurnId::new(),
+            check: "test".to_string(),
+            command: "cargo test".to_string(),
+            success: true,
+            exit_code: Some(0),
+            attempt: 1,
+        };
+        update(&mut app, Msg::Event(pass));
+        let status = app.verification.clone().expect("verification status set");
+        assert!(status.contains('✓'));
+        assert!(status.contains("test"));
+
+        // A failing verification flips to a ⚠ retrying verdict.
+        let fail = AgentEvent::VerificationCompleted {
+            event_id: EventId::new(),
+            session_id: PSessionId::new(),
+            turn_id: TurnId::new(),
+            check: "test".to_string(),
+            command: "cargo test".to_string(),
+            success: false,
+            exit_code: Some(101),
+            attempt: 2,
+        };
+        update(&mut app, Msg::Event(fail));
+        let status = app.verification.clone().expect("verification status set");
+        assert!(status.contains('⚠'));
+        assert!(status.contains("retrying"));
+    }
+
+    #[test]
+    fn failure_budget_exceeded_shows_replanning_note() {
+        use codel00p_protocol::{AgentEvent, EventId, SessionId as PSessionId, TurnId};
+        let mut app = test_app();
+        let event = AgentEvent::FailureBudgetExceeded {
+            event_id: EventId::new(),
+            session_id: PSessionId::new(),
+            turn_id: TurnId::new(),
+            operation: "run_command:cargo build".to_string(),
+            attempts: 3,
+            error_kind: "compile_error".to_string(),
+        };
+        update(&mut app, Msg::Event(event));
+        let status = app.verification.clone().expect("verification status set");
+        assert!(status.contains("replanning"));
+    }
+
+    #[test]
+    fn settings_profile_row_cycles_and_persists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            // The built-in presets are seeded; none active to start.
+            assert!(app.active_profile.is_none());
+            assert!(!app.profile_names.is_empty());
+            update(&mut app, ctrl(KeyCode::Char('p')));
+            type_str(&mut app, "settings");
+            update(&mut app, key(KeyCode::Enter));
+            // Move to the "Agent profile" row (third row) and cycle it forward.
+            update(&mut app, key(KeyCode::Down));
+            update(&mut app, key(KeyCode::Down));
+            match &app.overlay {
+                Overlay::Settings(settings) => {
+                    assert_eq!(settings.current(), SettingsRow::Profile);
+                }
+                _ => panic!("expected settings overlay"),
+            }
+            update(&mut app, key(KeyCode::Enter));
+            // Forward from no selection picks the first name.
+            let first = app.profile_names[0].clone();
+            assert_eq!(app.active_profile.as_deref(), Some(first.as_str()));
+            // It persisted to `agent.profile` (the key the harness reads).
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(
+                resolved.merged.agent.profile.as_deref(),
+                Some(first.as_str())
+            );
+            // Right cycles to the next name; overlay stays open.
+            update(&mut app, key(KeyCode::Right));
+            assert_eq!(
+                app.active_profile.as_deref(),
+                Some(app.profile_names[1].as_str())
+            );
+            assert!(matches!(app.overlay, Overlay::Settings(_)));
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(
+                resolved.merged.agent.profile.as_deref(),
+                Some(app.profile_names[1].as_str())
+            );
+        });
     }
 }

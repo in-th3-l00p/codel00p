@@ -1,7 +1,7 @@
 //! The application model: all TUI state in one place, mutated only by `update`.
 
 use codel00p_harness::SessionState;
-use codel00p_protocol::{TokenUsage, Viewer};
+use codel00p_protocol::{CostEstimate, TokenUsage, Viewer};
 use tokio::sync::oneshot;
 
 use crate::agent::{AgentRunOptions, McpServerSpec};
@@ -85,6 +85,15 @@ pub(crate) struct App {
     /// estimate in [`SessionUsage`] when present; `None` until the first inference
     /// reports usage. Drives the advanced status bar's token + context meters.
     pub(crate) last_usage: Option<TokenUsage>,
+    /// The most recent provider-reported cost estimate, captured from
+    /// `InferenceCompleted`/`TurnCompleted` events. `None` until a provider
+    /// reports pricing (many free/local models never do), in which case the cost
+    /// HUD is omitted rather than showing a bogus `$0.00`.
+    pub(crate) last_cost: Option<CostEstimate>,
+    /// The latest verify-before-done / self-critique / failure-budget verdict, as
+    /// a short status-bar line (e.g. "✓ verified" or "⚠ replanning"). `None`
+    /// until the first such event arrives this session.
+    pub(crate) verification: Option<String>,
     pub(crate) cloud: CloudState,
     pub(crate) theme: Theme,
     /// Show advanced status-bar info (model name, real tokens, context meter).
@@ -123,6 +132,13 @@ pub(crate) struct App {
     /// off). Loaded from `agent.behavior.failure_budget` (default 3); edited in
     /// Advanced.
     pub(crate) failure_budget: u32,
+    /// The active agent profile name (`agent.profile`), or `None` when no profile
+    /// is selected. Shown + switched in the Settings overlay; persisted to the
+    /// same config key the harness reads on the next run.
+    pub(crate) active_profile: Option<String>,
+    /// All selectable profile names: built-in presets ∪ user-defined
+    /// `[agent.profiles.*]`, sorted. Cycled by the Settings profile switcher.
+    pub(crate) profile_names: Vec<String>,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
     /// A newer release version if one is already known (from the update cache or a
@@ -155,6 +171,8 @@ impl App {
         max_iterations: u32,
         verify_iterations: u32,
         failure_budget: u32,
+        active_profile: Option<String>,
+        profile_names: Vec<String>,
     ) -> Self {
         Self {
             config,
@@ -171,6 +189,8 @@ impl App {
             turn: TurnStatus::default(),
             usage: SessionUsage::default(),
             last_usage: None,
+            last_cost: None,
+            verification: None,
             cloud: CloudState {
                 configured: cloud_configured,
                 ..CloudState::default()
@@ -185,6 +205,8 @@ impl App {
             max_iterations,
             verify_iterations,
             failure_budget,
+            active_profile,
+            profile_names,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),

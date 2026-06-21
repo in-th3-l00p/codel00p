@@ -419,21 +419,27 @@ impl SettingsPref {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsRow {
     Pref(SettingsPref),
+    /// Cycles the active agent profile among the built-in presets + any
+    /// user-defined `[agent.profiles.*]`, persisting `agent.profile`.
+    Profile,
     /// Opens the Advanced settings sub-overlay (harness-loop internals).
     Advanced,
 }
 
 impl SettingsRow {
-    /// All rows, in display order. The toggle prefs first, then "Advanced…".
-    pub(crate) const ORDER: [SettingsRow; 3] = [
+    /// All rows, in display order. The toggle prefs first, then the profile
+    /// switcher, then "Advanced…".
+    pub(crate) const ORDER: [SettingsRow; 4] = [
         SettingsRow::Pref(SettingsPref::ShowAdvanced),
         SettingsRow::Pref(SettingsPref::CheckUpdates),
+        SettingsRow::Profile,
         SettingsRow::Advanced,
     ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             SettingsRow::Pref(pref) => pref.label(),
+            SettingsRow::Profile => "Agent profile",
             SettingsRow::Advanced => "Advanced…",
         }
     }
@@ -441,6 +447,7 @@ impl SettingsRow {
     pub(crate) fn hint(self) -> &'static str {
         match self {
             SettingsRow::Pref(pref) => pref.hint(),
+            SettingsRow::Profile => "Enter/→ cycle · autonomous · careful · manual",
             SettingsRow::Advanced => "harness-loop knobs · iteration count",
         }
     }

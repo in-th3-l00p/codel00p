@@ -90,6 +90,12 @@ pub(crate) mod test_support {
             25,    // max_iterations (agent-loop default)
             3,     // verify_iterations (verify→fix default)
             3,     // failure_budget (replan-nudge default)
+            None,  // active_profile (no profile selected by default)
+            // profile_names: the built-in presets, as in a real config with no
+            // user-defined `[agent.profiles.*]`.
+            crate::settings::builtin_profiles()
+                .into_keys()
+                .collect::<Vec<_>>(),
         )
     }
 }
