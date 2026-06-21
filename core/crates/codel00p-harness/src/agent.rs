@@ -70,6 +70,11 @@ pub struct AgentHarness {
     /// self block and before project instructions. `None` injects nothing (back
     /// to pre-base-prompt behavior).
     base_prompt: Option<String>,
+    /// Whether to inject the live "Workspace state" block each turn (git status,
+    /// detected test/build/lint commands, files edited this turn). Default off at
+    /// the harness layer (exactly today's behavior); the CLI opts users in with an
+    /// on-by-default `[agent.behavior]` toggle.
+    workspace_context: bool,
     /// Shared handle to the `update_plan` plan store, so the self-awareness
     /// run-state can report plan progress. `None` omits plan progress.
     plan_store: Option<crate::planning::PlanStore>,

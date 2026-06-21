@@ -42,6 +42,7 @@ mod validation;
 mod walk;
 pub mod web;
 pub mod workspace;
+pub mod workspace_context;
 
 pub use agent::{AgentHarness, AgentHarnessBuilder, SelfCorrectConfig, VerifyConfig};
 pub use background::BackgroundProcesses;
@@ -119,6 +120,7 @@ pub use turn::{
 };
 pub use web::{WebFetchTool, WebSearchTool, web_tools};
 pub use workspace::Workspace;
+pub use workspace_context::{GitSummary, WorkspaceContext};
 
 pub fn crate_name() -> &'static str {
     "codel00p-harness"

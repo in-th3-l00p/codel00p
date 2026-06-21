@@ -243,6 +243,38 @@ fn behavior_base_prompt_and_auto_plan_round_trip_and_default_on() {
 }
 
 #[test]
+fn behavior_workspace_context_round_trips_and_defaults_on() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config): unset, which the helper treats as on.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.agent().behavior.workspace_context.is_none());
+        assert!(resolved.agent().behavior.workspace_context_enabled());
+
+        // Set false: round-trips the literal value and effective view.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.workspace_context", "false")
+            .expect("set workspace_context");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().behavior.workspace_context, Some(false));
+        assert!(!resolved.agent().behavior.workspace_context_enabled());
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.workspace_context").unwrap(),
+            Some("false".to_string())
+        );
+
+        // Unsetting prunes back to the default (on).
+        assert!(
+            unset_value(&path, "agent.behavior.workspace_context")
+                .expect("unset workspace_context")
+        );
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.agent().behavior.workspace_context.is_none());
+        assert!(resolved.agent().behavior.workspace_context_enabled());
+    });
+}
+
+#[test]
 fn behavior_verify_toggles_round_trip_and_defaults() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

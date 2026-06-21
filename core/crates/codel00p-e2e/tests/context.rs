@@ -593,6 +593,78 @@ fn auto_plan_off_keeps_base_prompt_but_drops_planning_guidance() {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario 8 — Workspace / build-test awareness ("Workspace state" block)
+// ---------------------------------------------------------------------------
+
+/// By default (`agent.behavior.workspace_context` unset = on), a plain
+/// `agent run` injects a "Workspace state" block. With a `Cargo.toml` in the
+/// workspace, the detected test/build/lint commands appear so the model knows how
+/// to verify without guessing.
+#[test]
+fn default_run_injects_workspace_state_block_with_detected_commands() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new()
+        .workspace_file(
+            "Cargo.toml",
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .with_provider(&provider);
+
+    let result = runner.run(&["agent", "run", "Do work.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        system.contains("Workspace state"),
+        "default run should inject the workspace-state block, got:\n{system}"
+    );
+    assert!(
+        system.contains("test = `cargo test`"),
+        "workspace-state block should list the detected test command, got:\n{system}"
+    );
+    assert!(
+        system.contains("from Cargo.toml"),
+        "workspace-state block should name the detection source, got:\n{system}"
+    );
+}
+
+/// Setting `agent.behavior.workspace_context=false` drops the workspace-state
+/// block entirely — the system prompt no longer contains it.
+#[test]
+fn workspace_context_off_omits_workspace_state_block() {
+    let provider = MockProvider::start().assistant_text("done");
+    let runner = CodelRunner::new()
+        .workspace_file(
+            "Cargo.toml",
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .with_provider(&provider);
+
+    let set = runner.run(&["config", "set", "agent.behavior.workspace_context", "false"]);
+    assert!(
+        set.success(),
+        "config set should succeed\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        set.stdout(),
+        set.stderr()
+    );
+
+    let result = runner.run(&["agent", "run", "Do work.", "--tool-set", "all"]);
+    result.assert_success();
+
+    let requests = provider.received_requests();
+    let body: Value =
+        serde_json::from_str(&requests[0]).expect("request body should be valid JSON");
+    let system = extract_system_content(&body);
+    assert!(
+        !system.contains("Workspace state"),
+        "workspace_context=false should omit the workspace-state block, got:\n{system}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Scenario 5 — Context compaction (documented as not feasible headlessly)
 // ---------------------------------------------------------------------------
 //
