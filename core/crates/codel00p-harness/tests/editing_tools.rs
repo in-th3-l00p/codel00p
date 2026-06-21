@@ -10,7 +10,14 @@ async fn editing_defaults_expose_write_scoped_mutation_tools() {
 
     assert_eq!(
         registry.names(),
-        vec!["apply_patch", "create_file", "delete_file", "update_file"]
+        vec![
+            "apply_patch",
+            "copy_file",
+            "create_file",
+            "delete_file",
+            "move_file",
+            "update_file"
+        ]
     );
     for tool_name in registry.names() {
         assert_eq!(
@@ -527,5 +534,176 @@ async fn apply_patch_real_multi_line_code_edit_preserves_surrounding_bytes() {
     assert_eq!(
         fs::read_to_string(dir.path().join("src/main.rs")).expect("read"),
         "use std::io;\n\nfn parse(input: &str) -> u32 {\n    let trimmed = input.trim();\n    trimmed.parse().unwrap_or(u32::MAX)\n}\n\nfn main() {\n    println!(\"{}\", parse(\"7\"));\n}\n",
+    );
+}
+
+#[tokio::test]
+async fn move_file_relocates_content_and_removes_source() {
+    let dir = tempdir().expect("tempdir");
+    // Binary / non-UTF-8 payload so we exercise byte-safety, not just text.
+    let payload: &[u8] = &[0x00, 0xff, 0xfe, b'h', b'i', 0x80, 0x0a];
+    fs::write(dir.path().join("source.bin"), payload).expect("write source");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let moved = registry
+        .execute(
+            "move_file",
+            &workspace,
+            json!({ "from": "source.bin", "to": "nested/dest.bin" }),
+        )
+        .await
+        .expect("move file");
+
+    assert_eq!(
+        moved.content(),
+        &json!({
+            "from": "source.bin",
+            "to": "nested/dest.bin",
+            "operation": "moved",
+            "bytes_written": payload.len(),
+        })
+    );
+    assert!(!dir.path().join("source.bin").exists());
+    assert_eq!(
+        fs::read(dir.path().join("nested/dest.bin")).expect("read dest"),
+        payload
+    );
+}
+
+#[tokio::test]
+async fn copy_file_duplicates_content_and_keeps_source() {
+    let dir = tempdir().expect("tempdir");
+    let payload: &[u8] = &[0xde, 0xad, 0xbe, 0xef, 0x00, 0x0a];
+    fs::write(dir.path().join("source.bin"), payload).expect("write source");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let copied = registry
+        .execute(
+            "copy_file",
+            &workspace,
+            json!({ "from": "source.bin", "to": "copy.bin" }),
+        )
+        .await
+        .expect("copy file");
+
+    assert_eq!(
+        copied.content(),
+        &json!({
+            "from": "source.bin",
+            "to": "copy.bin",
+            "operation": "copied",
+            "bytes_written": payload.len(),
+        })
+    );
+    assert_eq!(
+        fs::read(dir.path().join("source.bin")).expect("read source"),
+        payload,
+        "copy must leave the source intact"
+    );
+    assert_eq!(
+        fs::read(dir.path().join("copy.bin")).expect("read copy"),
+        payload
+    );
+}
+
+#[tokio::test]
+async fn move_and_copy_reject_missing_source_and_existing_dest() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("a.txt"), "a\n").expect("write a");
+    fs::write(dir.path().join("b.txt"), "b\n").expect("write b");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let missing = registry
+        .execute(
+            "move_file",
+            &workspace,
+            json!({ "from": "nope.txt", "to": "x.txt" }),
+        )
+        .await
+        .expect_err("missing source should fail");
+    assert!(
+        matches!(missing, HarnessError::ToolFailed { name, message } if name == "move_file" && message.contains("does not exist"))
+    );
+
+    let occupied = registry
+        .execute(
+            "copy_file",
+            &workspace,
+            json!({ "from": "a.txt", "to": "b.txt" }),
+        )
+        .await
+        .expect_err("existing dest should fail");
+    assert!(
+        matches!(occupied, HarnessError::ToolFailed { name, message } if name == "copy_file" && message.contains("already exists"))
+    );
+    // b.txt must be untouched.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("b.txt")).expect("read b"),
+        "b\n"
+    );
+}
+
+#[tokio::test]
+async fn move_file_overwrites_dest_when_requested() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("a.txt"), "new\n").expect("write a");
+    fs::write(dir.path().join("b.txt"), "old\n").expect("write b");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    registry
+        .execute(
+            "move_file",
+            &workspace,
+            json!({ "from": "a.txt", "to": "b.txt", "overwrite": true }),
+        )
+        .await
+        .expect("move with overwrite");
+
+    assert!(!dir.path().join("a.txt").exists());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("b.txt")).expect("read b"),
+        "new\n"
+    );
+}
+
+#[tokio::test]
+async fn move_and_copy_reject_workspace_escape_paths() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("a.txt"), "a\n").expect("write a");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let escape_to = registry
+        .execute(
+            "copy_file",
+            &workspace,
+            json!({ "from": "a.txt", "to": "../escape.txt" }),
+        )
+        .await
+        .expect_err("escaping dest should fail");
+    assert!(matches!(escape_to, HarnessError::WorkspaceEscape { .. }));
+
+    let escape_from = registry
+        .execute(
+            "move_file",
+            &workspace,
+            json!({ "from": "../../etc/passwd", "to": "a-copy.txt" }),
+        )
+        .await
+        .expect_err("escaping source should fail");
+    assert!(matches!(escape_from, HarnessError::WorkspaceEscape { .. }));
+}
+
+#[tokio::test]
+async fn update_file_description_nudges_toward_apply_patch() {
+    use codel00p_harness::{Tool, UpdateFileTool};
+    let description = UpdateFileTool.description();
+    assert!(
+        description.contains("apply_patch"),
+        "update_file description should nudge toward apply_patch: {description}"
     );
 }

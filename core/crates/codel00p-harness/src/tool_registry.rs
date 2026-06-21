@@ -10,7 +10,9 @@ use crate::{
     background::BackgroundProcesses,
     checks::RunChecksTool,
     commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool},
-    editing::{ApplyPatchTool, CreateFileTool, DeleteFileTool, UpdateFileTool},
+    editing::{
+        ApplyPatchTool, CopyFileTool, CreateFileTool, DeleteFileTool, MoveFileTool, UpdateFileTool,
+    },
     errors::HarnessError,
     find::{FindFilesTool, GrepTool},
     git::{GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool},
@@ -60,8 +62,10 @@ impl ToolRegistry {
     pub fn editing_defaults() -> Self {
         Self::new()
             .with_tool(ApplyPatchTool)
+            .with_tool(CopyFileTool)
             .with_tool(CreateFileTool)
             .with_tool(DeleteFileTool)
+            .with_tool(MoveFileTool)
             .with_tool(UpdateFileTool)
     }
 

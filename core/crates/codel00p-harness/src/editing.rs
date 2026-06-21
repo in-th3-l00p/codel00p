@@ -71,7 +71,8 @@ impl Tool for UpdateFileTool {
     }
 
     fn description(&self) -> &str {
-        "Replace a UTF-8 file inside the workspace root."
+        "Replace a UTF-8 file inside the workspace root. Prefer `apply_patch` for \
+         targeted edits; use this only to replace an entire file."
     }
 
     fn input_schema(&self) -> Value {
@@ -264,6 +265,149 @@ impl Tool for ApplyPatchTool {
             "changes": summaries,
         })))
     }
+}
+
+pub struct MoveFileTool;
+
+#[async_trait]
+impl Tool for MoveFileTool {
+    fn name(&self) -> &str {
+        "move_file"
+    }
+
+    fn description(&self) -> &str {
+        "Move (rename) a file inside the workspace root. Binary-safe and \
+         workspace-bounded. Fails if `from` is missing or `to` already exists \
+         unless `overwrite` is true. Implemented as copy-then-delete through the \
+         execution backend."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+                "from": { "type": "string" },
+                "to": { "type": "string" },
+                "overwrite": { "type": "boolean" }
+            }
+        })
+    }
+
+    fn permission_scope(&self, _input: &Value) -> PermissionScope {
+        PermissionScope::WorkspaceWrite
+    }
+
+    async fn execute(
+        &self,
+        workspace: &Workspace,
+        input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        let from = required_string(self.name(), &input, "from")?;
+        let to = required_string(self.name(), &input, "to")?;
+        let overwrite = optional_bool(&input, "overwrite");
+
+        let bytes = read_source_file(workspace, self.name(), from)?;
+        ensure_dest_free(workspace, self.name(), to, overwrite)?;
+
+        // copy-then-delete so the move flows through the same boundary-checked,
+        // backend-aware write/delete path as the other editing tools.
+        workspace.write(to, &bytes)?;
+        workspace.delete(from)?;
+
+        Ok(ToolResult::json(json!({
+            "from": from,
+            "to": to,
+            "operation": "moved",
+            "bytes_written": bytes.len(),
+        })))
+    }
+}
+
+pub struct CopyFileTool;
+
+#[async_trait]
+impl Tool for CopyFileTool {
+    fn name(&self) -> &str {
+        "copy_file"
+    }
+
+    fn description(&self) -> &str {
+        "Copy a file inside the workspace root, leaving the source intact. \
+         Binary-safe and workspace-bounded. Fails if `from` is missing or `to` \
+         already exists unless `overwrite` is true."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+                "from": { "type": "string" },
+                "to": { "type": "string" },
+                "overwrite": { "type": "boolean" }
+            }
+        })
+    }
+
+    fn permission_scope(&self, _input: &Value) -> PermissionScope {
+        PermissionScope::WorkspaceWrite
+    }
+
+    async fn execute(
+        &self,
+        workspace: &Workspace,
+        input: Value,
+    ) -> Result<ToolResult, HarnessError> {
+        let from = required_string(self.name(), &input, "from")?;
+        let to = required_string(self.name(), &input, "to")?;
+        let overwrite = optional_bool(&input, "overwrite");
+
+        let bytes = read_source_file(workspace, self.name(), from)?;
+        ensure_dest_free(workspace, self.name(), to, overwrite)?;
+
+        workspace.write(to, &bytes)?;
+
+        Ok(ToolResult::json(json!({
+            "from": from,
+            "to": to,
+            "operation": "copied",
+            "bytes_written": bytes.len(),
+        })))
+    }
+}
+
+fn optional_bool(input: &Value, key: &str) -> bool {
+    input.get(key).and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// Read the raw bytes of an existing source file (binary-safe), erroring with a
+/// clear message if it is missing. Boundary enforcement and I/O are routed
+/// through the workspace facade / backend.
+fn read_source_file(
+    workspace: &Workspace,
+    tool_name: &str,
+    from: &str,
+) -> Result<Vec<u8>, HarnessError> {
+    require_existing_file(workspace, tool_name, from)?;
+    workspace.read_bytes(from)
+}
+
+/// Reject an existing destination unless `overwrite` is requested, so neither
+/// tool silently clobbers a file.
+fn ensure_dest_free(
+    workspace: &Workspace,
+    tool_name: &str,
+    to: &str,
+    overwrite: bool,
+) -> Result<(), HarnessError> {
+    if !overwrite && workspace.exists(to)? {
+        return Err(tool_failed(
+            tool_name,
+            format!("destination already exists: {to} (set `overwrite` to true to replace it)"),
+        ));
+    }
+    Ok(())
 }
 
 /// Require that `path` names an existing regular file in the workspace,
