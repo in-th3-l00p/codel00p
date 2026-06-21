@@ -310,6 +310,18 @@ Commands:
   continue  Resume the most recent session
   chat      Start an interactive multi-turn chat session
   mcp       Inspect MCP server tools
+
+Personas (each agent is its own CODEL00P_HOME):
+  create <name> [--description ..] [--model ..] [--provider ..]
+                [--from <agent>] [--persona <text-or-@file>]
+  use <name>            Set the sticky active agent (use --default or - to clear)
+  list | ls            List agents (active marked with *)
+  show <name>          Show an agent's details and home path
+  rename <old> <new>   Rename an agent
+  delete | rm <name>   Delete an agent (never the default/base home)
+
+Global: --agent <name>  Use a named agent for one invocation (overrides the
+                        sticky active agent).
 ";
 
 const AGENT_RUN_HELP: &str = "\
