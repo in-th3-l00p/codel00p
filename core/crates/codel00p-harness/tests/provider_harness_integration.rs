@@ -88,8 +88,8 @@ async fn harness_runs_final_turn_through_provider_inference_client() {
                                     "required": ["path"],
                                     "properties": {
                                         "path": { "type": "string" },
-                                        "offset": { "type": "integer" },
-                                        "limit": { "type": "integer" }
+                                        "offset": { "type": "integer", "minimum": 1 },
+                                        "limit": { "type": "integer", "minimum": 1 }
                                     }
                                 }
                             }
@@ -258,8 +258,8 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                     "required": ["path"],
                                     "properties": {
                                         "path": { "type": "string" },
-                                        "offset": { "type": "integer" },
-                                        "limit": { "type": "integer" }
+                                        "offset": { "type": "integer", "minimum": 1 },
+                                        "limit": { "type": "integer", "minimum": 1 }
                                     }
                                 }
                             }
@@ -413,8 +413,8 @@ async fn harness_executes_provider_tool_call_and_sends_tool_result_back_to_infer
                                     "required": ["path"],
                                     "properties": {
                                         "path": { "type": "string" },
-                                        "offset": { "type": "integer" },
-                                        "limit": { "type": "integer" }
+                                        "offset": { "type": "integer", "minimum": 1 },
+                                        "limit": { "type": "integer", "minimum": 1 }
                                     }
                                 }
                             }

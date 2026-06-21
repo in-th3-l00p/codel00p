@@ -185,7 +185,10 @@ impl Tool for WebSearchTool {
 
     fn description(&self) -> &str {
         "Search the web and return a list of { title, url, snippet } results. \
-         Requires a configured search backend (set BRAVE_SEARCH_API_KEY)."
+         Requires a configured search backend: set BRAVE_SEARCH_API_KEY to a \
+         Brave Search API key. To use a self-hosted or Brave-compatible proxy \
+         instead of Brave's default endpoint, also set CODEL00P_SEARCH_API_URL \
+         to that endpoint's URL."
     }
 
     fn input_schema(&self) -> Value {
@@ -231,9 +234,9 @@ impl Tool for WebSearchTool {
             SearchBackend::Unconfigured => {
                 return Err(self.failed(format!(
                     "web_search is not configured: set the `{BRAVE_API_KEY_ENV}` environment \
-                     variable to a Brave Search API key (and optionally `{SEARCH_API_URL_ENV}` to \
-                     point at a Brave-compatible endpoint). See \
-                     https://brave.com/search/api/ to obtain a key."
+                     variable to a Brave Search API key (see https://brave.com/search/api/ to \
+                     obtain one). To point at a self-hosted or Brave-compatible endpoint instead \
+                     of Brave's default, also set `{SEARCH_API_URL_ENV}` to that endpoint's URL."
                 )));
             }
         };
