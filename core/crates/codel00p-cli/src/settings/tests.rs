@@ -333,6 +333,34 @@ fn behavior_persona_round_trips_and_defaults_on() {
 }
 
 #[test]
+fn behavior_curated_memory_round_trips_and_defaults_on() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config): unset, which the helper treats as on.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.agent().behavior.curated_memory.is_none());
+        assert!(resolved.agent().behavior.curated_memory_enabled());
+
+        // Set false: round-trips the literal value and effective view.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.curated_memory", "false").expect("set curated_memory");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().behavior.curated_memory, Some(false));
+        assert!(!resolved.agent().behavior.curated_memory_enabled());
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.curated_memory").unwrap(),
+            Some("false".to_string())
+        );
+
+        // Unsetting prunes back to the default (on).
+        assert!(unset_value(&path, "agent.behavior.curated_memory").expect("unset curated_memory"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.agent().behavior.curated_memory.is_none());
+        assert!(resolved.agent().behavior.curated_memory_enabled());
+    });
+}
+
+#[test]
 fn behavior_verify_toggles_round_trip_and_defaults() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

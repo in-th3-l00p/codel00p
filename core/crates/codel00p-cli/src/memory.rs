@@ -6,6 +6,7 @@
 
 mod import;
 mod json;
+mod note;
 mod parse;
 mod query;
 mod review;
@@ -34,6 +35,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "quality" => query::memory_quality(config, rest),
         "list" => query::memory_list(config, rest),
         "show" => query::memory_show(config, rest),
+        "note" => note::memory_note(config, rest),
         "audit" => review::memory_audit(config, rest),
         "revisions" => review::memory_revisions(config, rest),
         "approve" => review::memory_review(config, rest, ReviewCommand::Approve),

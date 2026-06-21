@@ -333,6 +333,69 @@ fn provider_request_places_persona_first_ahead_of_self_and_base() {
 }
 
 #[test]
+fn provider_request_places_curated_memory_after_self_before_base() {
+    let mut state = SessionState::new(SessionId::from_static("session-curated"));
+    state.push_user(UserMessage::new("Do the work."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_persona("# Persona: coder\nYou are a careful Rust reviewer.")
+        .with_agent_self("You are `coder`, a codel00p agent (v0.0.0, provider: x, model: y).")
+        .with_curated_memory("# Curated memory (what I durably know)\n## Notes\nuses cargo")
+        .with_base_prompt("How you work:\n- Verify before you declare done.");
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    // persona -> self -> curated memory -> base prompt -> user message.
+    assert_eq!(provider_request.messages.len(), 5);
+    assert!(
+        provider_request.messages[0]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("# Persona: coder")
+    );
+    assert!(
+        provider_request.messages[1]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("You are `coder`")
+    );
+    assert!(
+        provider_request.messages[2]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("# Curated memory"),
+        "curated memory must come after the self block"
+    );
+    assert!(
+        provider_request.messages[3]
+            .content
+            .as_deref()
+            .unwrap()
+            .contains("Verify before you declare done"),
+        "base prompt must come after curated memory"
+    );
+    assert_eq!(provider_request.messages[4].role, MessageRole::User);
+}
+
+#[test]
+fn no_curated_memory_adds_no_provider_message() {
+    let mut state = SessionState::new(SessionId::from_static("session-no-curated"));
+    state.push_user(UserMessage::new("Do the work."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_agent_self("You are codel00p v0.0.0 (provider: x, model: y).");
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    // No curated-memory block: only the self block + user message.
+    assert_eq!(provider_request.messages.len(), 2);
+    assert_eq!(provider_request.messages[1].role, MessageRole::User);
+}
+
+#[test]
 fn no_persona_adds_no_provider_message() {
     let mut state = SessionState::new(SessionId::from_static("session-no-persona"));
     state.push_user(UserMessage::new("Do the work."));

@@ -604,6 +604,16 @@ pub(crate) async fn build_agent_harness_with(
     {
         tools = tools.with_registry(checkpoint_tools(crate::settings::home_dir()));
     }
+    // Capped curated memory (#13 phase 3): the `note` tool lets the agent curate
+    // its own always-in-context notes (NOTES.md + USER.md). It writes to the
+    // active agent home (outside the workspace), so — like the checkpoint tools —
+    // it is folded in here with the home path rather than in a static tool set.
+    // It rides with the default/learn tool sets so any agent that can learn can
+    // also curate; the `curated_memory` toggle still gates whether the block is
+    // injected.
+    if behavior.curated_memory_enabled() {
+        tools = tools.with_tool(codel00p_harness::NoteTool::new(crate::settings::home_dir()));
+    }
 
     let mut builder = AgentHarness::builder()
         .model_client(model_client)
@@ -735,6 +745,19 @@ pub(crate) async fn build_agent_harness_with(
                 builder = builder.persona(trimmed.to_string());
             }
         }
+    }
+
+    // Capped curated memory (#13 phase 3): assemble the always-in-context notes
+    // layer (NOTES.md + USER.md) from the active agent home and inject it as a
+    // system block placed AFTER the persona + self block but BEFORE the base
+    // prompt. Unlike persona this also applies to the default agent (it reads the
+    // base home's files). Only injected when the toggle is on and at least one
+    // file is non-empty.
+    if behavior.curated_memory_enabled()
+        && let Some(block) =
+            codel00p_harness::assemble_curated_memory_block(&crate::settings::home_dir())
+    {
+        builder = builder.curated_memory(block);
     }
 
     // Workspace / build-test awareness (#12 T1.3): inject a compact live

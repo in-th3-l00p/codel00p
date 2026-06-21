@@ -59,6 +59,12 @@ pub struct HarnessInferenceRequest {
     /// Placed after the persona block so the model reads "who am I" before the
     /// project instructions, memory, and skills.
     agent_self: Option<String>,
+    /// The agent's capped curated memory block ("what I durably know"): the
+    /// always-injected NOTES.md / USER.md notes layer. Placed AFTER the persona
+    /// and self block but BEFORE the base prompt — higher priority than generic
+    /// operating guidance, lower than identity. `None` when the files are empty or
+    /// the `curated_memory` toggle is off.
+    curated_memory: Option<String>,
     /// The base operating prompt ("how I work"): rigor + (optionally) planning
     /// guidance. Injected right after the self block and before project
     /// instructions, so a project's `CODEL00P.md` can augment/override in spirit.
@@ -85,6 +91,7 @@ impl HarnessInferenceRequest {
             context_window: None,
             persona: None,
             agent_self: None,
+            curated_memory: None,
             base_prompt: None,
             project_instructions: None,
             project_memory: None,
@@ -119,6 +126,14 @@ impl HarnessInferenceRequest {
     /// Attach the pre-rendered agent "self" block (see [`crate::self_context`]).
     pub fn with_agent_self(mut self, agent_self: impl Into<String>) -> Self {
         self.agent_self = Some(agent_self.into());
+        self
+    }
+
+    /// Attach the agent's capped curated memory block ("what I durably know" —
+    /// the NOTES.md / USER.md notes layer). Injected after the persona and self
+    /// block but before the base prompt.
+    pub fn with_curated_memory(mut self, curated_memory: impl Into<String>) -> Self {
+        self.curated_memory = Some(curated_memory.into());
         self
     }
 
@@ -200,6 +215,11 @@ impl HarnessInferenceRequest {
     /// The pre-rendered agent "self" block, if any.
     pub fn agent_self(&self) -> Option<&str> {
         self.agent_self.as_deref()
+    }
+
+    /// The agent's capped curated memory block ("what I durably know"), if any.
+    pub fn curated_memory(&self) -> Option<&str> {
+        self.curated_memory.as_deref()
     }
 
     /// The base operating prompt ("how I work") block, if any.

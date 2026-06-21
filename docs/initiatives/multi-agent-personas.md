@@ -84,7 +84,7 @@ The plan below assumes **Option A**.
 
 ### Phase 3 — Per-agent growing memory + learning (mostly free under Option A)
 - [ ] Confirm the memory recommender + skill/capability extractors write into the **active agent's home** (they already write to `CODEL00P_HOME`'s memory DB / skills dir), so each agent learns independently. Add tests proving isolation (agent A's memories/skills don't appear for agent B).
-- [ ] Optional **capped curated memory** à la Hermes MEMORY.md/USER.md: a small always-injected per-agent notes file + a user-profile file (token-capped), distinct from the searchable memory DB. (Differentiator; keeps a cheap "always-known" layer.)
+- [x] **Capped curated memory** à la Hermes MEMORY.md/USER.md: a small always-injected per-agent notes file (`NOTES.md`, ~2000 chars) + a user-profile file (`USER.md`, ~1200 chars), distinct from the searchable memory DB. Rendered as a system block after persona/self and before the base prompt; the agent curates it with the `note` tool (add/replace/remove, cap-enforced, never auto-truncated); inspectable via `codel00p memory note [--user] <text>` / `--show`; gated by the on-by-default `agent.behavior.curated_memory` toggle. (Differentiator; keeps a cheap "always-known" layer.)
 - [ ] A **curator** pass (codel00p already has staleness/quality scoring): add opt-in consolidation of near-duplicate learned skills/memories per agent (shingle similarity from #107), archive-not-delete, behind review — fights skill/memory sprawl.
 
 ### Phase 4 — Sharing, orchestration, advanced memory (later)
