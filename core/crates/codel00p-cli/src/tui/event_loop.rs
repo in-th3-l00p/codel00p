@@ -79,6 +79,17 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
     let self_state = behavior.self_state_enabled();
     let base_prompt = behavior.base_prompt_enabled();
     let auto_plan = behavior.auto_plan_enabled();
+    // Harness-loop numerics edited in the Advanced sub-overlay. These persist to
+    // the same `agent.*` keys the harness reads, so changes take effect on the
+    // next turn. Defaults mirror the harness built-ins (max 25, verify 3,
+    // failure 3) when unset.
+    let agent_settings = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .map(|resolved| resolved.merged.agent)
+        .unwrap_or_default();
+    let max_iterations = agent_settings.max_iterations.unwrap_or(25);
+    let verify_iterations = behavior.verify_iterations_value();
+    let failure_budget = behavior.failure_budget_value();
 
     let mut app = App::new(
         config,
@@ -93,6 +104,9 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         self_state,
         base_prompt,
         auto_plan,
+        max_iterations,
+        verify_iterations,
+        failure_budget,
     );
 
     let mut terminal =

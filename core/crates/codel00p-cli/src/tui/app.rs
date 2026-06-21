@@ -112,6 +112,17 @@ pub(crate) struct App {
     /// `agent.behavior.auto_plan` (default true) at startup; toggled in the
     /// Settings overlay.
     pub(crate) auto_plan: bool,
+    /// The agent loop's iteration ceiling. Loaded from `agent.max_iterations`
+    /// (default 25) at startup; edited in the Advanced settings sub-overlay and
+    /// persisted to the same config key the harness reads.
+    pub(crate) max_iterations: u32,
+    /// Max verify→fix attempts before completing as not-verified. Loaded from
+    /// `agent.behavior.verify_iterations` (default 3); edited in Advanced.
+    pub(crate) verify_iterations: u32,
+    /// Consecutive same-operation failures before the replan nudge fires (0 =
+    /// off). Loaded from `agent.behavior.failure_budget` (default 3); edited in
+    /// Advanced.
+    pub(crate) failure_budget: u32,
     pub(crate) should_quit: bool,
     pub(crate) tick: u64,
     /// A newer release version if one is already known (from the update cache or a
@@ -141,6 +152,9 @@ impl App {
         self_state: bool,
         base_prompt: bool,
         auto_plan: bool,
+        max_iterations: u32,
+        verify_iterations: u32,
+        failure_budget: u32,
     ) -> Self {
         Self {
             config,
@@ -168,6 +182,9 @@ impl App {
             self_state,
             base_prompt,
             auto_plan,
+            max_iterations,
+            verify_iterations,
+            failure_budget,
             should_quit: false,
             tick: 0,
             update_available: crate::update::cached_newer_version(),
