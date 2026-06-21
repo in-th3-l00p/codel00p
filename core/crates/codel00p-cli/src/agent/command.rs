@@ -8,6 +8,15 @@ pub fn run(config: CliConfig, defaults: AgentSettings, args: &[String]) -> CliRe
         return agent_chat(config, &defaults, &[]);
     };
 
+    // Base-scoped agent registry lifecycle (create/use/list/show/rename/delete).
+    // main.rs skips the per-agent CODEL00P_HOME override for these, so they
+    // operate on the base registry regardless of any active agent.
+    if super::management::is_management(command)
+        && let Some(output) = super::management::run(args)?
+    {
+        return Ok(output);
+    }
+
     match command.as_str() {
         "run" => agent_run(config, &defaults, rest),
         "resume" => agent_resume(config, &defaults, rest),

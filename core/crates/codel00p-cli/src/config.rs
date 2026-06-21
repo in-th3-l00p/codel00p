@@ -21,6 +21,9 @@ pub struct GlobalOverrides {
     pub organization_id: Option<String>,
     pub project_id: Option<String>,
     pub project_name: Option<String>,
+    /// Select a named agent for this invocation (its home becomes
+    /// `CODEL00P_HOME`). Highest precedence over the sticky active pointer.
+    pub agent: Option<String>,
 }
 
 /// Parse the leading global flags. All are optional now — anything not supplied
@@ -47,6 +50,10 @@ pub fn parse_global_overrides(args: Vec<String>) -> CliResult<(GlobalOverrides, 
             }
             "--project-name" => {
                 overrides.project_name = Some(required_value(&args, index, "--project-name")?);
+                index += 2;
+            }
+            "--agent" => {
+                overrides.agent = Some(required_value(&args, index, "--agent")?);
                 index += 2;
             }
             _ => break,

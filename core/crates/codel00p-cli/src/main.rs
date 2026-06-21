@@ -81,6 +81,37 @@ fn run(args: Vec<String>) -> CliResult<String> {
 
     let workspace_start = env::current_dir().map_err(|error| error.to_string())?;
 
+    // Multi-agent personas (#13): an agent is a directory `<base>/agents/<name>`
+    // used as its own CODEL00P_HOME. Switching = pointing CODEL00P_HOME at it,
+    // so config/memory/sessions isolate automatically via the home boundary.
+    //
+    // Base-scoped operations are SKIPPED: the agent registry lifecycle
+    // (`agent create|use|list|...`) and the settings/capability commands below
+    // operate on the base registry, not inside an agent home. For everything
+    // else, if an agent is selected (`--agent` flag > sticky active pointer),
+    // override CODEL00P_HOME to its home BEFORE any subsystem resolves the home.
+    let base_scoped = matches!(
+        command,
+        "config" | "auth" | "skills" | "update" | "uninstall"
+    ) || (command == "agent"
+        && rest
+            .first()
+            .is_some_and(|sub| agent::management::is_management(sub)));
+    if !base_scoped {
+        let base = agent::registry::base_home();
+        if let Some(name) = agent::registry::resolve_active(&base, overrides.agent.as_deref()) {
+            agent::registry::validate_name(&name)?;
+            let home = agent::registry::agent_home(&base, &name);
+            std::fs::create_dir_all(&home).map_err(|error| {
+                format!("failed to create agent home {}: {error}", home.display())
+            })?;
+            // SAFETY: single-threaded startup, before any home is resolved or any
+            // worker thread is spawned. Mirrors the codebase's other set_var use
+            // (settings::test_env, agent spawner tests).
+            unsafe { env::set_var("CODEL00P_HOME", &home) };
+        }
+    }
+
     // Config and capability management operate on settings files directly and do
     // not need a resolved workspace/memory configuration.
     match command {
