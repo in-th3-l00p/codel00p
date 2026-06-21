@@ -22,7 +22,7 @@ use codel00p_harness::{
     ProjectMemoryProvider, ProjectMemoryRequest, ProposedSkill, ProviderModelClient, SessionId,
     SkillContext, SkillPrompt, SkillProposalSink, SkillProvider, SkillSelectionRequest, SshBackend,
     SshConfig, SubAgentSpawner, TerminalBackend, TokenSink, ToolRegistry, UpdatePlanTool,
-    UserMessage, Workspace, delegation_tools, learning_tools,
+    UserMessage, Workspace, checkpoint_tools, delegation_tools, learning_tools,
 };
 use codel00p_mcp::{
     HttpServerEndpoint, McpClient, McpHttpClient, McpStdioClient, McpTool, McpToolDescriptor,

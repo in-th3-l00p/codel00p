@@ -562,6 +562,16 @@ pub(crate) async fn build_agent_harness_with(
         let sink = Arc::new(CliSkillProposalSink::new(crate::skills::user_skills_dir()));
         tools = tools.with_registry(learning_tools(sink));
     }
+    // Shadow-git checkpoint tools ride with the git tool set (and `all`). They
+    // need the codel00p home dir as the shadow-store base, which lives outside
+    // the workspace, so they are folded in here rather than in `git_defaults()`.
+    if options
+        .tool_sets
+        .iter()
+        .any(|set| matches!(set, AgentToolSet::Git | AgentToolSet::All))
+    {
+        tools = tools.with_registry(checkpoint_tools(crate::settings::home_dir()));
+    }
 
     let mut builder = AgentHarness::builder()
         .model_client(model_client)
