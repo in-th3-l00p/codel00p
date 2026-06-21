@@ -9,12 +9,13 @@ use std::{fs, path::Path};
 
 use crate::config::CliResult;
 
+use super::distribution;
 use super::registry::{self, CreateOptions};
 
 /// Subcommand names that operate on the base registry and must NOT trigger the
 /// per-agent `CODEL00P_HOME` override in main.rs.
 pub(crate) const MANAGEMENT_SUBCOMMANDS: &[&str] = &[
-    "create", "use", "list", "ls", "show", "rename", "delete", "rm",
+    "create", "use", "list", "ls", "show", "rename", "delete", "rm", "export", "import",
 ];
 
 /// Whether `sub` is a base-scoped agent management subcommand.
@@ -36,6 +37,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<Option<String>> {
         "show" => show(&base, rest).map(Some),
         "rename" => rename(&base, rest).map(Some),
         "delete" | "rm" => delete(&base, rest).map(Some),
+        "export" => export(&base, rest).map(Some),
+        "import" => import(&base, rest).map(Some),
         _ => Ok(None),
     }
 }
@@ -189,6 +192,83 @@ fn delete(base: &Path, args: &[String]) -> CliResult<String> {
     }
     registry::delete_agent(base, name)?;
     Ok(format!("Deleted agent `{name}`.\n"))
+}
+
+/// `agent export <name> [--output <path>]` — package the agent's SHAREABLE files
+/// (manifest, config, persona, skills) into a portable `.tar` artifact. Never
+/// ships memory, sessions, `.env`, or the active pointer (see `distribution`).
+fn export(base: &Path, args: &[String]) -> CliResult<String> {
+    let mut name: Option<String> = None;
+    let mut output: Option<String> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--output" | "-o" => {
+                output = Some(value(args, index, "--output")?);
+                index += 2;
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("unknown flag for `agent export`: {other}"));
+            }
+            other => {
+                if name.is_some() {
+                    return Err(format!("unexpected argument: {other}"));
+                }
+                name = Some(other.to_string());
+                index += 1;
+            }
+        }
+    }
+    let name =
+        name.ok_or_else(|| "usage: codel00p agent export <name> [--output <path>]".to_string())?;
+    if !registry::agent_exists(base, &name) {
+        return Err(unknown_agent(base, &name));
+    }
+    let out = output
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| distribution::default_output_path(&name));
+    let written = distribution::export_agent(base, &name, &out)?;
+    Ok(format!(
+        "Exported agent `{name}` to {}\n  shipped:  agent.toml, config.toml, persona.md, skills/ (if present)\n  excluded: memory, sessions, .env, active_agent (private — never packaged)\n  share it: codel00p agent import {}\n",
+        written.display(),
+        written.display()
+    ))
+}
+
+/// `agent import <path> [--name <newname>]` — unpack an exported artifact into a
+/// NEW agent. Materializes config/persona/skills; private state stays EMPTY
+/// (fresh memory/sessions, no creds). Refuses an existing target name.
+fn import(base: &Path, args: &[String]) -> CliResult<String> {
+    let mut path: Option<String> = None;
+    let mut name: Option<String> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--name" | "-n" => {
+                name = Some(value(args, index, "--name")?);
+                index += 2;
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("unknown flag for `agent import`: {other}"));
+            }
+            other => {
+                if path.is_some() {
+                    return Err(format!("unexpected argument: {other}"));
+                }
+                path = Some(other.to_string());
+                index += 1;
+            }
+        }
+    }
+    let path =
+        path.ok_or_else(|| "usage: codel00p agent import <path> [--name <newname>]".to_string())?;
+    let info = distribution::import_agent(base, Path::new(&path), name.as_deref())?;
+    Ok(format!(
+        "Imported agent `{}` (fresh memory + sessions).\n  home:   {}\n  use it: codel00p agent use {}\n",
+        info.name,
+        info.home.display(),
+        info.name
+    ))
 }
 
 /// Read `agent.model` from an agent home's `config.toml`, if set, for display.

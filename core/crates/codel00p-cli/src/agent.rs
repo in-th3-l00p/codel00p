@@ -57,6 +57,7 @@ use crate::{
 mod chat;
 mod command;
 mod delegation;
+pub(crate) mod distribution;
 mod events;
 pub(crate) mod management;
 mod mcp;
