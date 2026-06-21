@@ -44,32 +44,32 @@ by #94 (`self_knowledge`, `self_state`).
 
 ---
 
-## Tier 0 — Autonomy discipline (highest leverage; in progress)
+## Tier 0 — Autonomy discipline (highest leverage) — **COMPLETE**
 
-- [ ] **Verify-before-done loop** — after mutating turns, run the project's
+- [x] **Verify-before-done loop** (#99) — after mutating turns, run the project's
       test/build/lint and feed failures back into the loop instead of completing;
       support acceptance criteria ("done = green"). (Aider lint-and-fix;
       OpenHands/SWE-agent reproduce→fix→verify.)
       → `agent.behavior.auto_test`, `self_verify`, `lint_and_fix` (default on);
       `test_command`, `verify_iterations`.
-- [ ] **Metacognition / self-critique** (self-awareness facet 3) — before
+- [x] **Metacognition / self-critique** (#99) (self-awareness facet 3) — before
       declaring done: "what did I claim, did I verify it, what's untested/risky?"
       Shares machinery with the verify loop. → `agent.behavior.self_critique`.
-- [ ] **Planning rigor + base system prompt** — ship a base prompt encoding
+- [x] **Planning rigor + base system prompt** (#96) — ship a base prompt encoding
       plan → act → verify → reflect; make planning expected for multi-step work;
       raise the `max_iterations` default well above 4. → `agent.behavior.auto_plan`.
-- [ ] **Error self-correction loop** — classify failures (missing dep / perms /
+- [x] **Error self-correction loop** (#101) — classify failures (missing dep / perms /
       timeout — Codex matches denial signatures), add a retry/failure budget,
       surface full failing output. → `agent.behavior.replan_on_failure`,
       `failure_budget`.
 
 ## Tier 1 — Semantic code intelligence (lexical → semantic)
 
-- [ ] **Tree-sitter repo map** — real ASTs instead of regex extraction; keep the
+- [x] **Tree-sitter repo map** (#98) — real ASTs instead of regex extraction; keep the
       PageRank-style ranking, run it on real symbols (Aider's design).
 - [ ] **LSP integration** — go-to-def, find-references, hover, diagnostics; inject
       diagnostics / compile errors into context.
-- [ ] **Workspace/build/test-awareness context block** — detect build/test
+- [x] **Workspace/build/test-awareness context block** (#103) — detect build/test
       commands (Cargo.toml/package.json/…), inject git status, recently-edited
       files, last test result, live diagnostics.
 - [ ] **Hybrid retrieval** for memory and code — BM25 + embeddings +
@@ -78,7 +78,7 @@ by #94 (`self_knowledge`, `self_state`).
 
 ## Tier 2 — Trust & scale
 
-- [ ] **Checkpoints / rollback** — per-step shadow-git snapshots (Cline's
+- [x] **Checkpoints / rollback** (#100) — per-step shadow-git snapshots (Cline's
       `core.worktree`-redirect trick, `--allow-empty --no-verify`, 3 restore
       modes) so aggressive autonomy is safely undoable.
 - [ ] **Browser / Playwright verification hook** — a CDP/Playwright tool so the
@@ -100,7 +100,7 @@ by #94 (`self_knowledge`, `self_state`).
 
 ## Cross-cutting
 
-- [ ] **Profiles** — `[agent.profiles.<name>]` table-of-tables + shipped presets +
+- [x] **Profiles** (#104; presets shipped, org-pin deferred) — `[agent.profiles.<name>]` table-of-tables + shipped presets +
       `--profile` + org-pinning, layering over `[agent.behavior]`.
 - [x] **Self-awareness** facets 1+2 (self-knowledge + run-state) shipped (#94);
       facet 3 (metacognition) lands with Tier 0's verify loop.
