@@ -173,10 +173,20 @@ impl SelfPromptAssembler {
         let mut lines: Vec<String> = Vec::new();
 
         if context.self_knowledge {
-            lines.push(format!(
-                "You are {} v{} (provider: {}, model: {}).",
-                context.name, context.version, context.provider, context.model
-            ));
+            // The default agent renders as the product ("You are codel00p v…");
+            // a named agent renders its identity ("You are `coder`, a codel00p
+            // agent (v…, …)") so the self block reflects the active persona.
+            if context.name == "codel00p" {
+                lines.push(format!(
+                    "You are codel00p v{} (provider: {}, model: {}).",
+                    context.version, context.provider, context.model
+                ));
+            } else {
+                lines.push(format!(
+                    "You are `{}`, a codel00p agent (v{}, provider: {}, model: {}).",
+                    context.name, context.version, context.provider, context.model
+                ));
+            }
 
             let mut caps: Vec<String> = Vec::new();
             if !context.tool_sets.is_empty() {
@@ -358,6 +368,33 @@ mod tests {
         assert!(block.contains("iteration 3/8"));
         assert!(block.contains("context ~41k/200k tokens"));
         assert!(block.contains("plan 2/5 steps done"));
+    }
+
+    #[test]
+    fn named_agent_renders_agent_identity() {
+        let context = AgentSelfContext::new("coder", "0.11.0", "openrouter", "x/y");
+        let block = SelfPromptAssembler
+            .assemble(&context, &AgentSelfState::default())
+            .expect("block present");
+        assert!(
+            block.contains(
+                "You are `coder`, a codel00p agent (v0.11.0, provider: openrouter, model: x/y)."
+            ),
+            "block: {block}"
+        );
+        assert!(!block.contains("You are codel00p v"));
+    }
+
+    #[test]
+    fn default_agent_renders_product_identity() {
+        let context = AgentSelfContext::new("codel00p", "0.11.0", "openrouter", "x/y");
+        let block = SelfPromptAssembler
+            .assemble(&context, &AgentSelfState::default())
+            .expect("block present");
+        assert!(
+            block.contains("You are codel00p v0.11.0 (provider: openrouter, model: x/y)."),
+            "block: {block}"
+        );
     }
 
     #[test]

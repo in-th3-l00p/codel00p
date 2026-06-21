@@ -291,6 +291,71 @@ fn provider_request_places_base_prompt_after_self_and_before_instructions() {
 }
 
 #[test]
+fn provider_request_places_persona_first_ahead_of_self_and_base() {
+    let mut state = SessionState::new(SessionId::from_static("session-persona"));
+    state.push_user(UserMessage::new("Do the work."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_persona("# Persona: coder\nYou are a careful Rust reviewer.")
+        .with_agent_self("You are `coder`, a codel00p agent (v0.0.0, provider: x, model: y).")
+        .with_base_prompt("How you work:\n- Verify before you declare done.");
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    // persona -> self -> base prompt -> user message.
+    assert_eq!(provider_request.messages.len(), 4);
+    assert_eq!(provider_request.messages[0].role, MessageRole::System);
+    assert!(
+        provider_request.messages[0]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("# Persona: coder"),
+        "persona must be the FIRST system block"
+    );
+    assert_eq!(provider_request.messages[1].role, MessageRole::System);
+    assert!(
+        provider_request.messages[1]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("You are `coder`")
+    );
+    assert_eq!(provider_request.messages[2].role, MessageRole::System);
+    assert!(
+        provider_request.messages[2]
+            .content
+            .as_deref()
+            .unwrap()
+            .contains("Verify before you declare done")
+    );
+    assert_eq!(provider_request.messages[3].role, MessageRole::User);
+}
+
+#[test]
+fn no_persona_adds_no_provider_message() {
+    let mut state = SessionState::new(SessionId::from_static("session-no-persona"));
+    state.push_user(UserMessage::new("Do the work."));
+    let request = HarnessInferenceRequest::new(state)
+        .with_agent_self("You are codel00p v0.0.0 (provider: x, model: y).");
+
+    let provider_request =
+        ProviderModelClient::build_provider_request("github", "gpt-4o", &request);
+
+    // No persona block: only the self block + user message (default agent).
+    assert_eq!(provider_request.messages.len(), 2);
+    assert_eq!(provider_request.messages[0].role, MessageRole::System);
+    assert!(
+        provider_request.messages[0]
+            .content
+            .as_deref()
+            .unwrap()
+            .starts_with("You are codel00p")
+    );
+    assert_eq!(provider_request.messages[1].role, MessageRole::User);
+}
+
+#[test]
 fn no_base_prompt_adds_no_provider_message() {
     let mut state = SessionState::new(SessionId::from_static("session-no-base"));
     state.push_user(UserMessage::new("Do the work."));

@@ -19,6 +19,35 @@ fn resolve_execution_backend(workspace: &Path) -> CliResult<Arc<dyn TerminalBack
     )
 }
 
+/// Resolve the active agent's identity for the self block (#13 phase 2).
+///
+/// By the time the harness is built, main has already overridden `CODEL00P_HOME`
+/// to the active agent's home (`<base>/agents/<name>`). We derive the name from:
+/// (1) the sticky active pointer in the true base home, then (2) the home dir's
+/// basename when it sits under an `agents/` dir, falling back to "codel00p" for
+/// the default agent. Returning "codel00p" makes the self block render the
+/// product identity (today's behavior); any other name renders the agent's.
+fn resolve_agent_identity() -> String {
+    let base = crate::agent::registry::base_home();
+    if let Some(name) = crate::agent::registry::active_agent(&base) {
+        return name;
+    }
+    // No sticky pointer: a `--agent` flag run overrode the home without writing
+    // the pointer, so recover the name from the home path when it is an agent
+    // home (`.../agents/<name>`). Otherwise this is the default/base home.
+    let home = crate::settings::home_dir();
+    let is_agent_home = home
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|os| os.to_str())
+        .map(|name| name == "agents")
+        .unwrap_or(false);
+    if is_agent_home && let Some(name) = home.file_name().and_then(|os| os.to_str()) {
+        return name.to_string();
+    }
+    "codel00p".to_string()
+}
+
 /// Map a resolved `agent.execution_backend` value to a backend. Absent or
 /// `local` yields [`LocalBackend`]; `docker` builds a [`DockerBackend`] for
 /// `workspace` from `docker` settings; anything else is a clear error. Kept
@@ -670,8 +699,14 @@ pub(crate) async fn build_agent_harness_with(
         .iter()
         .map(|set| set.as_str().to_string())
         .collect();
+    // Multi-agent personas (#13 phase 2): the home was already overridden to the
+    // active agent's home in main, so `home_dir()` IS the agent home. Derive the
+    // agent identity for the self block from the active pointer (resolved against
+    // the true base), falling back to the home dir's basename, and finally to
+    // "codel00p" for the default agent (no agent active).
+    let agent_identity = resolve_agent_identity();
     let self_context = AgentSelfContext::new(
-        "codel00p",
+        agent_identity.clone(),
         crate::update::current_version(),
         &options.provider,
         &options.model,
@@ -685,6 +720,22 @@ pub(crate) async fn build_agent_harness_with(
         behavior.self_state_enabled(),
     );
     builder = builder.agent_self(self_context).plan_store(plan_store);
+
+    // Persona injection (#13 phase 2): inject the active agent's `persona.md` as
+    // the FIRST system block (the deepest "who I am"), ahead of the self block,
+    // base prompt, and project instructions. The home was already overridden to
+    // the agent home, so the persona file lives at `home_dir()/persona.md`. Only
+    // injected when an agent is active (default agent renders none), the persona
+    // toggle is on, and the file exists and is non-empty.
+    if behavior.persona_enabled() && agent_identity != "codel00p" {
+        let persona_path = crate::settings::home_dir().join("persona.md");
+        if let Ok(text) = std::fs::read_to_string(&persona_path) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                builder = builder.persona(trimmed.to_string());
+            }
+        }
+    }
 
     // Workspace / build-test awareness (#12 T1.3): inject a compact live
     // "Workspace state" block each turn (git branch + working-tree summary, the

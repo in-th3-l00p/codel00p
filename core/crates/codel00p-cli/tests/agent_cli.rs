@@ -11,6 +11,8 @@ mod mcp_http;
 mod mcp_permissions;
 #[path = "agent_cli/mcp_servers.rs"]
 mod mcp_servers;
+#[path = "agent_cli/memory_switch.rs"]
+mod memory_switch;
 #[path = "agent_cli/permission_modes.rs"]
 mod permission_modes;
 #[path = "agent_cli/registry_lifecycle.rs"]

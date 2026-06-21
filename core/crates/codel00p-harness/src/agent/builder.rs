@@ -31,6 +31,7 @@ pub struct AgentHarnessBuilder {
     skill_proposal_sink: Option<Arc<dyn SkillProposalSink>>,
     context_window: Option<ContextWindowState>,
     agent_self: Option<crate::self_context::AgentSelfContext>,
+    persona: Option<String>,
     base_prompt: Option<String>,
     workspace_context: bool,
     plan_store: Option<crate::planning::PlanStore>,
@@ -112,6 +113,15 @@ impl AgentHarnessBuilder {
     /// no tool).
     pub fn agent_self(mut self, agent_self: crate::self_context::AgentSelfContext) -> Self {
         self.agent_self = Some(agent_self);
+        self
+    }
+
+    /// Inject the agent's durable persona ("who I am") as the FIRST system block
+    /// each turn, ahead of the self block, base prompt, and project instructions.
+    /// Pass the persona text (e.g. an agent's `persona.md`). Without this, no
+    /// persona block is injected — exactly the default agent's behavior.
+    pub fn persona(mut self, persona: impl Into<String>) -> Self {
+        self.persona = Some(persona.into());
         self
     }
 
@@ -420,6 +430,7 @@ impl AgentHarnessBuilder {
             skill_proposal_sink: self.skill_proposal_sink,
             context_window: self.context_window,
             agent_self,
+            persona: self.persona,
             base_prompt: self.base_prompt,
             workspace_context: self.workspace_context,
             plan_store: self.plan_store,

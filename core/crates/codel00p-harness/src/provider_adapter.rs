@@ -63,7 +63,15 @@ impl ProviderModelClient {
     ) -> InferenceRequest {
         let mut builder = InferenceRequest::builder(provider, model);
 
-        // Inject the agent "self" block first, so the model reads "who am I"
+        // Inject the durable persona block FIRST — the deepest "who I am" for a
+        // named agent. It precedes the self block (capabilities/run-state), the
+        // base prompt, and project instructions, so persona is the foundation the
+        // model reads before everything else. `None` for the default agent.
+        if let Some(persona) = request.persona() {
+            builder = builder.message(ChatMessage::system(persona.to_string()));
+        }
+
+        // Inject the agent "self" block next, so the model reads "who am I"
         // (identity, capabilities, run-state) before instructions/memory/skills.
         if let Some(agent_self) = request.agent_self() {
             builder = builder.message(ChatMessage::system(agent_self.to_string()));

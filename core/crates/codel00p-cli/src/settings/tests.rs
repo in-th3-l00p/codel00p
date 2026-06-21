@@ -305,6 +305,34 @@ fn behavior_proactive_memory_round_trips_and_defaults_on() {
 }
 
 #[test]
+fn behavior_persona_round_trips_and_defaults_on() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Default (no config): unset, which the helper treats as on.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        assert!(resolved.agent().behavior.persona.is_none());
+        assert!(resolved.agent().behavior.persona_enabled());
+
+        // Set false: round-trips the literal value and effective view.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.persona", "false").expect("set persona");
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.agent().behavior.persona, Some(false));
+        assert!(!resolved.agent().behavior.persona_enabled());
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.persona").unwrap(),
+            Some("false".to_string())
+        );
+
+        // Unsetting prunes back to the default (on).
+        assert!(unset_value(&path, "agent.behavior.persona").expect("unset persona"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(resolved.agent().behavior.persona.is_none());
+        assert!(resolved.agent().behavior.persona_enabled());
+    });
+}
+
+#[test]
 fn behavior_verify_toggles_round_trip_and_defaults() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

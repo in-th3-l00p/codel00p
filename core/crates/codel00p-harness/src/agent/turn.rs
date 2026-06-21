@@ -119,6 +119,13 @@ impl AgentHarness {
             if let Some(context_window) = &self.context_window {
                 request = request.with_context_window(context_window.clone());
             }
+            // Persona ("who I am"): the durable identity block, injected FIRST in
+            // the system prompt (ahead of the self block, base prompt, and project
+            // instructions). `None` for the default agent — no block, exactly
+            // today's behavior.
+            if let Some(persona) = &self.persona {
+                request = request.with_persona(persona.clone());
+            }
             // Self-awareness: refresh the live run-state from the sources in scope
             // here (iteration budget, accumulated usage, context window, plan) and
             // render the compact "self" block. Updating the shared handle also
