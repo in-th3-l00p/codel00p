@@ -32,6 +32,7 @@ pub struct AgentHarnessBuilder {
     context_window: Option<ContextWindowState>,
     agent_self: Option<crate::self_context::AgentSelfContext>,
     base_prompt: Option<String>,
+    workspace_context: bool,
     plan_store: Option<crate::planning::PlanStore>,
     token_sink: Option<Arc<dyn TokenSink>>,
     max_iterations: Option<u32>,
@@ -121,6 +122,15 @@ impl AgentHarnessBuilder {
     /// block is injected (pre-base-prompt behavior).
     pub fn base_prompt(mut self, base_prompt: impl Into<String>) -> Self {
         self.base_prompt = Some(base_prompt.into());
+        self
+    }
+
+    /// Inject the live "Workspace state" system block each turn: the current git
+    /// branch + working-tree summary, the project's detected test/build/lint
+    /// commands, and the files the agent edited this turn. Default off (no block —
+    /// exactly today's behavior); the CLI defaults the user-facing toggle to on.
+    pub fn workspace_context(mut self, enabled: bool) -> Self {
+        self.workspace_context = enabled;
         self
     }
 
@@ -411,6 +421,7 @@ impl AgentHarnessBuilder {
             context_window: self.context_window,
             agent_self,
             base_prompt: self.base_prompt,
+            workspace_context: self.workspace_context,
             plan_store: self.plan_store,
             token_sink: self.token_sink,
             max_iterations: self.max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS),

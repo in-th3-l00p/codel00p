@@ -196,6 +196,23 @@ impl AgentHarness {
                 }
             }
 
+            // Workspace / build-test awareness (#12 T1.3): when enabled, gather the
+            // live workspace state (git status, detected test/build/lint commands,
+            // files edited so far this turn) and inject a compact "Workspace state"
+            // block after skills. Gathering degrades gracefully (omits the git
+            // section when not a repo / git errors) and never fails the turn.
+            if self.workspace_context {
+                let detected = crate::checks::detect_checks(&self.workspace);
+                let context = crate::workspace_context::WorkspaceContext::gather(
+                    &self.workspace,
+                    detected,
+                    &executed_tool_calls,
+                );
+                if let Some(block) = context.render() {
+                    request = request.with_workspace_context(block);
+                }
+            }
+
             // Emit a deterministic context manifest capturing exactly what
             // went into this inference request — instruction files, injected
             // memory ids, advertised tools, and selected skills.  One event

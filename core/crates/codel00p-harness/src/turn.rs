@@ -61,6 +61,11 @@ pub struct HarnessInferenceRequest {
     project_instructions: Option<ProjectInstructions>,
     project_memory: Option<ProjectMemoryContext>,
     skills: Option<SkillContext>,
+    /// The pre-rendered "Workspace state" block (live git status, detected
+    /// test/build/lint commands, files edited this turn). Situational state, so
+    /// it is placed after the instruction-ish blocks (self → base → instructions
+    /// → memory → skills → workspace state).
+    workspace_context: Option<String>,
 }
 
 impl HarnessInferenceRequest {
@@ -78,6 +83,7 @@ impl HarnessInferenceRequest {
             project_instructions: None,
             project_memory: None,
             skills: None,
+            workspace_context: None,
         }
     }
 
@@ -122,6 +128,13 @@ impl HarnessInferenceRequest {
 
     pub fn with_skills(mut self, skills: SkillContext) -> Self {
         self.skills = Some(skills);
+        self
+    }
+
+    /// Attach the pre-rendered "Workspace state" block (see
+    /// [`crate::workspace_context`]). Injected after skills as situational state.
+    pub fn with_workspace_context(mut self, workspace_context: impl Into<String>) -> Self {
+        self.workspace_context = Some(workspace_context.into());
         self
     }
 
@@ -186,6 +199,11 @@ impl HarnessInferenceRequest {
 
     pub fn skills(&self) -> Option<&SkillContext> {
         self.skills.as_ref()
+    }
+
+    /// The pre-rendered "Workspace state" block, if any.
+    pub fn workspace_context(&self) -> Option<&str> {
+        self.workspace_context.as_deref()
     }
 }
 

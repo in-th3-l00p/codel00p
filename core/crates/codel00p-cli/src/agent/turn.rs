@@ -683,6 +683,13 @@ pub(crate) async fn build_agent_harness_with(
     );
     builder = builder.agent_self(self_context).plan_store(plan_store);
 
+    // Workspace / build-test awareness (#12 T1.3): inject a compact live
+    // "Workspace state" block each turn (git branch + working-tree summary, the
+    // project's detected test/build/lint commands, and files edited this turn) so
+    // the agent knows the project's live state without rediscovering it. Default
+    // on; with `workspace_context` off no block is injected (today's behavior).
+    builder = builder.workspace_context(behavior.workspace_context_enabled());
+
     // Base operating prompt ("how I work"): default on, injected after the self
     // block and before project instructions. The planning guidance is included
     // unless `auto_plan` is off. With `base_prompt` off, no base block is added.

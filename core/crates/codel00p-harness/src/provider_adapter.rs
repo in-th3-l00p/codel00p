@@ -92,6 +92,14 @@ impl ProviderModelClient {
             builder = builder.message(ChatMessage::system(prompt));
         }
 
+        // Inject the live "Workspace state" block last among the system blocks:
+        // it is situational state (git status, detected commands, recent edits),
+        // so it sits after the instruction-ish blocks (self -> base ->
+        // instructions -> memory -> skills -> workspace state).
+        if let Some(workspace_context) = request.workspace_context() {
+            builder = builder.message(ChatMessage::system(workspace_context.to_string()));
+        }
+
         for message in request.session_state().messages() {
             builder = builder.message(map_session_message(message));
         }

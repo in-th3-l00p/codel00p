@@ -166,6 +166,12 @@ pub struct BehaviorSettings {
     /// defaults to 3; 0 disables the budget entirely.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_budget: Option<u32>,
+    /// Inject the live "Workspace state" block each turn: the current git branch +
+    /// working-tree summary, the project's detected test/build/lint commands, and
+    /// the files the agent edited this turn. Unset (the default) means enabled; set
+    /// to `false` to inject no workspace-state block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_context: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -187,6 +193,7 @@ impl BehaviorSettings {
         take(&mut self.error_hints, other.error_hints);
         take(&mut self.replan_on_failure, other.replan_on_failure);
         take(&mut self.failure_budget, other.failure_budget);
+        take(&mut self.workspace_context, other.workspace_context);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -254,6 +261,11 @@ impl BehaviorSettings {
     /// Consecutive same-operation failures before the replan nudge. Defaults to 3.
     pub fn failure_budget_value(&self) -> u32 {
         self.failure_budget.unwrap_or(3)
+    }
+
+    /// Whether the live "Workspace state" block is injected. Defaults to on.
+    pub fn workspace_context_enabled(&self) -> bool {
+        self.workspace_context.unwrap_or(true)
     }
 }
 

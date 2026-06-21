@@ -59,6 +59,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.error_hints", ValueKind::Bool),
     ("agent.behavior.replan_on_failure", ValueKind::Bool),
     ("agent.behavior.failure_budget", ValueKind::U32),
+    ("agent.behavior.workspace_context", ValueKind::Bool),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
@@ -147,6 +148,10 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.behavior.failure_budget" => {
             agent.behavior.failure_budget.map(|value| value.to_string())
         }
+        "agent.behavior.workspace_context" => agent
+            .behavior
+            .workspace_context
+            .map(|value| value.to_string()),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -363,6 +368,7 @@ pub fn starter_template() -> String {
          # error_hints = true           # attach error_kind + hint to failed tool results\n\
          # replan_on_failure = true     # nudge to step back/replan after repeated same-op failures\n\
          # failure_budget = 3           # consecutive same-op failures before the replan nudge (0 = off)\n\
+         # workspace_context = true     # inject the live workspace-state block (git status, detected commands, recent edits)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\
