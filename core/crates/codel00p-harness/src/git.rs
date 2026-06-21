@@ -172,7 +172,10 @@ impl Tool for GitCommitTool {
     }
 
     fn description(&self) -> &str {
-        "Create a guarded git commit for tracked workspace changes."
+        "Create a guarded git commit for tracked workspace changes. By default \
+         the commit is refused while any untracked files are present; set \
+         `allow_untracked` to true to commit the staged/tracked changes anyway \
+         (untracked files are left untouched and are not added)."
     }
 
     fn input_schema(&self) -> Value {
@@ -180,7 +183,14 @@ impl Tool for GitCommitTool {
             "type": "object",
             "required": ["message"],
             "properties": {
-                "message": { "type": "string" }
+                "message": { "type": "string" },
+                "allow_untracked": {
+                    "type": "boolean",
+                    "description": "Commit tracked changes even when untracked \
+                                    files are present. Untracked files are not \
+                                    added. Defaults to false (refuse if any \
+                                    untracked files exist)."
+                }
             }
         })
     }
@@ -196,16 +206,27 @@ impl Tool for GitCommitTool {
     ) -> Result<ToolResult, HarnessError> {
         let message = required_string(self.name(), &input, "message")?;
         validate_commit_message(message)?;
+        let allow_untracked = input
+            .get("allow_untracked")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
 
         let status = git_output(self.name(), workspace, &["status", "--porcelain=v1"])?;
         let files = parse_status(&status);
-        if files.iter().any(|file| file["index"] == "untracked") {
+        if !allow_untracked && files.iter().any(|file| file["index"] == "untracked") {
             return Err(tool_failed(
                 self.name(),
                 "refusing to commit while untracked files are present",
             ));
         }
-        if files.is_empty() {
+        // Only the staged/tracked changes are committed. `git add -u` never
+        // stages untracked files, so they remain untracked regardless of
+        // `allow_untracked`.
+        let tracked_changes = files
+            .iter()
+            .filter(|file| file["index"] != "untracked")
+            .count();
+        if tracked_changes == 0 {
             return Err(tool_failed(self.name(), "no changes to commit"));
         }
 
@@ -217,7 +238,7 @@ impl Tool for GitCommitTool {
         Ok(ToolResult::json(json!({
             "sha": sha,
             "subject": first_line(message),
-            "files_changed": files.len(),
+            "files_changed": tracked_changes,
             "output": output.trim(),
         })))
     }
@@ -451,6 +472,68 @@ mod tests {
         assert!(commit["author_name"].is_string());
         assert!(commit["author_email"].is_string());
         assert!(commit["sha"].is_string());
+    }
+
+    #[tokio::test]
+    async fn git_commit_refuses_untracked_by_default() {
+        let (_dir, ws) = repo_with_commit(Some("line one\nCHANGED\n"));
+        fs::write(ws.root().join("new.txt"), "untracked\n").unwrap();
+
+        let err = GitCommitTool
+            .execute(&ws, json!({ "message": "edit" }))
+            .await
+            .unwrap_err();
+
+        assert!(
+            err.to_string().contains("untracked files are present"),
+            "expected untracked refusal, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_commit_allow_untracked_commits_tracked_and_leaves_untracked() {
+        let (_dir, ws) = repo_with_commit(Some("line one\nCHANGED\n"));
+        fs::write(ws.root().join("new.txt"), "untracked\n").unwrap();
+
+        let result = GitCommitTool
+            .execute(&ws, json!({ "message": "edit", "allow_untracked": true }))
+            .await
+            .expect("commit should succeed with allow_untracked");
+
+        // Only the tracked file is counted/committed.
+        assert_eq!(result.content()["files_changed"], 1);
+        assert!(result.content()["sha"].is_string());
+
+        // The untracked file is still untracked (not added).
+        let status = git_output("git_status", &ws, &["status", "--porcelain=v1"]).unwrap();
+        let files = parse_status(&status);
+        assert!(
+            files
+                .iter()
+                .any(|f| f["path"] == "new.txt" && f["index"] == "untracked"),
+            "new.txt should remain untracked, status: {status}"
+        );
+        // The tracked change is gone (committed).
+        assert!(
+            !files.iter().any(|f| f["path"] == "file.txt"),
+            "file.txt change should be committed, status: {status}"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_commit_allow_untracked_with_only_untracked_has_nothing_to_commit() {
+        let (_dir, ws) = repo_with_commit(None);
+        fs::write(ws.root().join("new.txt"), "untracked\n").unwrap();
+
+        let err = GitCommitTool
+            .execute(&ws, json!({ "message": "edit", "allow_untracked": true }))
+            .await
+            .unwrap_err();
+
+        assert!(
+            err.to_string().contains("no changes to commit"),
+            "expected no-changes error, got: {err}"
+        );
     }
 
     #[tokio::test]
