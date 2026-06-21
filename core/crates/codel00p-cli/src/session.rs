@@ -256,6 +256,7 @@ pub(crate) fn agent_event_label(event: &AgentEvent) -> &'static str {
         AgentEvent::ContextManifest { .. } => "context_manifest",
         AgentEvent::VerificationCompleted { .. } => "verification_completed",
         AgentEvent::SelfCritiqueCompleted { .. } => "self_critique_completed",
+        AgentEvent::FailureBudgetExceeded { .. } => "failure_budget_exceeded",
         AgentEvent::TurnCompleted { .. } => "turn_completed",
     }
 }

@@ -318,6 +318,60 @@ fn behavior_verify_toggles_round_trip_and_defaults() {
 }
 
 #[test]
+fn behavior_self_correction_toggles_round_trip_and_defaults() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        // Defaults: error_hints + replan_on_failure ON, failure_budget 3.
+        let resolved = load_layered(dir.path()).expect("load layered");
+        let behavior = &resolved.agent().behavior;
+        assert!(behavior.error_hints.is_none());
+        assert!(behavior.replan_on_failure.is_none());
+        assert!(behavior.failure_budget.is_none());
+        assert!(behavior.error_hints_enabled());
+        assert!(behavior.replan_on_failure_enabled());
+        assert_eq!(behavior.failure_budget_value(), 3);
+
+        // Round-trip explicit values.
+        let path = user_config_path();
+        set_value(&path, "agent.behavior.error_hints", "false").expect("set error_hints");
+        set_value(&path, "agent.behavior.replan_on_failure", "false")
+            .expect("set replan_on_failure");
+        set_value(&path, "agent.behavior.failure_budget", "5").expect("set failure_budget");
+        let resolved = load_layered(dir.path()).expect("reload");
+        let behavior = &resolved.agent().behavior;
+        assert_eq!(behavior.error_hints, Some(false));
+        assert_eq!(behavior.replan_on_failure, Some(false));
+        assert_eq!(behavior.failure_budget, Some(5));
+        assert!(!behavior.error_hints_enabled());
+        assert!(!behavior.replan_on_failure_enabled());
+        assert_eq!(behavior.failure_budget_value(), 5);
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.failure_budget").unwrap(),
+            Some("5".to_string())
+        );
+        assert_eq!(
+            effective_value(&resolved.merged, "agent.behavior.error_hints").unwrap(),
+            Some("false".to_string())
+        );
+
+        // Unsetting prunes back to defaults.
+        for key in [
+            "agent.behavior.error_hints",
+            "agent.behavior.replan_on_failure",
+            "agent.behavior.failure_budget",
+        ] {
+            unset_value(&path, key).expect("unset key");
+        }
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        let behavior = &resolved.agent().behavior;
+        assert!(behavior.error_hints.is_none());
+        assert!(behavior.error_hints_enabled());
+        assert!(behavior.replan_on_failure_enabled());
+        assert_eq!(behavior.failure_budget_value(), 3);
+    });
+}
+
+#[test]
 fn tui_show_advanced_round_trips_and_defaults_unset() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

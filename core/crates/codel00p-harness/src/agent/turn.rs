@@ -3,8 +3,10 @@
 use super::*;
 
 mod hooks;
+mod self_correct;
 mod verify;
 
+use self_correct::FailureTracker;
 use verify::{DonePhase, VerifyState};
 
 impl AgentHarness {
@@ -69,6 +71,10 @@ impl AgentHarness {
         // Verify-before-done + self-critique state, threaded across iterations so
         // the verify→fix cycle is bounded and the reflection step runs once.
         let mut verify_state = VerifyState::new();
+
+        // In-turn error self-correction: tracks consecutive failures of the same
+        // operation so a repeatedly-failing call can trip the replan nudge.
+        let mut failure_tracker = FailureTracker::new();
 
         let budget = IterationBudget::new(self.max_iterations);
         while budget.consume() {
@@ -640,8 +646,13 @@ impl AgentHarness {
                     })
                     .collect();
 
+                // Step-back/replan nudges produced by the failure budget this
+                // batch. Injected after all tool results are recorded so the
+                // transcript keeps the tool results before the nudge.
+                let mut pending_nudges: Vec<String> = Vec::new();
+
                 for (tool_call, result) in batch.iter().zip(results) {
-                    let result = match result {
+                    let mut result = match result {
                         Ok(result) => {
                             for progress in result.progress() {
                                 self.record_event(
@@ -686,6 +697,54 @@ impl AgentHarness {
                         }
                     };
 
+                    // In-turn error self-correction (#12 T0.4). Detect whether
+                    // this call failed (an `error` key or a command `success:
+                    // false`); on success, clear the operation's failure streak.
+                    // On failure: optionally enrich the payload with a classified
+                    // `error_kind` + actionable `hint`, then track consecutive
+                    // same-operation failures and, when the budget is hit, queue
+                    // a step-back/replan nudge.
+                    let signature =
+                        self_correct::operation_signature(tool_call.name(), tool_call.input());
+                    if self_correct::result_is_failure(result.content()) {
+                        let message = self_correct::failure_message(result.content());
+                        if self.self_correct.error_hints {
+                            let mut content = result.content().clone();
+                            self_correct::enrich_failure(&mut content, &message);
+                            result = ToolResult::json(content);
+                        }
+                        let attempts = failure_tracker.record_failure(&signature);
+                        if self.self_correct.replan_on_failure
+                            && self.self_correct.failure_budget > 0
+                            && attempts == self.self_correct.failure_budget
+                        {
+                            let error_kind = crate::error_classify::classify(&message)
+                                .0
+                                .as_str()
+                                .to_string();
+                            self.record_event(
+                                &mut events,
+                                HarnessEvent::FailureBudgetExceeded {
+                                    event_id: EventId::new(),
+                                    session_id: session_state.session_id().clone(),
+                                    turn_id: turn_id.clone(),
+                                    operation: signature.clone(),
+                                    attempts,
+                                    error_kind,
+                                },
+                            )
+                            .await;
+                            pending_nudges.push(self_correct::replan_nudge(
+                                &signature,
+                                attempts,
+                                &message,
+                                self.plan_store.is_some(),
+                            ));
+                        }
+                    } else {
+                        failure_tracker.record_success(&signature);
+                    }
+
                     // Cap the result shown to the model so verbose output cannot
                     // flood the context window; the full output stays in the
                     // executed-call record below and (when truncated) on disk.
@@ -709,6 +768,14 @@ impl AgentHarness {
                         input: tool_call.input().clone(),
                         result,
                     });
+                }
+
+                // Inject any step-back/replan nudges produced this batch, after
+                // every tool result has been recorded, so the model sees the
+                // failing results immediately followed by the nudge to stop
+                // repeating them and reconsider its approach.
+                for nudge in pending_nudges {
+                    session_state.push_message(SessionMessage::user(nudge));
                 }
 
                 index = end;

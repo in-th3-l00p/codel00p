@@ -56,6 +56,9 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.self_critique", ValueKind::Bool),
     ("agent.behavior.verify_iterations", ValueKind::U32),
     ("agent.behavior.test_command", ValueKind::Str),
+    ("agent.behavior.error_hints", ValueKind::Bool),
+    ("agent.behavior.replan_on_failure", ValueKind::Bool),
+    ("agent.behavior.failure_budget", ValueKind::U32),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
     ("tui.show_advanced", ValueKind::Bool),
@@ -136,6 +139,14 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
             .verify_iterations
             .map(|value| value.to_string()),
         "agent.behavior.test_command" => agent.behavior.test_command.clone(),
+        "agent.behavior.error_hints" => agent.behavior.error_hints.map(|value| value.to_string()),
+        "agent.behavior.replan_on_failure" => agent
+            .behavior
+            .replan_on_failure
+            .map(|value| value.to_string()),
+        "agent.behavior.failure_budget" => {
+            agent.behavior.failure_budget.map(|value| value.to_string())
+        }
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
@@ -349,6 +360,9 @@ pub fn starter_template() -> String {
          # self_critique = true         # one reflection turn to catch unverified/over-claimed work\n\
          # verify_iterations = 3        # max verify->fix attempts before completing as unverified\n\
          # test_command = \"cargo test\"  # explicit verification command override (bypasses detection)\n\
+         # error_hints = true           # attach error_kind + hint to failed tool results\n\
+         # replan_on_failure = true     # nudge to step back/replan after repeated same-op failures\n\
+         # failure_budget = 3           # consecutive same-op failures before the replan nudge (0 = off)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

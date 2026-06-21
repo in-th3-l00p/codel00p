@@ -152,6 +152,20 @@ pub struct BehaviorSettings {
     /// instead of detection (e.g. `"cargo test -p mycrate"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_command: Option<String>,
+    /// Attach failure classification (`error_kind`) + an actionable `hint` to
+    /// failed tool results so the model self-corrects deliberately. Unset (the
+    /// default) means enabled; set to `false` for bare `{ "error": ... }`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_hints: Option<bool>,
+    /// When the same operation fails `failure_budget` times in a row, inject a
+    /// step-back/replan nudge so the agent stops looping on a broken call. Unset
+    /// (the default) means enabled; set to `false` to never nudge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replan_on_failure: Option<bool>,
+    /// Consecutive same-operation failures before the replan nudge fires. Unset
+    /// defaults to 3; 0 disables the budget entirely.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_budget: Option<u32>,
 }
 
 impl BehaviorSettings {
@@ -170,6 +184,9 @@ impl BehaviorSettings {
         take(&mut self.self_critique, other.self_critique);
         take(&mut self.verify_iterations, other.verify_iterations);
         take(&mut self.test_command, other.test_command);
+        take(&mut self.error_hints, other.error_hints);
+        take(&mut self.replan_on_failure, other.replan_on_failure);
+        take(&mut self.failure_budget, other.failure_budget);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -221,6 +238,22 @@ impl BehaviorSettings {
     /// Explicit `run_checks` command override for verification, if configured.
     pub fn test_command_value(&self) -> Option<String> {
         self.test_command.clone()
+    }
+
+    /// Whether failed tool results carry classification + hint. Defaults to on.
+    pub fn error_hints_enabled(&self) -> bool {
+        self.error_hints.unwrap_or(true)
+    }
+
+    /// Whether the step-back/replan nudge fires on the failure budget. Defaults
+    /// to on.
+    pub fn replan_on_failure_enabled(&self) -> bool {
+        self.replan_on_failure.unwrap_or(true)
+    }
+
+    /// Consecutive same-operation failures before the replan nudge. Defaults to 3.
+    pub fn failure_budget_value(&self) -> u32 {
+        self.failure_budget.unwrap_or(3)
     }
 }
 

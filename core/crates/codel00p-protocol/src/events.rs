@@ -244,6 +244,23 @@ pub enum AgentEvent {
         /// chose to fix/verify something) rather than completing immediately.
         produced_tool_calls: bool,
     },
+    /// In-turn error self-correction: the same operation (tool + program/args)
+    /// failed `attempts` times in a row, hitting the configured failure budget,
+    /// so a step-back/replan nudge was injected into the conversation. Additive
+    /// and observable; the nudge never aborts the turn (the iteration budget
+    /// still bounds it).
+    FailureBudgetExceeded {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        /// The operation signature that kept failing (e.g.
+        /// `"run_command:cargo build"`).
+        operation: String,
+        /// Consecutive failures of that operation when the nudge fired.
+        attempts: u32,
+        /// Classified kind of the latest failure (e.g. `"compile_error"`).
+        error_kind: String,
+    },
     TurnCompleted {
         event_id: EventId,
         session_id: SessionId,
@@ -513,6 +530,23 @@ mod tests {
 
         let json = serde_json::to_string(&event).expect("serialize");
         assert!(json.contains("\"kind\":\"self_critique_completed\""));
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
+    }
+
+    #[test]
+    fn failure_budget_exceeded_round_trip() {
+        let event = AgentEvent::FailureBudgetExceeded {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            operation: "run_command:cargo build".to_string(),
+            attempts: 3,
+            error_kind: "compile_error".to_string(),
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains("\"kind\":\"failure_budget_exceeded\""));
         let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(event, back);
     }
