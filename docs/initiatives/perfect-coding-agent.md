@@ -96,7 +96,7 @@ by #94 (`self_knowledge`, `self_state`).
 - [ ] **Sandbox matrix + protected-metadata carveouts** — keep `.git`/`.codel00p`
       read-only even in writable roots; on-request escalation on denial signatures
       (Codex internals).
-- [ ] **Smarter memory** — semantic dedup + proactive task-aware recall.
+- [x] **Smarter memory** (#107) — BM25 ranking + proactive task-aware recall + shingle dedup (offline; pluggable embedding seam).
 
 ## Cross-cutting
 
