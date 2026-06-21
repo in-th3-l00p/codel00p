@@ -23,7 +23,9 @@ pub enum HarnessError {
     #[error("inference failed: {message}")]
     InferenceFailed { message: String },
 
-    #[error("turn reached iteration limit: {limit}")]
+    #[error(
+        "reached the {limit}-step iteration limit before finishing — the task needed more steps than allowed. Raise it with `--max-iterations`, `agent.max_iterations`, or Settings → Advanced, or break the task into smaller steps."
+    )]
     IterationLimit { limit: u32 },
 
     #[error("io error: {0}")]
@@ -31,4 +33,22 @@ pub enum HarnessError {
 
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HarnessError;
+
+    #[test]
+    fn iteration_limit_display_is_actionable() {
+        let message = HarnessError::IterationLimit { limit: 25 }.to_string();
+        // The terse limit value is still present.
+        assert!(message.contains("25"));
+        // ...but now framed actionably with concrete next steps.
+        assert!(message.contains("iteration limit"));
+        assert!(message.contains("--max-iterations"));
+        assert!(message.contains("agent.max_iterations"));
+        assert!(message.contains("Settings → Advanced"));
+        assert!(message.contains("smaller steps"));
+    }
 }

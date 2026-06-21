@@ -90,6 +90,19 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
     let max_iterations = agent_settings.max_iterations.unwrap_or(25);
     let verify_iterations = behavior.verify_iterations_value();
     let failure_budget = behavior.failure_budget_value();
+    // The active agent profile and the full set of selectable profile names
+    // (built-in presets ∪ user-defined `[agent.profiles.*]`) for the Settings
+    // profile switcher. Falls back to no active profile + the built-in presets
+    // when the config fails to load.
+    let active_profile = agent_settings.profile.clone();
+    let profile_names = crate::settings::load_layered(&options.workspace)
+        .ok()
+        .map(|resolved| resolved.merged.agent.available_profile_names())
+        .unwrap_or_else(|| {
+            crate::settings::builtin_profiles()
+                .into_keys()
+                .collect::<Vec<_>>()
+        });
 
     let mut app = App::new(
         config,
@@ -107,6 +120,8 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         max_iterations,
         verify_iterations,
         failure_budget,
+        active_profile,
+        profile_names,
     );
 
     let mut terminal =

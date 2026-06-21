@@ -16,7 +16,7 @@
 //! - **`--max-iterations <N>`** — caps inference iterations. When every iteration
 //!   produces tool calls and the cap is hit before a final text turn, the turn
 //!   returns `HarnessError::IterationLimit` and the binary exits non-zero with
-//!   "turn reached iteration limit: N" on stderr. Confirmed from
+//!   the actionable "N-step iteration limit" message on stderr. Confirmed from
 //!   `codel00p-harness/src/agent/turn.rs` (the `while budget.consume()` loop ends
 //!   in `Err(IterationLimit { limit })`) and `iteration_budget.rs`.
 //! - **Tool-result truncation** — the recorded-for-model tool result is capped at
@@ -159,7 +159,7 @@ fn max_iterations_cap_stops_the_loop_and_fails() {
         result.stderr()
     );
     assert!(
-        result.stderr().contains("turn reached iteration limit: 2"),
+        result.stderr().contains("2-step iteration limit"),
         "stderr should report the iteration limit, got:\n{}",
         result.stderr()
     );

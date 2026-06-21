@@ -387,20 +387,7 @@ fn draw_input(app: &App, frame: &mut Frame, area: Rect) {
 
 fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
     let theme = &app.theme;
-    let turn = if app.turn.running {
-        let glyph = SPINNER[(app.tick as usize) % SPINNER.len()];
-        let verb = match &app.turn.current_tool {
-            Some(tool) => super::flavor::tool_verb(tool).to_string(),
-            None => super::flavor::thinking_verb(app.tick).to_string(),
-        };
-        let elapsed = app.tick.saturating_sub(app.turn.started_tick);
-        match super::flavor::charm(app.tick, elapsed) {
-            Some(charm) => format!("{glyph} {verb}… {charm}"),
-            None => format!("{glyph} {verb}…"),
-        }
-    } else {
-        "idle".to_string()
-    };
+    let turn = turn_label(app);
     let org = app
         .cloud
         .viewer
@@ -409,11 +396,11 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
         .map(|org| org.name().to_string())
         .unwrap_or_else(|| "no org".to_string());
 
-    // The status bar has two modes. The default (minimal) bar keeps only the
-    // turn spinner/status, org, and help — the model name and usage/context
-    // meters are hidden until the user opts in via the Settings overlay. The
-    // advanced bar additionally shows provider + model, real token usage, and a
-    // context-used/size meter.
+    // The status bar layers two kinds of information. The progress HUD (spinner +
+    // current tool + step N/max while running, a calm idle bar otherwise) is
+    // ALWAYS shown — it is progress, not "advanced model info". The advanced bar,
+    // gated on `show_advanced`, additionally shows provider + model, real token
+    // usage, a context-used/size meter, and (when priced) the running cost.
     let mut spans = Vec::new();
     if app.show_advanced {
         spans.push(Span::styled(
@@ -429,11 +416,27 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
         format!("  {turn}"),
         Style::default().fg(theme.tool),
     ));
+    // The latest verify-before-done / self-critique / failure-budget verdict, when
+    // one has fired this session. Always shown (it is a trust signal, not model
+    // internals); colored by outcome.
+    if let Some(verification) = &app.verification {
+        let style = if verification.starts_with('⚠') {
+            Style::default().fg(theme.error)
+        } else {
+            Style::default().fg(theme.accent)
+        };
+        spans.push(Span::styled(format!("   {verification}"), style));
+    }
     if app.show_advanced {
         spans.push(Span::styled(
             format!("   {}", usage_label(app)),
             theme.muted(),
         ));
+        // The running cost rides next to the token meter, but only when a provider
+        // actually priced the calls — never a bogus `$0.00` for free/local models.
+        if let Some(cost) = cost_label(app) {
+            spans.push(Span::styled(format!("  {cost}"), theme.muted()));
+        }
         spans.push(Span::styled(
             format!("   {}", context_label(app)),
             theme.muted(),
@@ -442,6 +445,59 @@ fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
     spans.push(Span::styled(format!("   org: {org}"), theme.muted()));
     spans.push(Span::styled("    Ctrl+P menu · Enter send", theme.muted()));
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// The always-on progress HUD text. While a turn is running it shows a spinner,
+/// the current tool with its present-progressive verb (or a thinking verb between
+/// tools), the loop's `step N/max` position, and a long-run charm — e.g.
+/// `⠋ committing git_commit · step 3/25 · still working…`. When idle it returns a
+/// calm `idle` bar. This is shown regardless of `show_advanced`.
+fn turn_label(app: &App) -> String {
+    if !app.turn.running {
+        return "idle".to_string();
+    }
+    let glyph = SPINNER[(app.tick as usize) % SPINNER.len()];
+    // `iterations` is the count of completed steps; the live step is the next one,
+    // clamped to the ceiling so we never render `26/25`.
+    let step = app
+        .turn
+        .iterations
+        .saturating_add(1)
+        .min(app.max_iterations);
+    let progress = format!("step {step}/{}", app.max_iterations);
+    let activity = match &app.turn.current_tool {
+        Some(tool) => format!("{} {tool}", super::flavor::tool_verb(tool)),
+        None => format!("{}…", super::flavor::thinking_verb(app.tick)),
+    };
+    // A reassuring charm once the turn has been running a while; omitted early on.
+    let elapsed = app.tick.saturating_sub(app.turn.started_tick);
+    match super::flavor::charm(app.tick, elapsed) {
+        Some(charm) => format!("{glyph} {activity} · {progress} · {charm}"),
+        None => format!("{glyph} {activity} · {progress}"),
+    }
+}
+
+/// The running-cost HUD: a compact `$0.0021`-style figure from the latest
+/// provider-reported [`CostEstimate`]. Returns `None` when no cost has been
+/// reported (free/local models) or the reported total is zero, so the meter is
+/// omitted rather than showing a misleading `$0.00`.
+fn cost_label(app: &App) -> Option<String> {
+    let cost = app.last_cost.as_ref()?;
+    if cost.total_nanos == 0 {
+        return None;
+    }
+    // Costs are nano-units of the currency (1e9 nanos == 1 unit). USD renders with
+    // a `$`; any other currency falls back to a suffix so the figure is unambiguous.
+    let value = cost.total_nanos as f64 / 1_000_000_000.0;
+    let formatted = if value < 0.01 {
+        format!("{value:.4}")
+    } else {
+        format!("{value:.2}")
+    };
+    match cost.currency.to_ascii_uppercase().as_str() {
+        "USD" | "" => Some(format!("${formatted}")),
+        other => Some(format!("{formatted} {other}")),
+    }
 }
 
 /// The status-bar usage meter: message count and a token total for the current
@@ -766,7 +822,7 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
         .split(inner);
     frame.render_widget(
         Paragraph::new(Span::styled(
-            "  ↑/↓ move · Enter/Space toggle · Esc to close",
+            "  ↑/↓ move · Enter/Space toggle · ←/→ cycle profile · Esc to close",
             app.theme.muted(),
         )),
         rows[0],
@@ -779,8 +835,9 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
         .map(|(index, row)| {
             let is_selected = index == selected;
             let prefix = if is_selected { "› " } else { "  " };
-            // Toggle rows render a checkbox; the "Advanced…" row renders a
-            // chevron since it opens a sub-overlay rather than toggling.
+            // Toggle rows render a checkbox; the profile row shows the active name
+            // in `‹ name ›` arrows; the "Advanced…" row renders a chevron since it
+            // opens a sub-overlay rather than toggling.
             let body = match row {
                 SettingsRow::Pref(pref) => {
                     let on = match pref {
@@ -789,6 +846,10 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
                     };
                     let checkbox = if on { "[x]" } else { "[ ]" };
                     format!("{checkbox} {}", pref.label())
+                }
+                SettingsRow::Profile => {
+                    let active = app.active_profile.as_deref().unwrap_or("(none)");
+                    format!("‹ {active} › {}", row.label())
                 }
                 SettingsRow::Advanced => format!("›   {}", row.label()),
             };
@@ -1234,6 +1295,83 @@ mod tests {
     }
 
     #[test]
+    fn progress_hud_shows_tool_and_step_while_running_without_advanced() {
+        // The progress HUD is always-on: even with advanced info OFF, a running
+        // turn shows a spinner, the current tool, and the step N/max position.
+        let mut app = test_app(); // show_advanced = false
+        app.turn.running = true;
+        app.turn.current_tool = Some("git_commit".to_string());
+        app.turn.iterations = 2; // 2 done → live step 3
+        app.max_iterations = 25;
+        let rendered = render_to_string(&mut app, 120, 12);
+        // git_commit renders with its present-progressive verb.
+        assert!(rendered.contains("committing git_commit"));
+        assert!(rendered.contains("step 3/25"));
+        // Still minimal: no model name / token meter.
+        assert!(!rendered.contains("claude-opus-4-8"));
+        assert!(!rendered.contains("tok"));
+    }
+
+    #[test]
+    fn progress_hud_shows_calm_idle_bar_when_not_running() {
+        let mut app = test_app();
+        app.turn.running = false;
+        let rendered = render_to_string(&mut app, 120, 12);
+        assert!(rendered.contains("idle"));
+        assert!(!rendered.contains("step "));
+    }
+
+    #[test]
+    fn progress_step_clamps_to_the_iteration_ceiling() {
+        let mut app = test_app();
+        app.turn.running = true;
+        app.turn.iterations = 25;
+        app.max_iterations = 25;
+        let rendered = render_to_string(&mut app, 120, 12);
+        // Never renders `26/25`.
+        assert!(rendered.contains("step 25/25"));
+        assert!(!rendered.contains("26/25"));
+    }
+
+    #[test]
+    fn status_bar_shows_cost_when_present() {
+        use codel00p_protocol::CostEstimate;
+        let mut app = test_app();
+        app.show_advanced = true;
+        app.last_cost = Some(CostEstimate {
+            currency: "USD".to_string(),
+            total_nanos: 2_100_000, // $0.0021
+        });
+        let rendered = render_to_string(&mut app, 200, 12);
+        assert!(rendered.contains("$0.0021"));
+    }
+
+    #[test]
+    fn status_bar_omits_cost_when_absent_or_zero() {
+        use codel00p_protocol::CostEstimate;
+        // No cost reported: no `$` figure.
+        let mut app = test_app();
+        app.show_advanced = true;
+        let rendered = render_to_string(&mut app, 200, 12);
+        assert!(!rendered.contains('$'));
+        // A zero cost (free/local model reporting 0) is also omitted, never $0.00.
+        app.last_cost = Some(CostEstimate {
+            currency: "USD".to_string(),
+            total_nanos: 0,
+        });
+        let rendered = render_to_string(&mut app, 200, 12);
+        assert!(!rendered.contains("$0.00"));
+    }
+
+    #[test]
+    fn status_bar_shows_verification_verdict() {
+        let mut app = test_app(); // advanced OFF — verdict is always-on
+        app.verification = Some("✓ Verified: test pass".to_string());
+        let rendered = render_to_string(&mut app, 200, 12);
+        assert!(rendered.contains("Verified"));
+    }
+
+    #[test]
     fn renders_settings_overlay() {
         use crate::tui::overlay::{Overlay, SettingsOverlay};
         let mut app = test_app();
@@ -1263,6 +1401,18 @@ mod tests {
         app.overlay = Overlay::Settings(SettingsOverlay::new());
         let rendered = render_to_string(&mut app, 80, 24);
         assert!(rendered.contains("Advanced…"));
+    }
+
+    #[test]
+    fn settings_overlay_lists_profile_switcher() {
+        use crate::tui::overlay::{Overlay, SettingsOverlay};
+        let mut app = test_app();
+        app.active_profile = Some("careful".to_string());
+        app.overlay = Overlay::Settings(SettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 90, 24);
+        assert!(rendered.contains("Agent profile"));
+        // The active profile is shown inline in the row.
+        assert!(rendered.contains("careful"));
     }
 
     #[test]
