@@ -77,6 +77,15 @@ impl ProviderModelClient {
             builder = builder.message(ChatMessage::system(agent_self.to_string()));
         }
 
+        // Inject the capped curated memory block ("what I durably know" — the
+        // NOTES.md / USER.md notes layer) after the persona + self block but
+        // before the base prompt: it is higher priority than generic operating
+        // guidance, lower than identity. `None` when the files are empty or the
+        // `curated_memory` toggle is off.
+        if let Some(curated_memory) = request.curated_memory() {
+            builder = builder.message(ChatMessage::system(curated_memory.to_string()));
+        }
+
         // Inject the base operating prompt ("how I work") after the self block and
         // before project instructions, so precedence is: who I am (self) -> how I
         // work (base) -> this project's instructions -> memory -> skills.

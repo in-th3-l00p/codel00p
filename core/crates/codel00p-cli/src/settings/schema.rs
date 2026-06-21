@@ -403,6 +403,13 @@ pub struct BehaviorSettings {
     /// `persona.md` is active — the default agent has no persona regardless.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub persona: Option<bool>,
+    /// Inject the active agent's capped curated memory (NOTES.md + USER.md — the
+    /// always-in-context notes layer) as a system block each turn, after the
+    /// persona/self block and before the base prompt. Unset (the default) means
+    /// enabled; set to `false` to never inject the curated-memory block. Only
+    /// produces a block when the files are non-empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curated_memory: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -427,6 +434,7 @@ impl BehaviorSettings {
         take(&mut self.workspace_context, other.workspace_context);
         take(&mut self.proactive_memory, other.proactive_memory);
         take(&mut self.persona, other.persona);
+        take(&mut self.curated_memory, other.curated_memory);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -510,6 +518,13 @@ impl BehaviorSettings {
     /// block only appears when an agent with a non-empty `persona.md` is active).
     pub fn persona_enabled(&self) -> bool {
         self.persona.unwrap_or(true)
+    }
+
+    /// Whether the active agent's capped curated memory block (NOTES.md +
+    /// USER.md) is injected. Defaults to on (the block only appears when the
+    /// files are non-empty).
+    pub fn curated_memory_enabled(&self) -> bool {
+        self.curated_memory.unwrap_or(true)
     }
 }
 

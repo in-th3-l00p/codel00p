@@ -8,6 +8,7 @@ pub mod checks;
 pub mod code_exec;
 pub mod commands;
 pub mod context;
+pub mod curated_memory;
 pub mod delegation;
 pub mod editing;
 pub mod error_classify;
@@ -62,6 +63,10 @@ pub use checks::{CheckSummary, DetectedChecks, RunChecksTool, detect_checks, par
 pub use code_exec::{CodeExecutionEngine, ExecuteCodeTool, code_execution_tools};
 pub use codel00p_protocol::{ContextWindowState, RuntimeErrorKind};
 pub use commands::{ProcessKillTool, ProcessListTool, ProcessOutputTool, RunCommandTool};
+pub use curated_memory::{
+    NOTES_CHAR_CAP, NOTES_FILE, NoteTarget, NoteTool, USER_CHAR_CAP, USER_FILE, append_note,
+    assemble_block as assemble_curated_memory_block, read_note_file, remove_note, replace_note,
+};
 pub use delegation::{
     AgentRole, DelegateTaskTool, DelegatedTask, DelegationOutcome, SubAgentSpawner, TaskIsolation,
     delegation_tools,

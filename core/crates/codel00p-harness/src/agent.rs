@@ -69,6 +69,11 @@ pub struct AgentHarness {
     /// FIRST each turn ahead of the self block, base prompt, and instructions.
     /// `None` for the default agent (no persona file / persona toggle off).
     persona: Option<String>,
+    /// The agent's capped curated memory block ("what I durably know" — the
+    /// NOTES.md / USER.md notes layer), injected each turn AFTER the persona and
+    /// self block but BEFORE the base prompt. `None` when the files are empty or
+    /// the `curated_memory` toggle is off.
+    curated_memory: Option<String>,
     /// The pre-rendered base operating prompt ("how I work"): rigor guidance plus
     /// (when `auto_plan` is on) planning guidance. Injected each turn after the
     /// self block and before project instructions. `None` injects nothing (back

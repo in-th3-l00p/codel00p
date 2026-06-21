@@ -182,6 +182,88 @@ fn config_init_set_get_show_round_trip() {
 }
 
 #[test]
+fn memory_note_add_and_show_round_trip() {
+    let runner = CodelRunner::new();
+
+    // Append an agent note and a user note.
+    runner
+        .run(&["memory", "note", "the project uses cargo"])
+        .assert_success();
+    runner
+        .run(&["memory", "note", "--user", "prefers terse answers"])
+        .assert_success();
+
+    // The files land in the (default agent) base home.
+    assert!(
+        runner.home_path().join("NOTES.md").exists(),
+        "memory note should create NOTES.md under CODEL00P_HOME"
+    );
+    assert!(
+        runner.home_path().join("USER.md").exists(),
+        "memory note --user should create USER.md under CODEL00P_HOME"
+    );
+
+    // `--show` prints both files' current contents.
+    let show = runner.run(&["memory", "note", "--show"]);
+    show.assert_success();
+    assert!(
+        show.stdout().contains("the project uses cargo"),
+        "show should print the agent note; got:\n{}",
+        show.stdout()
+    );
+    assert!(
+        show.stdout().contains("prefers terse answers"),
+        "show should print the user note; got:\n{}",
+        show.stdout()
+    );
+}
+
+#[test]
+fn memory_note_is_per_agent() {
+    let runner = CodelRunner::new();
+
+    // Notes written under agent `alpha`...
+    runner
+        .run(&["--agent", "alpha", "memory", "note", "alpha-only fact"])
+        .assert_success();
+    // ...and a different note under agent `beta`.
+    runner
+        .run(&["--agent", "beta", "memory", "note", "beta-only fact"])
+        .assert_success();
+
+    // Each agent only sees its own note (homes isolate via CODEL00P_HOME).
+    let alpha = runner.run(&["--agent", "alpha", "memory", "note", "--show"]);
+    alpha.assert_success();
+    assert!(
+        alpha.stdout().contains("alpha-only fact"),
+        "alpha should see its own note; got:\n{}",
+        alpha.stdout()
+    );
+    assert!(
+        !alpha.stdout().contains("beta-only fact"),
+        "alpha must not see beta's note; got:\n{}",
+        alpha.stdout()
+    );
+
+    let beta = runner.run(&["--agent", "beta", "memory", "note", "--show"]);
+    beta.assert_success();
+    assert!(
+        beta.stdout().contains("beta-only fact"),
+        "beta should see its own note; got:\n{}",
+        beta.stdout()
+    );
+    assert!(
+        !beta.stdout().contains("alpha-only fact"),
+        "beta must not see alpha's note; got:\n{}",
+        beta.stdout()
+    );
+
+    // On disk, each agent home has its own NOTES.md.
+    assert!(runner.home_path().join("agents/alpha/NOTES.md").exists());
+    assert!(runner.home_path().join("agents/beta/NOTES.md").exists());
+}
+
+#[test]
 fn config_set_rejects_unknown_key() {
     let runner = CodelRunner::new();
     let result = runner.run(&["config", "set", "agent.bogus", "x"]);

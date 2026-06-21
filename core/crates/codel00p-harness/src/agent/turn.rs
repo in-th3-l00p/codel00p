@@ -167,6 +167,13 @@ impl AgentHarness {
                     request = request.with_agent_self(block);
                 }
             }
+            // Inject the capped curated memory ("what I durably know" — the
+            // NOTES.md / USER.md notes layer) after the persona + self block but
+            // before the base prompt: higher priority than generic operating
+            // guidance, lower than identity. `None` when empty / toggle off.
+            if let Some(curated_memory) = &self.curated_memory {
+                request = request.with_curated_memory(curated_memory.clone());
+            }
             // Inject the base operating prompt ("how I work") after the self block
             // and before project instructions, so a project's CODEL00P.md can
             // augment/override it in spirit.

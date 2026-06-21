@@ -32,6 +32,7 @@ pub struct AgentHarnessBuilder {
     context_window: Option<ContextWindowState>,
     agent_self: Option<crate::self_context::AgentSelfContext>,
     persona: Option<String>,
+    curated_memory: Option<String>,
     base_prompt: Option<String>,
     workspace_context: bool,
     plan_store: Option<crate::planning::PlanStore>,
@@ -122,6 +123,16 @@ impl AgentHarnessBuilder {
     /// persona block is injected — exactly the default agent's behavior.
     pub fn persona(mut self, persona: impl Into<String>) -> Self {
         self.persona = Some(persona.into());
+        self
+    }
+
+    /// Inject the agent's capped curated memory ("what I durably know" — the
+    /// NOTES.md / USER.md notes layer) as a system block each turn, placed after
+    /// the persona and self block but before the base prompt. Pass the
+    /// already-assembled block (header + non-empty sections). Without this, no
+    /// curated-memory block is injected.
+    pub fn curated_memory(mut self, curated_memory: impl Into<String>) -> Self {
+        self.curated_memory = Some(curated_memory.into());
         self
     }
 
@@ -431,6 +442,7 @@ impl AgentHarnessBuilder {
             context_window: self.context_window,
             agent_self,
             persona: self.persona,
+            curated_memory: self.curated_memory,
             base_prompt: self.base_prompt,
             workspace_context: self.workspace_context,
             plan_store: self.plan_store,
