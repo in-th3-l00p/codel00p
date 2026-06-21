@@ -194,6 +194,23 @@ impl CheckpointStore {
         // the explicit git-dir/work-tree so no `.git` is created in the
         // workspace.
         self.git(&["init", "-q"])?;
+        // SAFETY-CRITICAL: never let the shadow repo capture any `.git`
+        // directory in the work-tree. Without this, `add -A` would stage the
+        // user's real `.git` *as files*, and a later `restore` (`reset --hard`
+        // + `clean -fd`) could revert/delete real repo internals created after
+        // the snapshot — corrupting the user's actual history. Excluding `.git/`
+        // means it is never staged AND `clean -fd` never removes it (ignored
+        // files are preserved without `-x`). The pattern (no leading slash,
+        // trailing slash) matches the top-level real repo and any nested `.git`.
+        let exclude_path = self.shadow_git_dir.join("info").join("exclude");
+        if let Some(parent) = exclude_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                tool_failed("checkpoints", format!("creating shadow exclude: {error}"))
+            })?;
+        }
+        std::fs::write(&exclude_path, ".git/\n").map_err(|error| {
+            tool_failed("checkpoints", format!("writing shadow exclude: {error}"))
+        })?;
         Ok(())
     }
 
@@ -658,8 +675,66 @@ mod tests {
             status_before,
             "status unchanged (clean)"
         );
-        // The shadow ops captured the real repo's `.git` as files but never
-        // created a second `.git`; the real one is right where it was.
+        // The shadow repo excludes `.git/`, so it never captured the real repo's
+        // internals; the real `.git` is right where it was.
+        assert!(root.join(".git").is_dir(), "real .git intact");
+    }
+
+    /// SAFETY-CRITICAL regression: if the user commits to the real repo *after* a
+    /// checkpoint and then restores it, the new commit must survive — restoring a
+    /// checkpoint rolls back the working tree, never the real git history. This
+    /// fails if the shadow repo captures `.git/` (then `reset --hard`/`clean`
+    /// would revert/delete real objects).
+    #[test]
+    fn real_repo_commit_after_checkpoint_survives_restore() {
+        let base = tempfile::tempdir().unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let root = work.path();
+        let run = |args: &[&str]| {
+            let out = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {:?}", out);
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        run(&["init", "-q"]);
+        run(&["config", "user.email", "real@example.com"]);
+        run(&["config", "user.name", "Real User"]);
+        fs::write(root.join("file.txt"), "v1\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "commit A"]);
+
+        let store = CheckpointStore::new(base.path(), Workspace::new(root).unwrap().root());
+        let cp = store.snapshot(Some("before B")).unwrap();
+
+        // The user commits B to the REAL repo after the checkpoint.
+        fs::write(root.join("file.txt"), "v2\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "commit B"]);
+        let commit_b = run(&["rev-parse", "HEAD"]);
+
+        // Restore the older checkpoint.
+        store.restore(&cp.id, RestoreMode::Files).unwrap();
+
+        // Commit B must still exist and still be HEAD — the real history is intact.
+        assert_eq!(
+            run(&["rev-parse", "HEAD"]),
+            commit_b,
+            "commit B is still HEAD"
+        );
+        assert!(
+            run(&["log", "--format=%s"]).contains("commit B"),
+            "commit B survives in the real repo log"
+        );
+        // Its object is reachable (would be gone if the shadow had cleaned .git).
+        Command::new("git")
+            .args(["cat-file", "-e", &commit_b])
+            .current_dir(root)
+            .status()
+            .map(|s| assert!(s.success(), "commit B object must still exist"))
+            .unwrap();
         assert!(root.join(".git").is_dir(), "real .git intact");
     }
 
