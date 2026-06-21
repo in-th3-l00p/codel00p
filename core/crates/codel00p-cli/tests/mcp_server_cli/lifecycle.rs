@@ -203,7 +203,9 @@ fn mcp_serve_can_create_and_review_project_memory() {
         .as_str()
         .expect("similar text");
     assert!(similar_text.contains(r#""id":"mem-mcp-1""#));
-    assert!(similar_text.contains(r#""score":89"#));
+    // Similarity now uses token-bigram (shingle) Jaccard, not unigram Jaccard, so
+    // the reworded near-duplicate scores 86 (was 89). Still well above threshold.
+    assert!(similar_text.contains(r#""score":86"#));
     assert!(similar_text.contains(r#""source":{"session_id":"session-mcp","turn_id":"turn-mcp"}"#));
     assert!(similar_text.contains(r#""source_uri":"codel00p://sessions/session-mcp""#));
 

@@ -57,7 +57,51 @@ fn finds_near_duplicate_active_memory() {
     assert_eq!(similar.len(), 1);
     assert_eq!(similar[0].entry().id(), "mem-original");
     assert_eq!(similar[0].entry().status(), MemoryStatus::Approved);
-    assert_eq!(similar[0].score(), 75);
+    // Similarity now uses token-bigram (shingle) Jaccard rather than unigram
+    // Jaccard, so a reworded near-duplicate scores higher (83 vs the old 75):
+    // shared phrasing ("run pnpm", "pnpm verify", "verify before", "before
+    // pushing") is rewarded, which is exactly the merge-candidate signal we want.
+    assert_eq!(similar[0].score(), 83);
+}
+
+#[test]
+fn shingle_similarity_catches_reworded_near_duplicate() {
+    // Two memories with the same meaning but reworded. Their unigram bag-of-words
+    // overlap is modest (different connective/order words), but they share whole
+    // bigrams ("cargo fmt", "cargo clippy", "before committing"), so shingle
+    // Jaccard surfaces them as a strong merge candidate.
+    let mut store = InMemoryMemoryStore::default();
+    store
+        .create_candidate(MemoryCandidateInput::new(
+            "mem-a",
+            project(),
+            MemoryKind::Convention,
+            "Always run cargo fmt and cargo clippy before committing changes.",
+            source(),
+        ))
+        .expect("create first");
+    store
+        .review("mem-a", ReviewDecision::approve("alice"))
+        .expect("approve first");
+
+    let similar = store
+        .similar_active(
+            MemorySimilarityQuery::new(
+                project(),
+                MemoryKind::Convention,
+                "Before committing changes, always run cargo clippy and cargo fmt.",
+            )
+            .with_min_score(60),
+        )
+        .expect("find similar memory");
+
+    assert_eq!(similar.len(), 1, "reworded duplicate should be detected");
+    assert_eq!(similar[0].entry().id(), "mem-a");
+    assert!(
+        similar[0].score() >= 60,
+        "reworded near-duplicate scored only {}",
+        similar[0].score()
+    );
 }
 
 #[test]
@@ -123,5 +167,7 @@ fn detects_stale_approved_memory_superseded_by_newer_active_memory() {
     assert_eq!(stale.len(), 1);
     assert_eq!(stale[0].entry().id(), "mem-original");
     assert_eq!(stale[0].newer_entry().id(), "mem-newer");
-    assert_eq!(stale[0].score(), 75);
+    // Shingle (token-bigram) Jaccard scores the reworded supersession at 83,
+    // up from the old unigram-Jaccard 75 — see `finds_near_duplicate_active_memory`.
+    assert_eq!(stale[0].score(), 83);
 }

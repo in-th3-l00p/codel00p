@@ -159,7 +159,9 @@ fn memory_approve_then_inject_into_second_run() {
     let provider2 = MockProvider::start().assistant_text("Done with second run.");
     // Reattach a new provider; the runner keeps the same CODEL00P_HOME.
     let runner = runner.with_provider(&provider2);
-    let run2 = runner.run(&["agent", "run", "Do a second task."]);
+    // Proactive task-aware recall (default on) ranks approved memory against the
+    // turn's task text, so turn 2's prompt overlaps the approved fact content.
+    let run2 = runner.run(&["agent", "run", "Tell me the approved fact content."]);
     run2.assert_success();
 
     // 2a. ContextManifest must list the approved id in injected_memory_ids.

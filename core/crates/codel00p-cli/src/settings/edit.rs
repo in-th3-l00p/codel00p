@@ -60,6 +60,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.replan_on_failure", ValueKind::Bool),
     ("agent.behavior.failure_budget", ValueKind::U32),
     ("agent.behavior.workspace_context", ValueKind::Bool),
+    ("agent.behavior.proactive_memory", ValueKind::Bool),
     ("agent.profile", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
@@ -216,6 +217,10 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.behavior.workspace_context" => agent
             .behavior
             .workspace_context
+            .map(|value| value.to_string()),
+        "agent.behavior.proactive_memory" => agent
+            .behavior
+            .proactive_memory
             .map(|value| value.to_string()),
         "agent.profile" => agent.profile.clone(),
         key if key.starts_with("agent.profiles.") => profile_effective_value(agent, key),
@@ -446,6 +451,7 @@ pub fn starter_template() -> String {
          # replan_on_failure = true     # nudge to step back/replan after repeated same-op failures\n\
          # failure_budget = 3           # consecutive same-op failures before the replan nudge (0 = off)\n\
          # workspace_context = true     # inject the live workspace-state block (git status, detected commands, recent edits)\n\
+         # proactive_memory = true      # recall project memory relevant to the current task (BM25, offline)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

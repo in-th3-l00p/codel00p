@@ -498,7 +498,7 @@ pub(crate) async fn build_agent_harness_with(
     let execution_backend = resolve_execution_backend(&options.workspace)?;
     let workspace = Workspace::with_backend(&options.workspace, execution_backend.clone())
         .map_err(|error| error.to_string())?;
-    let memory_provider = CliProjectMemoryProvider::new(config.clone()).with_limit(8);
+    let mut memory_provider = CliProjectMemoryProvider::new(config.clone()).with_limit(8);
     let memory_sink = CliMemoryCandidateSink::new(config.clone());
     let memory_extractor = ExplicitTurnMemoryExtractor::new(config.project.clone())
         .with_tag("agent")
@@ -528,6 +528,9 @@ pub(crate) async fn build_agent_harness_with(
         .ok()
         .map(|resolved| resolved.merged.agent.behavior)
         .unwrap_or_default();
+    // Proactive task-aware memory recall (default on): rank approved memory
+    // against the turn's task text (BM25, offline). Off ⇒ filter-only retrieval.
+    memory_provider = memory_provider.with_proactive(behavior.proactive_memory_enabled());
     let mut tools = plugins.apply_to_tool_registry(
         build_tool_registry(&options.tool_sets, mcp_servers, execution_backend).await?,
     );

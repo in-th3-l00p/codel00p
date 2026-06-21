@@ -7,6 +7,7 @@ mod error;
 mod extraction;
 mod inputs;
 mod query;
+mod ranking;
 mod records;
 mod repository;
 mod review;
@@ -20,6 +21,7 @@ pub use query::{
     MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRetrievalQuery, MemorySimilarityQuery,
     MemoryStalenessQuery,
 };
+pub use ranking::{Bm25Ranker, MemoryRanker, RankCandidate, RankedCandidate};
 pub use records::{
     MemoryQuality, MemoryRecord, QualityMemory, RankedMemory, RetrievedMemory, SimilarMemory,
     StaleMemory,

@@ -111,7 +111,9 @@ fn mcp_serve_exposes_stale_memory_review_queue() {
     assert_eq!(stale_items[0]["id"], "mem-stale-original");
     assert_eq!(stale_items[0]["status"], "approved");
     assert_eq!(stale_items[0]["kind"], "workflow");
-    assert_eq!(stale_items[0]["score"], 75);
+    // Shingle (token-bigram) Jaccard scores this reworded supersession at 83
+    // (was 75 under unigram Jaccard); still above the threshold.
+    assert_eq!(stale_items[0]["score"], 83);
     assert_eq!(stale_items[0]["newer"]["id"], "mem-stale-newer");
     assert_eq!(stale_items[0]["newer"]["status"], "candidate");
     assert_eq!(

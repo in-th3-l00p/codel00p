@@ -287,10 +287,12 @@ fn agent_run_extracts_reviewed_memory_and_reuses_approved_memory() {
     );
     assert!(approve.status.success(), "stderr: {}", stderr(&approve));
 
+    // Proactive task-aware recall (default on) ranks approved memory against the
+    // turn's task text, so the prompt must overlap the memory for it to surface.
     let second = server.mock(|when, then| {
         when.method(POST)
             .path("/chat/completions")
-            .body_includes("Use memory.")
+            .body_includes("How do I run pnpm verify before pushing?")
             .body_includes("Project memory:")
             .body_includes("kind: workflow")
             .body_includes("Run pnpm verify before pushing main.");
@@ -312,7 +314,7 @@ fn agent_run_extracts_reviewed_memory_and_reuses_approved_memory() {
         &[
             "agent",
             "run",
-            "Use memory.",
+            "How do I run pnpm verify before pushing?",
             "--workspace",
             workspace.to_str().expect("workspace path"),
             "--provider",

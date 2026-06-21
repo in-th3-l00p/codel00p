@@ -389,6 +389,13 @@ pub struct BehaviorSettings {
     /// to `false` to inject no workspace-state block.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_context: Option<bool>,
+    /// Proactively recall project memory relevant to the current task: rank
+    /// approved memory against the latest user message (BM25, offline) so the
+    /// most relevant memories surface automatically each turn. Unset (the
+    /// default) means enabled; set to `false` to ignore the task and retrieve
+    /// memory by configured filters only (prior behavior).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proactive_memory: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -411,6 +418,7 @@ impl BehaviorSettings {
         take(&mut self.replan_on_failure, other.replan_on_failure);
         take(&mut self.failure_budget, other.failure_budget);
         take(&mut self.workspace_context, other.workspace_context);
+        take(&mut self.proactive_memory, other.proactive_memory);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -483,6 +491,11 @@ impl BehaviorSettings {
     /// Whether the live "Workspace state" block is injected. Defaults to on.
     pub fn workspace_context_enabled(&self) -> bool {
         self.workspace_context.unwrap_or(true)
+    }
+
+    /// Whether proactive task-aware memory recall is enabled. Defaults to on.
+    pub fn proactive_memory_enabled(&self) -> bool {
+        self.proactive_memory.unwrap_or(true)
     }
 }
 

@@ -97,7 +97,10 @@ async fn context_manifest_event_emitted_with_correct_fields() {
         .workspace(workspace)
         .tools(ToolRegistry::read_only_defaults())
         .project_memory_provider(
+            // Static filter-only retrieval: this test asserts manifest mechanics
+            // (injected_memory_ids), not relevance ranking, so keep proactive off.
             MemoryRepositoryProjectMemoryProvider::new(project, store)
+                .with_proactive(false)
                 .with_kind(MemoryKind::Architecture)
                 .with_tag("harness"),
         )
@@ -203,46 +206,48 @@ async fn content_hash_changes_when_injected_memory_changes() {
     };
 
     // Build a helper that creates a harness with exactly one approved memory entry.
-    let run_with_memory_id = |ws: Workspace,
-                              memory_id: &'static str,
-                              memory_content: &'static str| {
-        let project = ProjectRef::new("project-hash-change", "codel00p");
-        let source = MemorySource::turn(
-            SessionId::from_static("session-hash-change-source"),
-            TurnId::from_static("turn-hash-change-source"),
-        );
-        let mut store = InMemoryMemoryStore::default();
-        store
-            .create_candidate(MemoryCandidateInput::new(
-                memory_id,
-                project.clone(),
-                MemoryKind::Architecture,
-                memory_content,
-                source,
-            ))
-            .expect("create memory");
-        store
-            .review(memory_id, ReviewDecision::approve("alice"))
-            .expect("approve memory");
-        let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
-            "github", "gpt-4o", "Done.",
-        )]);
-        async move {
-            AgentHarness::builder()
-                .model_client(model)
-                .workspace(ws)
-                .tools(ToolRegistry::read_only_defaults())
-                .project_memory_provider(MemoryRepositoryProjectMemoryProvider::new(project, store))
-                .build()
-                .expect("build harness")
-                .run_turn(
-                    SessionId::from_static("session-hash-change"),
-                    UserMessage::new("Check."),
-                )
-                .await
-                .expect("run turn")
-        }
-    };
+    let run_with_memory_id =
+        |ws: Workspace, memory_id: &'static str, memory_content: &'static str| {
+            let project = ProjectRef::new("project-hash-change", "codel00p");
+            let source = MemorySource::turn(
+                SessionId::from_static("session-hash-change-source"),
+                TurnId::from_static("turn-hash-change-source"),
+            );
+            let mut store = InMemoryMemoryStore::default();
+            store
+                .create_candidate(MemoryCandidateInput::new(
+                    memory_id,
+                    project.clone(),
+                    MemoryKind::Architecture,
+                    memory_content,
+                    source,
+                ))
+                .expect("create memory");
+            store
+                .review(memory_id, ReviewDecision::approve("alice"))
+                .expect("approve memory");
+            let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+                "github", "gpt-4o", "Done.",
+            )]);
+            async move {
+                AgentHarness::builder()
+                    .model_client(model)
+                    .workspace(ws)
+                    .tools(ToolRegistry::read_only_defaults())
+                    .project_memory_provider(
+                        MemoryRepositoryProjectMemoryProvider::new(project, store)
+                            .with_proactive(false),
+                    )
+                    .build()
+                    .expect("build harness")
+                    .run_turn(
+                        SessionId::from_static("session-hash-change"),
+                        UserMessage::new("Check."),
+                    )
+                    .await
+                    .expect("run turn")
+            }
+        };
 
     let outcome_a = run_with_memory_id(workspace_a, "mem-x", "Memory X.").await;
     let outcome_b = run_with_memory_id(workspace_b, "mem-y", "Memory Y.").await;

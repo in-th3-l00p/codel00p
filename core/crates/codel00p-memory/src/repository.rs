@@ -64,12 +64,13 @@ pub trait MemoryRepository {
 
     fn retrieve(&self, query: MemoryQuery) -> Result<Vec<RetrievedMemory>, MemoryError>;
 
-    /// Ranks approved project memory by lexical similarity of the query string
-    /// against each memory's content. Deterministic filters (kind/tag/sensitivity)
-    /// are applied first to bound the candidate set, then results are ordered by
-    /// descending score with ties broken by memory id. Reuses the same token
-    /// similarity scorer as `similar_active`, so ranking is consistent across the
-    /// product. Offline: no embeddings, no network.
+    /// Ranks approved project memory against the query string with BM25.
+    /// Deterministic filters (kind/tag/sensitivity/visibility) are applied first
+    /// to bound the candidate set, which then forms the corpus BM25 scores over
+    /// (term-frequency saturation + inverse-document-frequency). Raw BM25 scores
+    /// are mapped onto the 0..=100 scale; results are ordered by descending score
+    /// with ties broken by memory id. Offline: no embeddings, no network. See
+    /// [`crate::Bm25Ranker`] / [`crate::MemoryRanker`] for the pluggable seam.
     fn retrieve_ranked(
         &self,
         query: MemoryRetrievalQuery,

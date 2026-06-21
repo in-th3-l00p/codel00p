@@ -12,7 +12,7 @@ use crate::{
     MemoryRetrievalQuery, MemoryRevision, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery,
     QualityMemory, RankedMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
     StorageBackedMemoryStore,
-    records::{content_tokens, token_similarity_score},
+    ranking::{Bm25Ranker, MemoryRanker, RankCandidate, shingle_similarity, tokenize},
 };
 
 const MEMORY_COLLECTION: &str = "memory_entries";
@@ -426,12 +426,11 @@ where
         &self,
         query: MemoryRetrievalQuery,
     ) -> Result<Vec<RankedMemory>, MemoryError> {
-        let query_tokens = content_tokens(&query.query);
-        let mut ranked = Vec::new();
-
+        // Deterministic filters first, so the candidate set is bounded and
+        // reproducible before any ranking happens. The surviving records form the
+        // corpus over which BM25 computes inverse-document-frequency.
+        let mut filtered = Vec::new();
         for record in self.records()? {
-            // Deterministic filters first, so the candidate set is bounded and
-            // reproducible before any ranking happens.
             if record.entry().status() != MemoryStatus::Approved {
                 continue;
             }
@@ -470,16 +469,30 @@ where
                 continue;
             }
 
-            // Reuse the same token similarity scorer as near-duplicate detection
-            // so retrieval ranking stays consistent with the rest of the product.
-            let score =
-                token_similarity_score(&query_tokens, &content_tokens(record.entry().content()));
-            if score < query.min_score {
-                continue;
-            }
-
-            ranked.push(RankedMemory { record, score });
+            filtered.push(record);
         }
+
+        // BM25 ranking over the filtered corpus. Scores are mapped onto the
+        // existing 0..=100 scale: a near-perfect match lands near 100 and a
+        // candidate sharing no query term scores 0, so the `min_score` threshold
+        // keeps its prior meaning (default 1 ⇒ at least one query term must hit).
+        // Offline: no embeddings, no network — see `ranking::Bm25Ranker`.
+        let query_terms = tokenize(&query.query);
+        let candidates: Vec<RankCandidate<usize>> = filtered
+            .iter()
+            .enumerate()
+            .map(|(index, record)| RankCandidate::new(index, tokenize(record.entry().content())))
+            .collect();
+        let scored = Bm25Ranker.rank(&query_terms, &candidates);
+
+        let mut ranked: Vec<RankedMemory> = scored
+            .into_iter()
+            .filter(|candidate| candidate.score >= query.min_score)
+            .map(|candidate| RankedMemory {
+                record: filtered[candidate.key].clone(),
+                score: candidate.score,
+            })
+            .collect();
 
         ranked.sort_by(|left, right| {
             right
@@ -497,7 +510,6 @@ where
         &self,
         query: MemorySimilarityQuery,
     ) -> Result<Vec<SimilarMemory>, MemoryError> {
-        let query_tokens = content_tokens(&query.content);
         let mut similar = Vec::new();
 
         for record in self.records()? {
@@ -510,7 +522,10 @@ where
                 continue;
             }
 
-            let score = token_similarity_score(&query_tokens, &content_tokens(entry.content()));
+            // Shingle (token n-gram) Jaccard catches reworded near-duplicates that
+            // bag-of-words/substring matching misses, strengthening merge-candidate
+            // detection. The human review gate is unchanged — this only ranks.
+            let score = shingle_similarity(&query.content, entry.content());
             if score < query.min_score {
                 continue;
             }
@@ -550,7 +565,6 @@ where
                 continue;
             }
 
-            let older_tokens = content_tokens(older_entry.content());
             let mut best_newer: Option<StaleMemory> = None;
 
             for newer in records
@@ -568,8 +582,7 @@ where
                     continue;
                 }
 
-                let score =
-                    token_similarity_score(&older_tokens, &content_tokens(newer_entry.content()));
+                let score = shingle_similarity(older_entry.content(), newer_entry.content());
                 if score < query.min_score {
                     continue;
                 }

@@ -59,8 +59,8 @@ pub struct SimilarMemory {
     pub(crate) score: u8,
 }
 
-/// An approved memory matched by free-text retrieval, carrying its lexical
-/// similarity score against the query.
+/// An approved memory matched by free-text retrieval, carrying its BM25
+/// relevance score (mapped to 0..=100) against the query.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RankedMemory {
     pub(crate) record: MemoryRecord,
@@ -162,16 +162,6 @@ pub(crate) fn content_tokens(content: &str) -> BTreeSet<String> {
         .filter(|token| !token.is_empty())
         .map(str::to_lowercase)
         .collect()
-}
-
-pub(crate) fn token_similarity_score(left: &BTreeSet<String>, right: &BTreeSet<String>) -> u8 {
-    if left.is_empty() || right.is_empty() {
-        return 0;
-    }
-
-    let intersection = left.intersection(right).count();
-    let union = left.union(right).count();
-    (((intersection * 100) + (union / 2)) / union) as u8
 }
 
 pub(crate) fn score_memory_entry(entry: &MemoryEntry) -> MemoryQuality {
