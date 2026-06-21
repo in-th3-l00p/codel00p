@@ -10,8 +10,8 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs};
 use super::app::App;
 use super::conversation::{Block as ChatBlock, ToolState};
 use super::overlay::{
-    EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher, SettingsOverlay, SettingsPref,
-    UpdatePrompt,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, EntityBrowser, EntityTab, ModelPicker,
+    Overlay, SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::{Picker, PickerItem};
 use super::theme::Theme;
@@ -55,6 +55,7 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
         Overlay::Command(palette) => draw_command(app, frame, palette),
         Overlay::Settings(settings) => draw_settings(app, frame, settings),
+        Overlay::AdvancedSettings(advanced) => draw_advanced_settings(app, frame, advanced),
         Overlay::UpdatePrompt(prompt) => draw_update_prompt(app, frame, prompt),
     }
 }
@@ -772,25 +773,116 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
     );
 
     let selected = settings.selected;
-    let items: Vec<ListItem> = SettingsPref::ORDER
+    let items: Vec<ListItem> = SettingsRow::ORDER
         .iter()
         .enumerate()
-        .map(|(index, pref)| {
-            let on = match pref {
-                SettingsPref::ShowAdvanced => app.show_advanced,
-                SettingsPref::CheckUpdates => app.check_updates,
-                SettingsPref::SelfKnowledge => app.self_knowledge,
-                SettingsPref::SelfState => app.self_state,
-                SettingsPref::BasePrompt => app.base_prompt,
-                SettingsPref::AutoPlan => app.auto_plan,
-            };
+        .map(|(index, row)| {
             let is_selected = index == selected;
             let prefix = if is_selected { "› " } else { "  " };
-            let checkbox = if on { "[x]" } else { "[ ]" };
+            // Toggle rows render a checkbox; the "Advanced…" row renders a
+            // chevron since it opens a sub-overlay rather than toggling.
+            let body = match row {
+                SettingsRow::Pref(pref) => {
+                    let on = match pref {
+                        SettingsPref::ShowAdvanced => app.show_advanced,
+                        SettingsPref::CheckUpdates => app.check_updates,
+                    };
+                    let checkbox = if on { "[x]" } else { "[ ]" };
+                    format!("{checkbox} {}", pref.label())
+                }
+                SettingsRow::Advanced => format!("›   {}", row.label()),
+            };
             ListItem::new(Line::from(vec![
                 Span::styled(prefix, Style::default().fg(app.theme.accent)),
                 Span::styled(
-                    format!("{checkbox} {}", pref.label()),
+                    body,
+                    if is_selected {
+                        app.theme.selection()
+                    } else {
+                        Style::default()
+                    },
+                ),
+                Span::styled(format!("  {}", row.hint()), app.theme.muted()),
+            ]))
+        })
+        .collect();
+    frame.render_widget(List::new(items), rows[1]);
+}
+
+/// Draws the Advanced settings sub-overlay: the harness-loop knobs (iteration
+/// count + numeric/boolean internals). Numeric rows show their value inline with
+/// `‹ N ›` arrows; boolean rows show a checkbox. A help line explains these
+/// affect the agent loop.
+fn draw_advanced_settings(app: &App, frame: &mut Frame, advanced: &AdvancedSettingsOverlay) {
+    let area = centered_rect(56, 50, frame.area());
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(app.theme.overlay_border))
+        .title(" settings · advanced ");
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(1),
+        ])
+        .split(inner);
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  ↑/↓ move · ←/→ or -/+ adjust · Enter/Space toggle · Esc back",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  These tune the agent loop — change with care.",
+            app.theme.muted(),
+        )),
+        rows[1],
+    );
+
+    let selected = advanced.selected;
+    let items: Vec<ListItem> = AdvancedPref::ORDER
+        .iter()
+        .enumerate()
+        .map(|(index, pref)| {
+            let is_selected = index == selected;
+            let prefix = if is_selected { "› " } else { "  " };
+            let value = match pref.kind() {
+                AdvancedKind::Number { .. } => {
+                    let current = match pref {
+                        AdvancedPref::MaxIterations => app.max_iterations,
+                        AdvancedPref::VerifyIterations => app.verify_iterations,
+                        AdvancedPref::FailureBudget => app.failure_budget,
+                        _ => 0,
+                    };
+                    format!("‹ {current:>3} ›")
+                }
+                AdvancedKind::Bool => {
+                    let on = match pref {
+                        AdvancedPref::SelfKnowledge => app.self_knowledge,
+                        AdvancedPref::SelfState => app.self_state,
+                        AdvancedPref::BasePrompt => app.base_prompt,
+                        AdvancedPref::AutoPlan => app.auto_plan,
+                        _ => false,
+                    };
+                    if on {
+                        "  [x]  ".to_string()
+                    } else {
+                        "  [ ]  ".to_string()
+                    }
+                }
+            };
+            // Left-pad the label to a fixed column so the values line up.
+            ListItem::new(Line::from(vec![
+                Span::styled(prefix, Style::default().fg(app.theme.accent)),
+                Span::styled(
+                    format!("{:<22}{value}", pref.label()),
                     if is_selected {
                         app.theme.selection()
                     } else {
@@ -801,7 +893,7 @@ fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
             ]))
         })
         .collect();
-    frame.render_widget(List::new(items), rows[1]);
+    frame.render_widget(List::new(items), rows[2]);
 }
 
 /// Draws the update-prompt panel: the current → latest version and the two
@@ -1162,6 +1254,33 @@ mod tests {
         assert!(rendered.contains("Check for updates on start"));
         // Default is on, so the checkbox is checked.
         assert!(rendered.contains("[x] Check for updates on start"));
+    }
+
+    #[test]
+    fn settings_overlay_shows_advanced_entry() {
+        use crate::tui::overlay::{Overlay, SettingsOverlay};
+        let mut app = test_app();
+        app.overlay = Overlay::Settings(SettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 80, 24);
+        assert!(rendered.contains("Advanced…"));
+    }
+
+    #[test]
+    fn renders_advanced_settings_overlay_with_values() {
+        use crate::tui::overlay::{AdvancedSettingsOverlay, Overlay};
+        let mut app = test_app();
+        app.max_iterations = 42;
+        app.overlay = Overlay::AdvancedSettings(AdvancedSettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 90, 30);
+        assert!(rendered.contains("advanced"));
+        // Numeric rows render their current value inline.
+        assert!(rendered.contains("Max iterations"));
+        assert!(rendered.contains("42"));
+        assert!(rendered.contains("Verify iterations"));
+        assert!(rendered.contains("Failure budget"));
+        // The loop-internal toggles moved here.
+        assert!(rendered.contains("Self-knowledge"));
+        assert!(rendered.contains("Auto-plan guidance"));
     }
 
     #[test]

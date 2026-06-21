@@ -387,43 +387,22 @@ pub(crate) fn command_items() -> Vec<CommandItem> {
     .collect()
 }
 
-/// A single toggleable preference shown in the Settings overlay. The set of
-/// preferences is a fixed, ordered list so it is easy to add more later.
+/// A single toggleable preference shown in the main Settings overlay. These are
+/// the everyday switches; the harness-loop internals live in the Advanced
+/// sub-overlay (see [`AdvancedPref`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsPref {
     /// Show advanced status-bar info (model, real tokens, context meter).
     ShowAdvanced,
     /// Check for a newer codel00p release in the background on startup.
     CheckUpdates,
-    /// Inject the agent's identity/capabilities ("who am I") block each turn.
-    SelfKnowledge,
-    /// Include the agent's live run-state line (iteration, context, plan).
-    SelfState,
-    /// Inject the base operating prompt ("how I work") each turn.
-    BasePrompt,
-    /// Include the base prompt's planning guidance.
-    AutoPlan,
 }
 
 impl SettingsPref {
-    /// All preferences, in display order. Add new rows here.
-    pub(crate) const ORDER: [SettingsPref; 6] = [
-        SettingsPref::ShowAdvanced,
-        SettingsPref::CheckUpdates,
-        SettingsPref::SelfKnowledge,
-        SettingsPref::SelfState,
-        SettingsPref::BasePrompt,
-        SettingsPref::AutoPlan,
-    ];
-
     pub(crate) fn label(self) -> &'static str {
         match self {
             SettingsPref::ShowAdvanced => "Show advanced info",
             SettingsPref::CheckUpdates => "Check for updates on start",
-            SettingsPref::SelfKnowledge => "Self-knowledge",
-            SettingsPref::SelfState => "Self run-state",
-            SettingsPref::BasePrompt => "Base operating prompt",
-            SettingsPref::AutoPlan => "Auto-plan guidance",
         }
     }
 
@@ -431,16 +410,45 @@ impl SettingsPref {
         match self {
             SettingsPref::ShowAdvanced => "model · token usage · context size",
             SettingsPref::CheckUpdates => "notify when a newer release is available",
-            SettingsPref::SelfKnowledge => "inject identity · capabilities each turn",
-            SettingsPref::SelfState => "iteration · context · plan progress",
-            SettingsPref::BasePrompt => "understand · plan · verify before done",
-            SettingsPref::AutoPlan => "ask the agent to plan multi-step work",
         }
     }
 }
 
-/// The Settings overlay: a small list of toggleable TUI preferences. Up/Down
-/// move the selection, Enter/Space toggle the highlighted preference, Esc closes.
+/// One row in the main Settings overlay: either a toggleable preference or the
+/// non-toggle "Advanced…" entry that opens the harness-knobs sub-overlay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SettingsRow {
+    Pref(SettingsPref),
+    /// Opens the Advanced settings sub-overlay (harness-loop internals).
+    Advanced,
+}
+
+impl SettingsRow {
+    /// All rows, in display order. The toggle prefs first, then "Advanced…".
+    pub(crate) const ORDER: [SettingsRow; 3] = [
+        SettingsRow::Pref(SettingsPref::ShowAdvanced),
+        SettingsRow::Pref(SettingsPref::CheckUpdates),
+        SettingsRow::Advanced,
+    ];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            SettingsRow::Pref(pref) => pref.label(),
+            SettingsRow::Advanced => "Advanced…",
+        }
+    }
+
+    pub(crate) fn hint(self) -> &'static str {
+        match self {
+            SettingsRow::Pref(pref) => pref.hint(),
+            SettingsRow::Advanced => "harness-loop knobs · iteration count",
+        }
+    }
+}
+
+/// The Settings overlay: a small list of toggleable TUI preferences plus an
+/// "Advanced…" entry. Up/Down move the selection, Enter/Space toggle the
+/// highlighted preference (or open Advanced), Esc closes.
 #[derive(Clone, Debug)]
 pub(crate) struct SettingsOverlay {
     pub(crate) selected: usize,
@@ -453,19 +461,166 @@ impl SettingsOverlay {
 
     pub(crate) fn up(&mut self) {
         if self.selected == 0 {
-            self.selected = SettingsPref::ORDER.len().saturating_sub(1);
+            self.selected = SettingsRow::ORDER.len().saturating_sub(1);
         } else {
             self.selected -= 1;
         }
     }
 
     pub(crate) fn down(&mut self) {
-        self.selected = (self.selected + 1) % SettingsPref::ORDER.len().max(1);
+        self.selected = (self.selected + 1) % SettingsRow::ORDER.len().max(1);
     }
 
-    /// The currently highlighted preference.
-    pub(crate) fn current(&self) -> SettingsPref {
-        SettingsPref::ORDER[self.selected.min(SettingsPref::ORDER.len() - 1)]
+    /// The currently highlighted row.
+    pub(crate) fn current(&self) -> SettingsRow {
+        SettingsRow::ORDER[self.selected.min(SettingsRow::ORDER.len() - 1)]
+    }
+}
+
+/// One harness-internal preference in the Advanced sub-overlay. Each entry is
+/// either a numeric knob (with step/min/max) or a boolean toggle, and carries
+/// the dotted config key the harness already reads. These all require some
+/// understanding of how the agent loop works.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AdvancedPref {
+    /// `agent.max_iterations` — the agent-loop iteration ceiling.
+    MaxIterations,
+    /// `agent.behavior.verify_iterations` — verify→fix attempts before done.
+    VerifyIterations,
+    /// `agent.behavior.failure_budget` — same-op failures before the replan nudge.
+    FailureBudget,
+    /// `agent.behavior.self_knowledge` — inject the identity block each turn.
+    SelfKnowledge,
+    /// `agent.behavior.self_state` — include the live run-state line.
+    SelfState,
+    /// `agent.behavior.base_prompt` — inject the base operating prompt.
+    BasePrompt,
+    /// `agent.behavior.auto_plan` — include the base prompt's planning guidance.
+    AutoPlan,
+}
+
+/// How an Advanced row is edited: a bounded integer (Left/Right or -/+) or a
+/// boolean toggle (Enter/Space).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AdvancedKind {
+    /// A numeric knob edited by `step`, clamped to `[min, max]`.
+    Number {
+        step: u32,
+        min: u32,
+        max: u32,
+    },
+    Bool,
+}
+
+impl AdvancedPref {
+    /// All advanced prefs, in display order. Numerics first (the headline ask),
+    /// then the loop-internal toggles.
+    pub(crate) const ORDER: [AdvancedPref; 7] = [
+        AdvancedPref::MaxIterations,
+        AdvancedPref::VerifyIterations,
+        AdvancedPref::FailureBudget,
+        AdvancedPref::SelfKnowledge,
+        AdvancedPref::SelfState,
+        AdvancedPref::BasePrompt,
+        AdvancedPref::AutoPlan,
+    ];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            AdvancedPref::MaxIterations => "Max iterations",
+            AdvancedPref::VerifyIterations => "Verify iterations",
+            AdvancedPref::FailureBudget => "Failure budget",
+            AdvancedPref::SelfKnowledge => "Self-knowledge",
+            AdvancedPref::SelfState => "Self run-state",
+            AdvancedPref::BasePrompt => "Base operating prompt",
+            AdvancedPref::AutoPlan => "Auto-plan guidance",
+        }
+    }
+
+    pub(crate) fn hint(self) -> &'static str {
+        match self {
+            AdvancedPref::MaxIterations => "max tool/model steps per turn",
+            AdvancedPref::VerifyIterations => "verify→fix attempts before done",
+            AdvancedPref::FailureBudget => "same-op failures before replan (0 = off)",
+            AdvancedPref::SelfKnowledge => "inject identity · capabilities each turn",
+            AdvancedPref::SelfState => "iteration · context · plan progress",
+            AdvancedPref::BasePrompt => "understand · plan · verify before done",
+            AdvancedPref::AutoPlan => "ask the agent to plan multi-step work",
+        }
+    }
+
+    /// The dotted config key the harness reads for this preference.
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            AdvancedPref::MaxIterations => "agent.max_iterations",
+            AdvancedPref::VerifyIterations => "agent.behavior.verify_iterations",
+            AdvancedPref::FailureBudget => "agent.behavior.failure_budget",
+            AdvancedPref::SelfKnowledge => "agent.behavior.self_knowledge",
+            AdvancedPref::SelfState => "agent.behavior.self_state",
+            AdvancedPref::BasePrompt => "agent.behavior.base_prompt",
+            AdvancedPref::AutoPlan => "agent.behavior.auto_plan",
+        }
+    }
+
+    /// How this preference is edited (numeric step/bounds, or boolean toggle).
+    pub(crate) fn kind(self) -> AdvancedKind {
+        match self {
+            // The iteration ceiling can't drop below 1, and a generous cap keeps
+            // it sane.
+            AdvancedPref::MaxIterations => AdvancedKind::Number {
+                step: 1,
+                min: 1,
+                max: 200,
+            },
+            // At least one verify attempt; a small cap.
+            AdvancedPref::VerifyIterations => AdvancedKind::Number {
+                step: 1,
+                min: 1,
+                max: 20,
+            },
+            // 0 disables the replan nudge entirely.
+            AdvancedPref::FailureBudget => AdvancedKind::Number {
+                step: 1,
+                min: 0,
+                max: 20,
+            },
+            AdvancedPref::SelfKnowledge
+            | AdvancedPref::SelfState
+            | AdvancedPref::BasePrompt
+            | AdvancedPref::AutoPlan => AdvancedKind::Bool,
+        }
+    }
+}
+
+/// The Advanced settings sub-overlay: harness-loop internals (the iteration
+/// count and other knobs that require understanding the agent loop). Opened from
+/// the main Settings overlay's "Advanced…" row; Esc returns there. Up/Down move,
+/// Left/Right (or -/+) adjust a numeric row, Enter/Space toggle a boolean row.
+#[derive(Clone, Debug)]
+pub(crate) struct AdvancedSettingsOverlay {
+    pub(crate) selected: usize,
+}
+
+impl AdvancedSettingsOverlay {
+    pub(crate) fn new() -> Self {
+        Self { selected: 0 }
+    }
+
+    pub(crate) fn up(&mut self) {
+        if self.selected == 0 {
+            self.selected = AdvancedPref::ORDER.len().saturating_sub(1);
+        } else {
+            self.selected -= 1;
+        }
+    }
+
+    pub(crate) fn down(&mut self) {
+        self.selected = (self.selected + 1) % AdvancedPref::ORDER.len().max(1);
+    }
+
+    /// The currently highlighted advanced preference.
+    pub(crate) fn current(&self) -> AdvancedPref {
+        AdvancedPref::ORDER[self.selected.min(AdvancedPref::ORDER.len() - 1)]
     }
 }
 
@@ -490,6 +645,7 @@ pub(crate) enum Overlay {
     Entities(EntityBrowser),
     Command(CommandPalette),
     Settings(SettingsOverlay),
+    AdvancedSettings(AdvancedSettingsOverlay),
     UpdatePrompt(UpdatePrompt),
 }
 

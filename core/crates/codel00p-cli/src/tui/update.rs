@@ -8,8 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
-    CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
-    SettingsOverlay, SettingsPref, UpdatePrompt,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, CommandAction, CommandPalette,
+    EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher, SettingsOverlay, SettingsPref,
+    SettingsRow, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
 
@@ -259,6 +260,7 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         Overlay::Sessions(switcher) => handle_sessions_key(app, switcher, key),
         Overlay::Entities(browser) => handle_entities_key(app, browser, key),
         Overlay::Settings(settings) => handle_settings_key(app, settings, key),
+        Overlay::AdvancedSettings(advanced) => handle_advanced_settings_key(app, advanced, key),
         Overlay::UpdatePrompt(prompt) => handle_update_prompt_key(app, prompt, key),
         Overlay::Command(mut palette) => match palette.on_key(key) {
             PickerOutcome::Selected => match palette.selected_item() {
@@ -384,19 +386,132 @@ fn open_settings(app: &mut App) -> Vec<Effect> {
 
 /// Handles keys in the Settings overlay: Up/Down move, Enter/Space toggle the
 /// highlighted preference (flipping app state and persisting it to the user
-/// config), Esc closes. Any other key leaves the overlay open.
+/// config) or open the Advanced sub-overlay, Esc closes. Any other key leaves
+/// the overlay open.
 fn handle_settings_key(app: &mut App, mut settings: SettingsOverlay, key: KeyEvent) -> Vec<Effect> {
     match key.code {
         KeyCode::Esc => return Vec::new(), // close
         KeyCode::Up => settings.up(),
         KeyCode::Down => settings.down(),
-        KeyCode::Enter | KeyCode::Char(' ') => {
-            toggle_setting(app, settings.current());
-        }
+        KeyCode::Enter | KeyCode::Char(' ') => match settings.current() {
+            SettingsRow::Pref(pref) => toggle_setting(app, pref),
+            SettingsRow::Advanced => {
+                // Open the Advanced sub-overlay; Esc there returns to Settings.
+                app.overlay = Overlay::AdvancedSettings(AdvancedSettingsOverlay::new());
+                return Vec::new();
+            }
+        },
         _ => {}
     }
     app.overlay = Overlay::Settings(settings);
     Vec::new()
+}
+
+/// Handles keys in the Advanced settings sub-overlay: Up/Down move, Left/Right
+/// (or -/+) adjust the highlighted numeric knob within its bounds, Enter/Space
+/// toggle a boolean knob, Esc returns to the main Settings overlay. Every change
+/// is persisted immediately to the config key the harness reads.
+fn handle_advanced_settings_key(
+    app: &mut App,
+    mut advanced: AdvancedSettingsOverlay,
+    key: KeyEvent,
+) -> Vec<Effect> {
+    match key.code {
+        KeyCode::Esc => {
+            // Return to the main Settings overlay rather than closing outright.
+            app.overlay = Overlay::Settings(SettingsOverlay::new());
+            return Vec::new();
+        }
+        KeyCode::Up => advanced.up(),
+        KeyCode::Down => advanced.down(),
+        KeyCode::Right | KeyCode::Char('+') | KeyCode::Char('=') => {
+            adjust_advanced(app, advanced.current(), true);
+        }
+        KeyCode::Left | KeyCode::Char('-') | KeyCode::Char('_') => {
+            adjust_advanced(app, advanced.current(), false);
+        }
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            toggle_advanced(app, advanced.current());
+        }
+        _ => {}
+    }
+    app.overlay = Overlay::AdvancedSettings(advanced);
+    Vec::new()
+}
+
+/// Reads the current value of a numeric advanced preference from app state.
+fn advanced_number(app: &App, pref: AdvancedPref) -> u32 {
+    match pref {
+        AdvancedPref::MaxIterations => app.max_iterations,
+        AdvancedPref::VerifyIterations => app.verify_iterations,
+        AdvancedPref::FailureBudget => app.failure_budget,
+        _ => 0,
+    }
+}
+
+/// Increments or decrements a numeric advanced knob by its step, clamped to its
+/// bounds, then persists the new value. No-op on boolean prefs.
+fn adjust_advanced(app: &mut App, pref: AdvancedPref, increase: bool) {
+    let AdvancedKind::Number { step, min, max } = pref.kind() else {
+        return;
+    };
+    let current = advanced_number(app, pref);
+    let next = if increase {
+        current.saturating_add(step).min(max)
+    } else {
+        current.saturating_sub(step).max(min)
+    };
+    if next == current {
+        return; // already at the bound — nothing to write
+    }
+    match pref {
+        AdvancedPref::MaxIterations => app.max_iterations = next,
+        AdvancedPref::VerifyIterations => app.verify_iterations = next,
+        AdvancedPref::FailureBudget => app.failure_budget = next,
+        _ => {}
+    }
+    persist_setting(
+        app,
+        pref.config_key(),
+        &next.to_string(),
+        &format!("{} set to {next}.", pref.label()),
+        pref.label(),
+    );
+}
+
+/// Toggles a boolean advanced preference, persisting the new value. No-op on
+/// numeric prefs.
+fn toggle_advanced(app: &mut App, pref: AdvancedPref) {
+    if !matches!(pref.kind(), AdvancedKind::Bool) {
+        return;
+    }
+    let new_value = match pref {
+        AdvancedPref::SelfKnowledge => {
+            app.self_knowledge = !app.self_knowledge;
+            app.self_knowledge
+        }
+        AdvancedPref::SelfState => {
+            app.self_state = !app.self_state;
+            app.self_state
+        }
+        AdvancedPref::BasePrompt => {
+            app.base_prompt = !app.base_prompt;
+            app.base_prompt
+        }
+        AdvancedPref::AutoPlan => {
+            app.auto_plan = !app.auto_plan;
+            app.auto_plan
+        }
+        _ => return,
+    };
+    let state = if new_value { "enabled" } else { "disabled" };
+    persist_setting(
+        app,
+        pref.config_key(),
+        if new_value { "true" } else { "false" },
+        &format!("{} {state}.", pref.label()),
+        pref.label(),
+    );
 }
 
 /// Flips the given preference in app state and persists the new value to the
@@ -434,74 +549,6 @@ fn toggle_setting(app: &mut App, pref: SettingsPref) {
                     }
                 ),
                 "update checks",
-            );
-        }
-        SettingsPref::SelfKnowledge => {
-            app.self_knowledge = !app.self_knowledge;
-            let value = if app.self_knowledge { "true" } else { "false" };
-            persist_setting(
-                app,
-                "agent.behavior.self_knowledge",
-                value,
-                &format!(
-                    "Self-knowledge {}.",
-                    if app.self_knowledge {
-                        "enabled"
-                    } else {
-                        "disabled"
-                    }
-                ),
-                "self-knowledge",
-            );
-        }
-        SettingsPref::SelfState => {
-            app.self_state = !app.self_state;
-            let value = if app.self_state { "true" } else { "false" };
-            persist_setting(
-                app,
-                "agent.behavior.self_state",
-                value,
-                &format!(
-                    "Self run-state {}.",
-                    if app.self_state {
-                        "enabled"
-                    } else {
-                        "disabled"
-                    }
-                ),
-                "self run-state",
-            );
-        }
-        SettingsPref::BasePrompt => {
-            app.base_prompt = !app.base_prompt;
-            let value = if app.base_prompt { "true" } else { "false" };
-            persist_setting(
-                app,
-                "agent.behavior.base_prompt",
-                value,
-                &format!(
-                    "Base operating prompt {}.",
-                    if app.base_prompt {
-                        "enabled"
-                    } else {
-                        "disabled"
-                    }
-                ),
-                "base operating prompt",
-            );
-        }
-        SettingsPref::AutoPlan => {
-            app.auto_plan = !app.auto_plan;
-            let value = if app.auto_plan { "true" } else { "false" };
-            persist_setting(
-                app,
-                "agent.behavior.auto_plan",
-                value,
-                &format!(
-                    "Auto-plan guidance {}.",
-                    if app.auto_plan { "enabled" } else { "disabled" }
-                ),
-                "auto-plan guidance",
             );
         }
     }
@@ -1535,7 +1582,10 @@ mod tests {
             update(&mut app, key(KeyCode::Down));
             match &app.overlay {
                 Overlay::Settings(settings) => {
-                    assert_eq!(settings.current(), SettingsPref::CheckUpdates);
+                    assert_eq!(
+                        settings.current(),
+                        SettingsRow::Pref(SettingsPref::CheckUpdates)
+                    );
                 }
                 _ => panic!("expected settings overlay"),
             }
@@ -1549,6 +1599,91 @@ mod tests {
             assert!(app.check_updates);
             let resolved = crate::settings::load_layered(dir.path()).expect("reload");
             assert_eq!(resolved.merged.tui.check_updates, Some(true));
+        });
+    }
+
+    #[test]
+    fn settings_advanced_row_opens_and_esc_returns() {
+        let mut app = test_app();
+        update(&mut app, ctrl(KeyCode::Char('p')));
+        type_str(&mut app, "settings");
+        update(&mut app, key(KeyCode::Enter));
+        // Move to the "Advanced…" row (the last main row) and open it.
+        update(&mut app, key(KeyCode::Up)); // wraps to last row
+        match &app.overlay {
+            Overlay::Settings(settings) => assert_eq!(settings.current(), SettingsRow::Advanced),
+            _ => panic!("expected settings overlay"),
+        }
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(effects.is_empty());
+        assert!(matches!(app.overlay, Overlay::AdvancedSettings(_)));
+        // Esc returns to the main Settings overlay, not all the way closed.
+        update(&mut app, key(KeyCode::Esc));
+        assert!(matches!(app.overlay, Overlay::Settings(_)));
+        // A second Esc closes Settings.
+        update(&mut app, key(KeyCode::Esc));
+        assert!(matches!(app.overlay, Overlay::None));
+    }
+
+    #[test]
+    fn advanced_edits_max_iterations_and_persists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert_eq!(app.max_iterations, 25);
+            app.overlay = Overlay::AdvancedSettings(AdvancedSettingsOverlay::new());
+            // First row is Max iterations. Right increments by 1.
+            update(&mut app, key(KeyCode::Right));
+            assert_eq!(app.max_iterations, 26);
+            // It persisted to the key the harness reads.
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.agent.max_iterations, Some(26));
+            // Left decrements; `-` also works.
+            update(&mut app, key(KeyCode::Left));
+            update(&mut app, key(KeyCode::Char('-')));
+            assert_eq!(app.max_iterations, 24);
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.agent.max_iterations, Some(24));
+        });
+    }
+
+    #[test]
+    fn advanced_max_iterations_floors_at_one() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            app.max_iterations = 1;
+            app.overlay = Overlay::AdvancedSettings(AdvancedSettingsOverlay::new());
+            // Decrement repeatedly: it cannot drop below the floor of 1.
+            for _ in 0..5 {
+                update(&mut app, key(KeyCode::Left));
+            }
+            assert_eq!(app.max_iterations, 1);
+        });
+    }
+
+    #[test]
+    fn advanced_toggles_bool_pref_and_persists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert!(app.self_knowledge); // default on
+            app.overlay = Overlay::AdvancedSettings(AdvancedSettingsOverlay::new());
+            // Move down to the first boolean row (Self-knowledge, 4th row) and
+            // toggle it off.
+            for _ in 0..3 {
+                update(&mut app, key(KeyCode::Down));
+            }
+            match &app.overlay {
+                Overlay::AdvancedSettings(advanced) => {
+                    assert_eq!(advanced.current(), AdvancedPref::SelfKnowledge);
+                }
+                _ => panic!("expected advanced overlay"),
+            }
+            update(&mut app, key(KeyCode::Enter));
+            assert!(!app.self_knowledge);
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.agent.behavior.self_knowledge, Some(false));
         });
     }
 

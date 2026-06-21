@@ -87,6 +87,9 @@ pub(crate) mod test_support {
             true,  // self_state (run-state line on by default)
             true,  // base_prompt (base operating prompt on by default)
             true,  // auto_plan (planning guidance on by default)
+            25,    // max_iterations (agent-loop default)
+            3,     // verify_iterations (verify→fix default)
+            3,     // failure_budget (replan-nudge default)
         )
     }
 }
