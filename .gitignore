@@ -15,3 +15,8 @@ packages/*/dist/
 # Local agent/browser scratch artifacts (e.g. Playwright screenshots)
 .playwright-mcp/
 /*.png
+
+# stray compiled outputs from dogfooding/tests
+*.o
+a.out
+/knapsack

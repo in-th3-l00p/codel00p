@@ -206,7 +206,16 @@ fn parse_agent_flag_options(
             }
             "--tool-set" => {
                 let value = required_value(args, index, "--tool-set")?;
-                tool_sets.push(parse_agent_tool_set(&value)?);
+                // Accept a comma-separated list (`--tool-set read,edit`) as well as
+                // a single value or repeated flags. Mirrors the config-default path
+                // which maps a list of labels.
+                for part in value.split(',') {
+                    let part = part.trim();
+                    if part.is_empty() {
+                        continue;
+                    }
+                    tool_sets.push(parse_agent_tool_set(part)?);
+                }
                 index += 2;
             }
             "--tool-choice" => {
@@ -398,7 +407,10 @@ pub(super) fn parse_agent_tool_set(value: &str) -> CliResult<AgentToolSet> {
         "pipeline" | "programmatic" => Ok(AgentToolSet::Pipeline),
         "code" | "execute" | "code-execution" => Ok(AgentToolSet::Code),
         "all" => Ok(AgentToolSet::All),
-        _ => Err(format!("unknown tool set: {value}")),
+        _ => Err(format!(
+            "unknown tool set: {value} (accepted: read, edit, command, git, web, \
+             delegate, learn, pipeline, code, all)"
+        )),
     }
 }
 
@@ -533,6 +545,50 @@ mod tests {
         }
         let options = run_opts(&["script it", "--tool-set", "code"]);
         assert!(options.tool_sets.contains(&AgentToolSet::Code));
+    }
+
+    #[test]
+    fn tool_set_accepts_a_comma_list() {
+        let options = run_opts(&["go", "--tool-set", "read,edit,git"]);
+        assert_eq!(
+            options.tool_sets,
+            vec![AgentToolSet::Read, AgentToolSet::Edit, AgentToolSet::Git]
+        );
+    }
+
+    #[test]
+    fn tool_set_comma_list_trims_and_skips_blanks() {
+        let options = run_opts(&["go", "--tool-set", " read , , edit "]);
+        assert_eq!(
+            options.tool_sets,
+            vec![AgentToolSet::Read, AgentToolSet::Edit]
+        );
+    }
+
+    #[test]
+    fn tool_set_single_value_still_works() {
+        let options = run_opts(&["go", "--tool-set", "git"]);
+        assert_eq!(options.tool_sets, vec![AgentToolSet::Git]);
+    }
+
+    #[test]
+    fn tool_set_repeated_flags_still_work() {
+        let options = run_opts(&["go", "--tool-set", "read", "--tool-set", "git"]);
+        assert_eq!(
+            options.tool_sets,
+            vec![AgentToolSet::Read, AgentToolSet::Git]
+        );
+    }
+
+    #[test]
+    fn unknown_tool_set_error_lists_accepted_values() {
+        let error = parse_agent_tool_set("nope").unwrap_err();
+        assert!(error.contains("unknown tool set: nope"), "got: {error}");
+        for accepted in [
+            "read", "edit", "command", "git", "web", "delegate", "learn", "pipeline", "code", "all",
+        ] {
+            assert!(error.contains(accepted), "missing `{accepted}` in: {error}");
+        }
     }
 
     #[test]

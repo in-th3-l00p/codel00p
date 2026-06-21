@@ -173,8 +173,8 @@ impl Tool for ReadFileTool {
             "required": ["path"],
             "properties": {
                 "path": { "type": "string" },
-                "offset": { "type": "integer" },
-                "limit": { "type": "integer" }
+                "offset": { "type": "integer", "minimum": 1 },
+                "limit": { "type": "integer", "minimum": 1 }
             }
         })
     }
@@ -450,6 +450,14 @@ mod tests {
         fs::write(dir.path().join(path), bytes).unwrap();
         let workspace = Workspace::new(dir.path()).unwrap();
         (dir, workspace)
+    }
+
+    #[test]
+    fn read_file_schema_declares_offset_and_limit_minimums() {
+        let schema = ReadFileTool.input_schema();
+        let props = &schema["properties"];
+        assert_eq!(props["offset"]["minimum"], json!(1));
+        assert_eq!(props["limit"]["minimum"], json!(1));
     }
 
     #[tokio::test]

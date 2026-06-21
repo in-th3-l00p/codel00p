@@ -33,6 +33,13 @@ const MAX_GREP_LIMIT: usize = 1_000;
 const MAX_GREP_FILE_BYTES: u64 = 5 * 1_024 * 1_024;
 /// Upper bound on context lines emitted on each side of a match.
 const MAX_CONTEXT_LINES: usize = 20;
+/// Upper bound on the compiled size of a model-supplied `grep` regex. A
+/// pathological pattern (e.g. deeply nested bounded repetitions) can compile to
+/// an enormous program and pin the turn; rejecting it at build time surfaces the
+/// existing invalid-regex error instead of hanging.
+const MAX_GREP_REGEX_SIZE: usize = 10 * 1_024 * 1_024;
+/// Companion bound for the lazy-DFA cache used while matching.
+const MAX_GREP_REGEX_DFA_SIZE: usize = 10 * 1_024 * 1_024;
 
 /// Find files inside the workspace whose path matches a glob pattern.
 pub struct FindFilesTool;
@@ -185,6 +192,8 @@ impl Tool for GrepTool {
 
         let regex = RegexBuilder::new(pattern)
             .case_insensitive(case_insensitive)
+            .size_limit(MAX_GREP_REGEX_SIZE)
+            .dfa_size_limit(MAX_GREP_REGEX_DFA_SIZE)
             .build()
             .map_err(|error| HarnessError::InvalidToolInput {
                 name: self.name().to_string(),
@@ -525,5 +534,25 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, HarnessError::InvalidToolInput { .. }));
+    }
+
+    #[tokio::test]
+    async fn grep_rejects_oversized_compiled_regex() {
+        // A pattern whose compiled program blows past the size limit must be
+        // rejected at build time (surfacing the invalid-regex error) rather than
+        // hanging the turn. Nested bounded repetitions expand multiplicatively.
+        let (_dir, workspace) = workspace_with(&[("a.rs", "hi")]);
+
+        let pattern = format!("(?:{}){{1000}}", "\\w".repeat(1000));
+
+        let error = GrepTool
+            .execute(&workspace, json!({ "pattern": pattern }))
+            .await
+            .unwrap_err();
+
+        let HarnessError::InvalidToolInput { message, .. } = error else {
+            panic!("expected InvalidToolInput, got {error:?}");
+        };
+        assert!(message.contains("invalid regex"), "got: {message}");
     }
 }
