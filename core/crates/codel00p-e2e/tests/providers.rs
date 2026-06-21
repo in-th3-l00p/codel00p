@@ -145,12 +145,15 @@ fn retry_is_transparent_inside_the_tool_loop() {
     result.assert_tool_called("create_file");
     result.assert_turn_completed();
 
-    // Three round-trips: turn 0 (tool call), the 429 on the final slot, and the
-    // retry that returned the final text.
+    // Round-trips: turn 0 (tool call), the 429 on the final slot, the retry that
+    // returned the final text, and one more for the default-on self-critique
+    // reflection after this mutating turn (the workspace has no detectable test
+    // command, so verification itself is a graceful skip — only the reflection
+    // adds a round-trip).
     assert_eq!(
         provider.hits(),
-        3,
-        "tool turn + failed attempt + retry = 3 round-trips, got {}",
+        4,
+        "tool turn + failed attempt + retry + self-critique reflection = 4 round-trips, got {}",
         provider.hits()
     );
 

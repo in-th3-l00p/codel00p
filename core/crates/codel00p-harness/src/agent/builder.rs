@@ -44,6 +44,7 @@ pub struct AgentHarnessBuilder {
     capabilities: Vec<crate::capability::Capability>,
     capability_proposals: Option<Arc<dyn crate::capability::CapabilityProposalSink>>,
     capability_extractor: Option<Arc<dyn crate::capability::CapabilityExtractor>>,
+    verify: super::VerifyConfig,
 }
 
 impl AgentHarnessBuilder {
@@ -296,6 +297,14 @@ impl AgentHarnessBuilder {
         self
     }
 
+    /// Configure the verify-before-done loop and self-critique step. Without
+    /// this the harness uses [`VerifyConfig::default`] (the phase is off, exactly
+    /// today's behavior). The CLI builds this from the `[agent.behavior]` toggles.
+    pub fn verify_config(mut self, verify: super::VerifyConfig) -> Self {
+        self.verify = verify;
+        self
+    }
+
     /// Streams assistant text to `token_sink` as it is generated. Without a sink
     /// the harness uses the non-streaming inference path.
     pub fn token_sink<T>(mut self, token_sink: T) -> Self
@@ -403,6 +412,7 @@ impl AgentHarnessBuilder {
             tool_choice: self.tool_choice,
             response_format: self.response_format,
             cancel: self.cancel.unwrap_or_default(),
+            verify: self.verify,
         })
     }
 }

@@ -682,5 +682,21 @@ pub(crate) async fn build_agent_harness_with(
         ));
     }
 
+    // Verify-before-done + self-critique (the "perfect coding agent" core): when
+    // the model signals done after a mutating turn, run the project's checks via
+    // the registered `run_checks` tool and do not complete until they pass
+    // (bounded by `verify_iterations`), then give one self-critique reflection
+    // turn. All facets are individually toggleable under `[agent.behavior]`; the
+    // user-facing defaults are on (except `lint_and_fix`). With `self_verify`
+    // off, the harness behaves exactly as before.
+    builder = builder.verify_config(codel00p_harness::VerifyConfig {
+        self_verify: behavior.self_verify_enabled(),
+        auto_test: behavior.auto_test_enabled(),
+        lint_and_fix: behavior.lint_and_fix_enabled(),
+        self_critique: behavior.self_critique_enabled(),
+        verify_iterations: behavior.verify_iterations_value(),
+        test_command: behavior.test_command_value(),
+    });
+
     builder.build().map_err(|error| error.to_string())
 }

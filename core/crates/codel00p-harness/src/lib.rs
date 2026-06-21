@@ -41,7 +41,7 @@ mod walk;
 pub mod web;
 pub mod workspace;
 
-pub use agent::{AgentHarness, AgentHarnessBuilder};
+pub use agent::{AgentHarness, AgentHarnessBuilder, VerifyConfig};
 pub use background::BackgroundProcesses;
 pub use base_prompt::base_prompt;
 pub use cancel::CancelSignal;

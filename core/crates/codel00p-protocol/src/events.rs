@@ -212,6 +212,38 @@ pub enum AgentEvent {
         hook: String,
         message: String,
     },
+    /// The verify-before-done phase ran the project's checks and reached a
+    /// verdict. Emitted once per verification attempt at the point the model
+    /// signalled it was done after a mutating turn. Additive and observable so
+    /// callers can see that automated verification actually ran (and whether it
+    /// passed) — the structural fix for "green unit tests but a broken app".
+    VerificationCompleted {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        /// The check that was run (e.g. `"test"`, `"lint"`).
+        check: String,
+        /// The command that was executed for the check.
+        command: String,
+        /// Whether the check passed.
+        success: bool,
+        /// Exit code of the check command, when one was reported.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i64>,
+        /// 1-based index of this verify attempt within the turn's bounded budget.
+        attempt: u32,
+    },
+    /// The self-critique (metacognition) reflection step ran: the model was asked
+    /// to review what it changed and verified, and either addressed a gap (by
+    /// calling more tools — the loop continued) or confirmed completion. Additive.
+    SelfCritiqueCompleted {
+        event_id: EventId,
+        session_id: SessionId,
+        turn_id: TurnId,
+        /// Whether the reflection turn produced further tool calls (the model
+        /// chose to fix/verify something) rather than completing immediately.
+        produced_tool_calls: bool,
+    },
     TurnCompleted {
         event_id: EventId,
         session_id: SessionId,
@@ -224,6 +256,12 @@ pub enum AgentEvent {
         /// Aggregated estimated cost across the turn, when pricing was available.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cost: Option<CostEstimate>,
+        /// Whether the verify-before-done phase ran and passed. `None` means
+        /// verification did not apply (read-only turn, disabled, or no check
+        /// detected); `Some(true)` passed; `Some(false)` ran but did not pass
+        /// within the attempt budget (the turn completed anyway, surfaced here).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        verified: Option<bool>,
     },
 }
 
@@ -410,6 +448,7 @@ mod tests {
                 ..Default::default()
             }),
             cost: None,
+            verified: Some(true),
         };
 
         let json = serde_json::to_string(&event).expect("serialize");
@@ -438,9 +477,44 @@ mod tests {
             AgentEvent::TurnCompleted {
                 usage: None,
                 cost: None,
+                verified: None,
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn verification_completed_round_trip() {
+        let event = AgentEvent::VerificationCompleted {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            check: "test".to_string(),
+            command: "cargo test".to_string(),
+            success: false,
+            exit_code: Some(101),
+            attempt: 1,
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains("\"kind\":\"verification_completed\""));
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
+    }
+
+    #[test]
+    fn self_critique_completed_round_trip() {
+        let event = AgentEvent::SelfCritiqueCompleted {
+            event_id: EventId::from_static("ev-1"),
+            session_id: SessionId::from_static("ses-1"),
+            turn_id: TurnId::from_static("turn-1"),
+            produced_tool_calls: true,
+        };
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains("\"kind\":\"self_critique_completed\""));
+        let back: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(event, back);
     }
 
     #[test]

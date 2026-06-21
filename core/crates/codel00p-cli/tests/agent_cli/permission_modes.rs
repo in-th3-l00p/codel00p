@@ -234,6 +234,15 @@ fn agent_run_allows_tool_execution_when_permission_mode_ask_is_approved() {
     let db_path = dir.path().join("memory.sqlite");
     let workspace = dir.path().join("workspace");
     fs::create_dir(&workspace).expect("create workspace");
+    // This test exercises the permission approval flow on a single mutating tool
+    // call, so keep the (default-on) verify-before-done self-critique out of the
+    // way: it would otherwise add a reflection inference after the mutating turn.
+    fs::create_dir(workspace.join(".codel00p")).expect("create .codel00p");
+    fs::write(
+        workspace.join(".codel00p/config.toml"),
+        "[agent.behavior]\nself_critique = false\n",
+    )
+    .expect("write config");
 
     let server = MockServer::start();
     let first = server.mock(|when, then| {
