@@ -42,6 +42,7 @@ exit criteria.
 | 9 | [Terminal UI (TUI)](tui.md) | Interface | Stage 6 (Interfaces) | Phase 2 shipped, Phase 3 started (`codel00p-cli/src/tui`) |
 | 10 | [Tool-Calling Parity](tool-calling-parity.md) | Parity | Stage 1 (Agent parity) | **Complete** (all phases + both tails) |
 | 11 | [Capability Synthesis](capability-synthesis.md) | Differentiator | Stage 1 / Stage 3 (Memory) | Slices 1–2 shipped (`capability.rs`) |
+| 12 | [The Perfect Coding Agent](perfect-coding-agent.md) | Differentiator | Stage 1 (Agent parity) | Self-awareness shipped (#94); Tier 0 (verify loop) in progress |
 
 ## Sequencing
 
