@@ -14,11 +14,18 @@ async fn command_defaults_expose_shell_scoped_run_command_tool() {
             "process_kill",
             "process_list",
             "process_output",
+            "run_checks",
             "run_command"
         ]
     );
     assert_eq!(
         registry.permission_scope("run_command", &json!({})),
+        PermissionScope::Shell
+    );
+    // The project-aware check runner executes commands → shell-scoped, just
+    // like run_command.
+    assert_eq!(
+        registry.permission_scope("run_checks", &json!({})),
         PermissionScope::Shell
     );
     // The polling tools are read-only; killing is shell-scoped.

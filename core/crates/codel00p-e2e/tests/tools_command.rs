@@ -378,6 +378,61 @@ fn background_process_output_poll() {
 }
 
 // ---------------------------------------------------------------------------
+// 6b. run_checks — detects from Cargo.toml, runs an explicit override, parses
+//     a structured result. Kept light: we override the command with a trivial
+//     `true` so CI never runs a real test suite, but detection still reports
+//     the manifest it would have used.
+// ---------------------------------------------------------------------------
+#[test]
+fn run_checks_override_reports_structured_result() {
+    let provider = MockProvider::start()
+        .tool_call("run_checks", json!({ "check": "test", "command": "true" }))
+        .assistant_text("checks ran");
+
+    let result = CodelRunner::new()
+        .with_provider(&provider)
+        // Seed a Cargo workspace so detection has a source, but the explicit
+        // override (`true`) is what actually runs.
+        .workspace_file(
+            "Cargo.toml",
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
+        )
+        .run(&[
+            "agent",
+            "run",
+            "Run the project's tests.",
+            "--tool-set",
+            "command",
+        ]);
+
+    result.assert_success();
+    result.assert_tool_called("run_checks");
+    result.assert_turn_completed();
+
+    let tool_result = last_tool_result(&provider, 1);
+    assert_eq!(
+        tool_result["check"], "test",
+        "check should be test; result: {tool_result}"
+    );
+    assert_eq!(
+        tool_result["command"], "true",
+        "explicit override should win; result: {tool_result}"
+    );
+    assert_eq!(
+        tool_result["detected_from"], "override",
+        "override should be reported as the source; result: {tool_result}"
+    );
+    assert_eq!(
+        tool_result["success"], true,
+        "`true` exits 0; result: {tool_result}"
+    );
+    assert_eq!(
+        tool_result["exit_code"], 0,
+        "exit code should be 0; result: {tool_result}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // 7. Context manifest advertises command tools
 // ---------------------------------------------------------------------------
 #[test]
@@ -405,6 +460,7 @@ fn context_manifest_advertises_command_tools() {
             "process_list",
             "process_kill",
             "process_output",
+            "run_checks",
         ] {
             assert!(
                 advertised_tools.iter().any(|t| t == name),
