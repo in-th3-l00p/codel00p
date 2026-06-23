@@ -15,10 +15,14 @@ use super::overlay::{
 use super::picker::PickerOutcome;
 
 mod agents;
+mod events;
+mod input;
 mod settings;
 use agents::{
     handle_agent_create_key, handle_agent_switcher_key, open_agent_creator, open_agent_switcher,
 };
+use events::{apply_event, handle_turn_finished};
+use input::{handle_input_key, scroll_down, scroll_up};
 use settings::{
     handle_advanced_settings_key, handle_settings_key, handle_update_prompt_key, open_settings,
 };
@@ -546,121 +550,6 @@ fn handle_entities_key(app: &mut App, mut browser: EntityBrowser, key: KeyEvent)
     }
 }
 
-fn handle_input_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
-    match key.code {
-        KeyCode::F(1) => {
-            app.overlay = Overlay::Help;
-            Vec::new()
-        }
-        KeyCode::F(2) => open_model_picker(app),
-        KeyCode::F(3) => open_entities(app, EntityTab::Projects),
-        KeyCode::F(4) => open_entities(app, EntityTab::Org),
-        KeyCode::F(5) => open_sessions(app),
-        // Transcript scrolling.
-        KeyCode::PageUp => {
-            scroll_up(app, page_step(app));
-            Vec::new()
-        }
-        KeyCode::PageDown => {
-            scroll_down(app, page_step(app));
-            Vec::new()
-        }
-        KeyCode::Enter => {
-            // Alt/Shift+Enter inserts a newline; plain Enter submits.
-            if key
-                .modifiers
-                .intersects(KeyModifiers::ALT | KeyModifiers::SHIFT)
-            {
-                app.composer.insert_newline();
-                return Vec::new();
-            }
-            let line = app.composer.take();
-            if line.is_empty() {
-                Vec::new()
-            } else if let Some(command) = line.strip_prefix('/') {
-                handle_slash(app, command)
-            } else {
-                submit_turn(app, line)
-            }
-        }
-        KeyCode::Backspace => {
-            app.composer.backspace();
-            Vec::new()
-        }
-        KeyCode::Delete => {
-            app.composer.delete();
-            Vec::new()
-        }
-        KeyCode::Left => {
-            app.composer.left();
-            Vec::new()
-        }
-        KeyCode::Right => {
-            app.composer.right();
-            Vec::new()
-        }
-        KeyCode::Home => {
-            app.composer.home();
-            Vec::new()
-        }
-        KeyCode::End => {
-            app.composer.end();
-            Vec::new()
-        }
-        KeyCode::Esc => {
-            if app.composer.is_empty() {
-                vec![Effect::Quit]
-            } else {
-                app.composer.clear();
-                Vec::new()
-            }
-        }
-        KeyCode::Char(c) => {
-            app.composer.insert_char(c);
-            Vec::new()
-        }
-        _ => Vec::new(),
-    }
-}
-
-/// One screenful of transcript rows for paging keys, from the last rendered
-/// viewport height (minus one row of overlap). At least one row.
-fn page_step(app: &App) -> u16 {
-    app.viewport_rows.saturating_sub(1).max(1)
-}
-
-/// Scrolls the transcript up (toward older messages), leaving "follow" mode so the
-/// view holds position instead of snapping back to the newest line.
-fn scroll_up(app: &mut App, rows: u16) {
-    app.scroll.follow = false;
-    app.scroll.offset_from_bottom = app.scroll.offset_from_bottom.saturating_add(rows);
-}
-
-/// Scrolls the transcript down (toward newer messages). Reaching the bottom
-/// re-enables follow mode so new content keeps tailing.
-fn scroll_down(app: &mut App, rows: u16) {
-    app.scroll.offset_from_bottom = app.scroll.offset_from_bottom.saturating_sub(rows);
-    if app.scroll.offset_from_bottom == 0 {
-        app.scroll.follow = true;
-    }
-}
-
-fn submit_turn(app: &mut App, prompt: String) -> Vec<Effect> {
-    if app.turn.running {
-        app.conversation
-            .push_notice("A turn is already running — wait for it to finish.");
-        return Vec::new();
-    }
-    app.conversation.push_user(prompt.clone());
-    app.scroll = super::app::ScrollState::default();
-    app.turn = super::app::TurnStatus {
-        running: true,
-        started_tick: app.tick,
-        ..Default::default()
-    };
-    vec![Effect::SubmitTurn(prompt)]
-}
-
 fn handle_slash(app: &mut App, command: &str) -> Vec<Effect> {
     let name = command.split_whitespace().next().unwrap_or("");
     match name {
@@ -749,147 +638,6 @@ fn open_entities(app: &mut App, tab: EntityTab) -> Vec<Effect> {
         Effect::Cloud(CloudFetch::Projects),
         Effect::Cloud(CloudFetch::Users),
     ]
-}
-
-fn apply_event(app: &mut App, event: &HarnessEvent) {
-    use codel00p_protocol::AgentEvent::*;
-    match event {
-        ToolCallRequested { tool_name, .. } => {
-            app.conversation.tool_requested(tool_name);
-            app.turn.current_tool = Some(tool_name.clone());
-        }
-        ToolProgress {
-            tool_name, message, ..
-        } => app.conversation.tool_progress(tool_name, message.clone()),
-        ToolCallCompleted { tool_name, .. } => {
-            app.conversation.tool_completed(tool_name);
-            app.turn.current_tool = None;
-        }
-        ToolCallFailed {
-            tool_name, message, ..
-        } => {
-            app.conversation.tool_failed(tool_name, message);
-            app.turn.current_tool = None;
-        }
-        PermissionDenied {
-            tool_name, message, ..
-        } => app
-            .conversation
-            .push_notice(format!("Permission denied for {tool_name}: {message}")),
-        ContextCompacted {
-            before_message_count,
-            after_message_count,
-            ..
-        } => app.conversation.push_notice(format!(
-            "Context compacted: {before_message_count} → {after_message_count} messages."
-        )),
-        InferenceCompleted {
-            finish_reason,
-            usage,
-            cost,
-            ..
-        } => {
-            app.turn.finish_reason = finish_reason.clone();
-            // Capture real provider token usage when reported; this is preferred
-            // over the char-count estimate in the advanced status bar.
-            if let Some(usage) = usage {
-                app.last_usage = Some(usage.clone());
-            }
-            // Capture the cost estimate when the provider priced the call. Left
-            // untouched when absent so the HUD never shows a bogus `$0.00`.
-            if let Some(cost) = cost {
-                app.last_cost = Some(cost.clone());
-            }
-        }
-        TurnCompleted {
-            iterations,
-            usage,
-            cost,
-            ..
-        } => {
-            app.turn.iterations = *iterations;
-            // The turn-total usage supersedes the last per-inference figure.
-            if let Some(usage) = usage {
-                app.last_usage = Some(usage.clone());
-            }
-            if let Some(cost) = cost {
-                app.last_cost = Some(cost.clone());
-            }
-        }
-        // The verify-before-done loop ran the project's checks and reached a
-        // verdict — surface it as a transcript line and a persistent status-bar
-        // signal so automated verification is visible (a trust signal).
-        VerificationCompleted {
-            check,
-            command,
-            success,
-            ..
-        } => {
-            if *success {
-                let line = format!("✓ Verified: {check} pass");
-                app.verification = Some(line.clone());
-                app.conversation.push_notice(line);
-            } else {
-                let line = format!("⚠ Verification failed: `{command}` — retrying");
-                app.verification = Some(format!("⚠ {check} failed — retrying"));
-                app.conversation.push_notice(line);
-            }
-        }
-        // The self-critique reflection step ran. If it produced more tool calls
-        // the loop continued (a gap was addressed); otherwise it confirmed done.
-        SelfCritiqueCompleted {
-            produced_tool_calls,
-            ..
-        } => {
-            let line = if *produced_tool_calls {
-                "○ Self-check found a gap — addressing it".to_string()
-            } else {
-                "○ Self-check done".to_string()
-            };
-            app.verification = Some(line.clone());
-            app.conversation.push_notice(line);
-        }
-        // The in-turn failure budget was hit: the same operation kept failing and
-        // a step-back/replan nudge was injected. Surface it as a visible signal.
-        FailureBudgetExceeded {
-            operation,
-            attempts,
-            ..
-        } => {
-            let line = format!("⚠ repeated failures ({operation} ×{attempts}) — replanning");
-            app.verification = Some("⚠ repeated failures — replanning".to_string());
-            app.conversation.push_notice(line);
-        }
-        // `ToolCallArgsDelta` reaches the bridge here (via `ChannelEventSink`)
-        // but is intentionally not rendered into the transcript: it is a live
-        // signal, and the assembled call is surfaced by `ToolCallRequested`
-        // below it. Other consumers (e.g. `--stream-events`) observe the delta.
-        _ => {}
-    }
-}
-
-fn handle_turn_finished(
-    app: &mut App,
-    result: Result<Box<codel00p_harness::TurnOutcome>, String>,
-) -> Vec<Effect> {
-    app.turn.running = false;
-    app.turn.current_tool = None;
-    match result {
-        Ok(outcome) => {
-            if let Some(message) = &outcome.assistant_message {
-                app.conversation.finalize_assistant(message);
-            }
-            let start = app.persisted_message_count;
-            app.session_state = outcome.session_state.clone();
-            app.persisted_message_count = outcome.session_state.messages().len();
-            app.refresh_usage();
-            vec![Effect::Persist(outcome, start)]
-        }
-        Err(message) => {
-            app.conversation.push_error(message);
-            Vec::new()
-        }
-    }
 }
 
 #[cfg(test)]
