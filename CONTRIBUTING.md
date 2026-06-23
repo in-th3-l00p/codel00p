@@ -39,7 +39,8 @@ Documentation should stay concise and technical. Prefer short files with clear
 boundaries over one large document.
 
 Read [Repository Structure](docs/repository.md) before adding a new crate, app,
-or shared package.
+or shared package, and [Module Conventions](docs/module-conventions.md) before
+organizing or reorganizing code within a crate.
 
 ## Development
 
