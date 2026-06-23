@@ -6,6 +6,7 @@ pub mod capability;
 pub mod checkpoints;
 pub mod checks;
 pub mod code_exec;
+mod coerce;
 pub mod commands;
 pub mod context;
 pub mod curated_memory;

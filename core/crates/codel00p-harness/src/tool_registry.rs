@@ -294,10 +294,17 @@ impl ToolRegistry {
                 name: name.to_string(),
             })?;
 
+        // Repair common, unambiguous malformations (double-encoded JSON-string
+        // arguments, a scalar where an array is wanted, a number/bool sent as a
+        // string) against the schema before validating, so a coercible mistake
+        // succeeds the first time instead of costing a model round-trip.
+        let schema = tool.input_schema();
+        let input = crate::coerce::coerce_tool_input(&schema, input);
+
         // Validate arguments against the tool's schema before any side effect, so
         // a malformed call becomes a self-correctable error rather than an ad-hoc
         // failure mid-execution.
-        crate::validation::validate_tool_input(name, &tool.input_schema(), &input)?;
+        crate::validation::validate_tool_input(name, &schema, &input)?;
 
         tool.execute(workspace, input).await
     }
