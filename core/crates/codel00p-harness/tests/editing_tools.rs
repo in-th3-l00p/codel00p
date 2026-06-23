@@ -707,3 +707,139 @@ async fn update_file_description_nudges_toward_apply_patch() {
         "update_file description should nudge toward apply_patch: {description}"
     );
 }
+
+// --- apply_patch input-shape robustness (smaller-model tolerance) ---
+//
+// These cover the deviations from the canonical
+// `{ "changes": [{ "path", "find", "replace" }] }` shape that smaller models
+// produce, each of which previously dead-ended on "missing string field `path`"
+// or "missing array field `changes`". The fix normalizes them into the same
+// atomic batch the canonical shape uses.
+
+#[tokio::test]
+async fn apply_patch_accepts_a_flat_single_change_without_the_changes_wrapper() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("index.html"), "<h1>old</h1>\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let result = registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({ "path": "index.html", "find": "old", "replace": "new" }),
+        )
+        .await
+        .expect("flat change should apply");
+
+    assert_eq!(result.content()["changes"][0]["path"], json!("index.html"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("index.html")).expect("read"),
+        "<h1>new</h1>\n"
+    );
+}
+
+#[tokio::test]
+async fn apply_patch_shares_a_top_level_path_with_changes_that_omit_it() {
+    // The "name the file once, then list edits" shape: `path` at the top level,
+    // each change carrying only find/replace.
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("app.js"), "let a = 1;\nlet b = 2;\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let result = registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({
+                "path": "app.js",
+                "changes": [
+                    { "find": "let a = 1;", "replace": "const a = 1;" },
+                    { "find": "let b = 2;", "replace": "const b = 2;" }
+                ]
+            }),
+        )
+        .await
+        .expect("top-level path should fill in for changes");
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("app.js")).expect("read"),
+        "const a = 1;\nconst b = 2;\n"
+    );
+}
+
+#[tokio::test]
+async fn apply_patch_accepts_old_string_new_string_field_aliases() {
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("main.rs"), "fn main() { todo!() }\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let result = registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({
+                "changes": [
+                    { "file": "main.rs", "old_string": "todo!()", "new_string": "()" }
+                ]
+            }),
+        )
+        .await
+        .expect("aliased fields should apply");
+
+    assert_eq!(result.content()["changes"][0]["path"], json!("main.rs"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("main.rs")).expect("read"),
+        "fn main() { () }\n"
+    );
+}
+
+#[tokio::test]
+async fn apply_patch_accepts_changes_given_as_a_single_object() {
+    // Some models emit `changes` as one object instead of a one-element array.
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("notes.txt"), "draft\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({ "changes": { "path": "notes.txt", "find": "draft", "replace": "final" } }),
+        )
+        .await
+        .expect("single-object changes should apply");
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("notes.txt")).expect("read"),
+        "final\n"
+    );
+}
+
+#[tokio::test]
+async fn apply_patch_still_reports_missing_path_when_none_can_be_resolved() {
+    // With neither a per-change nor a top-level path, the actionable error is
+    // preserved (no silent success).
+    let dir = tempdir().expect("tempdir");
+    fs::write(dir.path().join("a.txt"), "x\n").expect("write file");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let registry = ToolRegistry::editing_defaults();
+
+    let error = registry
+        .execute(
+            "apply_patch",
+            &workspace,
+            json!({ "changes": [{ "find": "x", "replace": "y" }] }),
+        )
+        .await
+        .expect_err("missing path should still fail");
+
+    assert!(matches!(
+        error,
+        HarnessError::InvalidToolInput { name, message }
+            if name == "apply_patch" && message.contains("missing string field `path`")
+    ));
+}
