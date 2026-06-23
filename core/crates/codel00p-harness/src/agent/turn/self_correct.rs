@@ -39,6 +39,11 @@ impl FailureTracker {
         self.counts.remove(signature);
     }
 
+    /// The current consecutive-failure streak for `signature` (zero if none).
+    pub(super) fn streak(&self, signature: &str) -> u32 {
+        self.counts.get(signature).copied().unwrap_or(0)
+    }
+
     /// Record a failed run of `signature` and return the new consecutive-failure
     /// count for that operation.
     pub(super) fn record_failure(&mut self, signature: &str) -> u32 {

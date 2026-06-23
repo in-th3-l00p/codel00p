@@ -3,6 +3,7 @@
 use super::*;
 
 mod hooks;
+mod recover;
 mod self_correct;
 mod verify;
 
@@ -345,7 +346,20 @@ impl AgentHarness {
             )
             .await;
 
-            if response.tool_calls().is_empty() {
+            // Recover a tool call the model wrote as message *text* (a JSON object
+            // naming an advertised tool) instead of emitting a structured call — a
+            // common smaller-model failure that would otherwise end the turn with
+            // the work silently dropped. High-precision, so a genuine textual
+            // answer is never mistaken for a call.
+            let salvaged = if response.tool_calls().is_empty() {
+                response
+                    .assistant_message()
+                    .and_then(|text| recover::salvage_tool_call(text, &self.tools.names()))
+            } else {
+                None
+            };
+
+            if response.tool_calls().is_empty() && salvaged.is_none() {
                 let assistant_message = response.assistant_message().map(str::to_string);
                 if let Some(content) = &assistant_message {
                     session_state.push_assistant(content);
@@ -513,9 +527,16 @@ impl AgentHarness {
                 .await;
             }
 
-            session_state.push_assistant_tool_calls(response.tool_calls().to_vec());
+            // The structured tool calls, or the single call salvaged from message
+            // text above. From here the salvaged call runs through the identical
+            // path as a normal one (events, permissions, execution, logging).
+            let effective_tool_calls: Vec<crate::turn::ModelToolCall> = match salvaged {
+                Some(call) => vec![call],
+                None => response.tool_calls().to_vec(),
+            };
+            session_state.push_assistant_tool_calls(effective_tool_calls.clone());
 
-            let tool_calls = response.tool_calls();
+            let tool_calls = effective_tool_calls.as_slice();
             let mut index = 0;
             while index < tool_calls.len() {
                 let mut end = index + 1;
@@ -755,33 +776,41 @@ impl AgentHarness {
                             self_correct::enrich_failure(&mut content, &message, schema.as_ref());
                             result = ToolResult::json(content);
                         }
-                        let attempts = failure_tracker.record_failure(&signature);
-                        if self.self_correct.replan_on_failure
-                            && self.self_correct.failure_budget > 0
-                            && attempts == self.self_correct.failure_budget
-                        {
-                            let error_kind = crate::error_classify::classify(&message)
-                                .0
-                                .as_str()
-                                .to_string();
-                            self.record_event(
-                                &mut events,
-                                HarnessEvent::FailureBudgetExceeded {
-                                    event_id: EventId::new(),
-                                    session_id: session_state.session_id().clone(),
-                                    turn_id: turn_id.clone(),
-                                    operation: signature.clone(),
+                        // Grace the first invalid-input failure of an operation:
+                        // the expected schema was just echoed back, so the model
+                        // deserves one clean retry before this counts toward the
+                        // replan budget — replanning ("try a different tool") is
+                        // the wrong recovery for a fixable argument shape anyway.
+                        // The enriched error is still returned to the model below;
+                        // only the budget accounting is deferred.
+                        let kind = crate::error_classify::classify(&message).0;
+                        let graced = kind == crate::error_classify::ToolErrorKind::InvalidInput
+                            && failure_tracker.streak(&signature) == 0;
+                        if !graced {
+                            let attempts = failure_tracker.record_failure(&signature);
+                            if self.self_correct.replan_on_failure
+                                && self.self_correct.failure_budget > 0
+                                && attempts == self.self_correct.failure_budget
+                            {
+                                self.record_event(
+                                    &mut events,
+                                    HarnessEvent::FailureBudgetExceeded {
+                                        event_id: EventId::new(),
+                                        session_id: session_state.session_id().clone(),
+                                        turn_id: turn_id.clone(),
+                                        operation: signature.clone(),
+                                        attempts,
+                                        error_kind: kind.as_str().to_string(),
+                                    },
+                                )
+                                .await;
+                                pending_nudges.push(self_correct::replan_nudge(
+                                    &signature,
                                     attempts,
-                                    error_kind,
-                                },
-                            )
-                            .await;
-                            pending_nudges.push(self_correct::replan_nudge(
-                                &signature,
-                                attempts,
-                                &message,
-                                self.plan_store.is_some(),
-                            ));
+                                    &message,
+                                    self.plan_store.is_some(),
+                                ));
+                            }
                         }
                     } else {
                         failure_tracker.record_success(&signature);

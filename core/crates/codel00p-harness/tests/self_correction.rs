@@ -103,6 +103,29 @@ impl Tool for InvalidInputTool {
     }
 }
 
+/// A tool that records how many times it ran, used to prove a salvaged call
+/// actually executes.
+struct RecordingTool {
+    runs: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Tool for RecordingTool {
+    fn name(&self) -> &str {
+        "record"
+    }
+    fn description(&self) -> &str {
+        "Records that it ran (test fixture)."
+    }
+    fn input_schema(&self) -> Value {
+        json!({ "type": "object", "properties": {} })
+    }
+    async fn execute(&self, _ws: &Workspace, _input: Value) -> Result<ToolResult, HarnessError> {
+        self.runs.fetch_add(1, Ordering::SeqCst);
+        Ok(ToolResult::json(json!({ "ok": true })))
+    }
+}
+
 fn call(id: &str, name: &str) -> ModelToolCall {
     ModelToolCall::new(id, name, json!({}))
 }
@@ -272,6 +295,131 @@ async fn invalid_input_failure_echoes_tool_schema() {
             .as_str()
             .unwrap()
             .contains("expected_schema")
+    );
+}
+
+/// An invalid-input failure is graced once before it counts toward the replan
+/// budget: with the schema echoed back, the model deserves a clean retry, and
+/// "replan / try a different tool" is the wrong recovery for a fixable shape. So
+/// `failure_budget` (3) invalid-input failures trip NO nudge — unlike a
+/// substantive failure, which trips at exactly 3.
+#[tokio::test]
+async fn invalid_input_failure_is_graced_before_replan() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![call("a1", "needs_path")],
+        ),
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![call("a2", "needs_path")],
+        ),
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![call("a3", "needs_path")],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "done"),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::new().with_tool(InvalidInputTool))
+        .self_correct_config(enabled())
+        .max_iterations(20)
+        .build()
+        .expect("build")
+        .run_turn(SessionId::from_static("grace"), UserMessage::new("go"))
+        .await
+        .expect("run");
+
+    assert_eq!(
+        nudges(&outcome.events),
+        0,
+        "the first invalid-input failure is graced, so 3 do not trip the budget"
+    );
+}
+
+/// A tool call the model writes as message *text* (a fenced JSON object naming
+/// an advertised tool) instead of a structured call is salvaged and executed,
+/// so the turn acts on it rather than ending with the work silently dropped.
+#[tokio::test]
+async fn tool_call_emitted_as_text_is_salvaged_and_run() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let runs = Arc::new(AtomicUsize::new(0));
+
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::assistant(
+            "github",
+            "gpt-4o",
+            "Running it now:\n```json\n{\"name\": \"record\", \"arguments\": {}}\n```",
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "done"),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::new().with_tool(RecordingTool { runs: runs.clone() }))
+        .self_correct_config(enabled())
+        .max_iterations(20)
+        .build()
+        .expect("build")
+        .run_turn(SessionId::from_static("salvage"), UserMessage::new("go"))
+        .await
+        .expect("run");
+
+    assert_eq!(
+        runs.load(Ordering::SeqCst),
+        1,
+        "salvaged call executed once"
+    );
+    assert_eq!(outcome.tool_calls.len(), 1);
+    assert_eq!(outcome.tool_calls[0].name, "record");
+}
+
+/// A genuine textual answer (no JSON tool-call object) ends the turn normally —
+/// salvage must not fire on prose, even when it mentions a tool name.
+#[tokio::test]
+async fn prose_answer_is_not_salvaged() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+    let runs = Arc::new(AtomicUsize::new(0));
+
+    let model = ScriptedModelClient::new(vec![HarnessInferenceResponse::assistant(
+        "github",
+        "gpt-4o",
+        "You could use the record tool here, but I'll just explain it instead.",
+    )]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::new().with_tool(RecordingTool { runs: runs.clone() }))
+        .self_correct_config(enabled())
+        .max_iterations(20)
+        .build()
+        .expect("build")
+        .run_turn(SessionId::from_static("prose"), UserMessage::new("go"))
+        .await
+        .expect("run");
+
+    assert_eq!(
+        runs.load(Ordering::SeqCst),
+        0,
+        "prose must not trigger a tool run"
+    );
+    assert!(outcome.tool_calls.is_empty());
+    assert_eq!(
+        outcome.assistant_message.as_deref(),
+        Some("You could use the record tool here, but I'll just explain it instead.")
     );
 }
 
