@@ -76,6 +76,33 @@ impl Tool for FailThenSucceedTool {
     }
 }
 
+/// A tool that always rejects its input as invalid, with a distinctive schema we
+/// can assert is echoed back to the model.
+struct InvalidInputTool;
+
+#[async_trait]
+impl Tool for InvalidInputTool {
+    fn name(&self) -> &str {
+        "needs_path"
+    }
+    fn description(&self) -> &str {
+        "Always reports invalid input (test fixture)."
+    }
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "required": ["path"],
+            "properties": { "path": { "type": "string" } }
+        })
+    }
+    async fn execute(&self, _ws: &Workspace, _input: Value) -> Result<ToolResult, HarnessError> {
+        Err(HarnessError::InvalidToolInput {
+            name: "needs_path".to_string(),
+            message: "missing string field `path`".to_string(),
+        })
+    }
+}
+
 fn call(id: &str, name: &str) -> ModelToolCall {
     ModelToolCall::new(id, name, json!({}))
 }
@@ -201,6 +228,50 @@ async fn error_hints_enrich_failed_results() {
             .as_str()
             .unwrap()
             .contains("dependency")
+    );
+}
+
+/// An invalid-input failure echoes the failing tool's expected schema back to
+/// the model, so it can match the shape and self-correct instead of looping —
+/// the recovery lever for a mis-shaped tool call.
+#[tokio::test]
+async fn invalid_input_failure_echoes_tool_schema() {
+    let dir = tempdir().expect("tempdir");
+    let workspace = Workspace::new(dir.path()).expect("workspace");
+
+    let model = ScriptedModelClient::new(vec![
+        HarnessInferenceResponse::with_tool_calls(
+            "github",
+            "gpt-4o",
+            vec![call("a1", "needs_path")],
+        ),
+        HarnessInferenceResponse::assistant("github", "gpt-4o", "done"),
+    ]);
+
+    let outcome = AgentHarness::builder()
+        .model_client(model)
+        .workspace(workspace)
+        .tools(ToolRegistry::new().with_tool(InvalidInputTool))
+        .self_correct_config(enabled())
+        .max_iterations(10)
+        .build()
+        .expect("build")
+        .run_turn(SessionId::from_static("schema"), UserMessage::new("go"))
+        .await
+        .expect("run");
+
+    let result = &outcome.tool_calls[0].result;
+    assert_eq!(result.content()["error_kind"], "invalid_input");
+    // The exact schema the model must match is attached to the failed result.
+    assert_eq!(
+        result.content()["expected_schema"],
+        InvalidInputTool.input_schema()
+    );
+    assert!(
+        result.content()["hint"]
+            .as_str()
+            .unwrap()
+            .contains("expected_schema")
     );
 }
 

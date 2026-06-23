@@ -748,7 +748,11 @@ impl AgentHarness {
                         let message = self_correct::failure_message(result.content());
                         if self.self_correct.error_hints {
                             let mut content = result.content().clone();
-                            self_correct::enrich_failure(&mut content, &message);
+                            // Echo the failing tool's expected schema on an
+                            // invalid-input failure so the model can match the
+                            // shape exactly instead of looping on a guess.
+                            let schema = self.tools.input_schema(tool_call.name());
+                            self_correct::enrich_failure(&mut content, &message, schema.as_ref());
                             result = ToolResult::json(content);
                         }
                         let attempts = failure_tracker.record_failure(&signature);

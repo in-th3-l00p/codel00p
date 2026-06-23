@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use crate::error_classify::classify;
+use crate::error_classify::{ToolErrorKind, classify};
 
 /// Per-turn tracker of consecutive same-operation failures. A signature's count
 /// increments each time that operation fails and resets to zero the moment it
@@ -120,7 +120,12 @@ pub(super) fn failure_message(content: &Value) -> String {
 /// classifier. Non-destructive: existing keys are preserved, and an already
 /// present `error_kind`/`hint` (e.g. permission-denied set upstream) is left
 /// alone. No-op for an `unknown` classification that yields no hint.
-pub(super) fn enrich_failure(content: &mut Value, message: &str) {
+///
+/// `schema` is the failing tool's input schema, when known. On an
+/// invalid-input failure it is echoed back as `expected_schema` (size-bounded)
+/// so the model can match the exact shape instead of guessing — the highest-
+/// leverage recovery lever for a mis-shaped tool call.
+pub(super) fn enrich_failure(content: &mut Value, message: &str, schema: Option<&Value>) {
     let Value::Object(map) = content else {
         return;
     };
@@ -131,6 +136,45 @@ pub(super) fn enrich_failure(content: &mut Value, message: &str) {
         map.entry("hint")
             .or_insert_with(|| Value::String(hint.to_string()));
     }
+    if kind == ToolErrorKind::InvalidInput
+        && let Some(schema) = schema
+    {
+        map.entry("expected_schema")
+            .or_insert_with(|| compact_schema(schema));
+    }
+}
+
+/// Bound the size of an echoed schema so a pathologically large (often MCP) tool
+/// schema cannot blow up the context on every retry. Small schemas pass through
+/// verbatim; oversized ones are trimmed to the essentials the model needs to fix
+/// a call — the top-level `type`/`required` plus each property's declared type.
+fn compact_schema(schema: &Value) -> Value {
+    const MAX_BYTES: usize = 2_000;
+    if schema.to_string().len() <= MAX_BYTES {
+        return schema.clone();
+    }
+    let mut compact = serde_json::Map::new();
+    if let Some(kind) = schema.get("type") {
+        compact.insert("type".to_string(), kind.clone());
+    }
+    if let Some(required) = schema.get("required") {
+        compact.insert("required".to_string(), required.clone());
+    }
+    if let Some(Value::Object(props)) = schema.get("properties") {
+        let summarized: serde_json::Map<String, Value> = props
+            .iter()
+            .map(|(name, spec)| {
+                let kind = spec
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("any")
+                    .to_string();
+                (name.clone(), Value::String(kind))
+            })
+            .collect();
+        compact.insert("properties".to_string(), Value::Object(summarized));
+    }
+    Value::Object(compact)
 }
 
 /// The step-back/replan nudge injected as a user message when an operation
@@ -219,14 +263,74 @@ mod tests {
     #[test]
     fn enrich_adds_kind_and_hint_without_clobbering() {
         let mut content = json!({ "error": "cargo: command not found" });
-        enrich_failure(&mut content, "cargo: command not found");
+        enrich_failure(&mut content, "cargo: command not found", None);
         assert_eq!(content["error_kind"], "missing_dependency");
         assert!(content["hint"].as_str().unwrap().contains("dependency"));
+        // A non-input failure never carries a schema echo.
+        assert!(content.get("expected_schema").is_none());
 
         // Preset error_kind is preserved.
         let mut preset = json!({ "error": "denied", "error_kind": "permission_denied" });
-        enrich_failure(&mut preset, "permission denied");
+        enrich_failure(&mut preset, "permission denied", None);
         assert_eq!(preset["error_kind"], "permission_denied");
+    }
+
+    #[test]
+    fn invalid_input_failure_echoes_expected_schema() {
+        let schema = json!({
+            "type": "object",
+            "properties": { "changes": { "items": { "type": "object" } } }
+        });
+        let message = "invalid input for tool apply_patch: missing string field `path`";
+        let mut content = json!({ "error": message });
+        enrich_failure(&mut content, message, Some(&schema));
+        assert_eq!(content["error_kind"], "invalid_input");
+        // The exact schema the model needs to match is attached.
+        assert_eq!(content["expected_schema"], schema);
+        assert!(
+            content["hint"]
+                .as_str()
+                .unwrap()
+                .contains("expected_schema")
+        );
+    }
+
+    #[test]
+    fn schema_echo_only_on_invalid_input() {
+        // A schema is available, but the failure is not an input error, so it is
+        // not echoed (no needless context).
+        let schema = json!({ "type": "object" });
+        let mut content = json!({ "error": "connection refused" });
+        enrich_failure(&mut content, "connection refused", Some(&schema));
+        assert_eq!(content["error_kind"], "network");
+        assert!(content.get("expected_schema").is_none());
+    }
+
+    #[test]
+    fn oversized_schema_is_compacted() {
+        // Build a schema whose serialized form exceeds the echo budget.
+        let mut props = serde_json::Map::new();
+        for index in 0..200 {
+            props.insert(
+                format!("field_{index}"),
+                json!({ "type": "string", "description": "x".repeat(40) }),
+            );
+        }
+        let schema = json!({ "type": "object", "required": ["field_0"], "properties": props });
+        let mut content = json!({ "error": "invalid input: missing required field" });
+        enrich_failure(
+            &mut content,
+            "invalid input: missing required field",
+            Some(&schema),
+        );
+
+        let echoed = &content["expected_schema"];
+        // Compacted: top-level type/required kept, properties summarized to types
+        // (a string), and the whole thing is smaller than the raw schema.
+        assert_eq!(echoed["type"], "object");
+        assert_eq!(echoed["required"], json!(["field_0"]));
+        assert_eq!(echoed["properties"]["field_0"], json!("string"));
+        assert!(echoed.to_string().len() < schema.to_string().len());
     }
 
     #[test]

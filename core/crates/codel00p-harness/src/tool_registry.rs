@@ -202,6 +202,13 @@ impl ToolRegistry {
         self.deferred.iter().cloned().collect()
     }
 
+    /// The model-facing input schema for a registered tool, or `None` for an
+    /// unknown / synthetic name. Used to echo the expected shape back to the
+    /// model when it mis-calls a tool, so it can self-correct.
+    pub fn input_schema(&self, name: &str) -> Option<Value> {
+        self.tools.get(name).map(|tool| tool.input_schema())
+    }
+
     /// Every registered tool's model-facing definition, in stable name order.
     /// This is the full catalog regardless of disclosure state.
     pub fn specs(&self) -> Vec<ToolSpec> {

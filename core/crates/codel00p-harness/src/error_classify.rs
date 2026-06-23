@@ -90,8 +90,9 @@ impl ToolErrorKind {
                  avoid repeating it blindly and consider an offline alternative or asking the user",
             ),
             ToolErrorKind::InvalidInput => Some(
-                "the tool rejected the input as invalid; re-check the arguments against the \
-                 tool's expected schema before retrying",
+                "the tool rejected the input as invalid; match your arguments to the \
+                 `expected_schema` in this result (every required field, correct types) \
+                 before retrying",
             ),
             ToolErrorKind::Unknown => None,
         }
