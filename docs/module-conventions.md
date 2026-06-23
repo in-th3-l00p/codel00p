@@ -62,17 +62,26 @@ its job in one sentence and can be read without the others.
 
 ## Refactor roadmap
 
-The same treatment applies to the crate's other oversized modules. In rough
-priority order (largest / most-mixed first), candidates and their natural seams:
+The initial sweep of oversized modules is **done** — each was split into focused
+submodules with behaviour unchanged and the suite green at every step:
 
-| File | Seam to split on |
-| --- | --- |
-| `cli/src/tui/update.rs` (~2200) | one submodule per message/update group |
-| `cli/src/tui/view.rs` (~1650) | one submodule per screen/panel renderer |
-| `harness/src/terminal/{ssh,docker}.rs` (~1500/1400) | connection vs command-exec vs file-transfer |
-| `harness/src/code_exec.rs` (~1080) | language/runtime detection vs execution vs result shaping |
-| `harness/src/capability.rs` (~930) | capability model vs propose/verify/load flow |
-| `harness/src/agent/turn.rs` (~900) | already partly split (`turn/`); continue extracting phases |
+| File | Before → after | Split |
+| --- | --- | --- |
+| `harness/editing.rs` | 912 → ~20 | `patch` (pure engine) / `apply_patch` / `file_ops` / `support` |
+| `harness/tools.rs` | 673 → ~150 | `read` (list/read/search) split from the `Tool` contract |
+| `cli/tui/update.rs` | 2246 → ~310¹ | 7 modules: settings/agents/input/events/sessions/commands/entities |
+| `cli/tui/view.rs` | 1645 → ~190¹ | overlays / status / conversation / input renderers |
+| `harness/terminal/ssh.rs` | 1530 → 1161 | pure command/parse layer → `ssh/commands` |
+| `harness/terminal/docker.rs` | 1388 → 1170 | pure args layer → `docker/commands` |
+| `harness/code_exec.rs` | 1086 → 1006 | Rhai↔JSON converters → `code_exec/convert` |
+| `harness/capability.rs` | 935 → 734 | auto-extraction flow → `capability/extract` |
+
+¹ root figures exclude the in-file test module.
+
+Still worth doing later (lower priority): `agent/turn.rs` (~900, already partly
+split under `turn/` — continue extracting turn phases), and the next tier of
+600–900-line files (`cli/tui/overlay.rs`, `cli/agent/options.rs`,
+`harness/repo_map.rs`, `harness/checkpoints.rs`, …).
 
 Tackle these one module at a time, keeping the test suite green at each step — a
 refactor that changes behaviour is a different change and needs its own review.
