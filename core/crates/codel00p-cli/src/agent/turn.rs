@@ -659,17 +659,36 @@ pub(crate) async fn build_agent_harness_with(
             .skill_proposal_sink(CliSkillProposalSink::new(crate::skills::user_skills_dir()));
     }
     builder = plugins.apply_to_harness_builder(builder);
+    // Live token streaming, unchanged: the TUI channel when attached, else the
+    // stdout sink under `--stream`.
     if let Some(ui) = &ui_bridge {
-        builder = builder
-            .token_sink(crate::tui::bridge::ChannelTokenSink::new(ui.tx.clone()))
-            .event_sink(crate::tui::bridge::ChannelEventSink::new(ui.tx.clone()));
-    } else {
-        if options.stream_events {
-            builder = builder.event_sink(StdoutJsonEventSink);
+        builder = builder.token_sink(crate::tui::bridge::ChannelTokenSink::new(ui.tx.clone()));
+    } else if options.stream {
+        builder = builder.token_sink(StdoutTokenSink);
+    }
+    // Event sinks: always record the run's full event stream to a per-run log
+    // file (when logging is enabled), and fan that out to the live consumer — the
+    // TUI channel or the stdout JSON stream — so durable logging never displaces
+    // live event handling. The builder holds a single event sink, hence the
+    // fan-out.
+    let mut event_sinks: Vec<Arc<dyn AgentEventSink>> = Vec::new();
+    if let Some(log) = crate::agent::run_log::run_log() {
+        // Headless runs print the log path to stderr (once); the TUI surface must
+        // not be written under, so it is skipped there.
+        if ui_bridge.is_none() {
+            crate::agent::run_log::announce(&log);
         }
-        if options.stream {
-            builder = builder.token_sink(StdoutTokenSink);
-        }
+        event_sinks.push(Arc::new(crate::agent::run_log::FileEventSink::new(log)));
+    }
+    if let Some(ui) = &ui_bridge {
+        event_sinks.push(Arc::new(crate::tui::bridge::ChannelEventSink::new(
+            ui.tx.clone(),
+        )));
+    } else if options.stream_events {
+        event_sinks.push(Arc::new(StdoutJsonEventSink));
+    }
+    if !event_sinks.is_empty() {
+        builder = builder.event_sink(crate::agent::run_log::FanOutEventSink::new(event_sinks));
     }
     if let Some(max_iterations) = options.max_iterations {
         builder = builder.max_iterations(max_iterations);
