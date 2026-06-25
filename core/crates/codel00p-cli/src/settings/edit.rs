@@ -67,6 +67,9 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.profile", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
+    ("memory.ranker", ValueKind::Str),
+    ("memory.external_url", ValueKind::Str),
+    ("memory.allow_external_ranking", ValueKind::Bool),
     ("tui.show_advanced", ValueKind::Bool),
     ("tui.check_updates", ValueKind::Bool),
 ];
@@ -236,6 +239,12 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "delegation.max_concurrent_children" => settings
             .delegation
             .max_concurrent_children
+            .map(|value| value.to_string()),
+        "memory.ranker" => settings.memory.ranker.clone(),
+        "memory.external_url" => settings.memory.external_url.clone(),
+        "memory.allow_external_ranking" => settings
+            .memory
+            .allow_external_ranking
             .map(|value| value.to_string()),
         "tui.show_advanced" => settings.tui.show_advanced.map(|value| value.to_string()),
         "tui.check_updates" => settings.tui.check_updates.map(|value| value.to_string()),
@@ -479,6 +488,11 @@ pub fn starter_template() -> String {
          # user = \"deploy\"             # optional: defers to ~/.ssh/config\n\
          # port = 22                    # optional: defers to ~/.ssh/config\n\
          # identity_file = \"~/.ssh/id_ed25519\"  # optional: defers to ~/.ssh/config / agent\n\
+         \n\
+         # [memory]                     # how project memory is ranked for relevance retrieval\n\
+         # ranker = \"internal\"          # internal (offline BM25, default) | external (a remote ranking service)\n\
+         # external_url = \"https://ranker.internal/rank\"  # required for the external ranker\n\
+         # allow_external_ranking = false  # governance gate: external ranking sends memory content off-host; must be true to use it\n\
          \n\
          # [tui]\n\
          # show_advanced = false        # show model, token usage, and context meter in the TUI status bar\n\

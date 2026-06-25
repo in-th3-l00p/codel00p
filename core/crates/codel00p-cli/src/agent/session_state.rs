@@ -162,6 +162,7 @@ mod tests {
             memory_db: dir.join("memory.sqlite"),
             organization_id: "org-1".to_string(),
             project: ProjectRef::new("project-1", "codel00p"),
+            memory_ranking: Default::default(),
         }
     }
 

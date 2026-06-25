@@ -119,6 +119,7 @@ mod tests {
             memory_db: dir.join("memory.sqlite"),
             organization_id: "test-org".to_string(),
             project: ProjectRef::new("test-project", "Test Project"),
+            memory_ranking: Default::default(),
         }
     }
 

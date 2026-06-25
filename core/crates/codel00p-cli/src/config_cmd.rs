@@ -85,6 +85,23 @@ fn config_show(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         "  memory db:    {}\n",
         resolved.memory_db().display()
     ));
+    // Surface the memory ranker only when the operator has configured it — and
+    // be honest about the governance gate: an external ranker that isn't fully
+    // opted-in still ranks locally, so say so rather than implying it's live.
+    let memory = resolved.memory();
+    if memory.ranker.is_some() || memory.external_url.is_some() {
+        let status = if memory.external_ranking_enabled() {
+            format!(
+                "external — {}",
+                memory.external_url.as_deref().unwrap_or_default()
+            )
+        } else if memory.ranker.as_deref() == Some("external") {
+            "internal (external configured but allow_external_ranking is off)".to_string()
+        } else {
+            "internal (offline BM25)".to_string()
+        };
+        output.push_str(&format!("  mem ranking:  {status}\n"));
+    }
     output.push_str("\nagent defaults\n");
     output.push_str(&format!(
         "  provider:     {}\n",

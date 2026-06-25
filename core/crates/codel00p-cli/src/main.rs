@@ -19,6 +19,7 @@ mod help;
 mod login;
 mod mcp_server;
 mod memory;
+mod memory_ranker;
 mod memory_ui;
 mod plugins;
 mod providers;

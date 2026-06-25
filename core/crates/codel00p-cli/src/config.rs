@@ -12,6 +12,23 @@ pub struct CliConfig {
     pub memory_db: PathBuf,
     pub organization_id: String,
     pub project: ProjectRef,
+    /// How relevance retrieval ranks memory this invocation. Resolved (including
+    /// the external-ranker governance gate) in [`resolve_cli_config`] so the
+    /// store factory stays a simple match. Defaults to offline BM25.
+    pub memory_ranking: MemoryRanking,
+}
+
+/// The resolved memory ranking strategy for an invocation. The governance gate
+/// is decided once, in [`resolve_cli_config`], so the policy is auditable in one
+/// place and [`open_memory_store`] need only switch on the outcome.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum MemoryRanking {
+    /// Offline BM25 — fully local, the default. No memory content leaves the host.
+    #[default]
+    Internal,
+    /// A remote ranking service at `url`. Only produced once the operator has
+    /// opted into the external ranker, set a URL, and enabled the governance gate.
+    External { url: String },
 }
 
 /// Optional global flags that override file-based settings for one invocation.
@@ -92,10 +109,24 @@ pub fn resolve_cli_config(
         .project_name
         .unwrap_or_else(|| resolved.project_name());
 
+    // Resolve the external-ranker governance gate once. `external_ranking_enabled`
+    // is fail-closed: it requires `ranker = "external"`, a non-empty URL, and
+    // `allow_external_ranking = true` together, so anything short of a full opt-in
+    // keeps retrieval on offline BM25.
+    let memory = resolved.memory();
+    let memory_ranking = if memory.external_ranking_enabled() {
+        MemoryRanking::External {
+            url: memory.external_url.clone().unwrap_or_default(),
+        }
+    } else {
+        MemoryRanking::Internal
+    };
+
     CliConfig {
         memory_db,
         organization_id,
         project: ProjectRef::new(project_id, project_name),
+        memory_ranking,
     }
 }
 
@@ -122,10 +153,16 @@ pub fn open_memory_store(
     config: &CliConfig,
 ) -> CliResult<StorageBackedMemoryStore<codel00p_storage::SqliteStorage>> {
     let storage = SqliteStorage::open(&config.memory_db).map_err(|error| error.to_string())?;
-    Ok(StorageBackedMemoryStore::new(
-        storage_scope(config),
-        storage,
-    ))
+    let store = StorageBackedMemoryStore::new(storage_scope(config), storage);
+    // Inject the external ranker only when the governance gate resolved to it;
+    // otherwise the store keeps its default offline BM25 provider.
+    let store = match &config.memory_ranking {
+        MemoryRanking::Internal => store,
+        MemoryRanking::External { url } => store.with_ranker(std::sync::Arc::new(
+            crate::memory_ranker::ExternalRanker::new(url.clone()),
+        )),
+    };
+    Ok(store)
 }
 
 pub fn open_session_store(
@@ -206,5 +243,55 @@ mod tests {
             parse_global_overrides(owned(&["skills", "list"])).unwrap();
         assert!(overrides.agent.is_none() && overrides.memory_db.is_none());
         assert_eq!(rest, owned(&["skills", "list"]));
+    }
+
+    fn resolved_with_memory(
+        memory: crate::settings::schema::MemorySettings,
+    ) -> crate::settings::ResolvedSettings {
+        crate::settings::ResolvedSettings {
+            merged: crate::settings::schema::Settings {
+                memory,
+                ..Default::default()
+            },
+            user_path: PathBuf::from("/tmp/codel00p-config.toml"),
+            project_path: None,
+        }
+    }
+
+    #[test]
+    fn external_ranker_resolves_only_when_fully_opted_in() {
+        let memory = crate::settings::schema::MemorySettings {
+            ranker: Some("external".to_string()),
+            external_url: Some("https://ranker.internal/rank".to_string()),
+            allow_external_ranking: Some(true),
+        };
+        let config = resolve_cli_config(&resolved_with_memory(memory), GlobalOverrides::default());
+        assert_eq!(
+            config.memory_ranking,
+            MemoryRanking::External {
+                url: "https://ranker.internal/rank".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn external_ranker_is_fail_closed_without_the_governance_flag() {
+        // Ranker + URL set, but the gate is off → resolves to offline BM25.
+        let memory = crate::settings::schema::MemorySettings {
+            ranker: Some("external".to_string()),
+            external_url: Some("https://ranker.internal/rank".to_string()),
+            allow_external_ranking: None,
+        };
+        let config = resolve_cli_config(&resolved_with_memory(memory), GlobalOverrides::default());
+        assert_eq!(config.memory_ranking, MemoryRanking::Internal);
+    }
+
+    #[test]
+    fn default_memory_settings_resolve_to_internal() {
+        let config = resolve_cli_config(
+            &resolved_with_memory(crate::settings::schema::MemorySettings::default()),
+            GlobalOverrides::default(),
+        );
+        assert_eq!(config.memory_ranking, MemoryRanking::Internal);
     }
 }

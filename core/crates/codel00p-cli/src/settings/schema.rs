@@ -23,6 +23,8 @@ pub struct Settings {
     pub plugins: PluginSettings,
     #[serde(skip_serializing_if = "DelegationSettings::is_empty")]
     pub delegation: DelegationSettings,
+    #[serde(skip_serializing_if = "MemorySettings::is_empty")]
+    pub memory: MemorySettings,
     #[serde(skip_serializing_if = "TuiSettings::is_empty")]
     pub tui: TuiSettings,
 }
@@ -666,6 +668,53 @@ impl DelegationSettings {
     }
 }
 
+/// How project memory is ranked for relevance retrieval (proactive recall and
+/// `memory retrieve`). The default is offline BM25 — fully local, no network.
+/// An **external** ranker hands memory content to a relevance/embedding service,
+/// so it is governance-gated: it is used only when `ranker = "external"`, an
+/// `external_url` is set, **and** `allow_external_ranking = true`. Any of those
+/// missing falls back to BM25, fail-closed (memory content never leaves the host
+/// unless the operator has explicitly opted in on all three).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MemorySettings {
+    /// `internal` (default, offline BM25) or `external` (a remote ranking
+    /// service). `external` only takes effect alongside `external_url` and
+    /// `allow_external_ranking = true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranker: Option<String>,
+    /// Base URL of the external ranking service (required for `ranker =
+    /// "external"`). The host POSTs the query and candidate memory content here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_url: Option<String>,
+    /// Governance gate. Must be `true` for an external ranker to be used at all —
+    /// it acknowledges that ranking sends memory content off the host. Defaults
+    /// to off; leaving it unset keeps retrieval fully local even if a URL is set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_external_ranking: Option<bool>,
+}
+
+impl MemorySettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.ranker, other.ranker);
+        take(&mut self.external_url, other.external_url);
+        take(&mut self.allow_external_ranking, other.allow_external_ranking);
+    }
+
+    /// Whether external ranking is fully authorized: opted into the external
+    /// ranker, a URL configured, and the governance gate explicitly enabled.
+    /// Fail-closed — any missing piece keeps retrieval on offline BM25.
+    pub fn external_ranking_enabled(&self) -> bool {
+        self.ranker.as_deref() == Some("external")
+            && self.external_url.as_deref().is_some_and(|url| !url.is_empty())
+            && self.allow_external_ranking.unwrap_or(false)
+    }
+}
+
 /// Preferences for the interactive terminal UI (the agent TUI). These never
 /// affect agent behavior — only what the status bar and overlays display.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -824,6 +873,7 @@ impl Settings {
         self.agent.merge(other.agent);
         self.plugins.merge(other.plugins);
         self.delegation.merge(other.delegation);
+        self.memory.merge(other.memory);
         self.tui.merge(other.tui);
     }
 }
@@ -875,5 +925,9 @@ impl ResolvedSettings {
 
     pub fn agent(&self) -> &AgentSettings {
         &self.merged.agent
+    }
+
+    pub fn memory(&self) -> &MemorySettings {
+        &self.merged.memory
     }
 }
