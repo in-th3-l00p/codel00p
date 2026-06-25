@@ -23,7 +23,10 @@ pub use query::{
     MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRetrievalQuery, MemorySimilarityQuery,
     MemoryStalenessQuery,
 };
-pub use ranking::{Bm25Ranker, MemoryRanker, RankCandidate, RankedCandidate};
+pub use ranking::{
+    Bm25Ranker, Bm25RankingProvider, MemoryRanker, RankCandidate, RankedCandidate, RankingDocument,
+    RankingProvider,
+};
 pub use records::{
     MemoryQuality, MemoryRecord, QualityMemory, RankedMemory, RetrievedMemory, SimilarMemory,
     StaleMemory,

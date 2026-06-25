@@ -1,13 +1,16 @@
 //! Repository trait and storage-backed repository handle.
 
+use std::sync::Arc;
+
 use codel00p_protocol::MemoryEvidence;
 use codel00p_storage::{InMemoryStorage, StorageScope};
 
 use crate::{
-    MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError, MemoryListFilter, MemoryMerge,
-    MemoryQualityQuery, MemoryQuery, MemoryRecord, MemoryRetrievalQuery, MemoryRevision,
-    MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery, QualityMemory, RankedMemory,
-    RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
+    Bm25RankingProvider, MemoryAuditEvent, MemoryCandidateInput, MemoryEdit, MemoryError,
+    MemoryListFilter, MemoryMerge, MemoryQualityQuery, MemoryQuery, MemoryRecord,
+    MemoryRetrievalQuery, MemoryRevision, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery,
+    QualityMemory, RankedMemory, RankingProvider, RetrievedMemory, ReviewDecision, SimilarMemory,
+    StaleMemory,
 };
 
 pub trait MemoryRepository {
@@ -92,6 +95,10 @@ pub type InMemoryMemoryStore = StorageBackedMemoryStore<InMemoryStorage>;
 pub struct StorageBackedMemoryStore<S> {
     pub(crate) scope: StorageScope,
     pub(crate) storage: S,
+    /// The ranking provider consulted by `retrieve_ranked`. Defaults to offline
+    /// BM25 ([`Bm25RankingProvider`]); the host injects an external provider via
+    /// [`with_ranker`](Self::with_ranker) when the operator has opted in.
+    pub(crate) ranker: Arc<dyn RankingProvider>,
 }
 
 impl Default for StorageBackedMemoryStore<InMemoryStorage> {
@@ -102,7 +109,19 @@ impl Default for StorageBackedMemoryStore<InMemoryStorage> {
 
 impl<S> StorageBackedMemoryStore<S> {
     pub fn new(scope: StorageScope, storage: S) -> Self {
-        Self { scope, storage }
+        Self {
+            scope,
+            storage,
+            ranker: Arc::new(Bm25RankingProvider),
+        }
+    }
+
+    /// Inject a custom ranking provider for relevance retrieval (`retrieve_ranked`).
+    /// All other operations are unaffected. Use this to wire an external ranker;
+    /// without it the store ranks with offline BM25.
+    pub fn with_ranker(mut self, ranker: Arc<dyn RankingProvider>) -> Self {
+        self.ranker = ranker;
+        self
     }
 
     pub fn scope(&self) -> &StorageScope {

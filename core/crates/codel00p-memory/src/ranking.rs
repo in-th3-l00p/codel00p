@@ -26,7 +26,79 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::MemoryError;
+
 pub(crate) use codel00p_textsim::{shingle_similarity, tokenize};
+
+/// A document handed to a [`RankingProvider`]: a stable id plus the raw text to
+/// score against the query. The id lets an external provider key its own caches
+/// or correlate results; the built-in [`Bm25RankingProvider`] ignores it and
+/// scores the content.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RankingDocument {
+    pub id: String,
+    pub content: String,
+}
+
+impl RankingDocument {
+    pub fn new(id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            content: content.into(),
+        }
+    }
+}
+
+/// Object-safe ranking seam the repository holds behind an `Arc<dyn
+/// RankingProvider>` and consults in `retrieve_ranked`.
+///
+/// This is distinct from [`MemoryRanker`] on purpose. [`MemoryRanker`] is the
+/// *algorithmic* trait — its `rank<K>` is generic over the caller's key, which
+/// makes it ergonomic but **not** object-safe, so it cannot be stored as a trait
+/// object. `RankingProvider` is the *injection* trait: a fixed signature over
+/// `RankingDocument`s, object-safe, `Send + Sync`, so a store can be configured
+/// with any provider at construction time.
+///
+/// The default is [`Bm25RankingProvider`] (offline, deterministic, no network).
+/// An external provider — e.g. an embedding/relevance service — implements this
+/// trait and is injected by the host (`with_ranker`) only when the operator has
+/// explicitly opted in, because ranking sends memory content to the provider.
+pub trait RankingProvider: Send + Sync {
+    /// Returns a relevance score in `0..=100` for each document against `query`,
+    /// **aligned by index** with `documents` (output length must equal input
+    /// length). A provider that cannot score (e.g. a transient network failure)
+    /// should degrade gracefully rather than error — returning `Err` aborts the
+    /// retrieval and surfaces to the caller.
+    fn rank(&self, query: &str, documents: &[RankingDocument])
+    -> Result<Vec<u8>, MemoryError>;
+}
+
+/// The default ranking provider: wraps [`Bm25Ranker`] so the repository's
+/// `retrieve_ranked` uses offline BM25 unless an external provider is injected.
+/// Tokenizes the query and each document's content, then scores via BM25 and
+/// returns the scores in input order.
+#[derive(Clone, Debug, Default)]
+pub struct Bm25RankingProvider;
+
+impl RankingProvider for Bm25RankingProvider {
+    fn rank(
+        &self,
+        query: &str,
+        documents: &[RankingDocument],
+    ) -> Result<Vec<u8>, MemoryError> {
+        let query_terms = tokenize(query);
+        let candidates: Vec<RankCandidate<usize>> = documents
+            .iter()
+            .enumerate()
+            .map(|(index, document)| RankCandidate::new(index, tokenize(&document.content)))
+            .collect();
+        let mut scores = vec![0u8; documents.len()];
+        for scored in Bm25Ranker.rank(&query_terms, &candidates) {
+            scores[scored.key] = scored.score;
+        }
+        Ok(scores)
+    }
+}
 
 /// BM25 term-frequency saturation parameter. Standard default.
 const BM25_K1: f64 = 1.2;
@@ -275,5 +347,50 @@ mod tests {
         let query = tokenize("cargo build kubernetes");
         let ranked = Bm25Ranker.rank(&query, &candidates);
         assert_eq!(ranked[0].score, 0);
+    }
+
+    fn document(id: &str, content: &str) -> RankingDocument {
+        RankingDocument::new(id, content)
+    }
+
+    #[test]
+    fn bm25_provider_returns_one_score_per_document_in_input_order() {
+        let documents = vec![
+            document("relevant", "run cargo build then cargo test before pushing"),
+            document("irrelevant", "build a friendly relationship with the team"),
+        ];
+        let scores = Bm25RankingProvider
+            .rank("how do I build and test the cargo project", &documents)
+            .unwrap();
+        assert_eq!(scores.len(), documents.len());
+        // The on-topic document outscores the keyword-only one, and the scores
+        // stay aligned with the input order (index 0 is "relevant").
+        assert!(scores[0] > scores[1], "scores: {scores:?}");
+    }
+
+    #[test]
+    fn bm25_provider_agrees_with_direct_bm25() {
+        let documents = vec![
+            document("a", "deploy with cargo to kubernetes cluster"),
+            document("b", "cargo build the workspace"),
+        ];
+        let provider_scores = Bm25RankingProvider.rank("cargo kubernetes", &documents).unwrap();
+
+        let candidates: Vec<RankCandidate<usize>> = documents
+            .iter()
+            .enumerate()
+            .map(|(index, document)| RankCandidate::new(index, tokenize(&document.content)))
+            .collect();
+        let mut direct = vec![0u8; documents.len()];
+        for scored in Bm25Ranker.rank(&tokenize("cargo kubernetes"), &candidates) {
+            direct[scored.key] = scored.score;
+        }
+        assert_eq!(provider_scores, direct);
+    }
+
+    #[test]
+    fn bm25_provider_handles_an_empty_corpus() {
+        let scores = Bm25RankingProvider.rank("anything", &[]).unwrap();
+        assert!(scores.is_empty());
     }
 }
