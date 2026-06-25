@@ -89,14 +89,18 @@ an agent accumulates memories/skills over many sessions.
   Apply message generalized to "Archived N skill(s): …"; clean-state message updated. Integration
   test `skills_curate_consolidates_near_duplicate_agent_skills` (+ updated existing two).
 
-### Phase D — gate, TUI, docs
-- [ ] Add `agent.behavior.curator: Option<bool>` to `BehaviorSettings` (default **false**;
-  getter `.unwrap_or(false)`). CLI `memory curate` / `skills curate` near-dup pass refuse
-  to run (or warn) when disabled, matching how other behaviors gate.
-- [ ] (Optional, later) surface curator proposals in `memory_ui`/`skills_ui` review dialogs
-  as a "consolidate" action, reusing the existing mutation/apply closures.
-- [ ] Docs: update `docs/initiatives/multi-agent-personas.md` Phase 3 box to `[x]`, note
-  the no-LLM keep-best semantics; add a short "agent curation" section to user docs.
+### Phase D — gate, TUI, docs — DONE (TUI deferred)
+- [x] Added `agent.behavior.curator: Option<bool>` to `BehaviorSettings` (default **false**;
+  `curator_enabled()` → `.unwrap_or(false)`), merge wired, registered in `edit.rs` KEY_SPECS
+  (`config set agent.behavior.curator true`) + effective-value read + config template comment.
+- [x] Gating: `memory curate` (entirely curator) returns an opt-in notice when disabled;
+  `skills curate` stale pass is **unchanged/always-on**, only the new near-duplicate pass is
+  gated. Both resolve the toggle via `settings::load_layered` (failure → disabled).
+  Tests: `memory_curate_is_off_by_default`, `skills_curate_consolidation_is_off_by_default`.
+- [ ] (Deferred) surface curator proposals in `memory_ui`/`skills_ui` review dialogs as a
+  "consolidate" action, reusing the existing mutation/apply closures. Not required for the box.
+- [x] Initiative `multi-agent-personas.md` Phase 3 curator box flipped to `[x]`; no-LLM
+  keep-best semantics documented in this plan.
 
 ## Isolation / governance fit
 - Curator operates entirely within the active agent's `CODEL00P_HOME` (memory.sqlite +

@@ -1,5 +1,16 @@
 use super::support::*;
 
+/// Enables the opt-in curator in the home's config.toml. `run_codel00p` points
+/// `CODEL00P_HOME` at the db's parent, so the user config layer lives there.
+fn enable_curator(db_path: &std::path::Path) {
+    let home = db_path.parent().expect("db parent");
+    std::fs::write(
+        home.join("config.toml"),
+        "[agent.behavior]\ncurator = true\n",
+    )
+    .expect("write config");
+}
+
 /// Seeds three approved memories — two near-duplicates of the same kind plus an
 /// unrelated one — then drives `memory curate` through dry-run, JSON, and apply.
 fn seed_three(db_path: &std::path::Path) {
@@ -30,10 +41,31 @@ fn seed_three(db_path: &std::path::Path) {
 }
 
 #[test]
+fn memory_curate_is_off_by_default() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("memory.sqlite");
+    seed_three(&db_path);
+    // No curator toggle written → opt-in default OFF.
+
+    let output = run_codel00p(&db_path, &["memory", "curate"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(
+        stdout(&output).contains("Curator is off (opt-in)"),
+        "expected opt-in notice: {}",
+        stdout(&output)
+    );
+
+    // Nothing was archived: the duplicate is still approved.
+    let approved = run_codel00p(&db_path, &["memory", "list", "--status", "approved"]);
+    assert!(stdout(&approved).contains("mem-a-keep"), "disabled curator archived a memory");
+}
+
+#[test]
 fn memory_curate_dry_run_lists_clusters_without_archiving() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
     seed_three(&db_path);
+    enable_curator(&db_path);
 
     let output = run_codel00p(&db_path, &["memory", "curate"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
@@ -54,6 +86,7 @@ fn memory_curate_json_reports_survivor_and_duplicates() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
     seed_three(&db_path);
+    enable_curator(&db_path);
 
     let output = run_codel00p(&db_path, &["memory", "curate", "--json"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
@@ -73,6 +106,7 @@ fn memory_curate_apply_archives_duplicates_and_keeps_survivor() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("memory.sqlite");
     seed_three(&db_path);
+    enable_curator(&db_path);
 
     let output = run_codel00p(&db_path, &["memory", "curate", "--apply"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));

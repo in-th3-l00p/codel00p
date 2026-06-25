@@ -347,7 +347,8 @@ fn skills_curate(workspace_start: &Path, args: &[String]) -> CliResult<String> {
         _ => user_usage.get(&skill.name),
     };
 
-    // Two independent passes: retire stale unused agent skills, and consolidate
+    // Two independent passes: retire stale unused agent skills (always on, prior
+    // behavior), and — only when the opt-in curator is enabled — consolidate
     // near-duplicate agent skills (keeping the most-used survivor). Both archive
     // reversibly; bundled/human skills are never touched.
     let stale: Vec<&Skill> = skills
@@ -361,7 +362,11 @@ fn skills_curate(workspace_start: &Path, args: &[String]) -> CliResult<String> {
             )
         })
         .collect();
-    let consolidations = plan_skill_consolidations(&skills, usage_for, options.threshold);
+    let consolidations = if curator_enabled(workspace_start) {
+        plan_skill_consolidations(&skills, usage_for, options.threshold)
+    } else {
+        Vec::new()
+    };
 
     if stale.is_empty() && consolidations.is_empty() {
         return Ok("No skills to curate: no stale agent skills and no near-duplicates.\n".to_string());
@@ -431,6 +436,15 @@ fn render_skill_curate_dry_run(
     }
     output.push_str("Archive them (reversible):  codel00p skills curate --apply\n");
     output
+}
+
+/// Whether the opt-in curator is enabled in the layered configuration. Any
+/// resolution failure is treated as disabled so consolidation never runs
+/// unexpectedly.
+fn curator_enabled(workspace_start: &Path) -> bool {
+    settings::load_layered(workspace_start)
+        .map(|resolved| resolved.merged.agent.behavior.curator_enabled())
+        .unwrap_or(false)
 }
 
 fn now_epoch() -> u64 {

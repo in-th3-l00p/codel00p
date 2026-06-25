@@ -8,6 +8,17 @@ use crate::config::{CliConfig, CliResult, open_memory_store, required_value};
 
 use super::parse::kind_label;
 
+/// Whether the opt-in curator is enabled in the active (agent) configuration.
+/// Resolves the layered settings from the current home/workspace; any failure is
+/// treated as disabled so the curator never runs unexpectedly.
+fn curator_enabled() -> bool {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| crate::settings::load_layered(&cwd).ok())
+        .map(|resolved| resolved.merged.agent.behavior.curator_enabled())
+        .unwrap_or(false)
+}
+
 /// `codel00p memory curate` — the per-agent curator pass over near-duplicate
 /// memories. Detection reuses the offline shingle similarity; the default is a
 /// dry-run report. `--apply` archives (never deletes) each cluster's duplicates
@@ -45,6 +56,14 @@ pub(super) fn memory_curate(config: CliConfig, args: &[String]) -> CliResult<Str
             }
             flag => return Err(format!("unknown memory curate option: {flag}")),
         }
+    }
+
+    // The curator is opt-in: it archives knowledge, so it stays off until enabled.
+    if !curator_enabled() {
+        return Ok(
+            "Curator is off (opt-in). Enable it with:  codel00p config set agent.behavior.curator true\n"
+                .to_string(),
+        );
     }
 
     let mut store = open_memory_store(&config)?;

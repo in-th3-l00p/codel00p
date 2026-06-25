@@ -63,6 +63,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.proactive_memory", ValueKind::Bool),
     ("agent.behavior.persona", ValueKind::Bool),
     ("agent.behavior.curated_memory", ValueKind::Bool),
+    ("agent.behavior.curator", ValueKind::Bool),
     ("agent.profile", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
@@ -228,6 +229,7 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.behavior.curated_memory" => {
             agent.behavior.curated_memory.map(|value| value.to_string())
         }
+        "agent.behavior.curator" => agent.behavior.curator.map(|value| value.to_string()),
         "agent.profile" => agent.profile.clone(),
         key if key.starts_with("agent.profiles.") => profile_effective_value(agent, key),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
@@ -460,6 +462,7 @@ pub fn starter_template() -> String {
          # proactive_memory = true      # recall project memory relevant to the current task (BM25, offline)\n\
          # persona = true               # inject the active agent's persona.md as the first system block\n\
          # curated_memory = true        # inject the capped curated notes layer (NOTES.md + USER.md) each turn\n\
+         # curator = false              # opt-in: consolidate near-duplicate memories (memory curate) + skills (skills curate)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\

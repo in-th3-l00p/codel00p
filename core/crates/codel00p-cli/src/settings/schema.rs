@@ -410,6 +410,14 @@ pub struct BehaviorSettings {
     /// produces a block when the files are non-empty.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub curated_memory: Option<bool>,
+    /// Enable the per-agent **curator**: consolidation of near-duplicate learned
+    /// memories (`memory curate`) and skills (the near-duplicate pass of `skills
+    /// curate`). Default **OFF** (opt-in) — unlike the always-on self-awareness
+    /// knobs, curation archives knowledge, so a human opts in. Detection is
+    /// offline shingle similarity; every consolidation is propose-for-review and
+    /// reversible (archive-not-delete).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curator: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -435,6 +443,7 @@ impl BehaviorSettings {
         take(&mut self.proactive_memory, other.proactive_memory);
         take(&mut self.persona, other.persona);
         take(&mut self.curated_memory, other.curated_memory);
+        take(&mut self.curator, other.curator);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -525,6 +534,12 @@ impl BehaviorSettings {
     /// files are non-empty).
     pub fn curated_memory_enabled(&self) -> bool {
         self.curated_memory.unwrap_or(true)
+    }
+
+    /// Whether the per-agent curator (near-duplicate memory/skill consolidation)
+    /// is enabled. Defaults **OFF** — it is opt-in because it archives knowledge.
+    pub fn curator_enabled(&self) -> bool {
+        self.curator.unwrap_or(false)
     }
 }
 
