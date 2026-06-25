@@ -75,13 +75,19 @@ an agent accumulates memories/skills over many sessions.
 > stopwords** (`records::content_tokens`), distinct from ranking's stopword-dropping
 > `tokenize`. So survivor selection rewards the memory with more distinct content. Kept as-is.
 
-### Phase C — skill curator
-- [ ] `fn skill_consolidations(skills, usage, threshold) -> Vec<SkillConsolidation>`:
-  pairwise shingle similarity over skill instruction bodies, **agent-authored only**
-  (`created_by == "agent"`, same guard as `is_curatable`), cluster, survivor = most-used.
-- [ ] Extend `codel00p-cli/src/skills.rs` `skills_curate`: today it archives *stale unused*
-  agent skills; add a **near-duplicate** section (dry-run + `--apply` → `archive_skill`).
-  Keep the two concerns clearly separated in output.
+### Phase C — skill curator — DONE
+- [x] `codel00p-skill/src/consolidation.rs`: `plan_skill_consolidations(skills, usage_for, threshold)
+  -> Vec<SkillConsolidation>` — pure/deterministic, **agent-authored only** (`created_by ==
+  "agent"`, same guard as `is_curatable`). Compares `description + body` via textsim shingle
+  similarity, union-find clusters, survivor = most-used (ties → smallest name), rest as
+  `DuplicateSkill{ skill, similarity }`. `DEFAULT_SKILL_CONSOLIDATION_THRESHOLD = 60`.
+  Unit-tested (cluster+most-used survivor, human/bundled never considered, unrelated, tie-break).
+  `codel00p-skill` now depends on `codel00p-textsim` (clean leaf dep, no skill→memory edge).
+- [x] Extended `codel00p-cli/src/skills.rs` `skills_curate`: now two independent passes —
+  *stale unused* (unchanged) **and** *near-duplicate* — reported as separate sections; `--apply`
+  archives the union (each skill once) via `archive_skill` (reversible). New `--threshold` flag.
+  Apply message generalized to "Archived N skill(s): …"; clean-state message updated. Integration
+  test `skills_curate_consolidates_near_duplicate_agent_skills` (+ updated existing two).
 
 ### Phase D — gate, TUI, docs
 - [ ] Add `agent.behavior.curator: Option<bool>` to `BehaviorSettings` (default **false**;

@@ -473,6 +473,7 @@ dependencies = [
 name = "codel00p-skill"
 version = "0.1.0"
 dependencies = [
+ "codel00p-textsim",
  "serde",
  "serde_json",
  "tempfile",
