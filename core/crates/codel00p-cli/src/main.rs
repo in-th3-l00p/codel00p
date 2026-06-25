@@ -82,21 +82,22 @@ fn run(args: Vec<String>) -> CliResult<String> {
     let workspace_start = env::current_dir().map_err(|error| error.to_string())?;
 
     // Multi-agent personas (#13): an agent is a directory `<base>/agents/<name>`
-    // used as its own CODEL00P_HOME. Switching = pointing CODEL00P_HOME at it,
-    // so config/memory/sessions isolate automatically via the home boundary.
+    // used as its own CODEL00P_HOME. Switching = pointing CODEL00P_HOME at it, so
+    // config, memory, sessions, and skills isolate automatically via the home
+    // boundary — an agent owns ALL of those. So `config` and `skills` are
+    // agent-scoped too: with an agent selected, they target that agent's home.
     //
-    // Base-scoped operations are SKIPPED: the agent registry lifecycle
-    // (`agent create|use|list|...`) and the settings/capability commands below
-    // operate on the base registry, not inside an agent home. For everything
-    // else, if an agent is selected (`--agent` flag > sticky active pointer),
-    // override CODEL00P_HOME to its home BEFORE any subsystem resolves the home.
-    let base_scoped = matches!(
-        command,
-        "config" | "auth" | "skills" | "update" | "uninstall"
-    ) || (command == "agent"
-        && rest
-            .first()
-            .is_some_and(|sub| agent::management::is_management(sub)));
+    // Base-scoped operations are SKIPPED (always the base home): the agent
+    // registry lifecycle (`agent create|use|list|...`) operates on the base
+    // registry, and `auth`/`update`/`uninstall` manage genuinely global state
+    // (cloud credentials, the installed binary). For everything else, if an agent
+    // is selected (`--agent` flag > sticky active pointer), override CODEL00P_HOME
+    // to its home BEFORE any subsystem resolves the home.
+    let base_scoped = matches!(command, "auth" | "update" | "uninstall")
+        || (command == "agent"
+            && rest
+                .first()
+                .is_some_and(|sub| agent::management::is_management(sub)));
     if !base_scoped {
         let base = agent::registry::base_home();
         // Preserve the TRUE base home before the override below clobbers

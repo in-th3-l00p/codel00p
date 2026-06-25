@@ -1,6 +1,8 @@
 #[path = "agent_cli/support.rs"]
 mod support;
 
+#[path = "agent_cli/agent_scoped.rs"]
+mod agent_scoped;
 #[path = "agent_cli/basics.rs"]
 mod basics;
 #[path = "agent_cli/chat_streaming_config.rs"]

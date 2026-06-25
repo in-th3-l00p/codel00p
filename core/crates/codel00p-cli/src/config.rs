@@ -15,7 +15,7 @@ pub struct CliConfig {
 }
 
 /// Optional global flags that override file-based settings for one invocation.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct GlobalOverrides {
     pub memory_db: Option<PathBuf>,
     pub organization_id: Option<String>,
@@ -26,10 +26,20 @@ pub struct GlobalOverrides {
     pub agent: Option<String>,
 }
 
-/// Parse the leading global flags. All are optional now — anything not supplied
-/// here falls back to the layered configuration.
+/// Parse the global flags from anywhere in the argument list, returning the
+/// overrides plus the remaining (non-global) tokens — whose first element is the
+/// subcommand. All are optional; anything not supplied falls back to the layered
+/// configuration.
+///
+/// These flags are **position-tolerant**: `codel00p agent run --agent coder …`
+/// works as well as `codel00p --agent coder agent run …`. This is safe because no
+/// subcommand defines a flag named `--agent`/`--memory-db`/`--organization-id`/
+/// `--project-id`/`--project-name`, so hoisting them never steals a subcommand
+/// flag. A global flag consumes its own value (which must not start with `--`),
+/// matching `required_value`; every other token is preserved verbatim and order.
 pub fn parse_global_overrides(args: Vec<String>) -> CliResult<(GlobalOverrides, Vec<String>)> {
     let mut overrides = GlobalOverrides::default();
+    let mut rest = Vec::new();
     let mut index = 0;
 
     while index < args.len() {
@@ -56,11 +66,14 @@ pub fn parse_global_overrides(args: Vec<String>) -> CliResult<(GlobalOverrides, 
                 overrides.agent = Some(required_value(&args, index, "--agent")?);
                 index += 2;
             }
-            _ => break,
+            _ => {
+                rest.push(args[index].clone());
+                index += 1;
+            }
         }
     }
 
-    Ok((overrides, args[index..].to_vec()))
+    Ok((overrides, rest))
 }
 
 /// Resolve the effective `CliConfig` from layered settings plus flag overrides.
@@ -127,4 +140,71 @@ pub fn open_session_store(
 
 fn storage_scope(config: &CliConfig) -> StorageScope {
     StorageScope::project(&config.organization_id, config.project.id())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn owned(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn leading_global_flags_are_extracted() {
+        let (overrides, rest) =
+            parse_global_overrides(owned(&["--agent", "coder", "agent", "run", "hi"])).unwrap();
+        assert_eq!(overrides.agent.as_deref(), Some("coder"));
+        assert_eq!(rest, owned(&["agent", "run", "hi"]));
+    }
+
+    #[test]
+    fn trailing_agent_flag_is_extracted_and_command_preserved() {
+        // The exact dogfooding papercut: `--agent` after the subcommand.
+        let (overrides, rest) =
+            parse_global_overrides(owned(&["agent", "run", "hi", "--agent", "coder"])).unwrap();
+        assert_eq!(overrides.agent.as_deref(), Some("coder"));
+        assert_eq!(rest, owned(&["agent", "run", "hi"]));
+    }
+
+    #[test]
+    fn global_flags_interleave_with_subcommand_args_preserving_order() {
+        let (overrides, rest) = parse_global_overrides(owned(&[
+            "memory",
+            "--organization-id",
+            "org-1",
+            "list",
+            "--agent",
+            "coder",
+            "--status",
+            "approved",
+        ]))
+        .unwrap();
+        assert_eq!(overrides.agent.as_deref(), Some("coder"));
+        assert_eq!(overrides.organization_id.as_deref(), Some("org-1"));
+        // Non-global tokens keep their relative order; the command leads.
+        assert_eq!(rest, owned(&["memory", "list", "--status", "approved"]));
+    }
+
+    #[test]
+    fn last_value_wins_for_repeated_flag() {
+        let (overrides, rest) =
+            parse_global_overrides(owned(&["--agent", "a", "list", "--agent", "b"])).unwrap();
+        assert_eq!(overrides.agent.as_deref(), Some("b"));
+        assert_eq!(rest, owned(&["list"]));
+    }
+
+    #[test]
+    fn missing_value_for_global_flag_errors() {
+        let error = parse_global_overrides(owned(&["agent", "run", "--agent"])).unwrap_err();
+        assert!(error.contains("missing value for --agent"), "got: {error}");
+    }
+
+    #[test]
+    fn no_global_flags_passes_everything_through() {
+        let (overrides, rest) =
+            parse_global_overrides(owned(&["skills", "list"])).unwrap();
+        assert!(overrides.agent.is_none() && overrides.memory_db.is_none());
+        assert_eq!(rest, owned(&["skills", "list"]));
+    }
 }
