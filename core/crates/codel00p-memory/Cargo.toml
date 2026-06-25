@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 codel00p-protocol = { path = "../codel00p-protocol" }
 codel00p-storage = { path = "../codel00p-storage" }
+codel00p-textsim = { path = "../codel00p-textsim" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 thiserror = "2.0.18"

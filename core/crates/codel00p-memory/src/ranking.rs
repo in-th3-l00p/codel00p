@@ -17,34 +17,21 @@
 //! same trait without touching the repository. Keeping the seam here (not a
 //! vector implementation) is deliberate — the property we preserve is "offline,
 //! deterministic, auditable".
+//!
+//! The tokenizer and shingle similarity live in the dependency-light
+//! [`codel00p_textsim`] leaf crate so other crates (e.g. skill consolidation)
+//! share one auditable notion of similarity; they are re-exported here so the
+//! existing in-crate call sites (`ranking::tokenize`, `ranking::shingle_similarity`)
+//! keep working unchanged.
 
 use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) use codel00p_textsim::{shingle_similarity, tokenize};
 
 /// BM25 term-frequency saturation parameter. Standard default.
 const BM25_K1: f64 = 1.2;
 /// BM25 document-length normalization parameter. Standard default.
 const BM25_B: f64 = 0.75;
-
-/// Default shingle width for near-duplicate detection (token bigrams).
-const SHINGLE_N: usize = 2;
-
-/// Minimal English stopword set. Dropping these keeps BM25 focused on
-/// content-bearing terms; the list is intentionally small and fixed so ranking
-/// stays deterministic and predictable.
-const STOPWORDS: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on",
-    "or", "that", "the", "to", "with",
-];
-
-/// Tokenizes text into lowercase alphanumeric terms, preserving order and
-/// duplicates (BM25 needs term frequencies), with stopwords removed.
-pub(crate) fn tokenize(text: &str) -> Vec<String> {
-    text.split(|character: char| !character.is_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .map(str::to_lowercase)
-        .filter(|token| !STOPWORDS.contains(&token.as_str()))
-        .collect()
-}
 
 /// A candidate document for ranking: an opaque caller-chosen key plus the
 /// document's tokenized content.
@@ -218,37 +205,6 @@ fn max_possible_bm25(
     score
 }
 
-/// Builds the ordered set of token n-grams (shingles) for a token sequence. With
-/// fewer than `n` tokens the whole sequence is treated as a single shingle so
-/// short contents still compare meaningfully.
-fn shingles(tokens: &[String], n: usize) -> BTreeSet<String> {
-    if tokens.is_empty() {
-        return BTreeSet::new();
-    }
-    if tokens.len() < n {
-        return BTreeSet::from([tokens.join(" ")]);
-    }
-    tokens.windows(n).map(|window| window.join(" ")).collect()
-}
-
-/// Near-duplicate similarity between two contents as a 0..=100 score, using
-/// token n-gram (shingle) Jaccard. Comparing bigrams instead of bag-of-words
-/// catches reworded duplicates that share phrasing — overlap that unigram or
-/// substring matching misses — while staying deterministic and offline.
-pub(crate) fn shingle_similarity(left: &str, right: &str) -> u8 {
-    let left_shingles = shingles(&tokenize(left), SHINGLE_N);
-    let right_shingles = shingles(&tokenize(right), SHINGLE_N);
-    if left_shingles.is_empty() || right_shingles.is_empty() {
-        return 0;
-    }
-    let intersection = left_shingles.intersection(&right_shingles).count();
-    let union = left_shingles.union(&right_shingles).count();
-    if union == 0 {
-        return 0;
-    }
-    (((intersection * 100) + (union / 2)) / union) as u8
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,21 +275,5 @@ mod tests {
         let query = tokenize("cargo build kubernetes");
         let ranked = Bm25Ranker.rank(&query, &candidates);
         assert_eq!(ranked[0].score, 0);
-    }
-
-    #[test]
-    fn shingle_similarity_catches_reworded_duplicate() {
-        // Same meaning, reworded order — bigram Jaccard should still score high.
-        let left = "always run cargo fmt and cargo clippy before committing code";
-        let right = "before committing code always run cargo clippy and cargo fmt";
-        let score = shingle_similarity(left, right);
-        assert!(score >= 40, "reworded duplicate scored only {score}");
-    }
-
-    #[test]
-    fn shingle_similarity_low_for_unrelated() {
-        let left = "run cargo fmt before committing";
-        let right = "the colorful unicorn dashboard widget";
-        assert_eq!(shingle_similarity(left, right), 0);
     }
 }

@@ -7,6 +7,9 @@ mod revisions;
 #[path = "memory_cli/import.rs"]
 mod import;
 
+#[path = "memory_cli/curate.rs"]
+mod curate;
+
 #[path = "memory_cli/list_search.rs"]
 mod list_search;
 #[path = "memory_cli/quality.rs"]
