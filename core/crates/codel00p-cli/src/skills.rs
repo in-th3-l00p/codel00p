@@ -441,7 +441,7 @@ fn render_skill_curate_dry_run(
 /// Whether the opt-in curator is enabled in the layered configuration. Any
 /// resolution failure is treated as disabled so consolidation never runs
 /// unexpectedly.
-fn curator_enabled(workspace_start: &Path) -> bool {
+pub(crate) fn curator_enabled(workspace_start: &Path) -> bool {
     settings::load_layered(workspace_start)
         .map(|resolved| resolved.merged.agent.behavior.curator_enabled())
         .unwrap_or(false)

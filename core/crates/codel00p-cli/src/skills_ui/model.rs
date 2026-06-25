@@ -21,6 +21,15 @@ pub(crate) enum SkillKind {
     Disabled,
 }
 
+/// A curator finding attached to a near-duplicate active skill: the survivor it
+/// duplicates and the shingle similarity (0..=100). Set by the driver from
+/// `plan_skill_consolidations` when the curator is enabled.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NearDuplicate {
+    pub(crate) survivor: String,
+    pub(crate) similarity: u8,
+}
+
 /// A skill (active or candidate) projected for the list picker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SkillRow {
@@ -41,6 +50,9 @@ pub(crate) struct SkillRow {
     /// The skills-root directory this skill lives under, so the driver can
     /// approve/reject/archive without re-deriving it.
     pub(crate) root: PathBuf,
+    /// Curator finding: when set, this active skill is a near-duplicate of
+    /// `survivor` and `c` archives it (keeping the survivor).
+    pub(crate) near_duplicate_of: Option<NearDuplicate>,
 }
 
 impl PickerItem for SkillRow {
@@ -54,7 +66,11 @@ impl PickerItem for SkillRow {
             SkillKind::Active if self.usage == 0 => "unused".to_string(),
             SkillKind::Active => format!("used {}x", self.usage),
         };
-        Some(format!("{} · {usage}", self.source))
+        let mut detail = format!("{} · {usage}", self.source);
+        if let Some(dup) = &self.near_duplicate_of {
+            detail.push_str(&format!(" · ~dup of {} ({}%)", dup.survivor, dup.similarity));
+        }
+        Some(detail)
     }
 }
 
@@ -145,6 +161,8 @@ pub(crate) struct SkillsModel {
     pub(crate) show_help: bool,
     /// When set, a disable is awaiting `y` confirmation for this `(name, root)`.
     pub(crate) pending_disable: Option<(String, PathBuf)>,
+    /// Whether the opt-in curator is enabled (controls the `c` consolidate hint).
+    pub(crate) curator_enabled: bool,
     /// All rows across kinds; the picker shows the subset matching `filter`.
     all_rows: Vec<SkillRow>,
 }
@@ -160,8 +178,15 @@ impl SkillsModel {
             status: None,
             show_help: false,
             pending_disable: None,
+            curator_enabled: false,
             all_rows: Vec::new(),
         }
+    }
+
+    /// Records whether the opt-in curator is enabled (driver-provided), so the
+    /// `c` consolidate action can give an accurate hint when it does nothing.
+    pub(crate) fn set_curator_enabled(&mut self, enabled: bool) {
+        self.curator_enabled = enabled;
     }
 
     /// Replaces the full row set (called by the driver on load/reload) and
@@ -220,6 +245,39 @@ impl SkillsModel {
         }
     }
 
+    /// `c` (consolidate): if the row is a curator-flagged near-duplicate active
+    /// skill, arm a disable-confirm to archive it (keeping the survivor);
+    /// otherwise explain why nothing happened.
+    fn consolidate(&mut self, row: &SkillRow) -> Flow {
+        if row.kind != SkillKind::Active {
+            self.set_status("Consolidate applies to active skills only.");
+            return Flow::Stay;
+        }
+        match &row.near_duplicate_of {
+            Some(dup) => {
+                self.set_status(format!(
+                    "{} is a near-duplicate of {} ({}% similar). Press y to archive {} (keeps {}), any other key to cancel.",
+                    row.name, dup.survivor, dup.similarity, row.name, dup.survivor
+                ));
+                self.pending_disable = Some((row.name.clone(), row.root.clone()));
+                Flow::Stay
+            }
+            None if !self.curator_enabled => {
+                self.set_status(
+                    "Enable agent.behavior.curator to surface near-duplicate skills (config set agent.behavior.curator true).",
+                );
+                Flow::Stay
+            }
+            None => {
+                self.set_status(format!(
+                    "{} is not a near-duplicate of another active skill.",
+                    row.name
+                ));
+                Flow::Stay
+            }
+        }
+    }
+
     /// Begins a disable confirmation for the given row.
     fn request_disable(&mut self, name: String, root: PathBuf) -> Flow {
         self.set_status(format!(
@@ -255,6 +313,12 @@ impl SkillsModel {
                     root: row.root.clone(),
                 })
             }
+            // Consolidate a curator-flagged near-duplicate (archives it via the
+            // same confirmed-disable path, keeping the survivor active).
+            KeyCode::Char('c') => match self.picker.selected_item().cloned() {
+                Some(row) => self.consolidate(&row),
+                None => Flow::Stay,
+            },
             // Disable is confirmed, not immediate: it arms `pending_disable`.
             KeyCode::Char('d') => match self.picker.selected_item() {
                 Some(row) if row.kind == SkillKind::Active => {
@@ -315,6 +379,7 @@ impl SkillsModel {
                     root: row.root,
                 })
             }
+            KeyCode::Char('c') => self.consolidate(&row),
             KeyCode::Char('d') if row.kind == SkillKind::Active => {
                 self.request_disable(row.name, row.root)
             }

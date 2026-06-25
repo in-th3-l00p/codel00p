@@ -11,22 +11,26 @@ mod model;
 mod tests;
 mod view;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use codel00p_skill::{
-    Skill, SkillSource, approve_candidate, archive_skill, load_archived, load_candidates,
-    load_skills, load_usage, reject_candidate, restore_skill,
+    DEFAULT_SKILL_CONSOLIDATION_THRESHOLD, Skill, SkillSource, approve_candidate, archive_skill,
+    load_archived, load_candidates, load_skills, load_usage, plan_skill_consolidations,
+    reject_candidate, restore_skill,
 };
 
 use crate::config::CliResult;
-use crate::skills::{skill_sources, user_skills_dir};
-use model::{Flow, Mutation, SkillKind, SkillRow, SkillsModel};
+use crate::skills::{curator_enabled, skill_sources, user_skills_dir};
+use model::{Flow, Mutation, NearDuplicate, SkillKind, SkillRow, SkillsModel};
 
 /// Runs the review dialog. The terminal lifecycle and blocking loop come from
 /// [`crate::dialog`]; the `on_key` closure performs the skill-store effects.
 pub(crate) fn run(workspace_start: &Path) -> CliResult<String> {
+    let curator_on = curator_enabled(workspace_start);
     let mut model = SkillsModel::new();
-    model.set_rows(load_rows(workspace_start));
+    model.set_curator_enabled(curator_on);
+    model.set_rows(load_rows(workspace_start, curator_on));
 
     crate::dialog::run_blocking(&mut model, view::draw, |model, key| {
         match model.update(key) {
@@ -36,7 +40,7 @@ pub(crate) fn run(workspace_start: &Path) -> CliResult<String> {
                 apply(model, mutation);
                 model.screen = model::Screen::List;
                 model.selected = None;
-                model.set_rows(load_rows(workspace_start));
+                model.set_rows(load_rows(workspace_start, curator_on));
             }
         }
         Ok(true)
@@ -44,8 +48,10 @@ pub(crate) fn run(workspace_start: &Path) -> CliResult<String> {
     Ok("Closed skills review.\n".to_string())
 }
 
-/// Builds the combined active-skill + candidate row set for the model.
-fn load_rows(workspace_start: &Path) -> Vec<SkillRow> {
+/// Builds the combined active-skill + candidate row set for the model. When the
+/// curator is enabled, near-duplicate active skills are annotated (via
+/// `plan_skill_consolidations`) so the dialog can offer the `c` consolidate action.
+fn load_rows(workspace_start: &Path, curator_on: bool) -> Vec<SkillRow> {
     let sources = skill_sources(workspace_start);
     let skills = load_skills(&sources);
     // The skills root each active skill lives under, keyed by source, so a
@@ -58,11 +64,40 @@ fn load_rows(workspace_start: &Path) -> Vec<SkillRow> {
             .unwrap_or_else(user_skills_dir)
     };
 
+    // Curator finding map: duplicate skill name -> survivor + similarity. Built
+    // only when the opt-in curator is enabled.
+    let near_dups: HashMap<String, NearDuplicate> = if curator_on {
+        let usage_for = |skill: &Skill| load_usage(&root_for(skill.source)).get(&skill.name);
+        plan_skill_consolidations(&skills, usage_for, DEFAULT_SKILL_CONSOLIDATION_THRESHOLD)
+            .into_iter()
+            .flat_map(|consolidation| {
+                let survivor = consolidation.survivor().name.clone();
+                consolidation
+                    .duplicates()
+                    .iter()
+                    .map(|duplicate| {
+                        (
+                            duplicate.skill().name.clone(),
+                            NearDuplicate {
+                                survivor: survivor.clone(),
+                                similarity: duplicate.similarity(),
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    } else {
+        HashMap::new()
+    };
+
     let mut rows: Vec<SkillRow> = Vec::new();
     for skill in &skills {
         let root = root_for(skill.source);
         let usage = load_usage(&root).get(&skill.name);
-        rows.push(active_row(skill, root, usage.count));
+        let mut row = active_row(skill, root, usage.count);
+        row.near_duplicate_of = near_dups.get(&skill.name).cloned();
+        rows.push(row);
     }
 
     for (_, dir) in &sources {
@@ -91,6 +126,7 @@ fn active_row(skill: &Skill, root: PathBuf, usage: u64) -> SkillRow {
         triggers: skill.triggers.clone(),
         path: skill.path.display().to_string(),
         root,
+        near_duplicate_of: None,
     }
 }
 
@@ -107,6 +143,7 @@ fn candidate_row(skill: &Skill, root: PathBuf) -> SkillRow {
         triggers: skill.triggers.clone(),
         path: skill.path.display().to_string(),
         root,
+        near_duplicate_of: None,
     }
 }
 
@@ -123,6 +160,7 @@ fn disabled_row(skill: &Skill, root: PathBuf) -> SkillRow {
         triggers: skill.triggers.clone(),
         path: skill.path.display().to_string(),
         root,
+        near_duplicate_of: None,
     }
 }
 

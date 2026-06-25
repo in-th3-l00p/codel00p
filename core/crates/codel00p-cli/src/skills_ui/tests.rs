@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::model::{Filter, Flow, Mutation, Screen, SkillKind, SkillRow, SkillsModel};
+use super::model::{
+    Filter, Flow, Mutation, NearDuplicate, Screen, SkillKind, SkillRow, SkillsModel,
+};
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::empty())
@@ -21,6 +23,18 @@ fn row(name: &str, kind: SkillKind) -> SkillRow {
         triggers: Vec::new(),
         path: format!("/skills/{name}/SKILL.md"),
         root: PathBuf::from("/skills"),
+        near_duplicate_of: None,
+    }
+}
+
+/// An active skill the curator flagged as a near-duplicate of `survivor`.
+fn dup_row(name: &str, survivor: &str, similarity: u8) -> SkillRow {
+    SkillRow {
+        near_duplicate_of: Some(NearDuplicate {
+            survivor: survivor.to_string(),
+            similarity,
+        }),
+        ..row(name, SkillKind::Active)
     }
 }
 
@@ -217,4 +231,57 @@ fn esc_from_detail_returns_to_list() {
 fn esc_from_list_quits() {
     let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
     assert_eq!(model.update(key(KeyCode::Esc)), Flow::Quit);
+}
+
+#[test]
+fn consolidate_arms_disable_for_a_near_duplicate_then_archives_on_y() {
+    let mut model = model_with(vec![dup_row("ship-staging", "deploy-staging", 88)]);
+    // `c` on a near-duplicate arms a confirm (does not mutate yet).
+    assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
+    assert!(model.pending_disable.is_some());
+    let status = model.status.as_deref().unwrap_or_default();
+    assert!(status.contains("near-duplicate of deploy-staging"), "status: {status}");
+    assert!(status.contains("88%"), "status: {status}");
+    // `y` archives the duplicate via the existing Disable path (keeps the survivor).
+    assert_eq!(
+        model.update(key(KeyCode::Char('y'))),
+        Flow::Mutate(Mutation::Disable {
+            name: "ship-staging".to_string(),
+            root: PathBuf::from("/skills"),
+        })
+    );
+}
+
+#[test]
+fn consolidate_on_a_non_duplicate_hints_to_enable_the_curator_when_off() {
+    // Curator disabled (default) → the hint points at the toggle.
+    let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
+    assert!(model.pending_disable.is_none());
+    assert!(
+        model.status.as_deref().unwrap_or_default().contains("agent.behavior.curator"),
+        "status: {:?}",
+        model.status
+    );
+}
+
+#[test]
+fn consolidate_on_a_non_duplicate_says_so_when_curator_enabled() {
+    let mut model = model_with(vec![row("alpha", SkillKind::Active)]);
+    model.set_curator_enabled(true);
+    assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
+    assert!(
+        model.status.as_deref().unwrap_or_default().contains("not a near-duplicate"),
+        "status: {:?}",
+        model.status
+    );
+}
+
+#[test]
+fn consolidate_from_detail_arms_confirm() {
+    let mut model = model_with(vec![dup_row("ship-staging", "deploy-staging", 75)]);
+    model.update(key(KeyCode::Enter));
+    assert_eq!(model.screen, Screen::Detail);
+    assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
+    assert!(model.pending_disable.is_some());
 }

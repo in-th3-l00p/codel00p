@@ -12,6 +12,15 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::tui::composer::Composer;
 use crate::tui::picker::{Picker, PickerItem, PickerOutcome};
 
+/// A curator finding attached to a near-duplicate approved memory: the survivor
+/// it duplicates and the shingle similarity (0..=100). Set by the driver from
+/// `plan_consolidations` when the curator is enabled.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NearDuplicate {
+    pub(crate) survivor: String,
+    pub(crate) similarity: u8,
+}
+
 /// A memory record projected for the list picker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct MemoryRow {
@@ -20,6 +29,9 @@ pub(crate) struct MemoryRow {
     pub(crate) kind: MemoryKind,
     pub(crate) content: String,
     pub(crate) tags: Vec<String>,
+    /// Curator finding: when set, this approved memory is a near-duplicate of
+    /// `survivor` and `c` (on the detail screen) archives it (keeping the survivor).
+    pub(crate) near_duplicate_of: Option<NearDuplicate>,
 }
 
 impl PickerItem for MemoryRow {
@@ -27,11 +39,11 @@ impl PickerItem for MemoryRow {
         self.content.clone()
     }
     fn detail(&self) -> Option<String> {
-        Some(format!(
-            "{} · {}",
-            status_label(self.status),
-            kind_label(self.kind)
-        ))
+        let mut detail = format!("{} · {}", status_label(self.status), kind_label(self.kind));
+        if let Some(dup) = &self.near_duplicate_of {
+            detail.push_str(&format!(" · ~dup of {} ({}%)", dup.survivor, dup.similarity));
+        }
+        Some(detail)
     }
 }
 
@@ -176,6 +188,8 @@ pub(crate) struct MemoryModel {
     pub(crate) merge_targets: Picker<MemoryRow>,
     /// Restorable audit entries for the restore picker, built from the audit.
     pub(crate) restore_picker: Picker<RestoreRow>,
+    /// Whether the opt-in curator is enabled (controls the `c` consolidate hint).
+    pub(crate) curator_enabled: bool,
 }
 
 impl MemoryModel {
@@ -193,7 +207,14 @@ impl MemoryModel {
             show_help: false,
             merge_targets: Picker::new(Vec::new()),
             restore_picker: Picker::new(Vec::new()),
+            curator_enabled: false,
         }
+    }
+
+    /// Records whether the opt-in curator is enabled (driver-provided), so the
+    /// `c` consolidate action can give an accurate hint when it does nothing.
+    pub(crate) fn set_curator_enabled(&mut self, enabled: bool) {
+        self.curator_enabled = enabled;
     }
 
     /// Replaces the list rows (called by the driver on load/reload).
@@ -308,8 +329,44 @@ impl MemoryModel {
                 self.status = None;
                 Flow::LoadMergeTargets(row.id)
             }
+            KeyCode::Char('c') => self.consolidate(&row),
             KeyCode::Char('u') => self.open_restore_picker(),
             _ => Flow::Stay,
+        }
+    }
+
+    /// `c` (consolidate): if this approved memory is a curator-flagged
+    /// near-duplicate, archive it (reversible) with an auto reason naming the
+    /// survivor; otherwise explain why nothing happened. Archive is reversible via
+    /// the audit trail, so no extra confirmation step is needed.
+    fn consolidate(&mut self, row: &MemoryRow) -> Flow {
+        match &row.near_duplicate_of {
+            Some(dup) => {
+                self.set_status(format!(
+                    "Archiving {} as a near-duplicate of {} ({}% similar).",
+                    row.id, dup.survivor, dup.similarity
+                ));
+                Flow::Mutate(Mutation::Archive {
+                    id: row.id.clone(),
+                    reason: format!(
+                        "curator: near-duplicate of {} ({}% similar)",
+                        dup.survivor, dup.similarity
+                    ),
+                })
+            }
+            None if !self.curator_enabled => {
+                self.set_status(
+                    "Enable agent.behavior.curator to surface near-duplicate memories (config set agent.behavior.curator true).",
+                );
+                Flow::Stay
+            }
+            None => {
+                self.set_status(format!(
+                    "{} is not a near-duplicate of another approved memory.",
+                    row.id
+                ));
+                Flow::Stay
+            }
         }
     }
 

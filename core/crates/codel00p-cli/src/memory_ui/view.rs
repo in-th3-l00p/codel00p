@@ -21,6 +21,7 @@ const HELP: &[(&str, &str)] = &[
     ("x", "archive — prompts for a reason (detail)"),
     ("e", "edit the content (detail)"),
     ("m", "merge into another record (detail)"),
+    ("c", "consolidate a near-duplicate (~dup) — archive it (detail)"),
     ("u", "restore prior content (detail)"),
     ("?", "toggle this help"),
     ("Esc", "back / quit"),

@@ -1,7 +1,9 @@
 use codel00p_protocol::{MemoryKind, MemoryStatus};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::model::{AuditRow, Flow, MemoryModel, MemoryRow, Mutation, Screen, StatusFilter};
+use super::model::{
+    AuditRow, Flow, MemoryModel, MemoryRow, Mutation, NearDuplicate, Screen, StatusFilter,
+};
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::empty())
@@ -14,6 +16,19 @@ fn row(id: &str, content: &str) -> MemoryRow {
         kind: MemoryKind::Convention,
         content: content.to_string(),
         tags: Vec::new(),
+        near_duplicate_of: None,
+    }
+}
+
+/// An approved memory the curator flagged as a near-duplicate of `survivor`.
+fn dup_row(id: &str, survivor: &str, similarity: u8) -> MemoryRow {
+    MemoryRow {
+        status: MemoryStatus::Approved,
+        near_duplicate_of: Some(NearDuplicate {
+            survivor: survivor.to_string(),
+            similarity,
+        }),
+        ..row(id, "duplicate content")
     }
 }
 
@@ -244,4 +259,44 @@ fn esc_cancels_restore_picker_back_to_detail() {
     assert_eq!(model.screen, Screen::SelectRestore);
     assert_eq!(model.update(key(KeyCode::Esc)), Flow::Stay);
     assert_eq!(model.screen, Screen::Detail);
+}
+
+#[test]
+fn consolidate_archives_a_near_duplicate_with_an_auto_reason() {
+    let mut model = model_with_rows();
+    model.show_detail(dup_row("mem-dup", "mem-survivor", 87), Vec::new());
+    let flow = model.update(key(KeyCode::Char('c')));
+    match flow {
+        Flow::Mutate(Mutation::Archive { id, reason }) => {
+            assert_eq!(id, "mem-dup");
+            assert!(reason.contains("near-duplicate of mem-survivor"), "reason: {reason}");
+            assert!(reason.contains("87%"), "reason: {reason}");
+        }
+        other => panic!("expected an archive mutation, got {other:?}"),
+    }
+}
+
+#[test]
+fn consolidate_on_a_non_duplicate_hints_to_enable_the_curator_when_off() {
+    let mut model = model_with_rows();
+    model.show_detail(row("mem-1", "not a dup"), Vec::new());
+    assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
+    assert!(
+        model.status.as_deref().unwrap_or_default().contains("agent.behavior.curator"),
+        "status: {:?}",
+        model.status
+    );
+}
+
+#[test]
+fn consolidate_on_a_non_duplicate_says_so_when_curator_enabled() {
+    let mut model = model_with_rows();
+    model.set_curator_enabled(true);
+    model.show_detail(row("mem-1", "not a dup"), Vec::new());
+    assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
+    assert!(
+        model.status.as_deref().unwrap_or_default().contains("not a near-duplicate"),
+        "status: {:?}",
+        model.status
+    );
 }
