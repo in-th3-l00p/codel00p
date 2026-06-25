@@ -19,6 +19,8 @@ mod memory_switch;
 mod permission_modes;
 #[path = "agent_cli/registry_lifecycle.rs"]
 mod registry_lifecycle;
+#[path = "agent_cli/route.rs"]
+mod route;
 #[path = "agent_cli/sessions_memory.rs"]
 mod sessions_memory;
 #[path = "agent_cli/skills_usage.rs"]

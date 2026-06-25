@@ -66,6 +66,7 @@ mod options;
 mod permissions;
 mod plugins;
 pub(crate) mod registry;
+pub(crate) mod routing;
 pub(crate) mod run_log;
 mod session_state;
 mod skills;

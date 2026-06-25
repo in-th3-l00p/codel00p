@@ -297,6 +297,7 @@ dependencies = [
  "codel00p-session",
  "codel00p-skill",
  "codel00p-storage",
+ "codel00p-textsim",
  "crossterm",
  "futures",
  "hmac 0.12.1",

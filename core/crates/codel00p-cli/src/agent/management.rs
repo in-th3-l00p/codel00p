@@ -11,11 +11,12 @@ use crate::config::CliResult;
 
 use super::distribution;
 use super::registry::{self, CreateOptions};
+use super::routing;
 
 /// Subcommand names that operate on the base registry and must NOT trigger the
 /// per-agent `CODEL00P_HOME` override in main.rs.
 pub(crate) const MANAGEMENT_SUBCOMMANDS: &[&str] = &[
-    "create", "use", "list", "ls", "show", "rename", "delete", "rm", "export", "import",
+    "create", "use", "list", "ls", "show", "rename", "delete", "rm", "export", "import", "route",
 ];
 
 /// Whether `sub` is a base-scoped agent management subcommand.
@@ -39,6 +40,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<Option<String>> {
         "delete" | "rm" => delete(&base, rest).map(Some),
         "export" => export(&base, rest).map(Some),
         "import" => import(&base, rest).map(Some),
+        "route" => route(&base, rest).map(Some),
         _ => Ok(None),
     }
 }
@@ -269,6 +271,97 @@ fn import(base: &Path, args: &[String]) -> CliResult<String> {
         info.home.display(),
         info.name
     ))
+}
+
+/// `agent route <task> [--json] [--limit N]` — rank the registered agents by how
+/// well their description/persona matches the task, best first. The top match is
+/// the specialist to route the task to. Offline BM25 — explainable, deterministic,
+/// no LLM/network. The `--json` form is the seam a delegation/fan-out layer reads.
+fn route(base: &Path, args: &[String]) -> CliResult<String> {
+    let mut task_parts: Vec<String> = Vec::new();
+    let mut json = false;
+    let mut limit: Option<usize> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" => {
+                json = true;
+                index += 1;
+            }
+            "--limit" => {
+                let count = value(args, index, "--limit")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid --limit".to_string())?;
+                limit = Some(count.max(1));
+                index += 2;
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("unknown flag for `agent route`: {other}"));
+            }
+            other => {
+                task_parts.push(other.to_string());
+                index += 1;
+            }
+        }
+    }
+    let task = task_parts.join(" ");
+    if task.trim().is_empty() {
+        return Err("usage: codel00p agent route <task> [--json] [--limit N]".to_string());
+    }
+    let agents = registry::list_agents(base);
+    if agents.is_empty() {
+        return Err(
+            "no agents to route to — create one: codel00p agent create <name> --description \"...\""
+                .to_string(),
+        );
+    }
+
+    let mut ranked = routing::rank_agents(&agents, &task);
+    // The best match is the top scorer that shares some content with the task
+    // (`best_match` is the same seam a delegation/fan-out layer calls to route).
+    let best = routing::best_match(&agents, &task, 1).map(|candidate| candidate.name);
+    if let Some(count) = limit {
+        ranked.truncate(count);
+    }
+
+    if json {
+        let matches: Vec<serde_json::Value> = ranked
+            .iter()
+            .map(|candidate| {
+                serde_json::json!({
+                    "name": candidate.name,
+                    "score": candidate.score,
+                    "description": candidate.description,
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({ "task": task, "best": best, "matches": matches });
+        return serde_json::to_string(&payload).map_err(|error| error.to_string());
+    }
+
+    let mut out = format!("Routing task: \"{task}\"\n\n");
+    for candidate in &ranked {
+        let marker = if Some(&candidate.name) == best.as_ref() {
+            "\u{2192}"
+        } else {
+            " "
+        };
+        let description = candidate.description.as_deref().unwrap_or("");
+        out.push_str(&format!(
+            "  {marker} {:<16} [{:>3}]  {}\n",
+            candidate.name, candidate.score, description
+        ));
+    }
+    out.push('\n');
+    match &best {
+        Some(name) => out.push_str(&format!(
+            "Best match: {name}\n  run it:  codel00p --agent {name} agent run \"{task}\"\n"
+        )),
+        None => out.push_str(
+            "No agent description matched the task — use the default agent or refine agent descriptions.\n",
+        ),
+    }
+    Ok(out)
 }
 
 /// Read `agent.model` from an agent home's `config.toml`, if set, for display.

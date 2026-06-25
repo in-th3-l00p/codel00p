@@ -323,6 +323,8 @@ Personas (each agent is its own CODEL00P_HOME):
   show <name>          Show an agent's details and home path
   rename <old> <new>   Rename an agent
   delete | rm <name>   Delete an agent (never the default/base home)
+  route <task>         Pick the best-matching specialist agent for a task,
+                       ranked by description/persona (offline; --json, --limit N)
 
 Global: --agent <name>  Use a named agent for one invocation — scopes its config,
                         skills, memory, and sessions. Overrides the sticky active
