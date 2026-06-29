@@ -4,12 +4,31 @@
 //!
 //! `super::render` dispatches to these by the active `Overlay`. They share the
 //! `centered_rect` layout helper and the generic `draw_picker` from `super`.
+//!
+//! Key-hint convention (kept consistent across every overlay): bare key names
+//! (no brackets), `·`-separated, in the form `<Key> to <verb>`. Esc reads `close`
+//! for dismissable panels, `cancel` for forms that discard input, and `go back`
+//! for a sub-overlay.
 
 use super::*;
 
+/// Frames an overlay: clears the region, draws a titled border in `color`, and
+/// returns the inner content `Rect`. Centralizes the panel chrome every overlay
+/// shared so framing stays identical across them.
+fn framed(frame: &mut Frame, area: Rect, title: &str, color: Color) -> Rect {
+    frame.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(color))
+        .title(title.to_string());
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+    inner
+}
+
 pub(super) fn draw_help(app: &App, frame: &mut Frame) {
     let area = centered_rect(60, 60, frame.area());
-    frame.render_widget(Clear, area);
+    let inner = framed(frame, area, " help ", app.theme.overlay_border);
     let lines = vec![
         Line::from(Span::styled("codel00p agent — keys", app.theme.accent())),
         Line::from(""),
@@ -30,13 +49,9 @@ pub(super) fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  Esc          close overlay · clear input · quit"),
         Line::from("  Ctrl-C       quit"),
         Line::from(""),
-        Line::from(Span::styled("  press any key to close", app.theme.muted())),
+        Line::from(Span::styled("  Any key to close", app.theme.muted())),
     ];
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" help ");
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 pub(super) fn draw_permission(
@@ -45,7 +60,7 @@ pub(super) fn draw_permission(
     request: &codel00p_harness::PermissionRequest,
 ) {
     let area = centered_rect(60, 30, frame.area());
-    frame.render_widget(Clear, area);
+    let inner = framed(frame, area, " approve tool ", app.theme.error);
     let lines = vec![
         Line::from(Span::styled("Permission requested", app.theme.accent())),
         Line::from(""),
@@ -53,26 +68,16 @@ pub(super) fn draw_permission(
         Line::from(format!("  scope: {:?}", request.scope())),
         Line::from(""),
         Line::from(Span::styled(
-            "  [y] allow    [n] deny    [Esc] deny",
+            "  y to allow · n to deny · Esc to deny",
             app.theme.muted(),
         )),
     ];
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.error))
-        .title(" approve tool ");
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 pub(super) fn draw_entities(app: &App, frame: &mut Frame, browser: &EntityBrowser) {
     let area = centered_rect(72, 72, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" organization ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " organization ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -168,13 +173,7 @@ pub(super) fn draw_org(app: &App, frame: &mut Frame, area: Rect, browser: &Entit
 /// the filter doesn't match, switches the model for the next turn.
 pub(super) fn draw_model_picker(app: &App, frame: &mut Frame, picker: &ModelPicker) {
     let area = centered_rect(60, 60, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" switch model ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " switch model ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -184,7 +183,7 @@ pub(super) fn draw_model_picker(app: &App, frame: &mut Frame, picker: &ModelPick
     let status = picker
         .status
         .clone()
-        .unwrap_or_else(|| "Enter to use · type any model id · Esc to close".to_string());
+        .unwrap_or_else(|| "Enter to use · type to filter · Esc to close".to_string());
     frame.render_widget(
         Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
         rows[0],
@@ -195,13 +194,7 @@ pub(super) fn draw_model_picker(app: &App, frame: &mut Frame, picker: &ModelPick
 /// Draws the session switcher: a status line above the list of prior conversations.
 pub(super) fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
     let area = centered_rect(64, 60, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" switch session ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " switch session ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -242,13 +235,7 @@ pub(super) fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwit
 /// agents (default + registry) with the active one marked.
 pub(super) fn draw_agent_switcher(app: &App, frame: &mut Frame, switcher: &AgentSwitcher) {
     let area = centered_rect(60, 60, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" switch agent ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " switch agent ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -269,13 +256,7 @@ pub(super) fn draw_agent_switcher(app: &App, frame: &mut Frame, switcher: &Agent
 /// an optional description, with the focused field highlighted.
 pub(super) fn draw_agent_create(app: &App, frame: &mut Frame, form: &AgentCreateForm) {
     let area = centered_rect(56, 36, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" create agent ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " create agent ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -351,13 +332,7 @@ pub(super) fn draw_command(
     palette: &super::super::overlay::CommandPalette,
 ) {
     let area = centered_rect(60, 60, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" command palette ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " command palette ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -375,13 +350,7 @@ pub(super) fn draw_command(
 
 pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
     let area = centered_rect(50, 40, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" settings ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " settings ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -389,7 +358,7 @@ pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOve
         .split(inner);
     frame.render_widget(
         Paragraph::new(Span::styled(
-            "  ↑/↓ move · Enter/Space toggle · ←/→ cycle profile · Esc to close",
+            "  ↑/↓ to move · Enter/Space to toggle · ←/→ to cycle profile · Esc to close",
             app.theme.muted(),
         )),
         rows[0],
@@ -447,13 +416,12 @@ pub(super) fn draw_advanced_settings(
     advanced: &AdvancedSettingsOverlay,
 ) {
     let area = centered_rect(56, 50, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.overlay_border))
-        .title(" settings · advanced ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(
+        frame,
+        area,
+        " settings · advanced ",
+        app.theme.overlay_border,
+    );
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -465,7 +433,7 @@ pub(super) fn draw_advanced_settings(
         .split(inner);
     frame.render_widget(
         Paragraph::new(Span::styled(
-            "  ↑/↓ move · ←/→ or -/+ adjust · Enter/Space toggle · Esc back",
+            "  ↑/↓ to move · ←/→ or -/+ to adjust · Enter/Space to toggle · Esc to go back",
             app.theme.muted(),
         )),
         rows[0],
@@ -532,13 +500,7 @@ pub(super) fn draw_advanced_settings(
 /// choices (Update now / Dismiss). Mirrors the other centered overlays.
 pub(super) fn draw_update_prompt(app: &App, frame: &mut Frame, prompt: &UpdatePrompt) {
     let area = centered_rect(56, 30, frame.area());
-    frame.render_widget(Clear, area);
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(app.theme.notice))
-        .title(" update available ");
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
+    let inner = framed(frame, area, " update available ", app.theme.notice);
 
     let lines = vec![
         Line::from(Span::styled(
@@ -559,9 +521,9 @@ pub(super) fn draw_update_prompt(app: &App, frame: &mut Frame, prompt: &UpdatePr
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            "  [Enter] update now    [Esc] dismiss",
+            "  Enter to update now · Esc to dismiss",
             app.theme.muted(),
         )),
     ];
-    frame.render_widget(Paragraph::new(lines).block(Block::default()), inner);
+    frame.render_widget(Paragraph::new(lines), inner);
 }

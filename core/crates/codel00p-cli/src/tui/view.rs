@@ -247,6 +247,38 @@ mod tests {
     }
 
     #[test]
+    fn tool_lifecycle_glyphs_distinguish_requested_from_running() {
+        // A queued tool reads as a hollow ○; once running it fills to ●. The
+        // distinct glyphs let the lifecycle be read at a glance, not just by color.
+        let mut app = test_app();
+        app.conversation.tool_requested("grep");
+        let requested = render_to_string(&mut app, 60, 12);
+        assert!(
+            requested.contains('○'),
+            "requested tool shows a hollow glyph"
+        );
+
+        app.conversation.tool_progress("grep", None);
+        let running = render_to_string(&mut app, 60, 12);
+        assert!(running.contains('●'), "running tool fills the glyph");
+    }
+
+    #[test]
+    fn overlay_hints_use_the_bare_key_grammar() {
+        // The standardized hint grammar is bare keys (no brackets) joined by `·`.
+        // The update prompt is the canary: it used to read `[Enter] update now`.
+        use crate::tui::overlay::{Overlay, UpdatePrompt};
+        let mut app = test_app();
+        app.overlay = Overlay::UpdatePrompt(UpdatePrompt {
+            current: "0.8.0".to_string(),
+            latest: "0.9.0".to_string(),
+        });
+        let rendered = render_to_string(&mut app, 80, 24);
+        assert!(rendered.contains("Enter to update now · Esc to dismiss"));
+        assert!(!rendered.contains("[Enter]"), "no bracketed keys remain");
+    }
+
+    #[test]
     fn command_palette_renders_actions() {
         use crate::tui::overlay::{CommandPalette, Overlay};
         let mut app = test_app();
