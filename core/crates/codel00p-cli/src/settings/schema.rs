@@ -702,7 +702,10 @@ impl MemorySettings {
     fn merge(&mut self, other: Self) {
         take(&mut self.ranker, other.ranker);
         take(&mut self.external_url, other.external_url);
-        take(&mut self.allow_external_ranking, other.allow_external_ranking);
+        take(
+            &mut self.allow_external_ranking,
+            other.allow_external_ranking,
+        );
     }
 
     /// Whether external ranking is fully authorized: opted into the external
@@ -710,7 +713,10 @@ impl MemorySettings {
     /// Fail-closed — any missing piece keeps retrieval on offline BM25.
     pub fn external_ranking_enabled(&self) -> bool {
         self.ranker.as_deref() == Some("external")
-            && self.external_url.as_deref().is_some_and(|url| !url.is_empty())
+            && self
+                .external_url
+                .as_deref()
+                .is_some_and(|url| !url.is_empty())
             && self.allow_external_ranking.unwrap_or(false)
     }
 }

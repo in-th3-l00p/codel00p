@@ -27,7 +27,11 @@ fn run_home(home: &Path, args: &[&str]) -> Output {
 /// Run via [`run_home`] and assert the command succeeded, returning its output.
 fn run_ok(home: &Path, args: &[&str]) -> Output {
     let output = run_home(home, args);
-    assert!(output.status.success(), "`{args:?}` failed: {}", stderr(&output));
+    assert!(
+        output.status.success(),
+        "`{args:?}` failed: {}",
+        stderr(&output)
+    );
     output
 }
 
@@ -39,18 +43,28 @@ fn global_agent_flag_is_position_tolerant() {
     run_ok(home.path(), &["agent", "create", "coder"]);
 
     // Flag AFTER the subcommand token.
-    let after = run_home(home.path(), &["skills", "--agent", "coder", "create", "demo-after"]);
+    let after = run_home(
+        home.path(),
+        &["skills", "--agent", "coder", "create", "demo-after"],
+    );
     assert!(after.status.success(), "stderr: {}", stderr(&after));
     assert!(
-        home.path().join("agents/coder/skills/demo-after/SKILL.md").is_file(),
+        home.path()
+            .join("agents/coder/skills/demo-after/SKILL.md")
+            .is_file(),
         "skill should be created under the coder agent home"
     );
 
     // Flag in the LEADING position still works too.
-    let before = run_home(home.path(), &["--agent", "coder", "skills", "create", "demo-before"]);
+    let before = run_home(
+        home.path(),
+        &["--agent", "coder", "skills", "create", "demo-before"],
+    );
     assert!(before.status.success(), "stderr: {}", stderr(&before));
     assert!(
-        home.path().join("agents/coder/skills/demo-before/SKILL.md").is_file(),
+        home.path()
+            .join("agents/coder/skills/demo-before/SKILL.md")
+            .is_file(),
         "leading --agent should also target the coder home"
     );
 
@@ -67,28 +81,62 @@ fn skills_isolate_per_agent() {
     run_ok(home.path(), &["agent", "create", "coder"]);
     run_ok(home.path(), &["agent", "create", "reviewer"]);
 
-    run_ok(home.path(), &["--agent", "coder", "skills", "create", "coder-skill"]);
-    run_ok(home.path(), &["--agent", "reviewer", "skills", "create", "reviewer-skill"]);
+    run_ok(
+        home.path(),
+        &["--agent", "coder", "skills", "create", "coder-skill"],
+    );
+    run_ok(
+        home.path(),
+        &["--agent", "reviewer", "skills", "create", "reviewer-skill"],
+    );
 
     let coder_list = run_home(home.path(), &["--agent", "coder", "skills", "list"]);
-    assert!(coder_list.status.success(), "stderr: {}", stderr(&coder_list));
+    assert!(
+        coder_list.status.success(),
+        "stderr: {}",
+        stderr(&coder_list)
+    );
     let coder_out = stdout(&coder_list);
     assert!(coder_out.contains("coder-skill"), "coder list: {coder_out}");
-    assert!(!coder_out.contains("reviewer-skill"), "coder must not see reviewer's: {coder_out}");
+    assert!(
+        !coder_out.contains("reviewer-skill"),
+        "coder must not see reviewer's: {coder_out}"
+    );
 
     let reviewer_list = run_home(home.path(), &["--agent", "reviewer", "skills", "list"]);
     let reviewer_out = stdout(&reviewer_list);
-    assert!(reviewer_out.contains("reviewer-skill"), "reviewer list: {reviewer_out}");
-    assert!(!reviewer_out.contains("coder-skill"), "reviewer must not see coder's: {reviewer_out}");
+    assert!(
+        reviewer_out.contains("reviewer-skill"),
+        "reviewer list: {reviewer_out}"
+    );
+    assert!(
+        !reviewer_out.contains("coder-skill"),
+        "reviewer must not see coder's: {reviewer_out}"
+    );
 
     // The base/default home sees neither agent's skills.
     let base_out = stdout(&run_home(home.path(), &["skills", "list"]));
-    assert!(!base_out.contains("coder-skill"), "base saw coder's: {base_out}");
-    assert!(!base_out.contains("reviewer-skill"), "base saw reviewer's: {base_out}");
+    assert!(
+        !base_out.contains("coder-skill"),
+        "base saw coder's: {base_out}"
+    );
+    assert!(
+        !base_out.contains("reviewer-skill"),
+        "base saw reviewer's: {base_out}"
+    );
 
     // On-disk: each agent's skill lives under its own home, not the other's.
-    assert!(home.path().join("agents/coder/skills/coder-skill/SKILL.md").is_file());
-    assert!(!home.path().join("agents/reviewer/skills/coder-skill").exists());
+    assert!(
+        home.path()
+            .join("agents/coder/skills/coder-skill/SKILL.md")
+            .is_file()
+    );
+    assert!(
+        !home
+            .path()
+            .join("agents/reviewer/skills/coder-skill")
+            .exists()
+    );
 }
 
 /// `config set/get` honor the selected agent: a value set under `coder` is read
@@ -101,14 +149,27 @@ fn config_targets_the_selected_agent() {
     // Set on coder, with the flag MID-position to also exercise tolerance.
     let set = run_home(
         home.path(),
-        &["config", "--agent", "coder", "set", "agent.behavior.curator", "true"],
+        &[
+            "config",
+            "--agent",
+            "coder",
+            "set",
+            "agent.behavior.curator",
+            "true",
+        ],
     );
     assert!(set.status.success(), "stderr: {}", stderr(&set));
 
     // Coder reads back true.
     let coder_get = run_home(
         home.path(),
-        &["--agent", "coder", "config", "get", "agent.behavior.curator"],
+        &[
+            "--agent",
+            "coder",
+            "config",
+            "get",
+            "agent.behavior.curator",
+        ],
     );
     assert!(coder_get.status.success(), "stderr: {}", stderr(&coder_get));
     assert_eq!(stdout(&coder_get).trim(), "true");
@@ -141,15 +202,23 @@ fn sticky_active_agent_scopes_config_and_skills() {
 
     // No --agent flag: the sticky pointer should route these to coder.
     run_ok(home.path(), &["skills", "create", "sticky-skill"]);
-    run_ok(home.path(), &["config", "set", "agent.behavior.curator", "true"]);
+    run_ok(
+        home.path(),
+        &["config", "set", "agent.behavior.curator", "true"],
+    );
 
     assert!(
-        home.path().join("agents/coder/skills/sticky-skill/SKILL.md").is_file(),
+        home.path()
+            .join("agents/coder/skills/sticky-skill/SKILL.md")
+            .is_file(),
         "sticky agent should scope skills create to coder"
     );
     let coder_config = std::fs::read_to_string(home.path().join("agents/coder/config.toml"))
         .expect("read coder config.toml");
-    assert!(coder_config.contains("curator = true"), "sticky agent should scope config to coder");
+    assert!(
+        coder_config.contains("curator = true"),
+        "sticky agent should scope config to coder"
+    );
 
     // The base home stayed clean.
     assert!(!home.path().join("skills/sticky-skill").exists());

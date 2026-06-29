@@ -146,10 +146,16 @@ fn skills_curate_consolidates_near_duplicate_agent_skills() {
     let dry = run(home.path(), &["skills", "curate"]);
     assert!(dry.status.success(), "stderr: {}", stderr(&dry));
     let listed = stdout(&dry);
-    assert!(listed.contains("Near-duplicate agent skills"), "dry: {listed}");
+    assert!(
+        listed.contains("Near-duplicate agent skills"),
+        "dry: {listed}"
+    );
     assert!(listed.contains("keep a-deploy"), "dry: {listed}");
     assert!(listed.contains("archive b-deploy"), "dry: {listed}");
-    assert!(!listed.contains("Stale agent-created skills"), "dry: {listed}");
+    assert!(
+        !listed.contains("Stale agent-created skills"),
+        "dry: {listed}"
+    );
 
     let apply = run(home.path(), &["skills", "curate", "--apply"]);
     assert!(apply.status.success(), "stderr: {}", stderr(&apply));
@@ -166,7 +172,10 @@ fn skills_curate_consolidates_near_duplicate_agent_skills() {
 
     let after = stdout(&run(home.path(), &["skills", "list"]));
     assert!(after.contains("a-deploy"), "survivor missing: {after}");
-    assert!(!after.contains("b-deploy"), "duplicate still active: {after}");
+    assert!(
+        !after.contains("b-deploy"),
+        "duplicate still active: {after}"
+    );
 }
 
 #[test]

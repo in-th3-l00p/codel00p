@@ -369,11 +369,17 @@ fn skills_curate(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     };
 
     if stale.is_empty() && consolidations.is_empty() {
-        return Ok("No skills to curate: no stale agent skills and no near-duplicates.\n".to_string());
+        return Ok(
+            "No skills to curate: no stale agent skills and no near-duplicates.\n".to_string(),
+        );
     }
 
     if !options.apply {
-        return Ok(render_skill_curate_dry_run(&stale, &consolidations, options.threshold));
+        return Ok(render_skill_curate_dry_run(
+            &stale,
+            &consolidations,
+            options.threshold,
+        ));
     }
 
     // Archive the union of stale skills and consolidation duplicates, each once.

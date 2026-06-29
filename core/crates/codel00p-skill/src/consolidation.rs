@@ -90,8 +90,10 @@ pub fn plan_skill_consolidations(
     let mut parent: Vec<usize> = (0..count).collect();
     for left in 0..count {
         for right in (left + 1)..count {
-            let similarity =
-                shingle_similarity(&skill_text(candidates[left]), &skill_text(candidates[right]));
+            let similarity = shingle_similarity(
+                &skill_text(candidates[left]),
+                &skill_text(candidates[right]),
+            );
             if similarity >= threshold {
                 union(&mut parent, left, right);
             }
@@ -124,7 +126,10 @@ pub fn plan_skill_consolidations(
             .iter()
             .map(|&member| DuplicateSkill {
                 skill: candidates[member].clone(),
-                similarity: shingle_similarity(&skill_text(&survivor), &skill_text(candidates[member])),
+                similarity: shingle_similarity(
+                    &skill_text(&survivor),
+                    &skill_text(candidates[member]),
+                ),
             })
             .collect();
         duplicates.sort_by(|left, right| left.skill.name.cmp(&right.skill.name));
@@ -242,8 +247,18 @@ mod tests {
     #[test]
     fn unrelated_skills_produce_no_plan() {
         let skills = vec![
-            skill("deploy", "agent", "Deploy the app", "run the deploy script for production"),
-            skill("lint", "agent", "Lint the code", "run the formatter and the linter over the tree"),
+            skill(
+                "deploy",
+                "agent",
+                "Deploy the app",
+                "run the deploy script for production",
+            ),
+            skill(
+                "lint",
+                "agent",
+                "Lint the code",
+                "run the formatter and the linter over the tree",
+            ),
         ];
         assert!(plan_skill_consolidations(&skills, no_usage, 60).is_empty());
     }

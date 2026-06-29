@@ -41,7 +41,10 @@ impl PickerItem for MemoryRow {
     fn detail(&self) -> Option<String> {
         let mut detail = format!("{} · {}", status_label(self.status), kind_label(self.kind));
         if let Some(dup) = &self.near_duplicate_of {
-            detail.push_str(&format!(" · ~dup of {} ({}%)", dup.survivor, dup.similarity));
+            detail.push_str(&format!(
+                " · ~dup of {} ({}%)",
+                dup.survivor, dup.similarity
+            ));
         }
         Some(detail)
     }

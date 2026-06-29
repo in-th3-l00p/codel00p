@@ -601,8 +601,9 @@ fn agent_flag_after_subcommand_selects_home() {
         .run_plain(&["agent", "create", "coder"])
         .assert_success();
 
-    let provider = MockProvider::start()
-        .assistant_text("Done.\nremember convention[trailing]: TRAILING_FLAG_FACT after the subcommand.");
+    let provider = MockProvider::start().assistant_text(
+        "Done.\nremember convention[trailing]: TRAILING_FLAG_FACT after the subcommand.",
+    );
     let base_url = provider.base_url();
     let workspace = runner.workspace_path().to_str().expect("utf8 workspace");
 

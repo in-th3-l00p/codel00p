@@ -313,11 +313,7 @@ struct FixedScoreRanker {
 }
 
 impl RankingProvider for FixedScoreRanker {
-    fn rank(
-        &self,
-        _query: &str,
-        documents: &[RankingDocument],
-    ) -> Result<Vec<u8>, MemoryError> {
+    fn rank(&self, _query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError> {
         Ok(documents
             .iter()
             .map(|document| self.scores.get(&document.id).copied().unwrap_or(0))

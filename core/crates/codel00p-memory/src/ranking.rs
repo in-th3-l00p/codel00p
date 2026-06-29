@@ -69,8 +69,7 @@ pub trait RankingProvider: Send + Sync {
     /// length). A provider that cannot score (e.g. a transient network failure)
     /// should degrade gracefully rather than error — returning `Err` aborts the
     /// retrieval and surfaces to the caller.
-    fn rank(&self, query: &str, documents: &[RankingDocument])
-    -> Result<Vec<u8>, MemoryError>;
+    fn rank(&self, query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError>;
 }
 
 /// The default ranking provider: wraps [`Bm25Ranker`] so the repository's
@@ -81,11 +80,7 @@ pub trait RankingProvider: Send + Sync {
 pub struct Bm25RankingProvider;
 
 impl RankingProvider for Bm25RankingProvider {
-    fn rank(
-        &self,
-        query: &str,
-        documents: &[RankingDocument],
-    ) -> Result<Vec<u8>, MemoryError> {
+    fn rank(&self, query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError> {
         let query_terms = tokenize(query);
         let candidates: Vec<RankCandidate<usize>> = documents
             .iter()
@@ -374,7 +369,9 @@ mod tests {
             document("a", "deploy with cargo to kubernetes cluster"),
             document("b", "cargo build the workspace"),
         ];
-        let provider_scores = Bm25RankingProvider.rank("cargo kubernetes", &documents).unwrap();
+        let provider_scores = Bm25RankingProvider
+            .rank("cargo kubernetes", &documents)
+            .unwrap();
 
         let candidates: Vec<RankCandidate<usize>> = documents
             .iter()

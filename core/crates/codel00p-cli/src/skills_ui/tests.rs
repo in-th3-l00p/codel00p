@@ -240,7 +240,10 @@ fn consolidate_arms_disable_for_a_near_duplicate_then_archives_on_y() {
     assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
     assert!(model.pending_disable.is_some());
     let status = model.status.as_deref().unwrap_or_default();
-    assert!(status.contains("near-duplicate of deploy-staging"), "status: {status}");
+    assert!(
+        status.contains("near-duplicate of deploy-staging"),
+        "status: {status}"
+    );
     assert!(status.contains("88%"), "status: {status}");
     // `y` archives the duplicate via the existing Disable path (keeps the survivor).
     assert_eq!(
@@ -259,7 +262,11 @@ fn consolidate_on_a_non_duplicate_hints_to_enable_the_curator_when_off() {
     assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
     assert!(model.pending_disable.is_none());
     assert!(
-        model.status.as_deref().unwrap_or_default().contains("agent.behavior.curator"),
+        model
+            .status
+            .as_deref()
+            .unwrap_or_default()
+            .contains("agent.behavior.curator"),
         "status: {:?}",
         model.status
     );
@@ -271,7 +278,11 @@ fn consolidate_on_a_non_duplicate_says_so_when_curator_enabled() {
     model.set_curator_enabled(true);
     assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
     assert!(
-        model.status.as_deref().unwrap_or_default().contains("not a near-duplicate"),
+        model
+            .status
+            .as_deref()
+            .unwrap_or_default()
+            .contains("not a near-duplicate"),
         "status: {:?}",
         model.status
     );

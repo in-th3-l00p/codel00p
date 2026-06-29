@@ -94,6 +94,9 @@ mod tests {
 
     #[test]
     fn tokenize_drops_stopwords_and_lowercases() {
-        assert_eq!(tokenize("The Cargo BUILD and test"), vec!["cargo", "build", "test"]);
+        assert_eq!(
+            tokenize("The Cargo BUILD and test"),
+            vec!["cargo", "build", "test"]
+        );
     }
 }

@@ -239,8 +239,7 @@ mod tests {
 
     #[test]
     fn no_global_flags_passes_everything_through() {
-        let (overrides, rest) =
-            parse_global_overrides(owned(&["skills", "list"])).unwrap();
+        let (overrides, rest) = parse_global_overrides(owned(&["skills", "list"])).unwrap();
         assert!(overrides.agent.is_none() && overrides.memory_db.is_none());
         assert_eq!(rest, owned(&["skills", "list"]));
     }

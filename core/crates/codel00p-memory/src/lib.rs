@@ -15,7 +15,9 @@ mod review;
 mod store;
 mod util;
 
-pub use curator::{Consolidation, DEFAULT_CONSOLIDATION_THRESHOLD, DuplicateMemory, plan_consolidations};
+pub use curator::{
+    Consolidation, DEFAULT_CONSOLIDATION_THRESHOLD, DuplicateMemory, plan_consolidations,
+};
 pub use error::MemoryError;
 pub use extraction::{ExplicitMemoryExtractor, MemoryCandidateExtractor};
 pub use inputs::{MemoryCandidateInput, MemoryExtractionInput};

@@ -783,8 +783,7 @@ fn memory_ranker_keys_round_trip_and_gate_is_fail_closed() {
     with_home(dir.path(), || {
         let path = user_config_path();
         set_value(&path, "memory.ranker", "external").expect("set ranker");
-        set_value(&path, "memory.external_url", "https://ranker.internal/rank")
-            .expect("set url");
+        set_value(&path, "memory.external_url", "https://ranker.internal/rank").expect("set url");
 
         // Ranker + URL alone do NOT enable external ranking — the governance gate
         // is still off, so it stays fail-closed on offline BM25.

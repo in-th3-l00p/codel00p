@@ -14,9 +14,27 @@ fn run_in_home(home: &Path, args: &[&str]) -> Output {
 
 fn seed_specialists(home: &Path) {
     let ok = |args: &[&str]| assert!(run_in_home(home, args).status.success());
-    ok(&["agent", "create", "coder", "--description", "implements features and refactors rust code"]);
-    ok(&["agent", "create", "reviewer", "--description", "reviews pull requests for correctness"]);
-    ok(&["agent", "create", "devops", "--description", "manages kubernetes deployments and cloud infrastructure"]);
+    ok(&[
+        "agent",
+        "create",
+        "coder",
+        "--description",
+        "implements features and refactors rust code",
+    ]);
+    ok(&[
+        "agent",
+        "create",
+        "reviewer",
+        "--description",
+        "reviews pull requests for correctness",
+    ]);
+    ok(&[
+        "agent",
+        "create",
+        "devops",
+        "--description",
+        "manages kubernetes deployments and cloud infrastructure",
+    ]);
 }
 
 #[test]
@@ -24,7 +42,10 @@ fn route_picks_the_topical_specialist() {
     let dir = tempdir().expect("tempdir");
     seed_specialists(dir.path());
 
-    let out = run_in_home(dir.path(), &["agent", "route", "refactor the rust parser code"]);
+    let out = run_in_home(
+        dir.path(),
+        &["agent", "route", "refactor the rust parser code"],
+    );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let text = stdout(&out);
     assert!(text.contains("Best match: coder"), "routing output: {text}");
@@ -37,7 +58,12 @@ fn route_json_reports_best_and_ranked_matches() {
 
     let out = run_in_home(
         dir.path(),
-        &["agent", "route", "deploy the service to the kubernetes cluster", "--json"],
+        &[
+            "agent",
+            "route",
+            "deploy the service to the kubernetes cluster",
+            "--json",
+        ],
     );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let payload: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("route json");
@@ -56,7 +82,14 @@ fn route_limit_truncates_to_best_n() {
 
     let out = run_in_home(
         dir.path(),
-        &["agent", "route", "review this code for bugs", "--json", "--limit", "1"],
+        &[
+            "agent",
+            "route",
+            "review this code for bugs",
+            "--json",
+            "--limit",
+            "1",
+        ],
     );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let payload: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("route json");
@@ -70,11 +103,19 @@ fn route_reports_no_match_for_unrelated_task() {
 
     let out = run_in_home(
         dir.path(),
-        &["agent", "route", "compose a haiku about the autumn moon", "--json"],
+        &[
+            "agent",
+            "route",
+            "compose a haiku about the autumn moon",
+            "--json",
+        ],
     );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let payload: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("route json");
-    assert!(payload["best"].is_null(), "unrelated task should have no confident route: {payload}");
+    assert!(
+        payload["best"].is_null(),
+        "unrelated task should have no confident route: {payload}"
+    );
 }
 
 #[test]
@@ -82,5 +123,9 @@ fn route_errors_without_agents() {
     let dir = tempdir().expect("tempdir");
     let out = run_in_home(dir.path(), &["agent", "route", "do something"]);
     assert!(!out.status.success());
-    assert!(stderr(&out).contains("no agents to route to"), "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("no agents to route to"),
+        "stderr: {}",
+        stderr(&out)
+    );
 }

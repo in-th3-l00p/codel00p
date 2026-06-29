@@ -88,11 +88,7 @@ impl ExternalRanker {
 }
 
 impl RankingProvider for ExternalRanker {
-    fn rank(
-        &self,
-        query: &str,
-        documents: &[RankingDocument],
-    ) -> Result<Vec<u8>, MemoryError> {
+    fn rank(&self, query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError> {
         if documents.is_empty() {
             return Ok(Vec::new());
         }

@@ -481,9 +481,7 @@ where
         // via `with_ranker`. Either way the scoring contract is the same.
         let documents: Vec<RankingDocument> = filtered
             .iter()
-            .map(|record| {
-                RankingDocument::new(record.entry().id(), record.entry().content())
-            })
+            .map(|record| RankingDocument::new(record.entry().id(), record.entry().content()))
             .collect();
         let scores = self.ranker.rank(&query.query, &documents)?;
         if scores.len() != filtered.len() {

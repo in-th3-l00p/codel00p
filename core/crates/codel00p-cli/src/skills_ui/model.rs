@@ -68,7 +68,10 @@ impl PickerItem for SkillRow {
         };
         let mut detail = format!("{} · {usage}", self.source);
         if let Some(dup) = &self.near_duplicate_of {
-            detail.push_str(&format!(" · ~dup of {} ({}%)", dup.survivor, dup.similarity));
+            detail.push_str(&format!(
+                " · ~dup of {} ({}%)",
+                dup.survivor, dup.similarity
+            ));
         }
         Some(detail)
     }

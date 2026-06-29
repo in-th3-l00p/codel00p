@@ -57,7 +57,10 @@ fn memory_curate_is_off_by_default() {
 
     // Nothing was archived: the duplicate is still approved.
     let approved = run_codel00p(&db_path, &["memory", "list", "--status", "approved"]);
-    assert!(stdout(&approved).contains("mem-a-keep"), "disabled curator archived a memory");
+    assert!(
+        stdout(&approved).contains("mem-a-keep"),
+        "disabled curator archived a memory"
+    );
 }
 
 #[test]
@@ -71,14 +74,29 @@ fn memory_curate_dry_run_lists_clusters_without_archiving() {
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let text = stdout(&output);
     // The richer memory (more unique tokens → higher quality) survives.
-    assert!(text.contains("keep\tmem-b-dup\tworkflow"), "missing survivor line: {text}");
-    assert!(text.contains("archive\tmem-a-keep\tworkflow"), "missing duplicate line: {text}");
-    assert!(!text.contains("mem-z-other"), "unrelated memory should not appear: {text}");
-    assert!(text.contains("1 cluster(s), 1 duplicate(s)"), "missing summary: {text}");
+    assert!(
+        text.contains("keep\tmem-b-dup\tworkflow"),
+        "missing survivor line: {text}"
+    );
+    assert!(
+        text.contains("archive\tmem-a-keep\tworkflow"),
+        "missing duplicate line: {text}"
+    );
+    assert!(
+        !text.contains("mem-z-other"),
+        "unrelated memory should not appear: {text}"
+    );
+    assert!(
+        text.contains("1 cluster(s), 1 duplicate(s)"),
+        "missing summary: {text}"
+    );
 
     // Dry-run must NOT mutate: the duplicate is still approved.
     let approved = run_codel00p(&db_path, &["memory", "list", "--status", "approved"]);
-    assert!(stdout(&approved).contains("mem-a-keep"), "dry-run archived the duplicate");
+    assert!(
+        stdout(&approved).contains("mem-a-keep"),
+        "dry-run archived the duplicate"
+    );
 }
 
 #[test]
@@ -95,7 +113,9 @@ fn memory_curate_json_reports_survivor_and_duplicates() {
     let clusters = plan["clusters"].as_array().expect("clusters array");
     assert_eq!(clusters.len(), 1);
     assert_eq!(clusters[0]["survivor"]["id"], "mem-b-dup");
-    let duplicates = clusters[0]["duplicates"].as_array().expect("duplicates array");
+    let duplicates = clusters[0]["duplicates"]
+        .as_array()
+        .expect("duplicates array");
     assert_eq!(duplicates.len(), 1);
     assert_eq!(duplicates[0]["id"], "mem-a-keep");
     assert_eq!(duplicates[0]["similarity"], 83);
@@ -118,13 +138,25 @@ fn memory_curate_apply_archives_duplicates_and_keeps_survivor() {
 
     // The duplicate is archived; the survivor and the unrelated memory stay approved.
     let archived = run_codel00p(&db_path, &["memory", "list", "--status", "archived"]);
-    assert!(stdout(&archived).contains("mem-a-keep"), "duplicate not archived");
+    assert!(
+        stdout(&archived).contains("mem-a-keep"),
+        "duplicate not archived"
+    );
 
     let approved = run_codel00p(&db_path, &["memory", "list", "--status", "approved"]);
     let approved_text = stdout(&approved);
-    assert!(approved_text.contains("mem-b-dup"), "survivor should remain approved");
-    assert!(approved_text.contains("mem-z-other"), "unrelated memory should remain approved");
-    assert!(!approved_text.contains("mem-a-keep"), "duplicate should no longer be approved");
+    assert!(
+        approved_text.contains("mem-b-dup"),
+        "survivor should remain approved"
+    );
+    assert!(
+        approved_text.contains("mem-z-other"),
+        "unrelated memory should remain approved"
+    );
+    assert!(
+        !approved_text.contains("mem-a-keep"),
+        "duplicate should no longer be approved"
+    );
 
     // Re-running finds nothing left to consolidate.
     let again = run_codel00p(&db_path, &["memory", "curate"]);

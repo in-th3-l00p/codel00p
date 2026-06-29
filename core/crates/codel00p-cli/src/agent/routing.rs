@@ -118,8 +118,14 @@ mod tests {
     fn ranks_the_topical_specialist_first() {
         let agents = vec![
             agent("coder", "implements features and refactors rust code"),
-            agent("reviewer", "reviews pull requests for correctness and style"),
-            agent("devops", "manages kubernetes deployments and cloud infrastructure"),
+            agent(
+                "reviewer",
+                "reviews pull requests for correctness and style",
+            ),
+            agent(
+                "devops",
+                "manages kubernetes deployments and cloud infrastructure",
+            ),
         ];
         let ranked = rank_agents(&agents, "refactor the rust code in the parser");
         assert_eq!(ranked[0].name, "coder", "ranking: {ranked:?}");
@@ -130,7 +136,10 @@ mod tests {
     fn best_match_picks_deployment_specialist() {
         let agents = vec![
             agent("coder", "implements features and refactors rust code"),
-            agent("devops", "manages kubernetes deployments and cloud infrastructure"),
+            agent(
+                "devops",
+                "manages kubernetes deployments and cloud infrastructure",
+            ),
         ];
         let best = best_match(&agents, "deploy the service to the kubernetes cluster", 1).unwrap();
         assert_eq!(best.name, "devops");
@@ -158,6 +167,9 @@ mod tests {
         let first = rank_agents(&agents, "write documentation");
         let second = rank_agents(&agents, "write documentation");
         assert_eq!(first, second);
-        assert_eq!(first[0].name, "alpha", "tie should break to the smaller name");
+        assert_eq!(
+            first[0].name, "alpha",
+            "tie should break to the smaller name"
+        );
     }
 }

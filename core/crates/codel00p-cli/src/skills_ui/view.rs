@@ -18,7 +18,10 @@ const HELP_KEYS: &[(&str, &str)] = &[
     ("↵", "open the selected skill"),
     ("a", "approve a candidate (immediate)"),
     ("r", "reject a candidate (archived, reversible)"),
-    ("c", "consolidate a near-duplicate (~dup) skill (asks to confirm)"),
+    (
+        "c",
+        "consolidate a near-duplicate (~dup) skill (asks to confirm)",
+    ),
     ("d", "disable an active skill (asks to confirm)"),
     ("y", "confirm a pending disable / consolidate"),
     ("u / e", "restore a disabled skill (immediate)"),

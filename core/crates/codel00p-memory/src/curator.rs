@@ -88,7 +88,12 @@ pub fn plan_consolidations(records: &[MemoryRecord], threshold: u8) -> Vec<Conso
     let mut consolidations = Vec::new();
     for (_kind, mut indices) in by_kind {
         // Sort by id so union-find iteration (and thus clustering) is stable.
-        indices.sort_by(|left, right| records[*left].entry().id().cmp(records[*right].entry().id()));
+        indices.sort_by(|left, right| {
+            records[*left]
+                .entry()
+                .id()
+                .cmp(records[*right].entry().id())
+        });
 
         let count = indices.len();
         let mut parent: Vec<usize> = (0..count).collect();
@@ -121,7 +126,12 @@ pub fn plan_consolidations(records: &[MemoryRecord], threshold: u8) -> Vec<Conso
                     .quality()
                     .score()
                     .cmp(&records[*left].quality().score())
-                    .then_with(|| records[*left].entry().id().cmp(records[*right].entry().id()))
+                    .then_with(|| {
+                        records[*left]
+                            .entry()
+                            .id()
+                            .cmp(records[*right].entry().id())
+                    })
             });
             let survivor_index = members[0];
             let survivor = records[survivor_index].clone();
@@ -146,7 +156,8 @@ pub fn plan_consolidations(records: &[MemoryRecord], threshold: u8) -> Vec<Conso
     }
 
     // Stable output ordering by survivor id.
-    consolidations.sort_by(|left, right| left.survivor.entry().id().cmp(right.survivor.entry().id()));
+    consolidations
+        .sort_by(|left, right| left.survivor.entry().id().cmp(right.survivor.entry().id()));
     consolidations
 }
 
@@ -247,8 +258,16 @@ mod tests {
     #[test]
     fn unrelated_memories_produce_no_plan() {
         let records = vec![
-            record("a", MemoryKind::Convention, "run cargo fmt before committing"),
-            record("b", MemoryKind::Convention, "the colorful unicorn dashboard widget"),
+            record(
+                "a",
+                MemoryKind::Convention,
+                "run cargo fmt before committing",
+            ),
+            record(
+                "b",
+                MemoryKind::Convention,
+                "the colorful unicorn dashboard widget",
+            ),
         ];
         assert!(plan_consolidations(&records, 60).is_empty());
     }

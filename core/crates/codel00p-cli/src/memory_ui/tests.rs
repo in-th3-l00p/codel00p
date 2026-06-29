@@ -269,7 +269,10 @@ fn consolidate_archives_a_near_duplicate_with_an_auto_reason() {
     match flow {
         Flow::Mutate(Mutation::Archive { id, reason }) => {
             assert_eq!(id, "mem-dup");
-            assert!(reason.contains("near-duplicate of mem-survivor"), "reason: {reason}");
+            assert!(
+                reason.contains("near-duplicate of mem-survivor"),
+                "reason: {reason}"
+            );
             assert!(reason.contains("87%"), "reason: {reason}");
         }
         other => panic!("expected an archive mutation, got {other:?}"),
@@ -282,7 +285,11 @@ fn consolidate_on_a_non_duplicate_hints_to_enable_the_curator_when_off() {
     model.show_detail(row("mem-1", "not a dup"), Vec::new());
     assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
     assert!(
-        model.status.as_deref().unwrap_or_default().contains("agent.behavior.curator"),
+        model
+            .status
+            .as_deref()
+            .unwrap_or_default()
+            .contains("agent.behavior.curator"),
         "status: {:?}",
         model.status
     );
@@ -295,7 +302,11 @@ fn consolidate_on_a_non_duplicate_says_so_when_curator_enabled() {
     model.show_detail(row("mem-1", "not a dup"), Vec::new());
     assert_eq!(model.update(key(KeyCode::Char('c'))), Flow::Stay);
     assert!(
-        model.status.as_deref().unwrap_or_default().contains("not a near-duplicate"),
+        model
+            .status
+            .as_deref()
+            .unwrap_or_default()
+            .contains("not a near-duplicate"),
         "status: {:?}",
         model.status
     );
