@@ -1,0 +1,75 @@
+# TUI Ctrl+P menu redesign
+
+Replace the flat 13-item Ctrl+P command palette with a clean, hierarchical
+four-section menu — **Agent · Conversations · Organization · Settings** — where
+each section is a focused area with a "create new" first row, per-item
+edit/delete/inspect actions (`e` / `d` / Enter), and detail views.
+
+## Why
+
+The flat palette listed every action at one level ("Switch model", "Switch
+session", "Browse organization", "Show history", …). It was too much to scan and
+mixed unrelated concerns. Grouping into four durable sections matches how users
+actually think about the tool and leaves room for richer per-section UX.
+
+## Architecture
+
+- Ctrl+P opens `Overlay::Menu(MainMenu)` — a `Picker<MenuSection>` over the four
+  sections. Selecting a section opens its dedicated overlay.
+- Reuses the existing `Picker<T>` primitive and the `framed()` overlay chrome, so
+  every section list looks and behaves identically.
+- The per-section overlays (agent switcher, sessions, entity/org browser,
+  settings) already exist; the redesign restructures the entry point first, then
+  enriches each overlay in place.
+
+## Phases
+
+### Phase 1 — top-level menu  ✅ (commit b469d13)
+- `MenuSection` enum + `MainMenu`; `Overlay::Command` → `Overlay::Menu`.
+- `open_command_palette`/`run_command` → `open_menu`/`open_section`.
+- `draw_command` → `draw_menu`. Tests + clippy `-D warnings` green (118 TUI tests).
+- Routing: Agent → agent switcher, Conversations → sessions, Organization → org
+  browser, Settings → settings.
+
+### Phase 2 — Agent section  (recommended next; most backing already exists)
+- Agent list with **"＋ New agent"** as the first row → the create form.
+- Selecting an agent → **detail view**: default provider+model, dispatch
+  provider+model list, persona, memory summary, description.
+- Keys: `e` edit · `d` delete (with confirm) · Enter use/switch.
+- Edit surfaces: provider+model picker (reuse `ModelPicker`), description,
+  **persona editor** (net-new: read/write `persona.md`), **dispatch list**
+  add/remove (backed by `agent.fallbacks` in config).
+- Memory: open the memory review dialog scoped to the agent's home.
+- Backing that exists: `create/rename/delete_agent`, agent-scoped `config set`,
+  `agent.provider/model/fallbacks`, persona file, memory repository.
+- Net-new: persona read/write helper; agent detail aggregation; dispatch-list UI.
+
+### Phase 3 — Conversations section
+- **"＋ New conversation"** first row.
+- List with **edit (name + description)** and **delete**.
+- Net-new backing: `SessionStore::delete_session`; a `description` field on
+  `SessionMetadata`; `sessions delete` CLI command.
+
+### Phase 4 — Organization section
+- List orgs with create-new first row; select (use) an org; detail = users,
+  metadata, role.
+- **Open decision:** org creation has no codel00p backend route (org lifecycle is
+  Clerk's). See "Open decisions" below.
+
+### Phase 5 — Settings section
+- Permissions / approvals (set `agent.permission_mode` directly, not only via
+  profiles).
+- Providers + **API keys** (sensitive — see open decision).
+- Display / advanced (exists), appearance/theme (net-new), account settings
+  (Clerk-managed, mostly read-only), and the remaining behavior toggles.
+
+### Phase 6 — help/keys + polish
+- Update the help overlay and key hints to the new structure; consistency pass.
+
+## Open decisions (need product direction)
+
+1. **Org creation** — no backend POST /orgs exists. Options: (a) open the Clerk
+   dashboard in the browser; (b) read-only with a "managed in dashboard" notice;
+   (c) add a backend org-creation route (larger).
+2. **API keys in the TUI** — (a) edit + store in local `config.toml`; (b) show
+   presence only and point at env vars (never write secrets); (c) defer.
