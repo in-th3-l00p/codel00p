@@ -9,7 +9,7 @@ use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
     AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentSwitcher,
-    CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
+    EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker, Overlay, SessionSwitcher,
     SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
@@ -214,10 +214,10 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return vec![Effect::Quit];
     }
-    // Ctrl-P opens the command palette from anywhere — the unified launcher for
-    // every action, so users do not have to remember the individual F-keys.
+    // Ctrl-P opens the top-level menu from anywhere — the four-section launcher,
+    // so users do not have to remember the individual F-keys.
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('p') {
-        return open_command_palette(app);
+        return open_menu(app);
     }
     if app.overlay.is_open() {
         handle_overlay_key(app, key)
@@ -286,14 +286,14 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         Overlay::AgentSwitcher(switcher) => handle_agent_switcher_key(app, switcher, key),
         Overlay::AgentCreate(form) => handle_agent_create_key(app, form, key),
         Overlay::UpdatePrompt(prompt) => handle_update_prompt_key(app, prompt, key),
-        Overlay::Command(mut palette) => match palette.on_key(key) {
-            PickerOutcome::Selected => match palette.selected_item() {
-                Some(item) => run_command(app, item.action),
+        Overlay::Menu(mut menu) => match menu.on_key(key) {
+            PickerOutcome::Selected => match menu.selected_section() {
+                Some(section) => open_section(app, section),
                 None => Vec::new(),
             },
             PickerOutcome::Cancelled => Vec::new(),
             PickerOutcome::Pending => {
-                app.overlay = Overlay::Command(palette);
+                app.overlay = Overlay::Menu(menu);
                 Vec::new()
             }
         },
@@ -778,37 +778,37 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_p_opens_the_command_palette() {
+    fn ctrl_p_opens_the_menu() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        assert!(matches!(app.overlay, Overlay::Command(_)));
+        assert!(matches!(app.overlay, Overlay::Menu(_)));
     }
 
     #[test]
-    fn selecting_a_command_runs_its_action() {
+    fn selecting_a_section_opens_its_overlay() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        // The first palette row is "Switch model"; Enter runs it.
+        // The first section is "Agent"; Enter opens the agent switcher.
         let effects = update(&mut app, key(KeyCode::Enter));
-        assert!(matches!(app.overlay, Overlay::Model(_)));
-        assert!(matches!(effects.as_slice(), [Effect::FetchModels(_)]));
+        assert!(matches!(app.overlay, Overlay::AgentSwitcher(_)));
+        assert!(matches!(effects.as_slice(), [Effect::ListAgents]));
     }
 
     #[test]
-    fn command_palette_filters_and_quit_runs() {
+    fn menu_filters_to_conversations_section() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        // Filter down to "Quit" and run it.
-        type_str(&mut app, "quit");
-        let effects = update(&mut app, key(KeyCode::Enter));
-        assert!(matches!(effects.as_slice(), [Effect::Quit]));
+        // Filter down to the Conversations section and open it.
+        type_str(&mut app, "conv");
+        update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::Sessions(_)));
     }
 
     #[test]
-    fn settings_palette_action_opens_settings_overlay() {
+    fn settings_section_opens_settings_overlay() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        // Filter down to "Settings" and run it.
+        // Filter down to "Settings" and open it.
         type_str(&mut app, "settings");
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(effects.is_empty());
@@ -1158,18 +1158,20 @@ mod tests {
     // ---- Multi-agent personas (#13) phase 3: switch / create from the menu ----
 
     #[test]
-    fn palette_lists_switch_and_create_agent_rows() {
-        use crate::tui::overlay::command_items;
-        let labels: Vec<_> = command_items().into_iter().map(|item| item.label).collect();
-        assert!(labels.iter().any(|l| l == "Switch agent"));
-        assert!(labels.iter().any(|l| l == "Create agent"));
+    fn menu_lists_the_four_sections() {
+        use crate::tui::overlay::MenuSection;
+        let labels: Vec<_> = MenuSection::ORDER.iter().map(|s| s.label()).collect();
+        assert_eq!(
+            labels,
+            ["Agent", "Conversations", "Organization", "Settings"]
+        );
     }
 
     #[test]
-    fn switch_agent_command_opens_switcher_and_lists() {
+    fn agent_section_opens_switcher_and_lists() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        type_str(&mut app, "switch agent");
+        type_str(&mut app, "agent");
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(matches!(app.overlay, Overlay::AgentSwitcher(_)));
         assert!(matches!(effects.as_slice(), [Effect::ListAgents]));

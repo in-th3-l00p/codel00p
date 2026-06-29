@@ -1,37 +1,27 @@
-//! The command palette and slash commands: the unified launcher that dispatches
-//! to every action handler, the model picker, and `apply_model`.
+//! The Ctrl+P menu and slash commands: the unified launcher that dispatches to
+//! every action handler, the model picker, and `apply_model`.
 //!
-//! `run_command` (palette selection) and `handle_slash` (`/command` text) both
-//! fan out to the open/handler functions in the sibling overlay modules, so this
-//! is the one place that maps a user's intent to an action.
+//! `open_section` (menu selection) and `handle_slash` (`/command` text) both fan
+//! out to the open/handler functions in the sibling overlay modules, so this is
+//! the one place that maps a user's intent to an action.
 
 use super::*;
 
-/// Opens the command palette overlay (the unified launcher).
-pub(super) fn open_command_palette(app: &mut App) -> Vec<Effect> {
-    app.overlay = Overlay::Command(CommandPalette::new());
+/// Opens the top-level Ctrl+P menu (the four-section launcher).
+pub(super) fn open_menu(app: &mut App) -> Vec<Effect> {
+    app.overlay = Overlay::Menu(MainMenu::new());
     Vec::new()
 }
 
-/// Dispatches a palette selection to the existing action handlers.
-pub(super) fn run_command(app: &mut App, action: CommandAction) -> Vec<Effect> {
-    match action {
-        CommandAction::Model => open_model_picker(app),
-        CommandAction::Sessions => open_sessions(app),
-        CommandAction::NewConversation => handle_slash(app, "reset"),
-        CommandAction::SwitchAgent => open_agent_switcher(app),
-        CommandAction::CreateAgent => open_agent_creator(app),
-        CommandAction::Browse => open_entities(app, EntityTab::Projects),
-        CommandAction::Users => open_entities(app, EntityTab::Users),
-        CommandAction::SwitchOrg => open_entities(app, EntityTab::Org),
-        CommandAction::History => handle_slash(app, "history"),
-        CommandAction::Tools => handle_slash(app, "tools"),
-        CommandAction::Settings => open_settings(app),
-        CommandAction::Help => {
-            app.overlay = Overlay::Help;
-            Vec::new()
-        }
-        CommandAction::Quit => vec![Effect::Quit],
+/// Opens the overlay for a chosen menu section. Each section is the entry point to
+/// a focused area; the richer per-section actions (create / edit / delete) live in
+/// the section overlays themselves.
+pub(super) fn open_section(app: &mut App, section: MenuSection) -> Vec<Effect> {
+    match section {
+        MenuSection::Agent => open_agent_switcher(app),
+        MenuSection::Conversations => open_sessions(app),
+        MenuSection::Organization => open_entities(app, EntityTab::Org),
+        MenuSection::Settings => open_settings(app),
     }
 }
 

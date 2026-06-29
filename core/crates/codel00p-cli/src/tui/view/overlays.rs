@@ -1,6 +1,6 @@
 //! Overlay renderers: every modal/picker panel drawn over the main view — help,
 //! permission prompt, entity browser, model picker, session switcher, agent
-//! switcher/creator, command palette, settings, and the update prompt.
+//! switcher/creator, the top-level menu, settings, and the update prompt.
 //!
 //! `super::render` dispatches to these by the active `Overlay`. They share the
 //! `centered_rect` layout helper and the generic `draw_picker` from `super`.
@@ -325,14 +325,11 @@ pub(super) fn draw_agent_create(app: &App, frame: &mut Frame, form: &AgentCreate
     frame.render_widget(Paragraph::new(footer), rows[5]);
 }
 
-/// Draws the command palette: a filterable list of every CLI action.
-pub(super) fn draw_command(
-    app: &App,
-    frame: &mut Frame,
-    palette: &super::super::overlay::CommandPalette,
-) {
-    let area = centered_rect(60, 60, frame.area());
-    let inner = framed(frame, area, " command palette ", app.theme.overlay_border);
+/// Draws the top-level Ctrl+P menu: the four focused sections that replaced the
+/// old flat action list.
+pub(super) fn draw_menu(app: &App, frame: &mut Frame, menu: &super::super::overlay::MainMenu) {
+    let area = centered_rect(50, 50, frame.area());
+    let inner = framed(frame, area, " menu ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -340,12 +337,12 @@ pub(super) fn draw_command(
         .split(inner);
     frame.render_widget(
         Paragraph::new(Span::styled(
-            "  type to filter · Enter to run · Esc to close",
+            "  ↑/↓ to move · Enter to open · type to filter · Esc to close",
             app.theme.muted(),
         )),
         rows[0],
     );
-    draw_picker(frame, rows[1], &app.theme, &palette.picker, "Commands");
+    draw_picker(frame, rows[1], &app.theme, &menu.picker, "Sections");
 }
 
 pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {

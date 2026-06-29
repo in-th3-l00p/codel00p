@@ -422,54 +422,75 @@ impl AgentCreateForm {
     }
 }
 
-/// An action reachable from the command palette. Each maps to an existing handler.
+/// A top-level section of the Ctrl+P menu. Replaces the old flat action palette:
+/// every action now lives under one of these four focused areas, so the launcher
+/// stays short and scannable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CommandAction {
-    Model,
-    Sessions,
-    NewConversation,
-    /// Open the local-agent switcher (multi-agent personas, #13).
-    SwitchAgent,
-    /// Open the create-agent form (multi-agent personas, #13).
-    CreateAgent,
-    Browse,
-    Users,
-    SwitchOrg,
-    History,
-    Tools,
+pub(crate) enum MenuSection {
+    /// The active agent + its roster: switch, create, edit, inspect.
+    Agent,
+    /// This agent's conversations: start a new one, resume, rename, delete.
+    Conversations,
+    /// Cloud organization: switch org, browse projects / members / data.
+    Organization,
+    /// Local instance settings: behavior, display, profiles, providers.
     Settings,
-    Help,
-    Quit,
 }
 
-/// One row in the command palette: a label, a short hint, and the action it runs.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CommandItem {
-    pub(crate) label: String,
-    pub(crate) hint: &'static str,
-    pub(crate) action: CommandAction,
+impl MenuSection {
+    /// The sections in display order.
+    pub(crate) const ORDER: [MenuSection; 4] = [
+        MenuSection::Agent,
+        MenuSection::Conversations,
+        MenuSection::Organization,
+        MenuSection::Settings,
+    ];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            MenuSection::Agent => "Agent",
+            MenuSection::Conversations => "Conversations",
+            MenuSection::Organization => "Organization",
+            MenuSection::Settings => "Settings",
+        }
+    }
+
+    pub(crate) fn hint(self) -> &'static str {
+        match self {
+            MenuSection::Agent => "switch · create · edit the active agent",
+            MenuSection::Conversations => "new · resume · rename · delete chats",
+            MenuSection::Organization => "switch org · projects · members · data",
+            MenuSection::Settings => "behavior · display · profiles · providers",
+        }
+    }
 }
 
-impl PickerItem for CommandItem {
+impl PickerItem for MenuSection {
     fn label(&self) -> String {
-        self.label.clone()
+        MenuSection::label(*self).to_string()
     }
     fn detail(&self) -> Option<String> {
-        Some(self.hint.to_string())
+        Some(MenuSection::hint(*self).to_string())
     }
 }
 
-/// The VSCode-style command palette: a fuzzy-filterable list of every CLI action,
-/// so users do not have to remember the individual F-key surfaces.
+/// The top-level Ctrl+P menu: four focused sections instead of one long list of
+/// every action. Selecting a section opens its dedicated overlay.
 #[derive(Clone, Debug)]
-pub(crate) struct CommandPalette {
-    pub(crate) picker: Picker<CommandItem>,
+pub(crate) struct MainMenu {
+    pub(crate) picker: Picker<MenuSection>,
 }
 
-impl CommandPalette {
+impl Default for MainMenu {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MainMenu {
     pub(crate) fn new() -> Self {
         Self {
-            picker: Picker::new(command_items()),
+            picker: Picker::new(MenuSection::ORDER.to_vec()),
         }
     }
 
@@ -477,44 +498,9 @@ impl CommandPalette {
         self.picker.on_key(key)
     }
 
-    pub(crate) fn selected_item(&self) -> Option<&CommandItem> {
-        self.picker.selected_item()
+    pub(crate) fn selected_section(&self) -> Option<MenuSection> {
+        self.picker.selected_item().copied()
     }
-}
-
-/// The full command catalog, in display order.
-pub(crate) fn command_items() -> Vec<CommandItem> {
-    use CommandAction::*;
-    [
-        ("Switch model", "pick a provider / model", Model),
-        ("Switch session", "resume a prior conversation", Sessions),
-        ("New conversation", "start a fresh chat", NewConversation),
-        (
-            "Switch agent",
-            "live-switch the active agent + memory",
-            SwitchAgent,
-        ),
-        ("Create agent", "define a new local agent", CreateAgent),
-        (
-            "Browse organization",
-            "projects · agents · MCP · memory",
-            Browse,
-        ),
-        ("Browse users", "organization members", Users),
-        ("Switch organization", "re-auth into another org", SwitchOrg),
-        ("Show history", "this conversation's messages", History),
-        ("Show tools", "enabled tool sets", Tools),
-        ("Settings", "TUI preferences", Settings),
-        ("Help", "keys and commands", Help),
-        ("Quit", "exit codel00p", Quit),
-    ]
-    .into_iter()
-    .map(|(label, hint, action)| CommandItem {
-        label: label.to_string(),
-        hint,
-        action,
-    })
-    .collect()
 }
 
 /// A single toggleable preference shown in the main Settings overlay. These are
@@ -780,7 +766,7 @@ pub(crate) enum Overlay {
     Model(ModelPicker),
     Sessions(SessionSwitcher),
     Entities(EntityBrowser),
-    Command(CommandPalette),
+    Menu(MainMenu),
     Settings(SettingsOverlay),
     AdvancedSettings(AdvancedSettingsOverlay),
     UpdatePrompt(UpdatePrompt),

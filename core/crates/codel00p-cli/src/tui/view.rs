@@ -63,7 +63,7 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Model(picker) => draw_model_picker(app, frame, picker),
         Overlay::Sessions(switcher) => draw_sessions(app, frame, switcher),
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
-        Overlay::Command(palette) => draw_command(app, frame, palette),
+        Overlay::Menu(menu) => draw_menu(app, frame, menu),
         Overlay::Settings(settings) => draw_settings(app, frame, settings),
         Overlay::AdvancedSettings(advanced) => draw_advanced_settings(app, frame, advanced),
         Overlay::UpdatePrompt(prompt) => draw_update_prompt(app, frame, prompt),
@@ -279,13 +279,16 @@ mod tests {
     }
 
     #[test]
-    fn command_palette_renders_actions() {
-        use crate::tui::overlay::{CommandPalette, Overlay};
+    fn menu_renders_the_four_sections() {
+        use crate::tui::overlay::{MainMenu, Overlay};
         let mut app = test_app();
-        app.overlay = Overlay::Command(CommandPalette::new());
+        app.overlay = Overlay::Menu(MainMenu::new());
         let rendered = render_to_string(&mut app, 80, 24);
-        assert!(rendered.contains("command palette"));
-        assert!(rendered.contains("Switch model"));
+        assert!(rendered.contains("menu"));
+        assert!(rendered.contains("Agent"));
+        assert!(rendered.contains("Conversations"));
+        assert!(rendered.contains("Organization"));
+        assert!(rendered.contains("Settings"));
     }
 
     #[test]
