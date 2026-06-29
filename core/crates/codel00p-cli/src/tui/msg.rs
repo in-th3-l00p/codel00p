@@ -85,9 +85,16 @@ pub(crate) enum Effect {
     SwitchAgent(String),
     /// Replay a prior session so it can be resumed inside the TUI.
     ResumeSession(codel00p_harness::SessionId),
-    /// Rename a prior session's title (blocking store write, off the UI task), then
-    /// refresh the switcher list.
-    RenameSession(codel00p_harness::SessionId, String),
+    /// Apply a conversation's edited name + description (blocking store writes off
+    /// the UI task), then refresh the switcher list. An empty description clears it.
+    EditSession {
+        session_id: codel00p_harness::SessionId,
+        title: String,
+        description: String,
+    },
+    /// Delete a conversation (blocking store write off the UI task), then refresh
+    /// the switcher list.
+    DeleteSession(codel00p_harness::SessionId),
     /// Run a live update check in the background (off the UI task) and notify this
     /// session via `Msg::UpdateAvailable` if a newer release is found. Dispatched
     /// once at startup when checking is enabled; never blocks the first render.

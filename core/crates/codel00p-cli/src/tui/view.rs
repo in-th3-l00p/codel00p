@@ -600,6 +600,7 @@ mod tests {
             vec![SessionSummary {
                 session_id: "chat-99".to_string(),
                 title: Some("Debug release packaging".to_string()),
+                description: None,
                 source: "cli".to_string(),
                 message_count: 2,
             }],
@@ -608,7 +609,9 @@ mod tests {
         let mut app = test_app();
         app.overlay = Overlay::Sessions(switcher);
         let rendered = render_to_string(&mut app, 80, 20);
-        assert!(rendered.contains("switch session"));
+        assert!(rendered.contains("conversations"));
+        // The always-present "new conversation" row and the prior conversation.
+        assert!(rendered.contains("New conversation"));
         assert!(rendered.contains("Debug release packaging"));
         assert!(rendered.contains("chat-99"));
     }

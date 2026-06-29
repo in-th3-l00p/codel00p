@@ -9,8 +9,8 @@ use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
     AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentSwitcher,
-    EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker, Overlay, SessionSwitcher,
-    SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
+    ConversationRow, EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker, Overlay,
+    SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
 
@@ -615,21 +615,30 @@ mod tests {
         assert!(matches!(effects.as_slice(), [Effect::ListSessions]));
     }
 
+    /// Builds a session switcher with one prior conversation and the highlight moved
+    /// onto it (past the always-first "New conversation" row).
+    fn switcher_with_one_session(app: &mut App, summary: crate::tui::overlay::SessionSummary) {
+        update(app, key(KeyCode::F(5)));
+        update(app, Msg::SessionList(Ok(vec![summary])));
+        // Row 0 is "New conversation"; move down onto the prior conversation.
+        update(app, key(KeyCode::Down));
+    }
+
+    fn sample_summary(id: &str, title: &str) -> crate::tui::overlay::SessionSummary {
+        crate::tui::overlay::SessionSummary {
+            session_id: id.to_string(),
+            title: Some(title.to_string()),
+            description: None,
+            source: "cli".to_string(),
+            message_count: 3,
+        }
+    }
+
     #[test]
     fn session_list_populates_switcher_and_selecting_resumes() {
-        use crate::tui::overlay::SessionSummary;
         let mut app = test_app();
-        update(&mut app, key(KeyCode::F(5)));
-        update(
-            &mut app,
-            Msg::SessionList(Ok(vec![SessionSummary {
-                session_id: "chat-42".to_string(),
-                title: Some("Fix switcher history".to_string()),
-                source: "cli".to_string(),
-                message_count: 3,
-            }])),
-        );
-        // Selecting the highlighted row fires a resume for that session id.
+        switcher_with_one_session(&mut app, sample_summary("chat-42", "Fix switcher history"));
+        // Selecting the highlighted session row fires a resume for that id.
         let effects = update(&mut app, key(KeyCode::Enter));
         match effects.as_slice() {
             [Effect::ResumeSession(id)] => assert_eq!(id.as_str(), "chat-42"),
@@ -638,65 +647,91 @@ mod tests {
     }
 
     #[test]
-    fn f2_in_switcher_enters_rename_and_enter_produces_rename_effect() {
-        use crate::tui::overlay::SessionSummary;
+    fn new_conversation_row_starts_a_fresh_chat() {
         let mut app = test_app();
         update(&mut app, key(KeyCode::F(5)));
         update(
             &mut app,
-            Msg::SessionList(Ok(vec![SessionSummary {
-                session_id: "chat-7".to_string(),
-                title: Some("Old name".to_string()),
-                source: "cli".to_string(),
-                message_count: 1,
-            }])),
+            Msg::SessionList(Ok(vec![sample_summary("chat-1", "Old")])),
         );
-        // F2 enters rename mode seeded with the current title.
-        update(&mut app, key(KeyCode::F(2)));
+        // Row 0 (New conversation) is highlighted by default; Enter resets the chat.
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(effects.is_empty());
+        assert!(matches!(app.overlay, Overlay::None));
+        assert!(app.conversation.blocks.iter().any(|block| matches!(
+            block,
+            crate::tui::conversation::Block::Notice(text) if text.contains("new conversation")
+        )));
+    }
+
+    #[test]
+    fn e_enters_edit_and_enter_produces_edit_effect() {
+        let mut app = test_app();
+        switcher_with_one_session(&mut app, sample_summary("chat-7", "Old name"));
+        // `e` enters edit mode seeded with the current name.
+        update(&mut app, key(KeyCode::Char('e')));
         match &app.overlay {
             Overlay::Sessions(switcher) => {
-                let rename = switcher.rename.as_ref().expect("rename mode");
-                assert_eq!(rename.session_id, "chat-7");
-                assert_eq!(rename.input, "Old name");
+                let edit = switcher.edit.as_ref().expect("edit mode");
+                assert_eq!(edit.session_id, "chat-7");
+                assert_eq!(edit.name, "Old name");
             }
             _ => panic!("expected session switcher"),
         }
-        // Clear it and type a new title.
+        // Clear the name and type a fresh one.
         for _ in 0.."Old name".len() {
             update(&mut app, key(KeyCode::Backspace));
         }
         type_str(&mut app, "Fresh title");
+        // Tab to the description field and type a description.
+        update(&mut app, key(KeyCode::Tab));
+        type_str(&mut app, "what it is about");
         let effects = update(&mut app, key(KeyCode::Enter));
         match effects.as_slice() {
-            [Effect::RenameSession(id, title)] => {
-                assert_eq!(id.as_str(), "chat-7");
+            [
+                Effect::EditSession {
+                    session_id,
+                    title,
+                    description,
+                },
+            ] => {
+                assert_eq!(session_id.as_str(), "chat-7");
                 assert_eq!(title, "Fresh title");
+                assert_eq!(description, "what it is about");
             }
-            other => panic!("expected RenameSession, got {} effects", other.len()),
+            other => panic!("expected EditSession, got {} effects", other.len()),
         }
-        // The switcher stays open (rename cleared) so the refreshed list can land.
         assert!(matches!(app.overlay, Overlay::Sessions(_)));
     }
 
     #[test]
-    fn esc_cancels_rename_without_leaving_the_switcher() {
-        use crate::tui::overlay::SessionSummary;
+    fn d_confirms_then_deletes_the_session() {
         let mut app = test_app();
-        update(&mut app, key(KeyCode::F(5)));
-        update(
-            &mut app,
-            Msg::SessionList(Ok(vec![SessionSummary {
-                session_id: "chat-7".to_string(),
-                title: Some("Keep me".to_string()),
-                source: "cli".to_string(),
-                message_count: 1,
-            }])),
-        );
-        update(&mut app, key(KeyCode::F(2)));
+        switcher_with_one_session(&mut app, sample_summary("chat-7", "Doomed"));
+        // `d` opens the confirm prompt; `y` confirms and emits the delete.
+        update(&mut app, key(KeyCode::Char('d')));
+        match &app.overlay {
+            Overlay::Sessions(switcher) => {
+                assert!(switcher.confirm_delete.is_some());
+            }
+            _ => panic!("expected session switcher"),
+        }
+        let effects = update(&mut app, key(KeyCode::Char('y')));
+        match effects.as_slice() {
+            [Effect::DeleteSession(id)] => assert_eq!(id.as_str(), "chat-7"),
+            other => panic!("expected DeleteSession, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn esc_cancels_edit_without_leaving_the_switcher() {
+        let mut app = test_app();
+        switcher_with_one_session(&mut app, sample_summary("chat-7", "Keep me"));
+        update(&mut app, key(KeyCode::Char('e')));
         let effects = update(&mut app, key(KeyCode::Esc));
         assert!(effects.is_empty());
         match &app.overlay {
-            Overlay::Sessions(switcher) => assert!(switcher.rename.is_none()),
+            Overlay::Sessions(switcher) => assert!(switcher.edit.is_none()),
             _ => panic!("expected session switcher to stay open"),
         }
     }

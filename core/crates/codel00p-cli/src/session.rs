@@ -24,6 +24,8 @@ pub fn run(config: CliConfig, agent_defaults: AgentSettings, args: &[String]) ->
         "list" => session_list(config, rest),
         "show" => session_show(config, rest),
         "rename" => session_rename(config, rest),
+        "describe" => session_describe(config, rest),
+        "delete" | "rm" => session_delete(config, rest),
         _ => Err(format!("unknown session command: {command}")),
     }
 }
@@ -172,6 +174,43 @@ fn session_rename(config: CliConfig, args: &[String]) -> CliResult<String> {
         .map_err(|error| error.to_string())?;
 
     Ok(format!("Renamed session {id} to \"{title}\".\n"))
+}
+
+/// `sessions describe <session_id> <description...>`: the remaining args are joined
+/// (whitespace-normalized) into the description. An empty description clears it.
+fn session_describe(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let Some((id, parts)) = args.split_first() else {
+        return Err("session describe expects: <session_id> <description>".to_string());
+    };
+    let description = parts.join(" ");
+    let description = description.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    let session_id = parse_session_id(id)?;
+    let mut store = open_session_store(&config)?;
+    store
+        .set_session_description(&session_id, &description)
+        .map_err(|error| error.to_string())?;
+
+    if description.is_empty() {
+        Ok(format!("Cleared the description for session {id}.\n"))
+    } else {
+        Ok(format!("Set the description for session {id}.\n"))
+    }
+}
+
+/// `sessions delete <session_id>`: permanently removes the session.
+fn session_delete(config: CliConfig, args: &[String]) -> CliResult<String> {
+    let id = single_id(args, "session delete")?;
+    let session_id = parse_session_id(id)?;
+    let mut store = open_session_store(&config)?;
+    let existed = store
+        .delete_session(&session_id)
+        .map_err(|error| error.to_string())?;
+    if existed {
+        Ok(format!("Deleted session {id}.\n"))
+    } else {
+        Err(format!("No such session: {id}"))
+    }
 }
 
 pub(crate) fn session_role_label(role: SessionRole) -> &'static str {

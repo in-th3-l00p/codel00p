@@ -41,8 +41,8 @@ pub(super) fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  ←/→ Home/End move/edit the cursor"),
         Line::from("  PgUp/PgDn    scroll the transcript · wheel scrolls too"),
         Line::from("  F1           this help"),
-        Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
-        Line::from("  F2 (in sessions)  rename the highlighted conversation"),
+        Line::from("  F2/F3/F5     model · organization · conversations (also in Ctrl+P)"),
+        Line::from("  in conversations  e edit (name + description) · d delete · Enter open"),
         Line::from("  /sessions /memory /history /tools /reset"),
         Line::from("  /agent /new-agent  switch · create a local agent (also in Ctrl+P)"),
         Line::from("  Ctrl+P → Settings  advanced status info · update checks"),
@@ -191,43 +191,106 @@ pub(super) fn draw_model_picker(app: &App, frame: &mut Frame, picker: &ModelPick
     draw_picker(frame, rows[1], &app.theme, &picker.picker, "Models");
 }
 
-/// Draws the session switcher: a status line above the list of prior conversations.
+/// Draws the conversations overlay: a "＋ New conversation" row plus the prior
+/// conversations, with inline name+description editing and a delete confirmation.
 pub(super) fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
     let area = centered_rect(64, 60, frame.area());
-    let inner = framed(frame, area, " switch session ", app.theme.overlay_border);
+    let inner = framed(frame, area, " conversations ", app.theme.overlay_border);
+
+    // Edit mode replaces the list with a two-field editor.
+    if let Some(edit) = &switcher.edit {
+        draw_session_edit(app, frame, inner, edit);
+        return;
+    }
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
 
-    // In rename mode the status line becomes an inline title editor; otherwise it
-    // shows the usual hint (now including the rename key).
-    if let Some(rename) = &switcher.rename {
+    // The status line shows the delete confirmation, the loading/empty status, or
+    // the usual key hints.
+    if let Some(confirm) = &switcher.confirm_delete {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("  rename: ", app.theme.accent()),
-                Span::styled(format!("{}▏", rename.input), Style::default()),
-                Span::styled("  Enter to save · Esc to cancel", app.theme.muted()),
+                Span::styled("  Delete ", Style::default().fg(app.theme.error)),
+                Span::styled(format!("\"{}\"", confirm.label), app.theme.accent()),
+                Span::styled(" ?  y to delete · n / Esc to cancel", app.theme.muted()),
             ])),
             rows[0],
         );
     } else {
-        let status = switcher
-            .status
-            .clone()
-            .unwrap_or_else(|| "Enter to resume · F2 to rename · Esc to close".to_string());
+        let status = switcher.status.clone().unwrap_or_else(|| {
+            "↑/↓ to move · Enter to open · e edit · d delete · Esc to close".to_string()
+        });
         frame.render_widget(
             Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
             rows[0],
         );
     }
-    draw_picker(
-        frame,
-        rows[1],
-        &app.theme,
-        &switcher.sessions,
-        "Prior conversations",
+    draw_picker(frame, rows[1], &app.theme, &switcher.rows, "Conversations");
+}
+
+/// Draws the inline conversation editor (name + description), with the focused
+/// field highlighted — mirrors the create-agent form's two-field layout.
+fn draw_session_edit(
+    app: &App,
+    frame: &mut Frame,
+    inner: Rect,
+    edit: &super::super::overlay::SessionEdit,
+) {
+    use super::super::overlay::SessionEditField;
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // hint
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // name
+            Constraint::Length(1), // description
+            Constraint::Min(1),    // padding
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  Tab to switch field · Enter to save · Esc to cancel",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+
+    let field_line = |label: &str, value: &str, focused: bool| {
+        let marker = if focused { "› " } else { "  " };
+        let cursor = if focused { "▏" } else { "" };
+        Line::from(vec![
+            Span::styled(marker, Style::default().fg(app.theme.accent)),
+            Span::styled(format!("{label:<13}"), app.theme.muted()),
+            Span::styled(
+                format!("{value}{cursor}"),
+                if focused {
+                    app.theme.selection()
+                } else {
+                    Style::default()
+                },
+            ),
+        ])
+    };
+
+    frame.render_widget(
+        Paragraph::new(field_line(
+            "name:",
+            &edit.name,
+            edit.field == SessionEditField::Name,
+        )),
+        rows[2],
+    );
+    frame.render_widget(
+        Paragraph::new(field_line(
+            "description:",
+            &edit.description,
+            edit.field == SessionEditField::Description,
+        )),
+        rows[3],
     );
 }
 

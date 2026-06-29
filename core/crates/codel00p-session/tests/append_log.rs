@@ -248,5 +248,76 @@ fn metadata_without_created_at_deserializes_to_none() {
     let metadata: SessionMetadata = serde_json::from_value(legacy).expect("deserialize legacy");
     assert_eq!(metadata.created_at(), None);
     assert_eq!(metadata.title(), None);
+    assert_eq!(metadata.description(), None);
     assert_eq!(metadata.session_id().as_str(), "session-legacy");
+}
+
+#[test]
+fn set_session_description_updates_and_clears_it() {
+    let mut store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "project-1"),
+        InMemoryStorage::default(),
+    );
+    let session_id = SessionId::from_static("session-described");
+    store
+        .create_session(SessionMetadata::new(session_id.clone(), "cli"))
+        .expect("create session");
+
+    store
+        .set_session_description(&session_id, "Tracking the v0.13 release")
+        .expect("set description");
+    assert_eq!(
+        store.metadata(&session_id).expect("metadata").description(),
+        Some("Tracking the v0.13 release")
+    );
+
+    // An empty/whitespace description clears it (mirrors `with_description`).
+    store
+        .set_session_description(&session_id, "   ")
+        .expect("clear description");
+    assert_eq!(
+        store.metadata(&session_id).expect("metadata").description(),
+        None
+    );
+}
+
+#[test]
+fn set_session_description_on_unknown_session_fails() {
+    let mut store = InMemorySessionStore::default();
+    let error = store
+        .set_session_description(&SessionId::from_static("session-missing"), "Nope")
+        .expect_err("unknown session should fail");
+    assert!(matches!(error, SessionStoreError::SessionNotFound { .. }));
+}
+
+#[test]
+fn delete_session_removes_it_from_listing_and_replay() {
+    let mut store = StorageBackedSessionStore::new(
+        StorageScope::project("org-1", "project-1"),
+        InMemoryStorage::default(),
+    );
+    let session_id = SessionId::from_static("session-doomed");
+    store
+        .create_session(SessionMetadata::new(session_id.clone(), "cli"))
+        .expect("create session");
+    store
+        .append_message(&session_id, SessionMessage::user("Soon to be gone."))
+        .expect("append message");
+
+    let existed = store.delete_session(&session_id).expect("delete session");
+    assert!(existed);
+
+    // Gone from the listing, and replay/metadata now report it missing.
+    assert!(store.list_sessions().expect("list").is_empty());
+    assert!(matches!(
+        store.metadata(&session_id),
+        Err(SessionStoreError::SessionNotFound { .. })
+    ));
+    assert!(matches!(
+        store.replay(&session_id),
+        Err(SessionStoreError::SessionNotFound { .. })
+    ));
+
+    // Deleting an absent session reports that nothing existed.
+    assert!(!store.delete_session(&session_id).expect("second delete"));
 }

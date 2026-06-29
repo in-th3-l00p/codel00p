@@ -237,8 +237,19 @@ fn execute_effect(
         Effect::ResumeSession(session_id) => {
             spawn_resume_session(app.config.clone(), session_id, tx.clone())
         }
-        Effect::RenameSession(session_id, title) => {
-            spawn_rename_session(app.config.clone(), session_id, title, tx.clone())
+        Effect::EditSession {
+            session_id,
+            title,
+            description,
+        } => spawn_edit_session(
+            app.config.clone(),
+            session_id,
+            title,
+            description,
+            tx.clone(),
+        ),
+        Effect::DeleteSession(session_id) => {
+            spawn_delete_session(app.config.clone(), session_id, tx.clone())
         }
         Effect::SwitchOrg(org_id) => switch_org(app, terminal, org_id, tx)?,
         Effect::CheckUpdates => spawn_update_check(tx.clone()),
@@ -457,6 +468,7 @@ fn spawn_session_list(config: CliConfig, tx: UnboundedSender<Msg>) {
                     .map(|summary| SessionSummary {
                         session_id: summary.session_id,
                         title: summary.title,
+                        description: summary.description,
                         source: summary.source,
                         message_count: summary.message_count,
                     })
@@ -487,13 +499,14 @@ fn spawn_resume_session(
     });
 }
 
-/// Renames a prior session's title (a blocking store write on `spawn_blocking`),
-/// then surfaces the result as a notice and refreshes the switcher list so the new
-/// title shows immediately.
-fn spawn_rename_session(
+/// Applies a conversation's edited name + description (blocking store writes on
+/// `spawn_blocking`), then surfaces the result as a notice and refreshes the
+/// switcher list so the change shows immediately. An empty description clears it.
+fn spawn_edit_session(
     config: CliConfig,
     session_id: codel00p_harness::SessionId,
     title: String,
+    description: String,
     tx: UnboundedSender<Msg>,
 ) {
     let list_config = config.clone();
@@ -505,16 +518,50 @@ fn spawn_rename_session(
             let mut store = crate::config::open_session_store(&config)?;
             store
                 .set_session_title(&session_id, &title)
+                .map_err(|error| error.to_string())?;
+            store
+                .set_session_description(&session_id, &description)
                 .map_err(|error| error.to_string())
         })
         .await
         .unwrap_or_else(|error| Err(error.to_string()));
         let notice = match result {
-            Ok(()) => format!("Renamed session {id} to \"{title_for_msg}\"."),
-            Err(error) => format!("Could not rename {id}: {error}"),
+            Ok(()) => format!("Updated conversation {id} (\"{title_for_msg}\")."),
+            Err(error) => format!("Could not update {id}: {error}"),
         };
         let _ = tx.send(Msg::Notice(notice));
-        // Refresh the switcher so the new title is reflected if it is still open.
+        // Refresh the switcher so the change is reflected if it is still open.
+        spawn_session_list(list_config, tx);
+    });
+}
+
+/// Deletes a conversation (a blocking store write on `spawn_blocking`), then
+/// surfaces the result as a notice and refreshes the switcher list so the row
+/// disappears immediately.
+fn spawn_delete_session(
+    config: CliConfig,
+    session_id: codel00p_harness::SessionId,
+    tx: UnboundedSender<Msg>,
+) {
+    let list_config = config.clone();
+    tokio::spawn(async move {
+        let id = session_id.as_str().to_string();
+        let result = tokio::task::spawn_blocking(move || {
+            use codel00p_session::SessionStore;
+            let mut store = crate::config::open_session_store(&config)?;
+            store
+                .delete_session(&session_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()));
+        let notice = match result {
+            Ok(true) => format!("Deleted conversation {id}."),
+            Ok(false) => format!("No such conversation: {id}."),
+            Err(error) => format!("Could not delete {id}: {error}"),
+        };
+        let _ = tx.send(Msg::Notice(notice));
+        // Refresh the switcher so the deleted row is gone if it is still open.
         spawn_session_list(list_config, tx);
     });
 }

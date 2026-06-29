@@ -44,11 +44,15 @@ actually think about the tool and leaves room for richer per-section UX.
   `agent.provider/model/fallbacks`, persona file, memory repository.
 - Net-new: persona read/write helper; agent detail aggregation; dispatch-list UI.
 
-### Phase 3 — Conversations section
-- **"＋ New conversation"** first row.
-- List with **edit (name + description)** and **delete**.
-- Net-new backing: `SessionStore::delete_session`; a `description` field on
-  `SessionMetadata`; `sessions delete` CLI command.
+### Phase 3 — Conversations section  ✅
+- **"＋ New conversation"** first row → fresh chat; sessions below.
+- `e`/F2 inline edit (name + description), `d` delete with confirm, Enter resume.
+  The list is arrow-navigated (no type-to-filter) so `e`/`d` are free for actions.
+- Net-new backing shipped: `description` on `SessionMetadata`;
+  `SessionStore::set_session_description` + `delete_session`; CLI
+  `sessions describe` + `sessions delete`. Effects `EditSession` + `DeleteSession`.
+- Tests: session-crate round-trip/delete + TUI edit/delete/new-row flows. Green;
+  clippy `-D warnings` + fmt clean.
 
 ### Phase 4 — Organization section
 - List orgs with create-new first row; select (use) an org; detail = users,
@@ -66,10 +70,10 @@ actually think about the tool and leaves room for richer per-section UX.
 ### Phase 6 — help/keys + polish
 - Update the help overlay and key hints to the new structure; consistency pass.
 
-## Open decisions (need product direction)
+## Decisions (resolved 2026-06-29)
 
-1. **Org creation** — no backend POST /orgs exists. Options: (a) open the Clerk
-   dashboard in the browser; (b) read-only with a "managed in dashboard" notice;
-   (c) add a backend org-creation route (larger).
-2. **API keys in the TUI** — (a) edit + store in local `config.toml`; (b) show
-   presence only and point at env vars (never write secrets); (c) defer.
+1. **Build order:** Conversations section first (then Agent, Settings, Organization).
+2. **Org creation:** the create-new row **opens the Clerk dashboard** in the
+   browser; codel00p stays read-only for org lifecycle. (Phase 4.)
+3. **API keys:** the Settings section **edits + stores keys in local
+   `config.toml`**. (Phase 5.)
