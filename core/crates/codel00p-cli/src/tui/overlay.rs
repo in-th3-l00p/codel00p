@@ -517,6 +517,124 @@ impl AgentSwitcher {
     }
 }
 
+/// An editable field of the agent detail/edit overlay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AgentField {
+    Description,
+    Provider,
+    Model,
+    Dispatch,
+    Persona,
+}
+
+/// The loaded values for an agent's detail/edit overlay, read off disk by the
+/// event loop (config.toml + persona.md + agent.toml + memory db size).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AgentDetailData {
+    pub(crate) description: String,
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    /// Comma-separated dispatch fallback routes (`agent.fallbacks`).
+    pub(crate) dispatch: String,
+    pub(crate) persona: String,
+    /// Read-only one-line memory summary (e.g. `memory.sqlite · 1.2 MB`).
+    pub(crate) memory_note: String,
+}
+
+/// The agent detail/edit overlay: shows an agent's default provider+model, dispatch
+/// routes, persona, description, and a memory summary, and edits them inline. Opened
+/// with `e` on an agent row; saving writes config.toml / persona.md / agent.toml.
+#[derive(Clone, Debug)]
+pub(crate) struct AgentDetail {
+    pub(crate) name: String,
+    /// The base/default agent has no `agent.toml`, so its description isn't editable.
+    pub(crate) is_default: bool,
+    pub(crate) description: String,
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    pub(crate) dispatch: String,
+    pub(crate) persona: String,
+    pub(crate) memory_note: String,
+    pub(crate) field: AgentField,
+    /// `false` until the event loop delivers the on-disk values.
+    pub(crate) loaded: bool,
+    pub(crate) status: Option<String>,
+}
+
+impl AgentDetail {
+    /// A pre-load placeholder shown while the event loop reads the agent's files.
+    pub(crate) fn loading(name: String, is_default: bool) -> Self {
+        Self {
+            name,
+            is_default,
+            description: String::new(),
+            provider: String::new(),
+            model: String::new(),
+            dispatch: String::new(),
+            persona: String::new(),
+            memory_note: String::new(),
+            field: if is_default {
+                AgentField::Provider
+            } else {
+                AgentField::Description
+            },
+            loaded: false,
+            status: Some("Loading…".to_string()),
+        }
+    }
+
+    /// Fills the buffers once the on-disk values arrive.
+    pub(crate) fn apply(&mut self, data: AgentDetailData) {
+        self.description = data.description;
+        self.provider = data.provider;
+        self.model = data.model;
+        self.dispatch = data.dispatch;
+        self.persona = data.persona;
+        self.memory_note = data.memory_note;
+        self.loaded = true;
+        self.status = None;
+    }
+
+    /// The editable fields in display order (the default agent omits Description).
+    pub(crate) fn fields(&self) -> Vec<AgentField> {
+        let mut fields = Vec::new();
+        if !self.is_default {
+            fields.push(AgentField::Description);
+        }
+        fields.extend([
+            AgentField::Provider,
+            AgentField::Model,
+            AgentField::Dispatch,
+            AgentField::Persona,
+        ]);
+        fields
+    }
+
+    /// Moves focus to the next (`forward`) or previous field, wrapping.
+    pub(crate) fn move_field(&mut self, forward: bool) {
+        let fields = self.fields();
+        let current = fields.iter().position(|f| *f == self.field).unwrap_or(0);
+        let len = fields.len();
+        let next = if forward {
+            (current + 1) % len
+        } else {
+            (current + len - 1) % len
+        };
+        self.field = fields[next];
+    }
+
+    /// The buffer for the currently focused field.
+    pub(crate) fn active_buffer_mut(&mut self) -> &mut String {
+        match self.field {
+            AgentField::Description => &mut self.description,
+            AgentField::Provider => &mut self.provider,
+            AgentField::Model => &mut self.model,
+            AgentField::Dispatch => &mut self.dispatch,
+            AgentField::Persona => &mut self.persona,
+        }
+    }
+}
+
 /// Which field of the create-agent form is focused. The form is intentionally
 /// small: a required name and an optional one-line description. Richer creation
 /// (clone, model, persona file) lives in the `agent create` CLI.
@@ -927,6 +1045,8 @@ pub(crate) enum Overlay {
     AgentSwitcher(AgentSwitcher),
     /// The create-agent form (multi-agent personas, #13).
     AgentCreate(AgentCreateForm),
+    /// The agent detail/edit overlay (multi-agent personas, #13).
+    AgentDetail(AgentDetail),
 }
 
 impl Overlay {

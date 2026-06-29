@@ -37,11 +37,14 @@ actually think about the tool and leaves room for richer per-section UX.
 - ✅ `d` delete with a y/n confirm; refused for the active and `default` agents.
   New `Effect::DeleteAgent` → `registry::delete_agent` + list refresh. The list is
   arrow-navigated (no type-filter) so `d` is free for the action.
-- ⏳ **Still to do:** `e` edit + a **detail view** — default provider+model
-  (reuse `ModelPicker`), dispatch provider+model list (backed by
-  `agent.fallbacks`), **persona editor** (net-new read/write `persona.md`),
-  description edit, and a memory summary (open the memory review scoped to the
-  agent's home).
+- ✅ `e` opens an **agent detail/edit overlay**: description, default provider,
+  model, dispatch fallbacks (`agent.fallbacks`, now a settable `StrList` key),
+  and persona — edited inline (↑/↓ between fields, Enter saves), plus a read-only
+  memory-db summary. Loads/saves off the UI task via `LoadAgentDetail` /
+  `SaveAgentDetail`; writes config.toml + persona.md + (registry agents) the
+  agent.toml description via new `registry::set_agent_description`.
+  Note: persona edits here are single-line; rich multi-line persona authoring
+  stays in `agent create --persona @file`.
 
 ### Phase 3 — Conversations section  ✅
 - **"＋ New conversation"** first row → fresh chat; sessions below.

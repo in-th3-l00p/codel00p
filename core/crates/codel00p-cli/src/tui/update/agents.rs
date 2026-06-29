@@ -39,6 +39,18 @@ pub(super) fn handle_agent_switcher_key(
         return handle_agent_delete_key(app, switcher, key);
     }
 
+    // `e` opens the detail/edit overlay for the highlighted agent.
+    if key.code == KeyCode::Char('e') {
+        if let Some(agent) = switcher.selected_agent() {
+            let name = agent.name.clone();
+            let is_default = name == super::super::agents::DEFAULT_AGENT_LABEL;
+            app.overlay = Overlay::AgentDetail(AgentDetail::loading(name.clone(), is_default));
+            return vec![Effect::LoadAgentDetail { name, is_default }];
+        }
+        app.overlay = Overlay::AgentSwitcher(switcher);
+        return Vec::new();
+    }
+
     // `d` opens a delete confirmation for the highlighted agent (guarded against
     // the active and default agents inside `begin_delete`).
     if key.code == KeyCode::Char('d') && switcher.selected_agent().is_some() {
@@ -152,6 +164,67 @@ pub(super) fn handle_agent_create_key(
         KeyCode::Enter => submit_agent_create(app, form),
         _ => {
             app.overlay = Overlay::AgentCreate(form);
+            Vec::new()
+        }
+    }
+}
+
+/// Handles keys in the agent detail/edit overlay: ↑/↓ or Tab move between fields,
+/// printable chars / Backspace edit the focused field, Enter saves (dispatching
+/// the write + returning to the list), Esc returns to the list without saving.
+/// Edits are ignored until the on-disk values have loaded.
+pub(super) fn handle_agent_detail_key(
+    app: &mut App,
+    mut detail: AgentDetail,
+    key: KeyEvent,
+) -> Vec<Effect> {
+    // Esc always returns to the agent list (reloading it).
+    if key.code == KeyCode::Esc {
+        app.overlay = Overlay::AgentSwitcher(AgentSwitcher::new());
+        return vec![Effect::ListAgents];
+    }
+    // Ignore edits until the values have loaded.
+    if !detail.loaded {
+        app.overlay = Overlay::AgentDetail(detail);
+        return Vec::new();
+    }
+    match key.code {
+        KeyCode::Up => {
+            detail.move_field(false);
+            app.overlay = Overlay::AgentDetail(detail);
+            Vec::new()
+        }
+        KeyCode::Down | KeyCode::Tab => {
+            detail.move_field(true);
+            app.overlay = Overlay::AgentDetail(detail);
+            Vec::new()
+        }
+        KeyCode::Enter => {
+            let effect = Effect::SaveAgentDetail {
+                name: detail.name.clone(),
+                is_default: detail.is_default,
+                description: detail.description.clone(),
+                provider: detail.provider.clone(),
+                model: detail.model.clone(),
+                dispatch: detail.dispatch.clone(),
+                persona: detail.persona.clone(),
+            };
+            // Return to the agent list (refreshed) after saving.
+            app.overlay = Overlay::AgentSwitcher(AgentSwitcher::new());
+            vec![effect, Effect::ListAgents]
+        }
+        KeyCode::Backspace => {
+            detail.active_buffer_mut().pop();
+            app.overlay = Overlay::AgentDetail(detail);
+            Vec::new()
+        }
+        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            detail.active_buffer_mut().push(c);
+            app.overlay = Overlay::AgentDetail(detail);
+            Vec::new()
+        }
+        _ => {
+            app.overlay = Overlay::AgentDetail(detail);
             Vec::new()
         }
     }

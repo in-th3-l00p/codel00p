@@ -69,6 +69,7 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::UpdatePrompt(prompt) => draw_update_prompt(app, frame, prompt),
         Overlay::AgentSwitcher(switcher) => draw_agent_switcher(app, frame, switcher),
         Overlay::AgentCreate(form) => draw_agent_create(app, frame, form),
+        Overlay::AgentDetail(detail) => draw_agent_detail(app, frame, detail),
     }
 }
 
@@ -660,6 +661,28 @@ mod tests {
         assert!(rendered.contains("scout"));
         // The active agent is marked.
         assert!(rendered.contains("default ✓"));
+    }
+
+    #[test]
+    fn renders_agent_detail_overlay() {
+        use crate::tui::overlay::{AgentDetail, AgentDetailData};
+        let mut detail = AgentDetail::loading("scout".to_string(), false);
+        detail.apply(AgentDetailData {
+            description: "recon agent".to_string(),
+            provider: "anthropic".to_string(),
+            model: "claude-opus-4-8".to_string(),
+            dispatch: "openai:gpt-4o".to_string(),
+            persona: "You scout.".to_string(),
+            memory_note: "memory.sqlite · 1.2 MB".to_string(),
+        });
+        let mut app = test_app();
+        app.overlay = Overlay::AgentDetail(detail);
+        let rendered = render_to_string(&mut app, 90, 24);
+        assert!(rendered.contains("agent: scout"));
+        assert!(rendered.contains("provider:"));
+        assert!(rendered.contains("anthropic"));
+        assert!(rendered.contains("dispatch:"));
+        assert!(rendered.contains("memory.sqlite"));
     }
 
     #[test]

@@ -273,6 +273,31 @@ fn write_meta(home: &Path, meta: &AgentMeta) -> RegistryResult<()> {
     fs::write(&path, text).map_err(|e| format!("failed to write {}: {e}", path.display()))
 }
 
+/// Sets (or clears) a registry agent's description, rewriting its `agent.toml`.
+/// Refuses unknown agents (the base/default agent has no `agent.toml`). An
+/// empty/whitespace value clears the description.
+pub fn set_agent_description(
+    base: &Path,
+    name: &str,
+    description: Option<&str>,
+) -> RegistryResult<()> {
+    validate_name(name)?;
+    if !agent_exists(base, name) {
+        return Err(format!("agent not found: `{name}`"));
+    }
+    let home = agent_home(base, name);
+    let path = home.join(AGENT_META_FILE);
+    let text =
+        fs::read_to_string(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+    let mut meta = toml::from_str::<AgentMeta>(&text)
+        .map_err(|e| format!("failed to parse {}: {e}", path.display()))?;
+    meta.description = description
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    write_meta(&home, &meta)
+}
+
 /// Delete agent `name` (its whole home dir). Refuses unknown agents. The base
 /// home is never reachable here (agents live strictly under `<base>/agents/`).
 pub fn delete_agent(base: &Path, name: &str) -> RegistryResult<()> {

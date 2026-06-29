@@ -25,7 +25,7 @@ use crate::config::{CliConfig, CliResult};
 use super::app::App;
 use super::cloud_data;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
-use super::overlay::{ModelChoice, Overlay, SessionSummary};
+use super::overlay::{AgentDetailData, ModelChoice, Overlay, SessionSummary};
 use super::update::update;
 use super::view;
 
@@ -248,6 +248,30 @@ fn execute_effect(
             }
             spawn_agent_list(app.base_home.clone(), app.active_agent.clone(), tx.clone());
         }
+        Effect::LoadAgentDetail { name, is_default } => {
+            spawn_load_agent_detail(app.base_home.clone(), name, is_default, tx.clone())
+        }
+        Effect::SaveAgentDetail {
+            name,
+            is_default,
+            description,
+            provider,
+            model,
+            dispatch,
+            persona,
+        } => spawn_save_agent_detail(
+            app.base_home.clone(),
+            AgentDetailWrite {
+                name,
+                is_default,
+                description,
+                provider,
+                model,
+                dispatch,
+                persona,
+            },
+            tx.clone(),
+        ),
         Effect::ResumeSession(session_id) => {
             spawn_resume_session(app.config.clone(), session_id, tx.clone())
         }
@@ -577,6 +601,136 @@ fn spawn_delete_session(
         let _ = tx.send(Msg::Notice(notice));
         // Refresh the switcher so the deleted row is gone if it is still open.
         spawn_session_list(list_config, tx);
+    });
+}
+
+/// Resolves an agent's home directory: the base itself for the default agent, or
+/// `<base>/agents/<name>` for a registry agent.
+fn agent_home_dir(base: &std::path::Path, name: &str, is_default: bool) -> std::path::PathBuf {
+    if is_default {
+        base.to_path_buf()
+    } else {
+        crate::agent::registry::agent_home(base, name)
+    }
+}
+
+/// Formats a byte count compactly for the memory summary line.
+fn human_size(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+/// Reads an agent's on-disk detail (config.toml + persona.md + agent.toml + memory
+/// db size) off the UI task and delivers it over `Msg::AgentDetailLoaded`.
+fn spawn_load_agent_detail(
+    base: std::path::PathBuf,
+    name: String,
+    is_default: bool,
+    tx: UnboundedSender<Msg>,
+) {
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            let home = agent_home_dir(&base, &name, is_default);
+            let settings = crate::settings::load_file(&home.join("config.toml"))
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let description = if is_default {
+                String::new()
+            } else {
+                crate::agent::registry::agent_info(&base, &name)
+                    .and_then(|info| info.description)
+                    .unwrap_or_default()
+            };
+            let persona = std::fs::read_to_string(home.join("persona.md")).unwrap_or_default();
+            let memory_note = match std::fs::metadata(home.join("memory.sqlite")) {
+                Ok(meta) => format!("memory.sqlite · {}", human_size(meta.len())),
+                Err(_) => "no memory recorded yet".to_string(),
+            };
+            Ok::<_, String>(AgentDetailData {
+                description,
+                provider: settings.agent.provider.unwrap_or_default(),
+                model: settings.agent.model.unwrap_or_default(),
+                dispatch: settings
+                    .agent
+                    .fallbacks
+                    .map(|routes| routes.join(", "))
+                    .unwrap_or_default(),
+                persona,
+                memory_note,
+            })
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()));
+        let _ = tx.send(Msg::AgentDetailLoaded(result));
+    });
+}
+
+/// The values to persist for an agent's detail/edit save.
+struct AgentDetailWrite {
+    name: String,
+    is_default: bool,
+    description: String,
+    provider: String,
+    model: String,
+    dispatch: String,
+    persona: String,
+}
+
+/// Persists edited agent detail off the UI task: config.toml provider/model/dispatch
+/// (set when non-empty, unset when cleared), persona.md, and — for registry agents —
+/// the agent.toml description. Surfaces the outcome as a notice.
+fn spawn_save_agent_detail(
+    base: std::path::PathBuf,
+    write: AgentDetailWrite,
+    tx: UnboundedSender<Msg>,
+) {
+    tokio::spawn(async move {
+        let name_for_msg = write.name.clone();
+        let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let home = agent_home_dir(&base, &write.name, write.is_default);
+            let config = home.join("config.toml");
+
+            // Scalar keys: set when present, unset (clear) when blank so the agent
+            // falls back to inherited defaults.
+            let put = |key: &str, value: &str| -> Result<(), String> {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    crate::settings::unset_value(&config, key).map(|_| ())
+                } else {
+                    crate::settings::set_value(&config, key, trimmed)
+                }
+            };
+            put("agent.provider", &write.provider)?;
+            put("agent.model", &write.model)?;
+            put("agent.fallbacks", &write.dispatch)?;
+
+            // Persona is a plain file under the agent's home.
+            std::fs::write(home.join("persona.md"), &write.persona)
+                .map_err(|error| format!("failed to write persona.md: {error}"))?;
+
+            // Description lives in agent.toml; only registry agents have one.
+            if !write.is_default {
+                crate::agent::registry::set_agent_description(
+                    &base,
+                    &write.name,
+                    Some(write.description.as_str()),
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()));
+        let notice = match result {
+            Ok(()) => format!("Saved agent “{name_for_msg}”."),
+            Err(error) => format!("Could not save {name_for_msg}: {error}"),
+        };
+        let _ = tx.send(Msg::Notice(notice));
     });
 }
 

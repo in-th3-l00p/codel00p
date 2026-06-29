@@ -317,7 +317,7 @@ pub(super) fn draw_agent_switcher(app: &App, frame: &mut Frame, switcher: &Agent
         );
     } else {
         let status = switcher.status.clone().unwrap_or_else(|| {
-            "↑/↓ to move · Enter to use/create · d delete · Esc to close".to_string()
+            "↑/↓ to move · Enter to use/create · e edit · d delete · Esc to close".to_string()
         });
         frame.render_widget(
             Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
@@ -398,6 +398,109 @@ pub(super) fn draw_agent_create(app: &App, frame: &mut Frame, form: &AgentCreate
         )),
     };
     frame.render_widget(Paragraph::new(footer), rows[5]);
+}
+
+/// Draws the agent detail/edit overlay (multi-agent personas, #13): the agent's
+/// default provider+model, dispatch routes, persona, and description as editable
+/// fields, plus a read-only memory summary.
+pub(super) fn draw_agent_detail(
+    app: &App,
+    frame: &mut Frame,
+    detail: &super::super::overlay::AgentDetail,
+) {
+    use super::super::overlay::AgentField;
+    let area = centered_rect(66, 60, frame.area());
+    let title = format!(" agent: {} ", detail.name);
+    let inner = framed(frame, area, &title, app.theme.overlay_border);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // hint
+            Constraint::Length(1), // spacer
+            Constraint::Min(1),    // fields
+            Constraint::Length(1), // memory summary
+        ])
+        .split(inner);
+
+    if !detail.loaded {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                format!("  {}", detail.status.as_deref().unwrap_or("Loading…")),
+                app.theme.muted(),
+            )),
+            rows[0],
+        );
+        return;
+    }
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  ↑/↓ to move · type to edit · Enter to save · Esc to go back",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+
+    let field_line = |label: &str, value: &str, focused: bool| {
+        let marker = if focused { "› " } else { "  " };
+        let cursor = if focused { "▏" } else { "" };
+        Line::from(vec![
+            Span::styled(marker, Style::default().fg(app.theme.accent)),
+            Span::styled(format!("{label:<13}"), app.theme.muted()),
+            Span::styled(
+                format!("{value}{cursor}"),
+                if focused {
+                    app.theme.selection()
+                } else {
+                    Style::default()
+                },
+            ),
+        ])
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+    if !detail.is_default {
+        lines.push(field_line(
+            "description:",
+            &detail.description,
+            detail.field == AgentField::Description,
+        ));
+    }
+    lines.push(field_line(
+        "provider:",
+        &detail.provider,
+        detail.field == AgentField::Provider,
+    ));
+    lines.push(field_line(
+        "model:",
+        &detail.model,
+        detail.field == AgentField::Model,
+    ));
+    lines.push(field_line(
+        "dispatch:",
+        &detail.dispatch,
+        detail.field == AgentField::Dispatch,
+    ));
+    lines.push(field_line(
+        "persona:",
+        &detail.persona,
+        detail.field == AgentField::Persona,
+    ));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  dispatch = comma-separated fallback provider:model routes",
+        app.theme.muted(),
+    )));
+    frame.render_widget(Paragraph::new(lines), rows[2]);
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            format!("  memory: {}", detail.memory_note),
+            app.theme.muted(),
+        )),
+        rows[3],
+    );
 }
 
 /// Draws the top-level Ctrl+P menu: the four focused sections that replaced the

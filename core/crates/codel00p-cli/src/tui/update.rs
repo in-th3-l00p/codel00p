@@ -8,9 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
-    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentRow, AgentSwitcher,
-    ConversationRow, EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker, Overlay,
-    SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentDetail, AgentRow,
+    AgentSwitcher, ConversationRow, EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker,
+    Overlay, SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
 
@@ -22,7 +22,8 @@ mod input;
 mod sessions;
 mod settings;
 use agents::{
-    handle_agent_create_key, handle_agent_switcher_key, open_agent_creator, open_agent_switcher,
+    handle_agent_create_key, handle_agent_detail_key, handle_agent_switcher_key,
+    open_agent_creator, open_agent_switcher,
 };
 use events::{apply_event, handle_turn_finished};
 use input::{handle_input_key, scroll_down, scroll_up};
@@ -172,6 +173,15 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
+        Msg::AgentDetailLoaded(result) => {
+            if let Overlay::AgentDetail(detail) = &mut app.overlay {
+                match result {
+                    Ok(data) => detail.apply(data),
+                    Err(error) => detail.status = Some(error),
+                }
+            }
+            Vec::new()
+        }
         Msg::SessionResumed(result) => {
             match result {
                 Ok((session_state, persisted)) => {
@@ -285,6 +295,7 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         Overlay::AdvancedSettings(advanced) => handle_advanced_settings_key(app, advanced, key),
         Overlay::AgentSwitcher(switcher) => handle_agent_switcher_key(app, switcher, key),
         Overlay::AgentCreate(form) => handle_agent_create_key(app, form, key),
+        Overlay::AgentDetail(detail) => handle_agent_detail_key(app, detail, key),
         Overlay::UpdatePrompt(prompt) => handle_update_prompt_key(app, prompt, key),
         Overlay::Menu(mut menu) => match menu.on_key(key) {
             PickerOutcome::Selected => match menu.selected_section() {
@@ -1324,6 +1335,64 @@ mod tests {
             [Effect::DeleteAgent(name)] => assert_eq!(name, "scout"),
             other => panic!("expected DeleteAgent, got {} effects", other.len()),
         }
+    }
+
+    #[test]
+    fn e_opens_agent_detail_and_loads_it() {
+        use crate::tui::overlay::{AgentChoice, AgentDetailData};
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![
+                AgentChoice {
+                    name: "default".to_string(),
+                    description: None,
+                    active: true,
+                },
+                AgentChoice {
+                    name: "scout".to_string(),
+                    description: Some("recon".to_string()),
+                    active: false,
+                },
+            ])),
+        );
+        // Move onto scout and press `e` → detail overlay opens + a load effect fires.
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Down));
+        let effects = update(&mut app, key(KeyCode::Char('e')));
+        match effects.as_slice() {
+            [Effect::LoadAgentDetail { name, is_default }] => {
+                assert_eq!(name, "scout");
+                assert!(!is_default);
+            }
+            other => panic!("expected LoadAgentDetail, got {} effects", other.len()),
+        }
+        assert!(matches!(app.overlay, Overlay::AgentDetail(_)));
+        // The loaded values populate the fields; editing then Enter saves them.
+        update(
+            &mut app,
+            Msg::AgentDetailLoaded(Ok(AgentDetailData {
+                description: "recon".to_string(),
+                provider: "anthropic".to_string(),
+                model: "claude-opus-4-8".to_string(),
+                dispatch: String::new(),
+                persona: "You scout.".to_string(),
+                memory_note: "no memory recorded yet".to_string(),
+            })),
+        );
+        match &app.overlay {
+            Overlay::AgentDetail(detail) => {
+                assert!(detail.loaded);
+                assert_eq!(detail.model, "claude-opus-4-8");
+            }
+            _ => panic!("expected the detail overlay"),
+        }
+        let effects = update(&mut app, key(KeyCode::Enter));
+        let saved = effects
+            .iter()
+            .any(|e| matches!(e, Effect::SaveAgentDetail { name, .. } if name == "scout"));
+        assert!(saved, "Enter should emit a SaveAgentDetail for scout");
     }
 
     #[test]

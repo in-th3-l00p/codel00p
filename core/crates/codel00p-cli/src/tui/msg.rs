@@ -8,7 +8,7 @@ use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRef, Projec
 use crossterm::event::KeyEvent;
 use tokio::sync::oneshot;
 
-use super::overlay::{AgentChoice, ModelChoice, SessionSummary};
+use super::overlay::{AgentChoice, AgentDetailData, ModelChoice, SessionSummary};
 
 /// Inbound events: terminal input, streamed turn output, and async results.
 pub(crate) enum Msg {
@@ -43,6 +43,8 @@ pub(crate) enum Msg {
     /// Local agents (default + registry) for the agent switcher overlay
     /// (multi-agent personas, #13).
     AgentList(Result<Vec<AgentChoice>, String>),
+    /// The on-disk values for the agent detail/edit overlay (multi-agent #13).
+    AgentDetailLoaded(Result<AgentDetailData, String>),
     /// A prior session was replayed and is ready to resume (state + message count).
     SessionResumed(Result<(Box<SessionState>, usize), String>),
     /// The background startup check found a newer release (carries the version).
@@ -86,6 +88,20 @@ pub(crate) enum Effect {
     /// Delete a local agent's home (multi-agent personas, #13), then refresh the
     /// agent switcher list. Never the active or default agent (guarded upstream).
     DeleteAgent(String),
+    /// Read an agent's on-disk detail (config.toml + persona.md + agent.toml +
+    /// memory size) for the detail/edit overlay, off the UI task.
+    LoadAgentDetail { name: String, is_default: bool },
+    /// Persist edited agent detail (config.toml provider/model/dispatch, persona.md,
+    /// and — for registry agents — the agent.toml description), off the UI task.
+    SaveAgentDetail {
+        name: String,
+        is_default: bool,
+        description: String,
+        provider: String,
+        model: String,
+        dispatch: String,
+        persona: String,
+    },
     /// Replay a prior session so it can be resumed inside the TUI.
     ResumeSession(codel00p_harness::SessionId),
     /// Apply a conversation's edited name + description (blocking store writes off
