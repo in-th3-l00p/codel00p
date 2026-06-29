@@ -533,6 +533,18 @@ mod tests {
     }
 
     #[test]
+    fn n_in_org_tab_opens_the_clerk_dashboard() {
+        let mut app = test_app();
+        app.cloud.configured = true;
+        app.overlay = Overlay::Entities(EntityBrowser::new(EntityTab::Org));
+        let effects = update(&mut app, key(KeyCode::Char('n')));
+        match effects.as_slice() {
+            [Effect::OpenUrl(url)] => assert!(url.contains("clerk.com")),
+            other => panic!("expected OpenUrl, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
     fn cloud_users_populates_entity_browser() {
         let mut app = test_app();
         app.overlay = Overlay::Entities(EntityBrowser::new(EntityTab::Users));

@@ -205,7 +205,7 @@ fn random_state() -> String {
     format!("{:x}{:x}", std::process::id(), nanos)
 }
 
-fn open_browser(url: &str) -> CliResult<()> {
+pub(crate) fn open_browser(url: &str) -> CliResult<()> {
     let result = match env::consts::OS {
         "macos" => Command::new("open").arg(url).spawn(),
         "windows" => Command::new("cmd").args(["/C", "start", "", url]).spawn(),

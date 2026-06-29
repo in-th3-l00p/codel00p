@@ -149,7 +149,7 @@ pub(super) fn draw_org(app: &App, frame: &mut Frame, area: Rect, browser: &Entit
                 lines.push(Line::from(format!("  you:   {email}")));
             }
             lines.push(Line::from(
-                "  Enter on an organization below to re-auth and switch.",
+                "  Enter to switch · n for a new org (opens the Clerk dashboard).",
             ));
         }
         (None, Some(error)) => lines.push(Line::from(Span::styled(

@@ -68,6 +68,8 @@ pub(crate) enum Effect {
     Cloud(CloudFetch),
     /// Re-authenticate through the browser for a selected organization.
     SwitchOrg(String),
+    /// Open a URL in the system browser (e.g. the Clerk dashboard to create an org).
+    OpenUrl(String),
     /// Read local state and surface it as a notice.
     Local(LocalQuery),
     /// Fetch the provider model catalog for the picker (blocking client, off the UI

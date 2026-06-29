@@ -290,6 +290,11 @@ fn execute_effect(
             spawn_delete_session(app.config.clone(), session_id, tx.clone())
         }
         Effect::SwitchOrg(org_id) => switch_org(app, terminal, org_id, tx)?,
+        Effect::OpenUrl(url) => {
+            if let Err(error) = crate::login::open_browser(&url) {
+                let _ = tx.send(Msg::Notice(format!("{error} ({url})")));
+            }
+        }
         Effect::CheckUpdates => spawn_update_check(tx.clone()),
     }
     Ok(())
