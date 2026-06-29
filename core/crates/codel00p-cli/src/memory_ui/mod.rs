@@ -11,13 +11,16 @@ mod model;
 mod tests;
 mod view;
 
+use std::collections::HashMap;
+
 use codel00p_memory::{
-    MemoryEdit, MemoryListFilter, MemoryMerge, MemoryRecord, MemoryRepository, ReviewDecision,
+    DEFAULT_CONSOLIDATION_THRESHOLD, MemoryEdit, MemoryListFilter, MemoryMerge, MemoryRecord,
+    MemoryRepository, ReviewDecision, plan_consolidations,
 };
 use codel00p_protocol::MemoryStatus;
 
 use crate::config::{CliConfig, CliResult, open_memory_store};
-use model::{AuditRow, Flow, MemoryModel, MemoryRow, Mutation, Screen};
+use model::{AuditRow, Flow, MemoryModel, MemoryRow, Mutation, NearDuplicate, Screen};
 
 type Store = codel00p_memory::StorageBackedMemoryStore<codel00p_storage::SqliteStorage>;
 
@@ -26,6 +29,12 @@ type Store = codel00p_memory::StorageBackedMemoryStore<codel00p_storage::SqliteS
 pub(crate) fn run(config: CliConfig) -> CliResult<String> {
     let mut store = open_memory_store(&config)?;
     let mut model = MemoryModel::new(crate::actor::infer_actor());
+    // Surface near-duplicates only when the opt-in curator is enabled.
+    let curator_on = std::env::current_dir()
+        .ok()
+        .map(|cwd| crate::skills::curator_enabled(&cwd))
+        .unwrap_or(false);
+    model.set_curator_enabled(curator_on);
     reload(&store, &config, &mut model)?;
 
     crate::dialog::run_blocking(&mut model, view::draw, |model, key| {
@@ -46,15 +55,54 @@ pub(crate) fn run(config: CliConfig) -> CliResult<String> {
     Ok("Closed memory review.\n".to_string())
 }
 
-/// Re-lists records for the current filter and feeds them to the model.
+/// Re-lists records for the current filter and feeds them to the model, tagging
+/// any near-duplicate approved memories (when the curator is enabled).
 fn reload(store: &Store, config: &CliConfig, model: &mut MemoryModel) -> CliResult<()> {
+    let near_dups = if model.curator_enabled {
+        consolidation_map(store, config)?
+    } else {
+        HashMap::new()
+    };
     let mut filter = MemoryListFilter::new(config.project.clone());
     if let Some(status) = model.filter.status() {
         filter = filter.with_status(status);
     }
     let records = store.list(filter).map_err(|error| error.to_string())?;
-    model.set_rows(records.iter().map(row_from_record).collect());
+    let rows = records
+        .iter()
+        .map(|record| {
+            let mut row = row_from_record(record);
+            row.near_duplicate_of = near_dups.get(row.id.as_str()).cloned();
+            row
+        })
+        .collect();
+    model.set_rows(rows);
     Ok(())
+}
+
+/// Maps each near-duplicate approved memory's id to its curator finding (survivor
+/// + similarity), computed over the approved set via `plan_consolidations`.
+fn consolidation_map(
+    store: &Store,
+    config: &CliConfig,
+) -> CliResult<HashMap<String, NearDuplicate>> {
+    let approved = store
+        .list(MemoryListFilter::new(config.project.clone()).with_status(MemoryStatus::Approved))
+        .map_err(|error| error.to_string())?;
+    let mut map = HashMap::new();
+    for consolidation in plan_consolidations(&approved, DEFAULT_CONSOLIDATION_THRESHOLD) {
+        let survivor = consolidation.survivor().entry().id().to_string();
+        for duplicate in consolidation.duplicates() {
+            map.insert(
+                duplicate.entry().id().to_string(),
+                NearDuplicate {
+                    survivor: survivor.clone(),
+                    similarity: duplicate.similarity(),
+                },
+            );
+        }
+    }
+    Ok(map)
 }
 
 /// Loads a record's audit trail and opens the detail screen.
@@ -155,6 +203,7 @@ fn row_from_record(record: &MemoryRecord) -> MemoryRow {
         kind: entry.kind(),
         content: entry.content().to_string(),
         tags: entry.tags().to_vec(),
+        near_duplicate_of: None,
     }
 }
 

@@ -22,6 +22,7 @@ codel00p-providers = { path = "../codel00p-providers" }
 codel00p-session = { path = "../codel00p-session" }
 codel00p-skill = { path = "../codel00p-skill" }
 codel00p-storage = { path = "../codel00p-storage", features = ["sqlite"] }
+codel00p-textsim = { path = "../codel00p-textsim" }
 hmac = "0.12"
 serde = { version = "1.0.219", features = ["derive"] }
 sha2 = "0.10"

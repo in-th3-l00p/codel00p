@@ -12,8 +12,9 @@ use std::{
 
 use codel00p_cron::parse_schedule;
 use codel00p_skill::{
-    SKILL_FILE, Skill, SkillSource, approve_candidate, archive_skill, is_curatable,
-    load_candidates, load_skills, load_usage, reject_candidate,
+    DEFAULT_SKILL_CONSOLIDATION_THRESHOLD, SKILL_FILE, Skill, SkillConsolidation, SkillSource,
+    approve_candidate, archive_skill, is_curatable, load_candidates, load_skills, load_usage,
+    plan_skill_consolidations, reject_candidate,
 };
 
 use crate::{config::CliResult, settings};
@@ -279,17 +280,32 @@ fn skills_review(workspace_start: &Path, args: &[String], action: Review) -> Cli
 struct CurateOptions {
     apply: bool,
     min_age_secs: u64,
+    threshold: u8,
 }
 
 fn parse_curate(args: &[String]) -> CliResult<CurateOptions> {
     let mut apply = false;
     let mut min_age_secs = DEFAULT_CURATE_MIN_AGE_SECS;
+    let mut threshold = DEFAULT_SKILL_CONSOLIDATION_THRESHOLD;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
             "--apply" => {
                 apply = true;
                 index += 1;
+            }
+            "--threshold" => {
+                let value = args
+                    .get(index + 1)
+                    .cloned()
+                    .filter(|v| !v.starts_with("--"))
+                    .ok_or("missing value for --threshold")?;
+                threshold = value
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|score| *score <= 100)
+                    .ok_or("invalid --threshold")?;
+                index += 2;
             }
             "--min-age" => {
                 let value = args
@@ -316,6 +332,7 @@ fn parse_curate(args: &[String]) -> CliResult<CurateOptions> {
     Ok(CurateOptions {
         apply,
         min_age_secs,
+        threshold,
     })
 }
 
@@ -325,49 +342,115 @@ fn skills_curate(workspace_start: &Path, args: &[String]) -> CliResult<String> {
     let user_usage = load_usage(&user_skills_dir());
     let project_usage = load_usage(&project_skills_dir(workspace_start));
     let now = now_epoch();
+    let usage_for = |skill: &Skill| match skill.source {
+        SkillSource::Project => project_usage.get(&skill.name),
+        _ => user_usage.get(&skill.name),
+    };
 
+    // Two independent passes: retire stale unused agent skills (always on, prior
+    // behavior), and — only when the opt-in curator is enabled — consolidate
+    // near-duplicate agent skills (keeping the most-used survivor). Both archive
+    // reversibly; bundled/human skills are never touched.
     let stale: Vec<&Skill> = skills
         .iter()
         .filter(|skill| {
-            let usage = match skill.source {
-                SkillSource::Project => project_usage.get(&skill.name),
-                _ => user_usage.get(&skill.name),
-            };
             is_curatable(
                 skill,
-                usage,
+                usage_for(skill),
                 skill_age_secs(&skill.path, now),
                 options.min_age_secs,
             )
         })
         .collect();
+    let consolidations = if curator_enabled(workspace_start) {
+        plan_skill_consolidations(&skills, usage_for, options.threshold)
+    } else {
+        Vec::new()
+    };
 
-    if stale.is_empty() {
-        return Ok("No stale agent-created skills to curate.\n".to_string());
+    if stale.is_empty() && consolidations.is_empty() {
+        return Ok(
+            "No skills to curate: no stale agent skills and no near-duplicates.\n".to_string(),
+        );
     }
 
     if !options.apply {
-        let mut output =
-            String::from("Stale agent-created skills (unused past the grace period):\n");
-        for skill in &stale {
-            output.push_str(&format!("  {}\n", skill.name));
-        }
-        output.push_str("\nArchive them (reversible):  codel00p skills curate --apply\n");
-        return Ok(output);
+        return Ok(render_skill_curate_dry_run(
+            &stale,
+            &consolidations,
+            options.threshold,
+        ));
     }
 
-    let mut archived = Vec::new();
-    for skill in &stale {
+    // Archive the union of stale skills and consolidation duplicates, each once.
+    let mut archived: Vec<String> = Vec::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut archive_skill_once = |skill: &Skill| -> CliResult<()> {
+        if !seen.insert(skill.name.clone()) {
+            return Ok(());
+        }
         if let Some(root) = skill_root(&skill.path) {
             archive_skill(&root, &skill.name).map_err(|error| error.to_string())?;
             archived.push(skill.name.clone());
         }
+        Ok(())
+    };
+    for skill in &stale {
+        archive_skill_once(skill)?;
     }
+    for consolidation in &consolidations {
+        for duplicate in consolidation.duplicates() {
+            archive_skill_once(duplicate.skill())?;
+        }
+    }
+
     Ok(format!(
-        "Archived {} stale skill(s): {}\nRestore with the skill files under <root>/.archive.\n",
+        "Archived {} skill(s): {}\nRestore with the skill files under <root>/.archive.\n",
         archived.len(),
         archived.join(", ")
     ))
+}
+
+fn render_skill_curate_dry_run(
+    stale: &[&Skill],
+    consolidations: &[SkillConsolidation],
+    threshold: u8,
+) -> String {
+    let mut output = String::new();
+    if !stale.is_empty() {
+        output.push_str("Stale agent-created skills (unused past the grace period):\n");
+        for skill in stale {
+            output.push_str(&format!("  {}\n", skill.name));
+        }
+        output.push('\n');
+    }
+    if !consolidations.is_empty() {
+        output.push_str(&format!(
+            "Near-duplicate agent skills (\u{2265}{threshold}% similar):\n"
+        ));
+        for consolidation in consolidations {
+            output.push_str(&format!("  keep {}\n", consolidation.survivor().name));
+            for duplicate in consolidation.duplicates() {
+                output.push_str(&format!(
+                    "    archive {} ({}% similar)\n",
+                    duplicate.skill().name,
+                    duplicate.similarity()
+                ));
+            }
+        }
+        output.push('\n');
+    }
+    output.push_str("Archive them (reversible):  codel00p skills curate --apply\n");
+    output
+}
+
+/// Whether the opt-in curator is enabled in the layered configuration. Any
+/// resolution failure is treated as disabled so consolidation never runs
+/// unexpectedly.
+pub(crate) fn curator_enabled(workspace_start: &Path) -> bool {
+    settings::load_layered(workspace_start)
+        .map(|resolved| resolved.merged.agent.behavior.curator_enabled())
+        .unwrap_or(false)
 }
 
 fn now_epoch() -> u64 {

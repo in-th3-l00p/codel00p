@@ -778,6 +778,39 @@ fn agent_profile_default_and_nested_profile_key_round_trip() {
 }
 
 #[test]
+fn memory_ranker_keys_round_trip_and_gate_is_fail_closed() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    with_home(dir.path(), || {
+        let path = user_config_path();
+        set_value(&path, "memory.ranker", "external").expect("set ranker");
+        set_value(&path, "memory.external_url", "https://ranker.internal/rank").expect("set url");
+
+        // Ranker + URL alone do NOT enable external ranking — the governance gate
+        // is still off, so it stays fail-closed on offline BM25.
+        let resolved = load_layered(dir.path()).expect("reload");
+        assert_eq!(resolved.memory().ranker.as_deref(), Some("external"));
+        assert_eq!(
+            effective_value(&resolved.merged, "memory.external_url").unwrap(),
+            Some("https://ranker.internal/rank".to_string())
+        );
+        assert!(
+            !resolved.memory().external_ranking_enabled(),
+            "external ranking must stay off until the gate is explicitly enabled"
+        );
+
+        // Flip the gate: now all three conditions hold and external ranking is on.
+        set_value(&path, "memory.allow_external_ranking", "true").expect("set gate");
+        let resolved = load_layered(dir.path()).expect("reload after gate");
+        assert!(resolved.memory().external_ranking_enabled());
+
+        // Unsetting the gate returns to fail-closed.
+        assert!(unset_value(&path, "memory.allow_external_ranking").expect("unset gate"));
+        let resolved = load_layered(dir.path()).expect("reload after unset");
+        assert!(!resolved.memory().external_ranking_enabled());
+    });
+}
+
+#[test]
 fn unknown_profile_field_key_is_rejected() {
     let dir = tempfile::tempdir().expect("tempdir");
     with_home(dir.path(), || {

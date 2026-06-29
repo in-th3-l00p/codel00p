@@ -11,7 +11,7 @@
 mod edit;
 mod loading;
 mod paths;
-mod schema;
+pub(crate) mod schema;
 
 pub use edit::{
     effective_value, migrate, set_value, starter_template, unset_value, write_file_atomic,

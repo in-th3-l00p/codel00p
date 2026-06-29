@@ -3,6 +3,7 @@
 //! This crate keeps extraction, review state, query builders, scoring, and storage
 //! persistence in focused modules while preserving the original public facade.
 
+mod curator;
 mod error;
 mod extraction;
 mod inputs;
@@ -14,6 +15,9 @@ mod review;
 mod store;
 mod util;
 
+pub use curator::{
+    Consolidation, DEFAULT_CONSOLIDATION_THRESHOLD, DuplicateMemory, plan_consolidations,
+};
 pub use error::MemoryError;
 pub use extraction::{ExplicitMemoryExtractor, MemoryCandidateExtractor};
 pub use inputs::{MemoryCandidateInput, MemoryExtractionInput};
@@ -21,7 +25,10 @@ pub use query::{
     MemoryListFilter, MemoryQualityQuery, MemoryQuery, MemoryRetrievalQuery, MemorySimilarityQuery,
     MemoryStalenessQuery,
 };
-pub use ranking::{Bm25Ranker, MemoryRanker, RankCandidate, RankedCandidate};
+pub use ranking::{
+    Bm25Ranker, Bm25RankingProvider, MemoryRanker, RankCandidate, RankedCandidate, RankingDocument,
+    RankingProvider,
+};
 pub use records::{
     MemoryQuality, MemoryRecord, QualityMemory, RankedMemory, RetrievedMemory, SimilarMemory,
     StaleMemory,

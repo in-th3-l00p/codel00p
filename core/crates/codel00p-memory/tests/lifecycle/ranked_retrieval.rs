@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use codel00p_memory::{MemoryError, RankingDocument, RankingProvider};
+
 use super::support::*;
 
 fn approved(store: &mut InMemoryMemoryStore, id: &str, kind: MemoryKind, content: &str, tag: &str) {
@@ -299,6 +303,97 @@ fn ranked_retrieval_returns_only_approved_memory() {
         .map(|memory| memory.entry().id())
         .collect::<Vec<_>>();
     assert_eq!(ids, ["mem-approved"]);
+}
+
+/// A stand-in external ranker that scores each document from a fixed id→score
+/// table, ignoring the query and content entirely. Lets the test prove the store
+/// consults the injected provider rather than its built-in BM25.
+struct FixedScoreRanker {
+    scores: std::collections::HashMap<String, u8>,
+}
+
+impl RankingProvider for FixedScoreRanker {
+    fn rank(&self, _query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError> {
+        Ok(documents
+            .iter()
+            .map(|document| self.scores.get(&document.id).copied().unwrap_or(0))
+            .collect())
+    }
+}
+
+#[test]
+fn ranked_retrieval_honors_an_injected_ranking_provider() {
+    // BM25 would rank "kubernetes" highest for this query; the injected provider
+    // overrides that, scoring `mem-b` above `mem-a` independent of relevance.
+    let ranker = FixedScoreRanker {
+        scores: [("mem-a".to_string(), 10u8), ("mem-b".to_string(), 90u8)]
+            .into_iter()
+            .collect(),
+    };
+    let mut store = InMemoryMemoryStore::default().with_ranker(Arc::new(ranker));
+    approved(
+        &mut store,
+        "mem-a",
+        MemoryKind::Deployment,
+        "Deploy the service to the kubernetes cluster.",
+        "deploy",
+    );
+    approved(
+        &mut store,
+        "mem-b",
+        MemoryKind::Deployment,
+        "Unrelated note about release timing.",
+        "release",
+    );
+
+    let ranked = store
+        .retrieve_ranked(MemoryRetrievalQuery::new(project(), "deploy to kubernetes"))
+        .expect("retrieve ranked memory");
+
+    let ids = ranked
+        .iter()
+        .map(|memory| memory.entry().id())
+        .collect::<Vec<_>>();
+    // Provider order wins: mem-b (90) ahead of mem-a (10), the reverse of BM25.
+    assert_eq!(ids, ["mem-b", "mem-a"]);
+    assert_eq!(ranked[0].score(), 90);
+    assert_eq!(ranked[1].score(), 10);
+}
+
+#[test]
+fn ranked_retrieval_surfaces_a_provider_length_mismatch_as_an_error() {
+    // A provider that returns the wrong number of scores must fail loudly rather
+    // than silently misalign scores to records.
+    struct ShortRanker;
+    impl RankingProvider for ShortRanker {
+        fn rank(
+            &self,
+            _query: &str,
+            _documents: &[RankingDocument],
+        ) -> Result<Vec<u8>, MemoryError> {
+            Ok(Vec::new())
+        }
+    }
+
+    let mut store = InMemoryMemoryStore::default().with_ranker(Arc::new(ShortRanker));
+    approved(
+        &mut store,
+        "mem-x",
+        MemoryKind::Workflow,
+        "Run pnpm verify before pushing main.",
+        "verify",
+    );
+
+    let error = store
+        .retrieve_ranked(MemoryRetrievalQuery::new(
+            project(),
+            "Run pnpm verify before pushing main.",
+        ))
+        .expect_err("a score/document length mismatch must error");
+    assert!(
+        matches!(error, MemoryError::Ranking { .. }),
+        "expected a ranking error, got {error:?}"
+    );
 }
 
 #[test]

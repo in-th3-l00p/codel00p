@@ -100,8 +100,9 @@ fn db_contains(db_path: &Path, needle: &str) -> bool {
 /// docs for why the standard `CodelRunner::run` is unusable here.
 ///
 /// `agent_flag` (when `Some`) is passed as the leading global `--agent <name>`
-/// flag (one-shot selection, no sticky pointer). Global flags must precede the
-/// subcommand, so they lead the argv.
+/// flag (one-shot selection, no sticky pointer). Global flags are position-tolerant
+/// (see `agent_flag_after_subcommand_selects_home` for the trailing case), but this
+/// helper leads with them for clarity.
 fn agent_run(
     runner: &CodelRunner,
     provider: &MockProvider,
@@ -581,6 +582,70 @@ fn agent_flag_selects_home_without_sticky_pointer() {
     assert!(
         system.contains("coder"),
         "the --agent flag run should name `coder` in the self block, got:\n{system}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 7 — Position-tolerant global `--agent` flag
+//
+// The global `--agent <name>` flag may appear AFTER the subcommand, not just
+// leading. This is the exact dogfooding papercut (`agent run … --agent coder`
+// used to error "unknown agent run option"). The run must select coder's home
+// and land the remembered fact in coder's db.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn agent_flag_after_subcommand_selects_home() {
+    let runner = CodelRunner::new();
+    runner
+        .run_plain(&["agent", "create", "coder"])
+        .assert_success();
+
+    let provider = MockProvider::start().assistant_text(
+        "Done.\nremember convention[trailing]: TRAILING_FLAG_FACT after the subcommand.",
+    );
+    let base_url = provider.base_url();
+    let workspace = runner.workspace_path().to_str().expect("utf8 workspace");
+
+    // `--agent coder` is placed at the VERY END, after every run flag.
+    let result = runner.run_plain(&[
+        "--organization-id",
+        "org-1",
+        "--project-id",
+        "project-1",
+        "--project-name",
+        "codel00p",
+        "agent",
+        "run",
+        "Record a fact with a trailing --agent flag.",
+        "--workspace",
+        workspace,
+        "--provider",
+        "custom",
+        "--model",
+        "test-model",
+        "--base-url",
+        &base_url,
+        "--json-events",
+        "--permission-mode",
+        "allow",
+        "--agent",
+        "coder",
+    ]);
+    result.assert_success();
+
+    // The fact landed in coder's db — the trailing flag repointed the home.
+    let coder_db = agent_db(&runner, "coder");
+    assert!(
+        db_contains(&coder_db, "TRAILING_FLAG_FACT"),
+        "trailing --agent coder must write to coder's db, got: {:?}",
+        candidates_in(&coder_db)
+    );
+    // The base db did not receive it.
+    assert!(
+        !db_contains(&runner.memory_db(), "TRAILING_FLAG_FACT"),
+        "trailing --agent run must not write to the base db, got: {:?}",
+        candidates_in(&runner.memory_db())
     );
 }
 

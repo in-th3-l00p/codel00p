@@ -17,34 +17,88 @@
 //! same trait without touching the repository. Keeping the seam here (not a
 //! vector implementation) is deliberate — the property we preserve is "offline,
 //! deterministic, auditable".
+//!
+//! The tokenizer and shingle similarity live in the dependency-light
+//! [`codel00p_textsim`] leaf crate so other crates (e.g. skill consolidation)
+//! share one auditable notion of similarity; they are re-exported here so the
+//! existing in-crate call sites (`ranking::tokenize`, `ranking::shingle_similarity`)
+//! keep working unchanged.
 
 use std::collections::{BTreeMap, BTreeSet};
+
+use crate::MemoryError;
+
+pub(crate) use codel00p_textsim::{shingle_similarity, tokenize};
+
+/// A document handed to a [`RankingProvider`]: a stable id plus the raw text to
+/// score against the query. The id lets an external provider key its own caches
+/// or correlate results; the built-in [`Bm25RankingProvider`] ignores it and
+/// scores the content.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RankingDocument {
+    pub id: String,
+    pub content: String,
+}
+
+impl RankingDocument {
+    pub fn new(id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            content: content.into(),
+        }
+    }
+}
+
+/// Object-safe ranking seam the repository holds behind an `Arc<dyn
+/// RankingProvider>` and consults in `retrieve_ranked`.
+///
+/// This is distinct from [`MemoryRanker`] on purpose. [`MemoryRanker`] is the
+/// *algorithmic* trait — its `rank<K>` is generic over the caller's key, which
+/// makes it ergonomic but **not** object-safe, so it cannot be stored as a trait
+/// object. `RankingProvider` is the *injection* trait: a fixed signature over
+/// `RankingDocument`s, object-safe, `Send + Sync`, so a store can be configured
+/// with any provider at construction time.
+///
+/// The default is [`Bm25RankingProvider`] (offline, deterministic, no network).
+/// An external provider — e.g. an embedding/relevance service — implements this
+/// trait and is injected by the host (`with_ranker`) only when the operator has
+/// explicitly opted in, because ranking sends memory content to the provider.
+pub trait RankingProvider: Send + Sync {
+    /// Returns a relevance score in `0..=100` for each document against `query`,
+    /// **aligned by index** with `documents` (output length must equal input
+    /// length). A provider that cannot score (e.g. a transient network failure)
+    /// should degrade gracefully rather than error — returning `Err` aborts the
+    /// retrieval and surfaces to the caller.
+    fn rank(&self, query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError>;
+}
+
+/// The default ranking provider: wraps [`Bm25Ranker`] so the repository's
+/// `retrieve_ranked` uses offline BM25 unless an external provider is injected.
+/// Tokenizes the query and each document's content, then scores via BM25 and
+/// returns the scores in input order.
+#[derive(Clone, Debug, Default)]
+pub struct Bm25RankingProvider;
+
+impl RankingProvider for Bm25RankingProvider {
+    fn rank(&self, query: &str, documents: &[RankingDocument]) -> Result<Vec<u8>, MemoryError> {
+        let query_terms = tokenize(query);
+        let candidates: Vec<RankCandidate<usize>> = documents
+            .iter()
+            .enumerate()
+            .map(|(index, document)| RankCandidate::new(index, tokenize(&document.content)))
+            .collect();
+        let mut scores = vec![0u8; documents.len()];
+        for scored in Bm25Ranker.rank(&query_terms, &candidates) {
+            scores[scored.key] = scored.score;
+        }
+        Ok(scores)
+    }
+}
 
 /// BM25 term-frequency saturation parameter. Standard default.
 const BM25_K1: f64 = 1.2;
 /// BM25 document-length normalization parameter. Standard default.
 const BM25_B: f64 = 0.75;
-
-/// Default shingle width for near-duplicate detection (token bigrams).
-const SHINGLE_N: usize = 2;
-
-/// Minimal English stopword set. Dropping these keeps BM25 focused on
-/// content-bearing terms; the list is intentionally small and fixed so ranking
-/// stays deterministic and predictable.
-const STOPWORDS: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on",
-    "or", "that", "the", "to", "with",
-];
-
-/// Tokenizes text into lowercase alphanumeric terms, preserving order and
-/// duplicates (BM25 needs term frequencies), with stopwords removed.
-pub(crate) fn tokenize(text: &str) -> Vec<String> {
-    text.split(|character: char| !character.is_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .map(str::to_lowercase)
-        .filter(|token| !STOPWORDS.contains(&token.as_str()))
-        .collect()
-}
 
 /// A candidate document for ranking: an opaque caller-chosen key plus the
 /// document's tokenized content.
@@ -218,37 +272,6 @@ fn max_possible_bm25(
     score
 }
 
-/// Builds the ordered set of token n-grams (shingles) for a token sequence. With
-/// fewer than `n` tokens the whole sequence is treated as a single shingle so
-/// short contents still compare meaningfully.
-fn shingles(tokens: &[String], n: usize) -> BTreeSet<String> {
-    if tokens.is_empty() {
-        return BTreeSet::new();
-    }
-    if tokens.len() < n {
-        return BTreeSet::from([tokens.join(" ")]);
-    }
-    tokens.windows(n).map(|window| window.join(" ")).collect()
-}
-
-/// Near-duplicate similarity between two contents as a 0..=100 score, using
-/// token n-gram (shingle) Jaccard. Comparing bigrams instead of bag-of-words
-/// catches reworded duplicates that share phrasing — overlap that unigram or
-/// substring matching misses — while staying deterministic and offline.
-pub(crate) fn shingle_similarity(left: &str, right: &str) -> u8 {
-    let left_shingles = shingles(&tokenize(left), SHINGLE_N);
-    let right_shingles = shingles(&tokenize(right), SHINGLE_N);
-    if left_shingles.is_empty() || right_shingles.is_empty() {
-        return 0;
-    }
-    let intersection = left_shingles.intersection(&right_shingles).count();
-    let union = left_shingles.union(&right_shingles).count();
-    if union == 0 {
-        return 0;
-    }
-    (((intersection * 100) + (union / 2)) / union) as u8
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,19 +344,50 @@ mod tests {
         assert_eq!(ranked[0].score, 0);
     }
 
-    #[test]
-    fn shingle_similarity_catches_reworded_duplicate() {
-        // Same meaning, reworded order — bigram Jaccard should still score high.
-        let left = "always run cargo fmt and cargo clippy before committing code";
-        let right = "before committing code always run cargo clippy and cargo fmt";
-        let score = shingle_similarity(left, right);
-        assert!(score >= 40, "reworded duplicate scored only {score}");
+    fn document(id: &str, content: &str) -> RankingDocument {
+        RankingDocument::new(id, content)
     }
 
     #[test]
-    fn shingle_similarity_low_for_unrelated() {
-        let left = "run cargo fmt before committing";
-        let right = "the colorful unicorn dashboard widget";
-        assert_eq!(shingle_similarity(left, right), 0);
+    fn bm25_provider_returns_one_score_per_document_in_input_order() {
+        let documents = vec![
+            document("relevant", "run cargo build then cargo test before pushing"),
+            document("irrelevant", "build a friendly relationship with the team"),
+        ];
+        let scores = Bm25RankingProvider
+            .rank("how do I build and test the cargo project", &documents)
+            .unwrap();
+        assert_eq!(scores.len(), documents.len());
+        // The on-topic document outscores the keyword-only one, and the scores
+        // stay aligned with the input order (index 0 is "relevant").
+        assert!(scores[0] > scores[1], "scores: {scores:?}");
+    }
+
+    #[test]
+    fn bm25_provider_agrees_with_direct_bm25() {
+        let documents = vec![
+            document("a", "deploy with cargo to kubernetes cluster"),
+            document("b", "cargo build the workspace"),
+        ];
+        let provider_scores = Bm25RankingProvider
+            .rank("cargo kubernetes", &documents)
+            .unwrap();
+
+        let candidates: Vec<RankCandidate<usize>> = documents
+            .iter()
+            .enumerate()
+            .map(|(index, document)| RankCandidate::new(index, tokenize(&document.content)))
+            .collect();
+        let mut direct = vec![0u8; documents.len()];
+        for scored in Bm25Ranker.rank(&tokenize("cargo kubernetes"), &candidates) {
+            direct[scored.key] = scored.score;
+        }
+        assert_eq!(provider_scores, direct);
+    }
+
+    #[test]
+    fn bm25_provider_handles_an_empty_corpus() {
+        let scores = Bm25RankingProvider.rank("anything", &[]).unwrap();
+        assert!(scores.is_empty());
     }
 }

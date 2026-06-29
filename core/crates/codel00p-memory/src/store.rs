@@ -12,7 +12,7 @@ use crate::{
     MemoryRetrievalQuery, MemoryRevision, MemorySimilarityQuery, MemorySplit, MemoryStalenessQuery,
     QualityMemory, RankedMemory, RetrievedMemory, ReviewDecision, SimilarMemory, StaleMemory,
     StorageBackedMemoryStore,
-    ranking::{Bm25Ranker, MemoryRanker, RankCandidate, shingle_similarity, tokenize},
+    ranking::{RankingDocument, shingle_similarity},
 };
 
 const MEMORY_COLLECTION: &str = "memory_entries";
@@ -472,25 +472,35 @@ where
             filtered.push(record);
         }
 
-        // BM25 ranking over the filtered corpus. Scores are mapped onto the
-        // existing 0..=100 scale: a near-perfect match lands near 100 and a
-        // candidate sharing no query term scores 0, so the `min_score` threshold
-        // keeps its prior meaning (default 1 ⇒ at least one query term must hit).
-        // Offline: no embeddings, no network — see `ranking::Bm25Ranker`.
-        let query_terms = tokenize(&query.query);
-        let candidates: Vec<RankCandidate<usize>> = filtered
+        // Rank the filtered corpus through the injected provider. Scores live on
+        // a 0..=100 scale: a near-perfect match lands near 100 and a candidate
+        // sharing no query term scores 0, so the `min_score` threshold keeps its
+        // prior meaning (default 1 ⇒ at least one query term must hit). The
+        // default provider is offline BM25 (no embeddings, no network — see
+        // `ranking::Bm25RankingProvider`); a host can inject an external ranker
+        // via `with_ranker`. Either way the scoring contract is the same.
+        let documents: Vec<RankingDocument> = filtered
             .iter()
-            .enumerate()
-            .map(|(index, record)| RankCandidate::new(index, tokenize(record.entry().content())))
+            .map(|record| RankingDocument::new(record.entry().id(), record.entry().content()))
             .collect();
-        let scored = Bm25Ranker.rank(&query_terms, &candidates);
+        let scores = self.ranker.rank(&query.query, &documents)?;
+        if scores.len() != filtered.len() {
+            return Err(MemoryError::Ranking {
+                message: format!(
+                    "ranking provider returned {} scores for {} documents",
+                    scores.len(),
+                    filtered.len()
+                ),
+            });
+        }
 
-        let mut ranked: Vec<RankedMemory> = scored
-            .into_iter()
-            .filter(|candidate| candidate.score >= query.min_score)
-            .map(|candidate| RankedMemory {
-                record: filtered[candidate.key].clone(),
-                score: candidate.score,
+        let mut ranked: Vec<RankedMemory> = filtered
+            .iter()
+            .zip(scores)
+            .filter(|(_, score)| *score >= query.min_score)
+            .map(|(record, score)| RankedMemory {
+                record: record.clone(),
+                score,
             })
             .collect();
 

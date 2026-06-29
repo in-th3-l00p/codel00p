@@ -297,6 +297,7 @@ dependencies = [
  "codel00p-session",
  "codel00p-skill",
  "codel00p-storage",
+ "codel00p-textsim",
  "crossterm",
  "futures",
  "hmac 0.12.1",
@@ -412,6 +413,7 @@ version = "0.1.0"
 dependencies = [
  "codel00p-protocol",
  "codel00p-storage",
+ "codel00p-textsim",
  "serde",
  "serde_json",
  "thiserror",
@@ -472,6 +474,7 @@ dependencies = [
 name = "codel00p-skill"
 version = "0.1.0"
 dependencies = [
+ "codel00p-textsim",
  "serde",
  "serde_json",
  "tempfile",
@@ -490,6 +493,10 @@ dependencies = [
  "serde_json",
  "thiserror",
 ]
+
+[[package]]
+name = "codel00p-textsim"
+version = "0.1.0"
 
 [[package]]
 name = "compact_str"

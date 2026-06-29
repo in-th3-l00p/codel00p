@@ -20,7 +20,12 @@ use std::{
 use serde::Serialize;
 use thiserror::Error;
 
+pub mod consolidation;
 pub mod usage;
+pub use consolidation::{
+    DEFAULT_SKILL_CONSOLIDATION_THRESHOLD, DuplicateSkill, SkillConsolidation,
+    plan_skill_consolidations,
+};
 pub use usage::{
     SkillUsage, USAGE_FILE, UsageLog, load_usage, record_skill_usage, record_usage, usage_path,
 };

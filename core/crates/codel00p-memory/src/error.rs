@@ -32,6 +32,9 @@ pub enum MemoryError {
         to: MemoryStatus,
     },
 
+    #[error("ranking provider failed: {message}")]
+    Ranking { message: String },
+
     #[error("storage failed: {0}")]
     Storage(#[from] StorageError),
 

@@ -51,6 +51,7 @@ pub(crate) mod test_support {
             memory_db: PathBuf::from("/tmp/codel00p-test.db"),
             organization_id: "org_test".to_string(),
             project: ProjectRef::new("proj_test", "test"),
+            memory_ranking: Default::default(),
         };
         let options = AgentRunOptions {
             prompt: String::new(),

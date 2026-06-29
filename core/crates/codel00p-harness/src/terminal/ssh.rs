@@ -624,8 +624,6 @@ const MARKER_PREFIX: &str = "CODEL00P_SSH_BG";
 /// combined with the pid it is unique across the host for the process lifetime.
 static MARKER_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Generate a unique marker token for one background spawn.
-
 #[cfg(test)]
 mod tests {
     use super::*;

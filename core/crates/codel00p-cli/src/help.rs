@@ -73,11 +73,15 @@ Commands
   uninstall  Remove codel00p from this machine
   version    Print the installed version
 
-Options
+Global options (may appear before OR after the command)
+  --agent <name>             Use a named agent for one invocation (its config,
+                             skills, memory, and sessions); overrides the sticky
+                             active agent set by `agent use`
   --project-id <id>          Project scope
   --organization-id <id>     Organization scope
   --project-name <name>      Project display name
-  --memory-db <path>         Memory and session database
+  --memory-db <path>         Memory and session database (an explicit path here
+                             overrides per-agent home resolution)
 
   Run `codel00p <command> --help` for details · `codel00p config setup` to begin.
 ";
@@ -319,9 +323,12 @@ Personas (each agent is its own CODEL00P_HOME):
   show <name>          Show an agent's details and home path
   rename <old> <new>   Rename an agent
   delete | rm <name>   Delete an agent (never the default/base home)
+  route <task>         Pick the best-matching specialist agent for a task,
+                       ranked by description/persona (offline; --json, --limit N)
 
-Global: --agent <name>  Use a named agent for one invocation (overrides the
-                        sticky active agent).
+Global: --agent <name>  Use a named agent for one invocation — scopes its config,
+                        skills, memory, and sessions. Overrides the sticky active
+                        agent, and may appear before OR after the subcommand.
 ";
 
 const AGENT_RUN_HELP: &str = "\

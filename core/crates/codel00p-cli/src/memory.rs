@@ -4,6 +4,7 @@
 //! submodules so search/list behavior can evolve independently from review and
 //! audit commands.
 
+mod curate;
 mod import;
 mod json;
 mod note;
@@ -33,6 +34,7 @@ pub fn run(config: CliConfig, args: &[String]) -> CliResult<String> {
         "similar" => query::memory_similar(config, rest),
         "stale" => query::memory_stale(config, rest),
         "quality" => query::memory_quality(config, rest),
+        "curate" => curate::memory_curate(config, rest),
         "list" => query::memory_list(config, rest),
         "show" => query::memory_show(config, rest),
         "note" => note::memory_note(config, rest),

@@ -748,7 +748,7 @@ async fn apply_patch_shares_a_top_level_path_with_changes_that_omit_it() {
     let workspace = Workspace::new(dir.path()).expect("workspace");
     let registry = ToolRegistry::editing_defaults();
 
-    let result = registry
+    registry
         .execute(
             "apply_patch",
             &workspace,

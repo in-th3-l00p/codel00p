@@ -11,6 +11,7 @@ fn test_config(dir: &std::path::Path) -> CliConfig {
         memory_db: dir.join("memory.sqlite"),
         organization_id: "test".to_string(),
         project: ProjectRef::new("p", "P"),
+        memory_ranking: Default::default(),
     }
 }
 

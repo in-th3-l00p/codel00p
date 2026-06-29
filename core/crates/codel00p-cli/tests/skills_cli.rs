@@ -17,6 +17,15 @@ fn write_skill(home: &Path, name: &str, front_matter_extra: &str) {
     .expect("write skill");
 }
 
+/// Enable the opt-in curator in the home's config.toml (the user config layer).
+fn enable_curator(home: &Path) {
+    fs::write(
+        home.join("config.toml"),
+        "[agent.behavior]\ncurator = true\n",
+    )
+    .expect("write config");
+}
+
 fn run(home: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_codel00p"))
         .env("CODEL00P_HOME", home)
@@ -104,7 +113,7 @@ fn skills_curate_archives_only_stale_agent_skills() {
         home.path(),
         &["skills", "curate", "--apply", "--min-age", "0"],
     );
-    assert!(stdout(&apply).contains("Archived 1 stale skill(s): agent-skill"));
+    assert!(stdout(&apply).contains("Archived 1 skill(s): agent-skill"));
     assert!(
         home.path()
             .join("skills/.archive/agent-skill/SKILL.md")
@@ -122,5 +131,67 @@ fn skills_curate_reports_nothing_when_clean() {
     write_skill(home.path(), "human-skill", "");
     let output = run(home.path(), &["skills", "curate", "--min-age", "0"]);
     assert!(output.status.success());
-    assert!(stdout(&output).contains("No stale agent-created skills"));
+    assert!(stdout(&output).contains("No skills to curate"));
+}
+
+#[test]
+fn skills_curate_consolidates_near_duplicate_agent_skills() {
+    let home = tempdir().expect("tempdir");
+    // Two agent skills with identical content → near-duplicates. The default
+    // grace period keeps them out of the stale pass, so only consolidation fires.
+    write_skill(home.path(), "a-deploy", "created_by: agent\n");
+    write_skill(home.path(), "b-deploy", "created_by: agent\n");
+    enable_curator(home.path());
+
+    let dry = run(home.path(), &["skills", "curate"]);
+    assert!(dry.status.success(), "stderr: {}", stderr(&dry));
+    let listed = stdout(&dry);
+    assert!(
+        listed.contains("Near-duplicate agent skills"),
+        "dry: {listed}"
+    );
+    assert!(listed.contains("keep a-deploy"), "dry: {listed}");
+    assert!(listed.contains("archive b-deploy"), "dry: {listed}");
+    assert!(
+        !listed.contains("Stale agent-created skills"),
+        "dry: {listed}"
+    );
+
+    let apply = run(home.path(), &["skills", "curate", "--apply"]);
+    assert!(apply.status.success(), "stderr: {}", stderr(&apply));
+    assert!(
+        stdout(&apply).contains("Archived 1 skill(s): b-deploy"),
+        "apply: {}",
+        stdout(&apply)
+    );
+    assert!(
+        home.path()
+            .join("skills/.archive/b-deploy/SKILL.md")
+            .exists()
+    );
+
+    let after = stdout(&run(home.path(), &["skills", "list"]));
+    assert!(after.contains("a-deploy"), "survivor missing: {after}");
+    assert!(
+        !after.contains("b-deploy"),
+        "duplicate still active: {after}"
+    );
+}
+
+#[test]
+fn skills_curate_consolidation_is_off_by_default() {
+    let home = tempdir().expect("tempdir");
+    // Two near-duplicate agent skills, but the curator toggle is unset (default OFF),
+    // so the near-duplicate pass must not fire. Use a 0 grace so the stale pass would
+    // run if it had anything — both skills are agent-authored and unused.
+    write_skill(home.path(), "a-deploy", "created_by: agent\n");
+    write_skill(home.path(), "b-deploy", "created_by: agent\n");
+
+    let dry = run(home.path(), &["skills", "curate"]);
+    assert!(dry.status.success(), "stderr: {}", stderr(&dry));
+    let listed = stdout(&dry);
+    assert!(
+        !listed.contains("Near-duplicate agent skills"),
+        "consolidation should be off by default: {listed}"
+    );
 }

@@ -63,9 +63,13 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("agent.behavior.proactive_memory", ValueKind::Bool),
     ("agent.behavior.persona", ValueKind::Bool),
     ("agent.behavior.curated_memory", ValueKind::Bool),
+    ("agent.behavior.curator", ValueKind::Bool),
     ("agent.profile", ValueKind::Str),
     ("plugins.enabled", ValueKind::StrList),
     ("delegation.max_concurrent_children", ValueKind::U32),
+    ("memory.ranker", ValueKind::Str),
+    ("memory.external_url", ValueKind::Str),
+    ("memory.allow_external_ranking", ValueKind::Bool),
     ("tui.show_advanced", ValueKind::Bool),
     ("tui.check_updates", ValueKind::Bool),
 ];
@@ -228,12 +232,19 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
         "agent.behavior.curated_memory" => {
             agent.behavior.curated_memory.map(|value| value.to_string())
         }
+        "agent.behavior.curator" => agent.behavior.curator.map(|value| value.to_string()),
         "agent.profile" => agent.profile.clone(),
         key if key.starts_with("agent.profiles.") => profile_effective_value(agent, key),
         "plugins.enabled" => settings.plugins.enabled.as_ref().map(|sets| sets.join(",")),
         "delegation.max_concurrent_children" => settings
             .delegation
             .max_concurrent_children
+            .map(|value| value.to_string()),
+        "memory.ranker" => settings.memory.ranker.clone(),
+        "memory.external_url" => settings.memory.external_url.clone(),
+        "memory.allow_external_ranking" => settings
+            .memory
+            .allow_external_ranking
             .map(|value| value.to_string()),
         "tui.show_advanced" => settings.tui.show_advanced.map(|value| value.to_string()),
         "tui.check_updates" => settings.tui.check_updates.map(|value| value.to_string()),
@@ -460,6 +471,7 @@ pub fn starter_template() -> String {
          # proactive_memory = true      # recall project memory relevant to the current task (BM25, offline)\n\
          # persona = true               # inject the active agent's persona.md as the first system block\n\
          # curated_memory = true        # inject the capped curated notes layer (NOTES.md + USER.md) each turn\n\
+         # curator = false              # opt-in: consolidate near-duplicate memories (memory curate) + skills (skills curate)\n\
          \n\
          # [agent.docker]               # used when execution_backend = \"docker\"\n\
          # image = \"alpine\"            # container image commands run in\n\
@@ -476,6 +488,11 @@ pub fn starter_template() -> String {
          # user = \"deploy\"             # optional: defers to ~/.ssh/config\n\
          # port = 22                    # optional: defers to ~/.ssh/config\n\
          # identity_file = \"~/.ssh/id_ed25519\"  # optional: defers to ~/.ssh/config / agent\n\
+         \n\
+         # [memory]                     # how project memory is ranked for relevance retrieval\n\
+         # ranker = \"internal\"          # internal (offline BM25, default) | external (a remote ranking service)\n\
+         # external_url = \"https://ranker.internal/rank\"  # required for the external ranker\n\
+         # allow_external_ranking = false  # governance gate: external ranking sends memory content off-host; must be true to use it\n\
          \n\
          # [tui]\n\
          # show_advanced = false        # show model, token usage, and context meter in the TUI status bar\n\

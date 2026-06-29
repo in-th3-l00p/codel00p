@@ -23,6 +23,8 @@ pub struct Settings {
     pub plugins: PluginSettings,
     #[serde(skip_serializing_if = "DelegationSettings::is_empty")]
     pub delegation: DelegationSettings,
+    #[serde(skip_serializing_if = "MemorySettings::is_empty")]
+    pub memory: MemorySettings,
     #[serde(skip_serializing_if = "TuiSettings::is_empty")]
     pub tui: TuiSettings,
 }
@@ -410,6 +412,14 @@ pub struct BehaviorSettings {
     /// produces a block when the files are non-empty.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub curated_memory: Option<bool>,
+    /// Enable the per-agent **curator**: consolidation of near-duplicate learned
+    /// memories (`memory curate`) and skills (the near-duplicate pass of `skills
+    /// curate`). Default **OFF** (opt-in) — unlike the always-on self-awareness
+    /// knobs, curation archives knowledge, so a human opts in. Detection is
+    /// offline shingle similarity; every consolidation is propose-for-review and
+    /// reversible (archive-not-delete).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curator: Option<bool>,
 }
 
 impl BehaviorSettings {
@@ -435,6 +445,7 @@ impl BehaviorSettings {
         take(&mut self.proactive_memory, other.proactive_memory);
         take(&mut self.persona, other.persona);
         take(&mut self.curated_memory, other.curated_memory);
+        take(&mut self.curator, other.curator);
     }
 
     /// Whether the identity/capabilities block is injected. Defaults to on.
@@ -525,6 +536,12 @@ impl BehaviorSettings {
     /// files are non-empty).
     pub fn curated_memory_enabled(&self) -> bool {
         self.curated_memory.unwrap_or(true)
+    }
+
+    /// Whether the per-agent curator (near-duplicate memory/skill consolidation)
+    /// is enabled. Defaults **OFF** — it is opt-in because it archives knowledge.
+    pub fn curator_enabled(&self) -> bool {
+        self.curator.unwrap_or(false)
     }
 }
 
@@ -648,6 +665,59 @@ impl DelegationSettings {
             &mut self.max_concurrent_children,
             other.max_concurrent_children,
         );
+    }
+}
+
+/// How project memory is ranked for relevance retrieval (proactive recall and
+/// `memory retrieve`). The default is offline BM25 — fully local, no network.
+/// An **external** ranker hands memory content to a relevance/embedding service,
+/// so it is governance-gated: it is used only when `ranker = "external"`, an
+/// `external_url` is set, **and** `allow_external_ranking = true`. Any of those
+/// missing falls back to BM25, fail-closed (memory content never leaves the host
+/// unless the operator has explicitly opted in on all three).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MemorySettings {
+    /// `internal` (default, offline BM25) or `external` (a remote ranking
+    /// service). `external` only takes effect alongside `external_url` and
+    /// `allow_external_ranking = true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranker: Option<String>,
+    /// Base URL of the external ranking service (required for `ranker =
+    /// "external"`). The host POSTs the query and candidate memory content here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_url: Option<String>,
+    /// Governance gate. Must be `true` for an external ranker to be used at all —
+    /// it acknowledges that ranking sends memory content off the host. Defaults
+    /// to off; leaving it unset keeps retrieval fully local even if a URL is set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_external_ranking: Option<bool>,
+}
+
+impl MemorySettings {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn merge(&mut self, other: Self) {
+        take(&mut self.ranker, other.ranker);
+        take(&mut self.external_url, other.external_url);
+        take(
+            &mut self.allow_external_ranking,
+            other.allow_external_ranking,
+        );
+    }
+
+    /// Whether external ranking is fully authorized: opted into the external
+    /// ranker, a URL configured, and the governance gate explicitly enabled.
+    /// Fail-closed — any missing piece keeps retrieval on offline BM25.
+    pub fn external_ranking_enabled(&self) -> bool {
+        self.ranker.as_deref() == Some("external")
+            && self
+                .external_url
+                .as_deref()
+                .is_some_and(|url| !url.is_empty())
+            && self.allow_external_ranking.unwrap_or(false)
     }
 }
 
@@ -809,6 +879,7 @@ impl Settings {
         self.agent.merge(other.agent);
         self.plugins.merge(other.plugins);
         self.delegation.merge(other.delegation);
+        self.memory.merge(other.memory);
         self.tui.merge(other.tui);
     }
 }
@@ -860,5 +931,9 @@ impl ResolvedSettings {
 
     pub fn agent(&self) -> &AgentSettings {
         &self.merged.agent
+    }
+
+    pub fn memory(&self) -> &MemorySettings {
+        &self.merged.memory
     }
 }

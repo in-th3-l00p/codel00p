@@ -66,6 +66,7 @@ mod options;
 mod permissions;
 mod plugins;
 pub(crate) mod registry;
+pub(crate) mod routing;
 pub(crate) mod run_log;
 mod session_state;
 mod skills;
@@ -118,6 +119,7 @@ mod tests {
             memory_db: dir.join("memory.sqlite"),
             organization_id: "test-org".to_string(),
             project: ProjectRef::new("test-project", "Test Project"),
+            memory_ranking: Default::default(),
         }
     }
 
