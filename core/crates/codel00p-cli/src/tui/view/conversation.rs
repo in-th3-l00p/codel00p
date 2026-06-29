@@ -117,20 +117,25 @@ pub(super) fn pad_to_width(
     Line::from(spans)
 }
 
-/// The empty-transcript welcome: a compact brand line and a tagline.
-fn welcome_lines(theme: &Theme, _width: usize) -> Vec<Line<'static>> {
+/// The empty-transcript welcome: a compact brand line and a tagline, centered as a
+/// block within the transcript width so the first impression has intentional rhythm.
+fn welcome_lines(theme: &Theme, width: usize) -> Vec<Line<'static>> {
+    let brand = "⌁ codel00p";
+    let tagline = "your terminal coding agent — project memory that grows as you work";
+    let hint = "Type a message and press Enter · Ctrl+P for the command menu";
+    // Indent every line by the same margin (sized to the longest line) so the block
+    // sits centered and its lines stay aligned under one another. Falls back to a
+    // small left margin on narrow terminals.
+    let longest = tagline.chars().count();
+    let indent = " ".repeat((width.saturating_sub(longest) / 2).max(2));
     vec![
         Line::from(""),
-        Line::from(Span::styled("  ⌁ codel00p", theme.accent())),
-        Line::from(Span::styled(
-            "  your terminal coding agent — project memory that grows as you work",
-            theme.muted(),
-        )),
         Line::from(""),
-        Line::from(Span::styled(
-            "  Type a message and press Enter · Ctrl+P for the command menu",
-            theme.muted(),
-        )),
+        Line::from(Span::styled(format!("{indent}{brand}"), theme.accent())),
+        Line::from(""),
+        Line::from(Span::styled(format!("{indent}{tagline}"), theme.muted())),
+        Line::from(""),
+        Line::from(Span::styled(format!("{indent}{hint}"), theme.muted())),
     ]
 }
 
@@ -155,8 +160,10 @@ fn note_block(color: Color, glyph: &str, text: &str, width: usize) -> Vec<Line<'
 
 /// A compact tool-call line in the timeline, with a lifecycle glyph.
 fn tool_lines(theme: &Theme, name: &str, state: &ToolState) -> Vec<Line<'static>> {
+    // A glyph that reads the lifecycle at a glance: a hollow ○ while queued, a
+    // filled ● once running, then ✓/✗ on completion.
     let (glyph, color, suffix) = match state {
-        ToolState::Requested => ("●", theme.muted, String::new()),
+        ToolState::Requested => ("○", theme.muted, String::new()),
         ToolState::Running(Some(message)) => ("●", theme.tool, format!(" — {message}")),
         ToolState::Running(None) => ("●", theme.tool, String::new()),
         ToolState::Done => ("✓", theme.tool, String::new()),
