@@ -26,33 +26,98 @@ pub(super) fn open_agent_creator(app: &mut App) -> Vec<Effect> {
     Vec::new()
 }
 
-/// Handles keys in the agent switcher: Enter live-switches to the highlighted
-/// agent (re-pointing the running TUI's home + memory via `Effect::SwitchAgent`),
-/// Esc closes. Selecting the already-active agent is a no-op notice.
+/// Handles keys in the agent overlay. In list mode the arrows move, Enter opens
+/// the highlighted row (New → create form, an agent → live switch), `d` deletes a
+/// non-active, non-default agent (with confirm), and Esc closes. The list is
+/// arrow-navigated so the letter key is free for the delete action.
 pub(super) fn handle_agent_switcher_key(
     app: &mut App,
     mut switcher: AgentSwitcher,
     key: KeyEvent,
 ) -> Vec<Effect> {
+    if switcher.confirm_delete.is_some() {
+        return handle_agent_delete_key(app, switcher, key);
+    }
+
+    // `d` opens a delete confirmation for the highlighted agent (guarded against
+    // the active and default agents inside `begin_delete`).
+    if key.code == KeyCode::Char('d') && switcher.selected_agent().is_some() {
+        switcher.begin_delete(super::super::agents::DEFAULT_AGENT_LABEL);
+        if switcher.confirm_delete.is_none() {
+            app.conversation
+                .push_notice("Can't delete the active or default agent.");
+        }
+        app.overlay = Overlay::AgentSwitcher(switcher);
+        return Vec::new();
+    }
+
     // Guard: never switch mid-turn (the home re-point must happen between turns).
-    if key.code == KeyCode::Enter && app.turn.running {
+    if key.code == KeyCode::Enter
+        && app.turn.running
+        && matches!(switcher.selected_row(), Some(AgentRow::Agent(_)))
+    {
         app.conversation
             .push_notice("Can't switch agents while a turn is running — wait for it to finish.");
         app.overlay = Overlay::AgentSwitcher(switcher);
         return Vec::new();
     }
-    match switcher.on_key(key) {
-        PickerOutcome::Selected => match switcher.selected_item() {
-            Some(agent) if agent.active => {
-                app.conversation
-                    .push_notice(format!("Already using agent “{}”.", agent.name));
+
+    // Only navigation / open / cancel keys reach the picker; letters stay free for
+    // actions (the list is arrow-navigated, not type-filtered).
+    match key.code {
+        KeyCode::Up
+        | KeyCode::Down
+        | KeyCode::PageUp
+        | KeyCode::PageDown
+        | KeyCode::Enter
+        | KeyCode::Esc => match switcher.on_key(key) {
+            PickerOutcome::Selected => match switcher.selected_row() {
+                Some(AgentRow::New) => open_agent_creator(app),
+                Some(AgentRow::Agent(agent)) if agent.active => {
+                    app.conversation
+                        .push_notice(format!("Already using agent “{}”.", agent.name));
+                    Vec::new()
+                }
+                Some(AgentRow::Agent(agent)) => vec![Effect::SwitchAgent(agent.name.clone())],
+                None => Vec::new(),
+            },
+            PickerOutcome::Cancelled => Vec::new(),
+            PickerOutcome::Pending => {
+                app.overlay = Overlay::AgentSwitcher(switcher);
                 Vec::new()
             }
-            Some(agent) => vec![Effect::SwitchAgent(agent.name.clone())],
-            None => Vec::new(),
         },
-        PickerOutcome::Cancelled => Vec::new(),
-        PickerOutcome::Pending => {
+        _ => {
+            app.overlay = Overlay::AgentSwitcher(switcher);
+            Vec::new()
+        }
+    }
+}
+
+/// Handles keys in the agent delete-confirmation prompt: `y` deletes, `n`/Esc
+/// cancels.
+fn handle_agent_delete_key(
+    app: &mut App,
+    mut switcher: AgentSwitcher,
+    key: KeyEvent,
+) -> Vec<Effect> {
+    let Some(confirm) = switcher.confirm_delete.as_ref() else {
+        app.overlay = Overlay::AgentSwitcher(switcher);
+        return Vec::new();
+    };
+    match key.code {
+        KeyCode::Char('y') => {
+            let name = confirm.name.clone();
+            switcher.confirm_delete = None;
+            app.overlay = Overlay::AgentSwitcher(switcher);
+            vec![Effect::DeleteAgent(name)]
+        }
+        KeyCode::Char('n') | KeyCode::Esc => {
+            switcher.confirm_delete = None;
+            app.overlay = Overlay::AgentSwitcher(switcher);
+            Vec::new()
+        }
+        _ => {
             app.overlay = Overlay::AgentSwitcher(switcher);
             Vec::new()
         }

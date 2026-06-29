@@ -234,6 +234,20 @@ fn execute_effect(
             spawn_agent_list(app.base_home.clone(), app.active_agent.clone(), tx.clone())
         }
         Effect::SwitchAgent(name) => switch_agent(app, name, tx)?,
+        Effect::DeleteAgent(name) => {
+            // Deleting a home is a quick filesystem removal; do it inline, surface
+            // the outcome as a notice, then refresh the switcher list so the row
+            // disappears. The active/default agents are guarded upstream.
+            match crate::agent::registry::delete_agent(&app.base_home, &name) {
+                Ok(()) => {
+                    let _ = tx.send(Msg::Notice(format!("Deleted agent “{name}”.")));
+                }
+                Err(error) => {
+                    let _ = tx.send(Msg::Notice(format!("Could not delete {name}: {error}")));
+                }
+            }
+            spawn_agent_list(app.base_home.clone(), app.active_agent.clone(), tx.clone());
+        }
         Effect::ResumeSession(session_id) => {
             spawn_resume_session(app.config.clone(), session_id, tx.clone())
         }

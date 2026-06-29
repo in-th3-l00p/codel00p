@@ -425,35 +425,95 @@ impl PickerItem for AgentChoice {
     }
 }
 
-/// The agent switcher overlay: a read-only list of local agents (default + every
-/// `<base>/agents/<name>`). Selecting one performs a LIVE switch — it re-points
-/// the running TUI at that agent's home so subsequent turns use its memory and
-/// sessions. Mirrors [`SessionSwitcher`]'s shape.
+/// A row in the agent overlay: the always-first "new agent" action, then one row
+/// per local agent (default + every `<base>/agents/<name>`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum AgentRow {
+    /// Define a new local agent. Always the first row.
+    New,
+    /// Use / edit / delete an existing agent.
+    Agent(AgentChoice),
+}
+
+impl PickerItem for AgentRow {
+    fn label(&self) -> String {
+        match self {
+            AgentRow::New => "＋ New agent".to_string(),
+            AgentRow::Agent(choice) => choice.label(),
+        }
+    }
+    fn detail(&self) -> Option<String> {
+        match self {
+            AgentRow::New => Some("define a new local agent".to_string()),
+            AgentRow::Agent(choice) => choice.detail(),
+        }
+    }
+}
+
+/// State for the delete-confirmation prompt in the agent overlay.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AgentDelete {
+    pub(crate) name: String,
+}
+
+/// The agent overlay: a "＋ New agent" row followed by the local agents (default +
+/// every `<base>/agents/<name>`), plus a status line. Selecting an agent performs
+/// a LIVE switch — re-pointing the running TUI at that agent's home so subsequent
+/// turns use its memory and sessions. `d` deletes a non-active, non-default agent.
 #[derive(Clone, Debug)]
 pub(crate) struct AgentSwitcher {
-    pub(crate) agents: Picker<AgentChoice>,
+    pub(crate) rows: Picker<AgentRow>,
     pub(crate) status: Option<String>,
+    /// `Some` while confirming an agent deletion.
+    pub(crate) confirm_delete: Option<AgentDelete>,
 }
 
 impl AgentSwitcher {
     pub(crate) fn new() -> Self {
         Self {
-            agents: Picker::new(Vec::new()),
+            rows: Picker::new(vec![AgentRow::New]),
             status: Some("Loading…".to_string()),
+            confirm_delete: None,
         }
     }
 
+    /// Rebuilds the row list as `[New, …agents]` and sets the status line.
     pub(crate) fn set_agents(&mut self, agents: Vec<AgentChoice>, status: Option<String>) {
-        self.agents.set_items(agents);
+        let rows = std::iter::once(AgentRow::New)
+            .chain(agents.into_iter().map(AgentRow::Agent))
+            .collect();
+        self.rows.set_items(rows);
         self.status = status;
     }
 
     pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
-        self.agents.on_key(key)
+        self.rows.on_key(key)
     }
 
-    pub(crate) fn selected_item(&self) -> Option<&AgentChoice> {
-        self.agents.selected_item()
+    pub(crate) fn selected_row(&self) -> Option<&AgentRow> {
+        self.rows.selected_item()
+    }
+
+    /// The highlighted agent, or `None` when the "New agent" row (or nothing) is
+    /// highlighted.
+    pub(crate) fn selected_agent(&self) -> Option<&AgentChoice> {
+        match self.rows.selected_item() {
+            Some(AgentRow::Agent(choice)) => Some(choice),
+            _ => None,
+        }
+    }
+
+    /// Opens the delete confirmation for the highlighted agent — but never for the
+    /// active agent (its home is live) or the `default` base agent. No-op otherwise.
+    pub(crate) fn begin_delete(&mut self, default_label: &str) {
+        if let Some(agent) = self.selected_agent() {
+            if agent.active || agent.name == default_label {
+                return;
+            }
+            self.confirm_delete = Some(AgentDelete {
+                name: agent.name.clone(),
+            });
+        }
     }
 }
 

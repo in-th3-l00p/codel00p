@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
-    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentSwitcher,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentRow, AgentSwitcher,
     ConversationRow, EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker, Overlay,
     SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
@@ -1243,13 +1243,33 @@ mod tests {
                 },
             ])),
         );
-        // First row (default) is active → moving down to scout then Enter switches.
+        // Rows are [New, default (active), scout]; move down twice onto scout,
+        // then Enter switches to it.
+        update(&mut app, key(KeyCode::Down));
         update(&mut app, key(KeyCode::Down));
         let effects = update(&mut app, key(KeyCode::Enter));
         match effects.as_slice() {
             [Effect::SwitchAgent(name)] => assert_eq!(name, "scout"),
             other => panic!("expected SwitchAgent, got {} effects", other.len()),
         }
+    }
+
+    #[test]
+    fn new_agent_row_opens_the_create_form() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![AgentChoice {
+                name: "default".to_string(),
+                description: None,
+                active: true,
+            }])),
+        );
+        // Row 0 (New agent) is highlighted by default; Enter opens the create form.
+        update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::AgentCreate(_)));
     }
 
     #[test]
@@ -1265,8 +1285,67 @@ mod tests {
                 active: true,
             }])),
         );
+        // Move past the New row onto the active default agent; Enter is a no-op.
+        update(&mut app, key(KeyCode::Down));
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(effects.is_empty());
+    }
+
+    #[test]
+    fn d_deletes_a_non_active_agent_after_confirm() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![
+                AgentChoice {
+                    name: "default".to_string(),
+                    description: None,
+                    active: true,
+                },
+                AgentChoice {
+                    name: "scout".to_string(),
+                    description: None,
+                    active: false,
+                },
+            ])),
+        );
+        // Move onto scout (row 2) and delete it.
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Char('d')));
+        match &app.overlay {
+            Overlay::AgentSwitcher(switcher) => assert!(switcher.confirm_delete.is_some()),
+            _ => panic!("expected the agent overlay with a pending confirm"),
+        }
+        let effects = update(&mut app, key(KeyCode::Char('y')));
+        match effects.as_slice() {
+            [Effect::DeleteAgent(name)] => assert_eq!(name, "scout"),
+            other => panic!("expected DeleteAgent, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn d_refuses_to_delete_the_active_agent() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![AgentChoice {
+                name: "default".to_string(),
+                description: None,
+                active: true,
+            }])),
+        );
+        // Move onto the active default agent and try to delete — refused, no confirm.
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Char('d')));
+        match &app.overlay {
+            Overlay::AgentSwitcher(switcher) => assert!(switcher.confirm_delete.is_none()),
+            _ => panic!("expected the agent overlay to stay open"),
+        }
     }
 
     #[test]

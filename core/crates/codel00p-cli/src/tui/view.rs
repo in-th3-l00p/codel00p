@@ -654,7 +654,9 @@ mod tests {
         let mut app = test_app();
         app.overlay = Overlay::AgentSwitcher(switcher);
         let rendered = render_to_string(&mut app, 80, 20);
-        assert!(rendered.contains("switch agent"));
+        assert!(rendered.contains("agents"));
+        // The always-present "new agent" row and a listed agent.
+        assert!(rendered.contains("New agent"));
         assert!(rendered.contains("scout"));
         // The active agent is marked.
         assert!(rendered.contains("default ✓"));

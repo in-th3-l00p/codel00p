@@ -294,25 +294,37 @@ fn draw_session_edit(
     );
 }
 
-/// Draws the local-agent switcher (multi-agent personas, #13): the list of
-/// agents (default + registry) with the active one marked.
+/// Draws the agent overlay (multi-agent personas, #13): a "＋ New agent" row plus
+/// the local agents (default + registry) with the active one marked, and a delete
+/// confirmation prompt.
 pub(super) fn draw_agent_switcher(app: &App, frame: &mut Frame, switcher: &AgentSwitcher) {
     let area = centered_rect(60, 60, frame.area());
-    let inner = framed(frame, area, " switch agent ", app.theme.overlay_border);
+    let inner = framed(frame, area, " agents ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
-    let status = switcher
-        .status
-        .clone()
-        .unwrap_or_else(|| "Enter to switch (live) · Esc to close".to_string());
-    frame.render_widget(
-        Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
-        rows[0],
-    );
-    draw_picker(frame, rows[1], &app.theme, &switcher.agents, "Agents");
+
+    if let Some(confirm) = &switcher.confirm_delete {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  Delete agent ", Style::default().fg(app.theme.error)),
+                Span::styled(format!("“{}”", confirm.name), app.theme.accent()),
+                Span::styled(" ?  y to delete · n / Esc to cancel", app.theme.muted()),
+            ])),
+            rows[0],
+        );
+    } else {
+        let status = switcher.status.clone().unwrap_or_else(|| {
+            "↑/↓ to move · Enter to use/create · d delete · Esc to close".to_string()
+        });
+        frame.render_widget(
+            Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
+            rows[0],
+        );
+    }
+    draw_picker(frame, rows[1], &app.theme, &switcher.rows, "Agents");
 }
 
 /// Draws the create-agent form (multi-agent personas, #13): a required name and

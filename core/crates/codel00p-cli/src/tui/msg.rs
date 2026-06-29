@@ -83,6 +83,9 @@ pub(crate) enum Effect {
     /// switcher. Runs synchronously on the UI task (only when idle / between
     /// turns), so the env mutation is single-threaded with no harness in flight.
     SwitchAgent(String),
+    /// Delete a local agent's home (multi-agent personas, #13), then refresh the
+    /// agent switcher list. Never the active or default agent (guarded upstream).
+    DeleteAgent(String),
     /// Replay a prior session so it can be resumed inside the TUI.
     ResumeSession(codel00p_harness::SessionId),
     /// Apply a conversation's edited name + description (blocking store writes off

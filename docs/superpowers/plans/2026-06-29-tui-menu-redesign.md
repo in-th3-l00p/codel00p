@@ -31,18 +31,17 @@ actually think about the tool and leaves room for richer per-section UX.
 - Routing: Agent → agent switcher, Conversations → sessions, Organization → org
   browser, Settings → settings.
 
-### Phase 2 — Agent section  (recommended next; most backing already exists)
-- Agent list with **"＋ New agent"** as the first row → the create form.
-- Selecting an agent → **detail view**: default provider+model, dispatch
-  provider+model list, persona, memory summary, description.
-- Keys: `e` edit · `d` delete (with confirm) · Enter use/switch.
-- Edit surfaces: provider+model picker (reuse `ModelPicker`), description,
-  **persona editor** (net-new: read/write `persona.md`), **dispatch list**
-  add/remove (backed by `agent.fallbacks` in config).
-- Memory: open the memory review dialog scoped to the agent's home.
-- Backing that exists: `create/rename/delete_agent`, agent-scoped `config set`,
-  `agent.provider/model/fallbacks`, persona file, memory repository.
-- Net-new: persona read/write helper; agent detail aggregation; dispatch-list UI.
+### Phase 2 — Agent section  🟡 (create + delete shipped; edit + detail next)
+- ✅ Agent list with **"＋ New agent"** as the first row → the existing create form.
+- ✅ Enter on an agent → live switch (active agent is a no-op notice).
+- ✅ `d` delete with a y/n confirm; refused for the active and `default` agents.
+  New `Effect::DeleteAgent` → `registry::delete_agent` + list refresh. The list is
+  arrow-navigated (no type-filter) so `d` is free for the action.
+- ⏳ **Still to do:** `e` edit + a **detail view** — default provider+model
+  (reuse `ModelPicker`), dispatch provider+model list (backed by
+  `agent.fallbacks`), **persona editor** (net-new read/write `persona.md`),
+  description edit, and a memory summary (open the memory review scoped to the
+  agent's home).
 
 ### Phase 3 — Conversations section  ✅
 - **"＋ New conversation"** first row → fresh chat; sessions below.
