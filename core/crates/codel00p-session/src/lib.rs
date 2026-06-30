@@ -22,6 +22,10 @@ pub struct SessionMetadata {
     /// names keep deserializing and can derive a display title from messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     title: Option<String>,
+    /// Optional longer note describing what the conversation is about. Like
+    /// `title`, optional so legacy sessions keep deserializing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 impl SessionMetadata {
@@ -32,6 +36,7 @@ impl SessionMetadata {
             parent_session_id: None,
             created_at: None,
             title: None,
+            description: None,
         }
     }
 
@@ -53,6 +58,18 @@ impl SessionMetadata {
         self
     }
 
+    /// Sets (or clears) the conversation description. An empty/whitespace-only
+    /// value clears it, mirroring [`SessionMetadata::with_title`].
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        let description = description.into().trim().to_string();
+        self.description = if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        };
+        self
+    }
+
     pub fn session_id(&self) -> &SessionId {
         &self.session_id
     }
@@ -71,6 +88,10 @@ impl SessionMetadata {
 
     pub fn title(&self) -> Option<&str> {
         self.title.as_deref()
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
     }
 }
 
@@ -168,6 +189,20 @@ pub trait SessionStore {
         session_id: &SessionId,
         title: &str,
     ) -> Result<(), SessionStoreError>;
+
+    /// Sets (or clears) a session's description. An empty/whitespace-only value
+    /// clears it, matching [`SessionMetadata::with_description`]. Returns
+    /// [`SessionStoreError::SessionNotFound`] if the session does not exist.
+    fn set_session_description(
+        &mut self,
+        session_id: &SessionId,
+        description: &str,
+    ) -> Result<(), SessionStoreError>;
+
+    /// Permanently removes a session's metadata, returning whether one existed.
+    /// The session then disappears from [`SessionStore::list_sessions`] and can no
+    /// longer be replayed (replay is gated on metadata).
+    fn delete_session(&mut self, session_id: &SessionId) -> Result<bool, SessionStoreError>;
 
     fn list_sessions(&self) -> Result<Vec<SessionMetadata>, SessionStoreError>;
 
@@ -313,6 +348,37 @@ where
             payload,
         ))?;
         Ok(())
+    }
+
+    fn set_session_description(
+        &mut self,
+        session_id: &SessionId,
+        description: &str,
+    ) -> Result<(), SessionStoreError> {
+        // Mirror `set_session_title`: load first so an unknown id surfaces a clear
+        // `SessionNotFound` rather than creating an orphan document.
+        let metadata = self.metadata(session_id)?.with_description(description);
+        let id = metadata.session_id().as_str().to_string();
+        let payload = serde_json::to_value(metadata)?;
+        self.storage.put_document(StorageDocument::new(
+            self.scope.clone(),
+            SESSION_METADATA_COLLECTION,
+            id,
+            payload,
+        ))?;
+        Ok(())
+    }
+
+    fn delete_session(&mut self, session_id: &SessionId) -> Result<bool, SessionStoreError> {
+        // Removing the metadata document is enough: listing reads metadata, and
+        // `replay`/`append` go through `ensure_session`, so the session becomes
+        // unreachable. Any already-written log records are left in place (the log
+        // store has no stream-delete primitive) but can no longer be replayed.
+        Ok(self.storage.delete_document(
+            &self.scope,
+            SESSION_METADATA_COLLECTION,
+            session_id.as_str(),
+        )?)
     }
 
     fn list_sessions(&self) -> Result<Vec<SessionMetadata>, SessionStoreError> {

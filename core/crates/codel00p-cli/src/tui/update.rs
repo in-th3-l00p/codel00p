@@ -8,9 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::App;
 use super::msg::{CloudFetch, Effect, LocalQuery, Msg};
 use super::overlay::{
-    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentSwitcher,
-    CommandAction, CommandPalette, EntityBrowser, EntityTab, ModelPicker, Overlay, SessionSwitcher,
-    SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
+    AdvancedKind, AdvancedPref, AdvancedSettingsOverlay, AgentCreateForm, AgentDetail, AgentRow,
+    AgentSwitcher, ConversationRow, EntityBrowser, EntityTab, MainMenu, MenuSection, ModelPicker,
+    Overlay, SessionSwitcher, SettingsOverlay, SettingsPref, SettingsRow, UpdatePrompt,
 };
 use super::picker::PickerOutcome;
 
@@ -22,7 +22,8 @@ mod input;
 mod sessions;
 mod settings;
 use agents::{
-    handle_agent_create_key, handle_agent_switcher_key, open_agent_creator, open_agent_switcher,
+    handle_agent_create_key, handle_agent_detail_key, handle_agent_switcher_key,
+    open_agent_creator, open_agent_switcher,
 };
 use events::{apply_event, handle_turn_finished};
 use input::{handle_input_key, scroll_down, scroll_up};
@@ -172,6 +173,15 @@ pub(crate) fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
+        Msg::AgentDetailLoaded(result) => {
+            if let Overlay::AgentDetail(detail) = &mut app.overlay {
+                match result {
+                    Ok(data) => detail.apply(data),
+                    Err(error) => detail.status = Some(error),
+                }
+            }
+            Vec::new()
+        }
         Msg::SessionResumed(result) => {
             match result {
                 Ok((session_state, persisted)) => {
@@ -214,10 +224,10 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return vec![Effect::Quit];
     }
-    // Ctrl-P opens the command palette from anywhere — the unified launcher for
-    // every action, so users do not have to remember the individual F-keys.
+    // Ctrl-P opens the top-level menu from anywhere — the four-section launcher,
+    // so users do not have to remember the individual F-keys.
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('p') {
-        return open_command_palette(app);
+        return open_menu(app);
     }
     if app.overlay.is_open() {
         handle_overlay_key(app, key)
@@ -285,15 +295,16 @@ fn handle_overlay_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
         Overlay::AdvancedSettings(advanced) => handle_advanced_settings_key(app, advanced, key),
         Overlay::AgentSwitcher(switcher) => handle_agent_switcher_key(app, switcher, key),
         Overlay::AgentCreate(form) => handle_agent_create_key(app, form, key),
+        Overlay::AgentDetail(detail) => handle_agent_detail_key(app, detail, key),
         Overlay::UpdatePrompt(prompt) => handle_update_prompt_key(app, prompt, key),
-        Overlay::Command(mut palette) => match palette.on_key(key) {
-            PickerOutcome::Selected => match palette.selected_item() {
-                Some(item) => run_command(app, item.action),
+        Overlay::Menu(mut menu) => match menu.on_key(key) {
+            PickerOutcome::Selected => match menu.selected_section() {
+                Some(section) => open_section(app, section),
                 None => Vec::new(),
             },
             PickerOutcome::Cancelled => Vec::new(),
             PickerOutcome::Pending => {
-                app.overlay = Overlay::Command(palette);
+                app.overlay = Overlay::Menu(menu);
                 Vec::new()
             }
         },
@@ -522,6 +533,18 @@ mod tests {
     }
 
     #[test]
+    fn n_in_org_tab_opens_the_clerk_dashboard() {
+        let mut app = test_app();
+        app.cloud.configured = true;
+        app.overlay = Overlay::Entities(EntityBrowser::new(EntityTab::Org));
+        let effects = update(&mut app, key(KeyCode::Char('n')));
+        match effects.as_slice() {
+            [Effect::OpenUrl(url)] => assert!(url.contains("clerk.com")),
+            other => panic!("expected OpenUrl, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
     fn cloud_users_populates_entity_browser() {
         let mut app = test_app();
         app.overlay = Overlay::Entities(EntityBrowser::new(EntityTab::Users));
@@ -615,21 +638,30 @@ mod tests {
         assert!(matches!(effects.as_slice(), [Effect::ListSessions]));
     }
 
+    /// Builds a session switcher with one prior conversation and the highlight moved
+    /// onto it (past the always-first "New conversation" row).
+    fn switcher_with_one_session(app: &mut App, summary: crate::tui::overlay::SessionSummary) {
+        update(app, key(KeyCode::F(5)));
+        update(app, Msg::SessionList(Ok(vec![summary])));
+        // Row 0 is "New conversation"; move down onto the prior conversation.
+        update(app, key(KeyCode::Down));
+    }
+
+    fn sample_summary(id: &str, title: &str) -> crate::tui::overlay::SessionSummary {
+        crate::tui::overlay::SessionSummary {
+            session_id: id.to_string(),
+            title: Some(title.to_string()),
+            description: None,
+            source: "cli".to_string(),
+            message_count: 3,
+        }
+    }
+
     #[test]
     fn session_list_populates_switcher_and_selecting_resumes() {
-        use crate::tui::overlay::SessionSummary;
         let mut app = test_app();
-        update(&mut app, key(KeyCode::F(5)));
-        update(
-            &mut app,
-            Msg::SessionList(Ok(vec![SessionSummary {
-                session_id: "chat-42".to_string(),
-                title: Some("Fix switcher history".to_string()),
-                source: "cli".to_string(),
-                message_count: 3,
-            }])),
-        );
-        // Selecting the highlighted row fires a resume for that session id.
+        switcher_with_one_session(&mut app, sample_summary("chat-42", "Fix switcher history"));
+        // Selecting the highlighted session row fires a resume for that id.
         let effects = update(&mut app, key(KeyCode::Enter));
         match effects.as_slice() {
             [Effect::ResumeSession(id)] => assert_eq!(id.as_str(), "chat-42"),
@@ -638,65 +670,91 @@ mod tests {
     }
 
     #[test]
-    fn f2_in_switcher_enters_rename_and_enter_produces_rename_effect() {
-        use crate::tui::overlay::SessionSummary;
+    fn new_conversation_row_starts_a_fresh_chat() {
         let mut app = test_app();
         update(&mut app, key(KeyCode::F(5)));
         update(
             &mut app,
-            Msg::SessionList(Ok(vec![SessionSummary {
-                session_id: "chat-7".to_string(),
-                title: Some("Old name".to_string()),
-                source: "cli".to_string(),
-                message_count: 1,
-            }])),
+            Msg::SessionList(Ok(vec![sample_summary("chat-1", "Old")])),
         );
-        // F2 enters rename mode seeded with the current title.
-        update(&mut app, key(KeyCode::F(2)));
+        // Row 0 (New conversation) is highlighted by default; Enter resets the chat.
+        let effects = update(&mut app, key(KeyCode::Enter));
+        assert!(effects.is_empty());
+        assert!(matches!(app.overlay, Overlay::None));
+        assert!(app.conversation.blocks.iter().any(|block| matches!(
+            block,
+            crate::tui::conversation::Block::Notice(text) if text.contains("new conversation")
+        )));
+    }
+
+    #[test]
+    fn e_enters_edit_and_enter_produces_edit_effect() {
+        let mut app = test_app();
+        switcher_with_one_session(&mut app, sample_summary("chat-7", "Old name"));
+        // `e` enters edit mode seeded with the current name.
+        update(&mut app, key(KeyCode::Char('e')));
         match &app.overlay {
             Overlay::Sessions(switcher) => {
-                let rename = switcher.rename.as_ref().expect("rename mode");
-                assert_eq!(rename.session_id, "chat-7");
-                assert_eq!(rename.input, "Old name");
+                let edit = switcher.edit.as_ref().expect("edit mode");
+                assert_eq!(edit.session_id, "chat-7");
+                assert_eq!(edit.name, "Old name");
             }
             _ => panic!("expected session switcher"),
         }
-        // Clear it and type a new title.
+        // Clear the name and type a fresh one.
         for _ in 0.."Old name".len() {
             update(&mut app, key(KeyCode::Backspace));
         }
         type_str(&mut app, "Fresh title");
+        // Tab to the description field and type a description.
+        update(&mut app, key(KeyCode::Tab));
+        type_str(&mut app, "what it is about");
         let effects = update(&mut app, key(KeyCode::Enter));
         match effects.as_slice() {
-            [Effect::RenameSession(id, title)] => {
-                assert_eq!(id.as_str(), "chat-7");
+            [
+                Effect::EditSession {
+                    session_id,
+                    title,
+                    description,
+                },
+            ] => {
+                assert_eq!(session_id.as_str(), "chat-7");
                 assert_eq!(title, "Fresh title");
+                assert_eq!(description, "what it is about");
             }
-            other => panic!("expected RenameSession, got {} effects", other.len()),
+            other => panic!("expected EditSession, got {} effects", other.len()),
         }
-        // The switcher stays open (rename cleared) so the refreshed list can land.
         assert!(matches!(app.overlay, Overlay::Sessions(_)));
     }
 
     #[test]
-    fn esc_cancels_rename_without_leaving_the_switcher() {
-        use crate::tui::overlay::SessionSummary;
+    fn d_confirms_then_deletes_the_session() {
         let mut app = test_app();
-        update(&mut app, key(KeyCode::F(5)));
-        update(
-            &mut app,
-            Msg::SessionList(Ok(vec![SessionSummary {
-                session_id: "chat-7".to_string(),
-                title: Some("Keep me".to_string()),
-                source: "cli".to_string(),
-                message_count: 1,
-            }])),
-        );
-        update(&mut app, key(KeyCode::F(2)));
+        switcher_with_one_session(&mut app, sample_summary("chat-7", "Doomed"));
+        // `d` opens the confirm prompt; `y` confirms and emits the delete.
+        update(&mut app, key(KeyCode::Char('d')));
+        match &app.overlay {
+            Overlay::Sessions(switcher) => {
+                assert!(switcher.confirm_delete.is_some());
+            }
+            _ => panic!("expected session switcher"),
+        }
+        let effects = update(&mut app, key(KeyCode::Char('y')));
+        match effects.as_slice() {
+            [Effect::DeleteSession(id)] => assert_eq!(id.as_str(), "chat-7"),
+            other => panic!("expected DeleteSession, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn esc_cancels_edit_without_leaving_the_switcher() {
+        let mut app = test_app();
+        switcher_with_one_session(&mut app, sample_summary("chat-7", "Keep me"));
+        update(&mut app, key(KeyCode::Char('e')));
         let effects = update(&mut app, key(KeyCode::Esc));
         assert!(effects.is_empty());
         match &app.overlay {
-            Overlay::Sessions(switcher) => assert!(switcher.rename.is_none()),
+            Overlay::Sessions(switcher) => assert!(switcher.edit.is_none()),
             _ => panic!("expected session switcher to stay open"),
         }
     }
@@ -778,37 +836,37 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_p_opens_the_command_palette() {
+    fn ctrl_p_opens_the_menu() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        assert!(matches!(app.overlay, Overlay::Command(_)));
+        assert!(matches!(app.overlay, Overlay::Menu(_)));
     }
 
     #[test]
-    fn selecting_a_command_runs_its_action() {
+    fn selecting_a_section_opens_its_overlay() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        // The first palette row is "Switch model"; Enter runs it.
+        // The first section is "Agent"; Enter opens the agent switcher.
         let effects = update(&mut app, key(KeyCode::Enter));
-        assert!(matches!(app.overlay, Overlay::Model(_)));
-        assert!(matches!(effects.as_slice(), [Effect::FetchModels(_)]));
+        assert!(matches!(app.overlay, Overlay::AgentSwitcher(_)));
+        assert!(matches!(effects.as_slice(), [Effect::ListAgents]));
     }
 
     #[test]
-    fn command_palette_filters_and_quit_runs() {
+    fn menu_filters_to_conversations_section() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        // Filter down to "Quit" and run it.
-        type_str(&mut app, "quit");
-        let effects = update(&mut app, key(KeyCode::Enter));
-        assert!(matches!(effects.as_slice(), [Effect::Quit]));
+        // Filter down to the Conversations section and open it.
+        type_str(&mut app, "conv");
+        update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::Sessions(_)));
     }
 
     #[test]
-    fn settings_palette_action_opens_settings_overlay() {
+    fn settings_section_opens_settings_overlay() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        // Filter down to "Settings" and run it.
+        // Filter down to "Settings" and open it.
         type_str(&mut app, "settings");
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(effects.is_empty());
@@ -1121,7 +1179,9 @@ mod tests {
             update(&mut app, ctrl(KeyCode::Char('p')));
             type_str(&mut app, "settings");
             update(&mut app, key(KeyCode::Enter));
-            // Move to the "Agent profile" row (third row) and cycle it forward.
+            // Move to the "Agent profile" row (4th: ShowAdvanced, CheckUpdates,
+            // PermissionMode, Profile) and cycle it forward.
+            update(&mut app, key(KeyCode::Down));
             update(&mut app, key(KeyCode::Down));
             update(&mut app, key(KeyCode::Down));
             match &app.overlay {
@@ -1155,21 +1215,75 @@ mod tests {
         });
     }
 
-    // ---- Multi-agent personas (#13) phase 3: switch / create from the menu ----
-
     #[test]
-    fn palette_lists_switch_and_create_agent_rows() {
-        use crate::tui::overlay::command_items;
-        let labels: Vec<_> = command_items().into_iter().map(|item| item.label).collect();
-        assert!(labels.iter().any(|l| l == "Switch agent"));
-        assert!(labels.iter().any(|l| l == "Create agent"));
+    fn settings_permission_mode_cycles_and_persists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert!(app.permission_mode.is_none());
+            app.overlay = Overlay::Settings(crate::tui::overlay::SettingsOverlay::new());
+            // Move to the PermissionMode row (3rd) and cycle forward → "allow".
+            update(&mut app, key(KeyCode::Down));
+            update(&mut app, key(KeyCode::Down));
+            match &app.overlay {
+                Overlay::Settings(settings) => {
+                    assert_eq!(settings.current(), SettingsRow::PermissionMode);
+                }
+                _ => panic!("expected settings overlay"),
+            }
+            update(&mut app, key(KeyCode::Right));
+            assert_eq!(app.permission_mode.as_deref(), Some("allow"));
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(
+                resolved.merged.agent.permission_mode.as_deref(),
+                Some("allow")
+            );
+        });
     }
 
     #[test]
-    fn switch_agent_command_opens_switcher_and_lists() {
+    fn settings_api_key_entry_emits_set_provider_key() {
+        let mut app = test_app();
+        let mut settings = crate::tui::overlay::SettingsOverlay::new();
+        // Highlight the API-key row, open entry, type a key, save.
+        settings.selected = SettingsRow::ORDER
+            .iter()
+            .position(|row| matches!(row, SettingsRow::ApiKey))
+            .expect("api key row");
+        app.overlay = Overlay::Settings(settings);
+        update(&mut app, key(KeyCode::Enter)); // begin entry
+        assert!(matches!(
+            &app.overlay,
+            Overlay::Settings(s) if s.api_key_entry.is_some()
+        ));
+        type_str(&mut app, "sk-test-123");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        match effects.as_slice() {
+            [Effect::SetProviderKey { provider, key }] => {
+                assert_eq!(provider, &app.options.provider);
+                assert_eq!(key, "sk-test-123");
+            }
+            other => panic!("expected SetProviderKey, got {} effects", other.len()),
+        }
+    }
+
+    // ---- Multi-agent personas (#13) phase 3: switch / create from the menu ----
+
+    #[test]
+    fn menu_lists_the_four_sections() {
+        use crate::tui::overlay::MenuSection;
+        let labels: Vec<_> = MenuSection::ORDER.iter().map(|s| s.label()).collect();
+        assert_eq!(
+            labels,
+            ["Agent", "Conversations", "Organization", "Settings"]
+        );
+    }
+
+    #[test]
+    fn agent_section_opens_switcher_and_lists() {
         let mut app = test_app();
         update(&mut app, ctrl(KeyCode::Char('p')));
-        type_str(&mut app, "switch agent");
+        type_str(&mut app, "agent");
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(matches!(app.overlay, Overlay::AgentSwitcher(_)));
         assert!(matches!(effects.as_slice(), [Effect::ListAgents]));
@@ -1206,13 +1320,33 @@ mod tests {
                 },
             ])),
         );
-        // First row (default) is active → moving down to scout then Enter switches.
+        // Rows are [New, default (active), scout]; move down twice onto scout,
+        // then Enter switches to it.
+        update(&mut app, key(KeyCode::Down));
         update(&mut app, key(KeyCode::Down));
         let effects = update(&mut app, key(KeyCode::Enter));
         match effects.as_slice() {
             [Effect::SwitchAgent(name)] => assert_eq!(name, "scout"),
             other => panic!("expected SwitchAgent, got {} effects", other.len()),
         }
+    }
+
+    #[test]
+    fn new_agent_row_opens_the_create_form() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![AgentChoice {
+                name: "default".to_string(),
+                description: None,
+                active: true,
+            }])),
+        );
+        // Row 0 (New agent) is highlighted by default; Enter opens the create form.
+        update(&mut app, key(KeyCode::Enter));
+        assert!(matches!(app.overlay, Overlay::AgentCreate(_)));
     }
 
     #[test]
@@ -1228,8 +1362,125 @@ mod tests {
                 active: true,
             }])),
         );
+        // Move past the New row onto the active default agent; Enter is a no-op.
+        update(&mut app, key(KeyCode::Down));
         let effects = update(&mut app, key(KeyCode::Enter));
         assert!(effects.is_empty());
+    }
+
+    #[test]
+    fn d_deletes_a_non_active_agent_after_confirm() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![
+                AgentChoice {
+                    name: "default".to_string(),
+                    description: None,
+                    active: true,
+                },
+                AgentChoice {
+                    name: "scout".to_string(),
+                    description: None,
+                    active: false,
+                },
+            ])),
+        );
+        // Move onto scout (row 2) and delete it.
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Char('d')));
+        match &app.overlay {
+            Overlay::AgentSwitcher(switcher) => assert!(switcher.confirm_delete.is_some()),
+            _ => panic!("expected the agent overlay with a pending confirm"),
+        }
+        let effects = update(&mut app, key(KeyCode::Char('y')));
+        match effects.as_slice() {
+            [Effect::DeleteAgent(name)] => assert_eq!(name, "scout"),
+            other => panic!("expected DeleteAgent, got {} effects", other.len()),
+        }
+    }
+
+    #[test]
+    fn e_opens_agent_detail_and_loads_it() {
+        use crate::tui::overlay::{AgentChoice, AgentDetailData};
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![
+                AgentChoice {
+                    name: "default".to_string(),
+                    description: None,
+                    active: true,
+                },
+                AgentChoice {
+                    name: "scout".to_string(),
+                    description: Some("recon".to_string()),
+                    active: false,
+                },
+            ])),
+        );
+        // Move onto scout and press `e` → detail overlay opens + a load effect fires.
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Down));
+        let effects = update(&mut app, key(KeyCode::Char('e')));
+        match effects.as_slice() {
+            [Effect::LoadAgentDetail { name, is_default }] => {
+                assert_eq!(name, "scout");
+                assert!(!is_default);
+            }
+            other => panic!("expected LoadAgentDetail, got {} effects", other.len()),
+        }
+        assert!(matches!(app.overlay, Overlay::AgentDetail(_)));
+        // The loaded values populate the fields; editing then Enter saves them.
+        update(
+            &mut app,
+            Msg::AgentDetailLoaded(Ok(AgentDetailData {
+                description: "recon".to_string(),
+                provider: "anthropic".to_string(),
+                model: "claude-opus-4-8".to_string(),
+                dispatch: String::new(),
+                persona: "You scout.".to_string(),
+                memory_note: "no memory recorded yet".to_string(),
+            })),
+        );
+        match &app.overlay {
+            Overlay::AgentDetail(detail) => {
+                assert!(detail.loaded);
+                assert_eq!(detail.model, "claude-opus-4-8");
+            }
+            _ => panic!("expected the detail overlay"),
+        }
+        let effects = update(&mut app, key(KeyCode::Enter));
+        let saved = effects
+            .iter()
+            .any(|e| matches!(e, Effect::SaveAgentDetail { name, .. } if name == "scout"));
+        assert!(saved, "Enter should emit a SaveAgentDetail for scout");
+    }
+
+    #[test]
+    fn d_refuses_to_delete_the_active_agent() {
+        use crate::tui::overlay::AgentChoice;
+        let mut app = test_app();
+        let _ = open_agent_switcher(&mut app);
+        update(
+            &mut app,
+            Msg::AgentList(Ok(vec![AgentChoice {
+                name: "default".to_string(),
+                description: None,
+                active: true,
+            }])),
+        );
+        // Move onto the active default agent and try to delete — refused, no confirm.
+        update(&mut app, key(KeyCode::Down));
+        update(&mut app, key(KeyCode::Char('d')));
+        match &app.overlay {
+            Overlay::AgentSwitcher(switcher) => assert!(switcher.confirm_delete.is_none()),
+            _ => panic!("expected the agent overlay to stay open"),
+        }
     }
 
     #[test]

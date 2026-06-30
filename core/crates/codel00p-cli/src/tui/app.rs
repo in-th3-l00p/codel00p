@@ -139,6 +139,10 @@ pub(crate) struct App {
     /// All selectable profile names: built-in presets ∪ user-defined
     /// `[agent.profiles.*]`, sorted. Cycled by the Settings profile switcher.
     pub(crate) profile_names: Vec<String>,
+    /// The tool-approval mode (`agent.permission_mode`): `allow` / `ask` / `deny`,
+    /// or `None` for the built-in default. Cycled in the Settings overlay; set
+    /// after construction in `run_async` (so it stays off `App::new`'s signature).
+    pub(crate) permission_mode: Option<String>,
     /// The active local agent (multi-agent personas, #13), or `None` when the
     /// base home (the implicit `default` agent) is in use. Resolved from the
     /// sticky registry pointer at startup and updated on a live switch; shown in
@@ -221,6 +225,7 @@ impl App {
             failure_budget,
             active_profile,
             profile_names,
+            permission_mode: None,
             active_agent,
             base_home,
             should_quit: false,

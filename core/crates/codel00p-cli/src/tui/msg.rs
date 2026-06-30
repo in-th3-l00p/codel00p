@@ -8,7 +8,7 @@ use codel00p_protocol::{Agent, McpServer, MemoryEntry, OrgMember, OrgRef, Projec
 use crossterm::event::KeyEvent;
 use tokio::sync::oneshot;
 
-use super::overlay::{AgentChoice, ModelChoice, SessionSummary};
+use super::overlay::{AgentChoice, AgentDetailData, ModelChoice, SessionSummary};
 
 /// Inbound events: terminal input, streamed turn output, and async results.
 pub(crate) enum Msg {
@@ -43,6 +43,8 @@ pub(crate) enum Msg {
     /// Local agents (default + registry) for the agent switcher overlay
     /// (multi-agent personas, #13).
     AgentList(Result<Vec<AgentChoice>, String>),
+    /// The on-disk values for the agent detail/edit overlay (multi-agent #13).
+    AgentDetailLoaded(Result<AgentDetailData, String>),
     /// A prior session was replayed and is ready to resume (state + message count).
     SessionResumed(Result<(Box<SessionState>, usize), String>),
     /// The background startup check found a newer release (carries the version).
@@ -66,6 +68,11 @@ pub(crate) enum Effect {
     Cloud(CloudFetch),
     /// Re-authenticate through the browser for a selected organization.
     SwitchOrg(String),
+    /// Open a URL in the system browser (e.g. the Clerk dashboard to create an org).
+    OpenUrl(String),
+    /// Store a provider's API key in the active home's `.env` (the credential
+    /// source loaded at startup). Applies on the next launch.
+    SetProviderKey { provider: String, key: String },
     /// Read local state and surface it as a notice.
     Local(LocalQuery),
     /// Fetch the provider model catalog for the picker (blocking client, off the UI
@@ -83,11 +90,35 @@ pub(crate) enum Effect {
     /// switcher. Runs synchronously on the UI task (only when idle / between
     /// turns), so the env mutation is single-threaded with no harness in flight.
     SwitchAgent(String),
+    /// Delete a local agent's home (multi-agent personas, #13), then refresh the
+    /// agent switcher list. Never the active or default agent (guarded upstream).
+    DeleteAgent(String),
+    /// Read an agent's on-disk detail (config.toml + persona.md + agent.toml +
+    /// memory size) for the detail/edit overlay, off the UI task.
+    LoadAgentDetail { name: String, is_default: bool },
+    /// Persist edited agent detail (config.toml provider/model/dispatch, persona.md,
+    /// and — for registry agents — the agent.toml description), off the UI task.
+    SaveAgentDetail {
+        name: String,
+        is_default: bool,
+        description: String,
+        provider: String,
+        model: String,
+        dispatch: String,
+        persona: String,
+    },
     /// Replay a prior session so it can be resumed inside the TUI.
     ResumeSession(codel00p_harness::SessionId),
-    /// Rename a prior session's title (blocking store write, off the UI task), then
-    /// refresh the switcher list.
-    RenameSession(codel00p_harness::SessionId, String),
+    /// Apply a conversation's edited name + description (blocking store writes off
+    /// the UI task), then refresh the switcher list. An empty description clears it.
+    EditSession {
+        session_id: codel00p_harness::SessionId,
+        title: String,
+        description: String,
+    },
+    /// Delete a conversation (blocking store write off the UI task), then refresh
+    /// the switcher list.
+    DeleteSession(codel00p_harness::SessionId),
     /// Run a live update check in the background (off the UI task) and notify this
     /// session via `Msg::UpdateAvailable` if a newer release is found. Dispatched
     /// once at startup when checking is enabled; never blocks the first render.

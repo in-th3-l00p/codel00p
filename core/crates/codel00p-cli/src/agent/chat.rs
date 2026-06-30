@@ -326,6 +326,7 @@ pub(crate) fn chat_sessions_listing(config: &CliConfig) -> CliResult<String> {
 pub(crate) struct ChatSessionSummary {
     pub(crate) session_id: String,
     pub(crate) title: Option<String>,
+    pub(crate) description: Option<String>,
     pub(crate) source: String,
     pub(crate) message_count: usize,
 }
@@ -364,6 +365,7 @@ pub(crate) fn chat_session_summaries(config: &CliConfig) -> CliResult<Vec<ChatSe
         summaries.push(ChatSessionSummary {
             session_id: metadata.session_id().as_str().to_string(),
             title,
+            description: metadata.description().map(str::to_string),
             source: metadata.source().to_string(),
             message_count,
         });

@@ -63,12 +63,13 @@ pub(crate) fn render(app: &mut App, frame: &mut Frame) {
         Overlay::Model(picker) => draw_model_picker(app, frame, picker),
         Overlay::Sessions(switcher) => draw_sessions(app, frame, switcher),
         Overlay::Entities(browser) => draw_entities(app, frame, browser),
-        Overlay::Command(palette) => draw_command(app, frame, palette),
+        Overlay::Menu(menu) => draw_menu(app, frame, menu),
         Overlay::Settings(settings) => draw_settings(app, frame, settings),
         Overlay::AdvancedSettings(advanced) => draw_advanced_settings(app, frame, advanced),
         Overlay::UpdatePrompt(prompt) => draw_update_prompt(app, frame, prompt),
         Overlay::AgentSwitcher(switcher) => draw_agent_switcher(app, frame, switcher),
         Overlay::AgentCreate(form) => draw_agent_create(app, frame, form),
+        Overlay::AgentDetail(detail) => draw_agent_detail(app, frame, detail),
     }
 }
 
@@ -279,13 +280,16 @@ mod tests {
     }
 
     #[test]
-    fn command_palette_renders_actions() {
-        use crate::tui::overlay::{CommandPalette, Overlay};
+    fn menu_renders_the_four_sections() {
+        use crate::tui::overlay::{MainMenu, Overlay};
         let mut app = test_app();
-        app.overlay = Overlay::Command(CommandPalette::new());
+        app.overlay = Overlay::Menu(MainMenu::new());
         let rendered = render_to_string(&mut app, 80, 24);
-        assert!(rendered.contains("command palette"));
-        assert!(rendered.contains("Switch model"));
+        assert!(rendered.contains("menu"));
+        assert!(rendered.contains("Agent"));
+        assert!(rendered.contains("Conversations"));
+        assert!(rendered.contains("Organization"));
+        assert!(rendered.contains("Settings"));
     }
 
     #[test]
@@ -597,6 +601,7 @@ mod tests {
             vec![SessionSummary {
                 session_id: "chat-99".to_string(),
                 title: Some("Debug release packaging".to_string()),
+                description: None,
                 source: "cli".to_string(),
                 message_count: 2,
             }],
@@ -605,7 +610,9 @@ mod tests {
         let mut app = test_app();
         app.overlay = Overlay::Sessions(switcher);
         let rendered = render_to_string(&mut app, 80, 20);
-        assert!(rendered.contains("switch session"));
+        assert!(rendered.contains("conversations"));
+        // The always-present "new conversation" row and the prior conversation.
+        assert!(rendered.contains("New conversation"));
         assert!(rendered.contains("Debug release packaging"));
         assert!(rendered.contains("chat-99"));
     }
@@ -648,10 +655,46 @@ mod tests {
         let mut app = test_app();
         app.overlay = Overlay::AgentSwitcher(switcher);
         let rendered = render_to_string(&mut app, 80, 20);
-        assert!(rendered.contains("switch agent"));
+        assert!(rendered.contains("agents"));
+        // The always-present "new agent" row and a listed agent.
+        assert!(rendered.contains("New agent"));
         assert!(rendered.contains("scout"));
         // The active agent is marked.
         assert!(rendered.contains("default ✓"));
+    }
+
+    #[test]
+    fn renders_settings_with_new_rows() {
+        let mut app = test_app();
+        app.permission_mode = Some("ask".to_string());
+        app.overlay = Overlay::Settings(crate::tui::overlay::SettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 90, 24);
+        assert!(rendered.contains("Tool approvals"));
+        assert!(rendered.contains("‹ ask ›"));
+        assert!(rendered.contains("Provider API key"));
+        assert!(rendered.contains("Account"));
+    }
+
+    #[test]
+    fn renders_agent_detail_overlay() {
+        use crate::tui::overlay::{AgentDetail, AgentDetailData};
+        let mut detail = AgentDetail::loading("scout".to_string(), false);
+        detail.apply(AgentDetailData {
+            description: "recon agent".to_string(),
+            provider: "anthropic".to_string(),
+            model: "claude-opus-4-8".to_string(),
+            dispatch: "openai:gpt-4o".to_string(),
+            persona: "You scout.".to_string(),
+            memory_note: "memory.sqlite · 1.2 MB".to_string(),
+        });
+        let mut app = test_app();
+        app.overlay = Overlay::AgentDetail(detail);
+        let rendered = render_to_string(&mut app, 90, 24);
+        assert!(rendered.contains("agent: scout"));
+        assert!(rendered.contains("provider:"));
+        assert!(rendered.contains("anthropic"));
+        assert!(rendered.contains("dispatch:"));
+        assert!(rendered.contains("memory.sqlite"));
     }
 
     #[test]

@@ -63,12 +63,13 @@ impl ModelPicker {
     }
 }
 
-/// A prior conversation shown in the session switcher overlay. Read-only — selecting
-/// one replays it and resets the live conversation to that session.
+/// A prior conversation shown in the session switcher overlay. Selecting one
+/// replays it; `e` edits its name + description, `d` deletes it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SessionSummary {
     pub(crate) session_id: String,
     pub(crate) title: Option<String>,
+    pub(crate) description: Option<String>,
     pub(crate) source: String,
     pub(crate) message_count: usize,
 }
@@ -80,16 +81,42 @@ impl PickerItem for SessionSummary {
             .unwrap_or_else(|| self.session_id.clone())
     }
     fn detail(&self) -> Option<String> {
-        if self.title.is_some() {
-            Some(format!(
+        let meta = if self.title.is_some() {
+            format!(
                 "{} · {} · {} message(s)",
                 self.session_id, self.source, self.message_count
-            ))
+            )
         } else {
-            Some(format!(
-                "{} · {} message(s)",
-                self.source, self.message_count
-            ))
+            format!("{} · {} message(s)", self.source, self.message_count)
+        };
+        match &self.description {
+            Some(description) if !description.is_empty() => Some(format!("{meta} — {description}")),
+            _ => Some(meta),
+        }
+    }
+}
+
+/// A row in the conversations overlay: the always-first "new conversation" action,
+/// then one row per prior conversation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ConversationRow {
+    /// Start a fresh conversation. Always the first row.
+    New,
+    /// Resume / edit / delete an existing conversation.
+    Session(SessionSummary),
+}
+
+impl PickerItem for ConversationRow {
+    fn label(&self) -> String {
+        match self {
+            ConversationRow::New => "＋ New conversation".to_string(),
+            ConversationRow::Session(summary) => summary.label(),
+        }
+    }
+    fn detail(&self) -> Option<String> {
+        match self {
+            ConversationRow::New => Some("start a fresh chat".to_string()),
+            ConversationRow::Session(summary) => summary.detail(),
         }
     }
 }
@@ -247,56 +274,122 @@ impl EntityBrowser {
 
 /// An in-progress rename inside the session switcher: the id of the session being
 /// renamed and the editable title buffer (a single line, cursor parked at the end).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SessionRename {
-    pub(crate) session_id: String,
-    pub(crate) input: String,
+/// Which field the inline conversation editor is focused on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SessionEditField {
+    Name,
+    Description,
 }
 
-/// The session switcher: a read-only list of prior conversations plus a status line
-/// (loading / error). Selecting a row resumes that session in place; pressing the
-/// rename key (F2) on a row enters an inline rename mode.
+/// State for editing a conversation's name + description inline.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SessionEdit {
+    pub(crate) session_id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) field: SessionEditField,
+}
+
+impl SessionEdit {
+    /// Moves focus between the name and description fields (Tab).
+    pub(crate) fn toggle_field(&mut self) {
+        self.field = match self.field {
+            SessionEditField::Name => SessionEditField::Description,
+            SessionEditField::Description => SessionEditField::Name,
+        };
+    }
+
+    /// The buffer for the currently focused field.
+    pub(crate) fn active_buffer_mut(&mut self) -> &mut String {
+        match self.field {
+            SessionEditField::Name => &mut self.name,
+            SessionEditField::Description => &mut self.description,
+        }
+    }
+}
+
+/// State for the delete-confirmation prompt.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SessionDelete {
+    pub(crate) session_id: String,
+    /// A display label (title or id) for the confirm prompt.
+    pub(crate) label: String,
+}
+
+/// The conversations overlay: a "＋ New conversation" row followed by the prior
+/// conversations, plus a status line. Selecting a session resumes it in place; `e`
+/// opens an inline name+description editor and `d` a delete confirmation.
 #[derive(Clone, Debug)]
 pub(crate) struct SessionSwitcher {
-    pub(crate) sessions: Picker<SessionSummary>,
+    pub(crate) rows: Picker<ConversationRow>,
     pub(crate) status: Option<String>,
-    /// `Some` while the user is editing a session's title inline.
-    pub(crate) rename: Option<SessionRename>,
+    /// `Some` while editing a conversation's name + description inline.
+    pub(crate) edit: Option<SessionEdit>,
+    /// `Some` while confirming a conversation deletion.
+    pub(crate) confirm_delete: Option<SessionDelete>,
 }
 
 impl SessionSwitcher {
     pub(crate) fn new() -> Self {
         Self {
-            sessions: Picker::new(Vec::new()),
+            rows: Picker::new(vec![ConversationRow::New]),
             status: Some("Loading…".to_string()),
-            rename: None,
+            edit: None,
+            confirm_delete: None,
         }
     }
 
+    /// Rebuilds the row list as `[New, …sessions]` and sets the status line.
     pub(crate) fn set_sessions(&mut self, sessions: Vec<SessionSummary>, status: Option<String>) {
-        self.sessions.set_items(sessions);
+        let rows = std::iter::once(ConversationRow::New)
+            .chain(sessions.into_iter().map(ConversationRow::Session))
+            .collect();
+        self.rows.set_items(rows);
         self.status = status;
     }
 
     pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
-        self.sessions.on_key(key)
+        self.rows.on_key(key)
     }
 
-    pub(crate) fn selected_item(&self) -> Option<&SessionSummary> {
-        self.sessions.selected_item()
+    pub(crate) fn selected_row(&self) -> Option<&ConversationRow> {
+        self.rows.selected_item()
     }
 
-    /// Enters rename mode for the highlighted session, seeding the input with its
-    /// current title (falling back to the id). No-op if no row is highlighted.
-    pub(crate) fn begin_rename(&mut self) {
-        if let Some(session) = self.sessions.selected_item() {
-            let input = session
-                .title
-                .clone()
-                .unwrap_or_else(|| session.session_id.clone());
-            self.rename = Some(SessionRename {
+    /// The highlighted session, or `None` when the "New conversation" row (or
+    /// nothing) is highlighted.
+    pub(crate) fn selected_session(&self) -> Option<&SessionSummary> {
+        match self.rows.selected_item() {
+            Some(ConversationRow::Session(summary)) => Some(summary),
+            _ => None,
+        }
+    }
+
+    /// Enters edit mode for the highlighted session, seeding the fields with its
+    /// current name (falling back to the id) and description. No-op on the New row.
+    pub(crate) fn begin_edit(&mut self) {
+        if let Some(session) = self.selected_session() {
+            self.edit = Some(SessionEdit {
                 session_id: session.session_id.clone(),
-                input,
+                name: session
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| session.session_id.clone()),
+                description: session.description.clone().unwrap_or_default(),
+                field: SessionEditField::Name,
+            });
+        }
+    }
+
+    /// Opens the delete confirmation for the highlighted session. No-op on New.
+    pub(crate) fn begin_delete(&mut self) {
+        if let Some(session) = self.selected_session() {
+            self.confirm_delete = Some(SessionDelete {
+                session_id: session.session_id.clone(),
+                label: session
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| session.session_id.clone()),
             });
         }
     }
@@ -332,35 +425,213 @@ impl PickerItem for AgentChoice {
     }
 }
 
-/// The agent switcher overlay: a read-only list of local agents (default + every
-/// `<base>/agents/<name>`). Selecting one performs a LIVE switch — it re-points
-/// the running TUI at that agent's home so subsequent turns use its memory and
-/// sessions. Mirrors [`SessionSwitcher`]'s shape.
+/// A row in the agent overlay: the always-first "new agent" action, then one row
+/// per local agent (default + every `<base>/agents/<name>`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum AgentRow {
+    /// Define a new local agent. Always the first row.
+    New,
+    /// Use / edit / delete an existing agent.
+    Agent(AgentChoice),
+}
+
+impl PickerItem for AgentRow {
+    fn label(&self) -> String {
+        match self {
+            AgentRow::New => "＋ New agent".to_string(),
+            AgentRow::Agent(choice) => choice.label(),
+        }
+    }
+    fn detail(&self) -> Option<String> {
+        match self {
+            AgentRow::New => Some("define a new local agent".to_string()),
+            AgentRow::Agent(choice) => choice.detail(),
+        }
+    }
+}
+
+/// State for the delete-confirmation prompt in the agent overlay.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AgentDelete {
+    pub(crate) name: String,
+}
+
+/// The agent overlay: a "＋ New agent" row followed by the local agents (default +
+/// every `<base>/agents/<name>`), plus a status line. Selecting an agent performs
+/// a LIVE switch — re-pointing the running TUI at that agent's home so subsequent
+/// turns use its memory and sessions. `d` deletes a non-active, non-default agent.
 #[derive(Clone, Debug)]
 pub(crate) struct AgentSwitcher {
-    pub(crate) agents: Picker<AgentChoice>,
+    pub(crate) rows: Picker<AgentRow>,
     pub(crate) status: Option<String>,
+    /// `Some` while confirming an agent deletion.
+    pub(crate) confirm_delete: Option<AgentDelete>,
 }
 
 impl AgentSwitcher {
     pub(crate) fn new() -> Self {
         Self {
-            agents: Picker::new(Vec::new()),
+            rows: Picker::new(vec![AgentRow::New]),
             status: Some("Loading…".to_string()),
+            confirm_delete: None,
         }
     }
 
+    /// Rebuilds the row list as `[New, …agents]` and sets the status line.
     pub(crate) fn set_agents(&mut self, agents: Vec<AgentChoice>, status: Option<String>) {
-        self.agents.set_items(agents);
+        let rows = std::iter::once(AgentRow::New)
+            .chain(agents.into_iter().map(AgentRow::Agent))
+            .collect();
+        self.rows.set_items(rows);
         self.status = status;
     }
 
     pub(crate) fn on_key(&mut self, key: KeyEvent) -> PickerOutcome {
-        self.agents.on_key(key)
+        self.rows.on_key(key)
     }
 
-    pub(crate) fn selected_item(&self) -> Option<&AgentChoice> {
-        self.agents.selected_item()
+    pub(crate) fn selected_row(&self) -> Option<&AgentRow> {
+        self.rows.selected_item()
+    }
+
+    /// The highlighted agent, or `None` when the "New agent" row (or nothing) is
+    /// highlighted.
+    pub(crate) fn selected_agent(&self) -> Option<&AgentChoice> {
+        match self.rows.selected_item() {
+            Some(AgentRow::Agent(choice)) => Some(choice),
+            _ => None,
+        }
+    }
+
+    /// Opens the delete confirmation for the highlighted agent — but never for the
+    /// active agent (its home is live) or the `default` base agent. No-op otherwise.
+    pub(crate) fn begin_delete(&mut self, default_label: &str) {
+        if let Some(agent) = self.selected_agent() {
+            if agent.active || agent.name == default_label {
+                return;
+            }
+            self.confirm_delete = Some(AgentDelete {
+                name: agent.name.clone(),
+            });
+        }
+    }
+}
+
+/// An editable field of the agent detail/edit overlay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AgentField {
+    Description,
+    Provider,
+    Model,
+    Dispatch,
+    Persona,
+}
+
+/// The loaded values for an agent's detail/edit overlay, read off disk by the
+/// event loop (config.toml + persona.md + agent.toml + memory db size).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AgentDetailData {
+    pub(crate) description: String,
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    /// Comma-separated dispatch fallback routes (`agent.fallbacks`).
+    pub(crate) dispatch: String,
+    pub(crate) persona: String,
+    /// Read-only one-line memory summary (e.g. `memory.sqlite · 1.2 MB`).
+    pub(crate) memory_note: String,
+}
+
+/// The agent detail/edit overlay: shows an agent's default provider+model, dispatch
+/// routes, persona, description, and a memory summary, and edits them inline. Opened
+/// with `e` on an agent row; saving writes config.toml / persona.md / agent.toml.
+#[derive(Clone, Debug)]
+pub(crate) struct AgentDetail {
+    pub(crate) name: String,
+    /// The base/default agent has no `agent.toml`, so its description isn't editable.
+    pub(crate) is_default: bool,
+    pub(crate) description: String,
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    pub(crate) dispatch: String,
+    pub(crate) persona: String,
+    pub(crate) memory_note: String,
+    pub(crate) field: AgentField,
+    /// `false` until the event loop delivers the on-disk values.
+    pub(crate) loaded: bool,
+    pub(crate) status: Option<String>,
+}
+
+impl AgentDetail {
+    /// A pre-load placeholder shown while the event loop reads the agent's files.
+    pub(crate) fn loading(name: String, is_default: bool) -> Self {
+        Self {
+            name,
+            is_default,
+            description: String::new(),
+            provider: String::new(),
+            model: String::new(),
+            dispatch: String::new(),
+            persona: String::new(),
+            memory_note: String::new(),
+            field: if is_default {
+                AgentField::Provider
+            } else {
+                AgentField::Description
+            },
+            loaded: false,
+            status: Some("Loading…".to_string()),
+        }
+    }
+
+    /// Fills the buffers once the on-disk values arrive.
+    pub(crate) fn apply(&mut self, data: AgentDetailData) {
+        self.description = data.description;
+        self.provider = data.provider;
+        self.model = data.model;
+        self.dispatch = data.dispatch;
+        self.persona = data.persona;
+        self.memory_note = data.memory_note;
+        self.loaded = true;
+        self.status = None;
+    }
+
+    /// The editable fields in display order (the default agent omits Description).
+    pub(crate) fn fields(&self) -> Vec<AgentField> {
+        let mut fields = Vec::new();
+        if !self.is_default {
+            fields.push(AgentField::Description);
+        }
+        fields.extend([
+            AgentField::Provider,
+            AgentField::Model,
+            AgentField::Dispatch,
+            AgentField::Persona,
+        ]);
+        fields
+    }
+
+    /// Moves focus to the next (`forward`) or previous field, wrapping.
+    pub(crate) fn move_field(&mut self, forward: bool) {
+        let fields = self.fields();
+        let current = fields.iter().position(|f| *f == self.field).unwrap_or(0);
+        let len = fields.len();
+        let next = if forward {
+            (current + 1) % len
+        } else {
+            (current + len - 1) % len
+        };
+        self.field = fields[next];
+    }
+
+    /// The buffer for the currently focused field.
+    pub(crate) fn active_buffer_mut(&mut self) -> &mut String {
+        match self.field {
+            AgentField::Description => &mut self.description,
+            AgentField::Provider => &mut self.provider,
+            AgentField::Model => &mut self.model,
+            AgentField::Dispatch => &mut self.dispatch,
+            AgentField::Persona => &mut self.persona,
+        }
     }
 }
 
@@ -422,54 +693,75 @@ impl AgentCreateForm {
     }
 }
 
-/// An action reachable from the command palette. Each maps to an existing handler.
+/// A top-level section of the Ctrl+P menu. Replaces the old flat action palette:
+/// every action now lives under one of these four focused areas, so the launcher
+/// stays short and scannable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CommandAction {
-    Model,
-    Sessions,
-    NewConversation,
-    /// Open the local-agent switcher (multi-agent personas, #13).
-    SwitchAgent,
-    /// Open the create-agent form (multi-agent personas, #13).
-    CreateAgent,
-    Browse,
-    Users,
-    SwitchOrg,
-    History,
-    Tools,
+pub(crate) enum MenuSection {
+    /// The active agent + its roster: switch, create, edit, inspect.
+    Agent,
+    /// This agent's conversations: start a new one, resume, rename, delete.
+    Conversations,
+    /// Cloud organization: switch org, browse projects / members / data.
+    Organization,
+    /// Local instance settings: behavior, display, profiles, providers.
     Settings,
-    Help,
-    Quit,
 }
 
-/// One row in the command palette: a label, a short hint, and the action it runs.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CommandItem {
-    pub(crate) label: String,
-    pub(crate) hint: &'static str,
-    pub(crate) action: CommandAction,
+impl MenuSection {
+    /// The sections in display order.
+    pub(crate) const ORDER: [MenuSection; 4] = [
+        MenuSection::Agent,
+        MenuSection::Conversations,
+        MenuSection::Organization,
+        MenuSection::Settings,
+    ];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            MenuSection::Agent => "Agent",
+            MenuSection::Conversations => "Conversations",
+            MenuSection::Organization => "Organization",
+            MenuSection::Settings => "Settings",
+        }
+    }
+
+    pub(crate) fn hint(self) -> &'static str {
+        match self {
+            MenuSection::Agent => "switch · create · edit the active agent",
+            MenuSection::Conversations => "new · resume · rename · delete chats",
+            MenuSection::Organization => "switch org · projects · members · data",
+            MenuSection::Settings => "behavior · display · profiles · providers",
+        }
+    }
 }
 
-impl PickerItem for CommandItem {
+impl PickerItem for MenuSection {
     fn label(&self) -> String {
-        self.label.clone()
+        MenuSection::label(*self).to_string()
     }
     fn detail(&self) -> Option<String> {
-        Some(self.hint.to_string())
+        Some(MenuSection::hint(*self).to_string())
     }
 }
 
-/// The VSCode-style command palette: a fuzzy-filterable list of every CLI action,
-/// so users do not have to remember the individual F-key surfaces.
+/// The top-level Ctrl+P menu: four focused sections instead of one long list of
+/// every action. Selecting a section opens its dedicated overlay.
 #[derive(Clone, Debug)]
-pub(crate) struct CommandPalette {
-    pub(crate) picker: Picker<CommandItem>,
+pub(crate) struct MainMenu {
+    pub(crate) picker: Picker<MenuSection>,
 }
 
-impl CommandPalette {
+impl Default for MainMenu {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MainMenu {
     pub(crate) fn new() -> Self {
         Self {
-            picker: Picker::new(command_items()),
+            picker: Picker::new(MenuSection::ORDER.to_vec()),
         }
     }
 
@@ -477,44 +769,9 @@ impl CommandPalette {
         self.picker.on_key(key)
     }
 
-    pub(crate) fn selected_item(&self) -> Option<&CommandItem> {
-        self.picker.selected_item()
+    pub(crate) fn selected_section(&self) -> Option<MenuSection> {
+        self.picker.selected_item().copied()
     }
-}
-
-/// The full command catalog, in display order.
-pub(crate) fn command_items() -> Vec<CommandItem> {
-    use CommandAction::*;
-    [
-        ("Switch model", "pick a provider / model", Model),
-        ("Switch session", "resume a prior conversation", Sessions),
-        ("New conversation", "start a fresh chat", NewConversation),
-        (
-            "Switch agent",
-            "live-switch the active agent + memory",
-            SwitchAgent,
-        ),
-        ("Create agent", "define a new local agent", CreateAgent),
-        (
-            "Browse organization",
-            "projects · agents · MCP · memory",
-            Browse,
-        ),
-        ("Browse users", "organization members", Users),
-        ("Switch organization", "re-auth into another org", SwitchOrg),
-        ("Show history", "this conversation's messages", History),
-        ("Show tools", "enabled tool sets", Tools),
-        ("Settings", "TUI preferences", Settings),
-        ("Help", "keys and commands", Help),
-        ("Quit", "exit codel00p", Quit),
-    ]
-    .into_iter()
-    .map(|(label, hint, action)| CommandItem {
-        label: label.to_string(),
-        hint,
-        action,
-    })
-    .collect()
 }
 
 /// A single toggleable preference shown in the main Settings overlay. These are
@@ -549,27 +806,38 @@ impl SettingsPref {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsRow {
     Pref(SettingsPref),
+    /// Cycles the tool-approval mode (`agent.permission_mode`): allow / ask / deny.
+    PermissionMode,
     /// Cycles the active agent profile among the built-in presets + any
     /// user-defined `[agent.profiles.*]`, persisting `agent.profile`.
     Profile,
+    /// Enter sets the active provider's API key (stored in the home `.env`).
+    ApiKey,
+    /// Read-only: the signed-in account (email · org · role), when authenticated.
+    Account,
     /// Opens the Advanced settings sub-overlay (harness-loop internals).
     Advanced,
 }
 
 impl SettingsRow {
-    /// All rows, in display order. The toggle prefs first, then the profile
-    /// switcher, then "Advanced…".
-    pub(crate) const ORDER: [SettingsRow; 4] = [
+    /// All rows, in display order.
+    pub(crate) const ORDER: [SettingsRow; 7] = [
         SettingsRow::Pref(SettingsPref::ShowAdvanced),
         SettingsRow::Pref(SettingsPref::CheckUpdates),
+        SettingsRow::PermissionMode,
         SettingsRow::Profile,
+        SettingsRow::ApiKey,
+        SettingsRow::Account,
         SettingsRow::Advanced,
     ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             SettingsRow::Pref(pref) => pref.label(),
+            SettingsRow::PermissionMode => "Tool approvals",
             SettingsRow::Profile => "Agent profile",
+            SettingsRow::ApiKey => "Provider API key",
+            SettingsRow::Account => "Account",
             SettingsRow::Advanced => "Advanced…",
         }
     }
@@ -577,23 +845,31 @@ impl SettingsRow {
     pub(crate) fn hint(self) -> &'static str {
         match self {
             SettingsRow::Pref(pref) => pref.hint(),
+            SettingsRow::PermissionMode => "Enter/→ cycle · allow · ask · deny",
             SettingsRow::Profile => "Enter/→ cycle · autonomous · careful · manual",
+            SettingsRow::ApiKey => "Enter to set the active provider's key (~/.env)",
+            SettingsRow::Account => "signed-in user · organization · role",
             SettingsRow::Advanced => "harness-loop knobs · iteration count",
         }
     }
 }
 
-/// The Settings overlay: a small list of toggleable TUI preferences plus an
-/// "Advanced…" entry. Up/Down move the selection, Enter/Space toggle the
-/// highlighted preference (or open Advanced), Esc closes.
+/// The Settings overlay: a list of TUI/agent preferences. Up/Down move, Enter/Space
+/// act on the highlighted row, ←/→ cycle the choosers, Esc closes. When
+/// `api_key_entry` is `Some`, the overlay is capturing a (masked) API key.
 #[derive(Clone, Debug)]
 pub(crate) struct SettingsOverlay {
     pub(crate) selected: usize,
+    /// `Some(buffer)` while entering the active provider's API key.
+    pub(crate) api_key_entry: Option<String>,
 }
 
 impl SettingsOverlay {
     pub(crate) fn new() -> Self {
-        Self { selected: 0 }
+        Self {
+            selected: 0,
+            api_key_entry: None,
+        }
     }
 
     pub(crate) fn up(&mut self) {
@@ -780,7 +1056,7 @@ pub(crate) enum Overlay {
     Model(ModelPicker),
     Sessions(SessionSwitcher),
     Entities(EntityBrowser),
-    Command(CommandPalette),
+    Menu(MainMenu),
     Settings(SettingsOverlay),
     AdvancedSettings(AdvancedSettingsOverlay),
     UpdatePrompt(UpdatePrompt),
@@ -788,6 +1064,8 @@ pub(crate) enum Overlay {
     AgentSwitcher(AgentSwitcher),
     /// The create-agent form (multi-agent personas, #13).
     AgentCreate(AgentCreateForm),
+    /// The agent detail/edit overlay (multi-agent personas, #13).
+    AgentDetail(AgentDetail),
 }
 
 impl Overlay {
@@ -805,6 +1083,7 @@ mod tests {
         let summary = SessionSummary {
             session_id: "chat-42".to_string(),
             title: Some("Review release blockers".to_string()),
+            description: None,
             source: "cli".to_string(),
             message_count: 3,
         };
@@ -814,5 +1093,41 @@ mod tests {
             summary.detail(),
             Some("chat-42 · cli · 3 message(s)".to_string())
         );
+    }
+
+    #[test]
+    fn session_summary_detail_appends_description() {
+        let summary = SessionSummary {
+            session_id: "chat-9".to_string(),
+            title: Some("Release prep".to_string()),
+            description: Some("track the v0.13 cut".to_string()),
+            source: "cli".to_string(),
+            message_count: 1,
+        };
+        assert_eq!(
+            summary.detail(),
+            Some("chat-9 · cli · 1 message(s) — track the v0.13 cut".to_string())
+        );
+    }
+
+    #[test]
+    fn new_conversation_is_always_the_first_row() {
+        let mut switcher = SessionSwitcher::new();
+        switcher.set_sessions(
+            vec![SessionSummary {
+                session_id: "chat-1".to_string(),
+                title: Some("First".to_string()),
+                description: None,
+                source: "cli".to_string(),
+                message_count: 1,
+            }],
+            None,
+        );
+        // Row 0 is New (no session); selecting it isn't a session.
+        assert!(matches!(
+            switcher.selected_row(),
+            Some(ConversationRow::New)
+        ));
+        assert!(switcher.selected_session().is_none());
     }
 }

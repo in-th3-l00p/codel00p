@@ -6,6 +6,10 @@
 
 use super::*;
 
+/// Where organization lifecycle (create / manage members) lives — Clerk owns it,
+/// so codel00p opens the dashboard rather than creating orgs itself.
+const CLERK_DASHBOARD_URL: &str = "https://dashboard.clerk.com";
+
 /// Runs `f` against the entity browser if one is open; otherwise drops the update
 /// (the user closed the overlay before the fetch returned).
 pub(super) fn with_entities(app: &mut App, f: impl FnOnce(&mut EntityBrowser)) {
@@ -99,6 +103,13 @@ pub(super) fn handle_entities_key(
             }
             app.overlay = Overlay::Entities(browser);
             Vec::new()
+        }
+        EntityTab::Org if key.code == KeyCode::Char('n') => {
+            // Organization lifecycle lives in Clerk; open its dashboard to create one.
+            app.conversation
+                .push_notice("Opening the Clerk dashboard to create an organization…");
+            app.overlay = Overlay::Entities(browser);
+            vec![Effect::OpenUrl(CLERK_DASHBOARD_URL.to_string())]
         }
         EntityTab::Org => match browser.orgs.on_key(key) {
             PickerOutcome::Selected => {

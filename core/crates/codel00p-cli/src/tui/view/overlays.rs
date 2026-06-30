@@ -1,6 +1,6 @@
 //! Overlay renderers: every modal/picker panel drawn over the main view — help,
 //! permission prompt, entity browser, model picker, session switcher, agent
-//! switcher/creator, command palette, settings, and the update prompt.
+//! switcher/creator, the top-level menu, settings, and the update prompt.
 //!
 //! `super::render` dispatches to these by the active `Overlay`. They share the
 //! `centered_rect` layout helper and the generic `draw_picker` from `super`.
@@ -41,8 +41,8 @@ pub(super) fn draw_help(app: &App, frame: &mut Frame) {
         Line::from("  ←/→ Home/End move/edit the cursor"),
         Line::from("  PgUp/PgDn    scroll the transcript · wheel scrolls too"),
         Line::from("  F1           this help"),
-        Line::from("  F2/F3/F5     model · organization · sessions (also in Ctrl+P)"),
-        Line::from("  F2 (in sessions)  rename the highlighted conversation"),
+        Line::from("  F2/F3/F5     model · organization · conversations (also in Ctrl+P)"),
+        Line::from("  in conversations  e edit (name + description) · d delete · Enter open"),
         Line::from("  /sessions /memory /history /tools /reset"),
         Line::from("  /agent /new-agent  switch · create a local agent (also in Ctrl+P)"),
         Line::from("  Ctrl+P → Settings  advanced status info · update checks"),
@@ -149,7 +149,7 @@ pub(super) fn draw_org(app: &App, frame: &mut Frame, area: Rect, browser: &Entit
                 lines.push(Line::from(format!("  you:   {email}")));
             }
             lines.push(Line::from(
-                "  Enter on an organization below to re-auth and switch.",
+                "  Enter to switch · n for a new org (opens the Clerk dashboard).",
             ));
         }
         (None, Some(error)) => lines.push(Line::from(Span::styled(
@@ -191,65 +191,140 @@ pub(super) fn draw_model_picker(app: &App, frame: &mut Frame, picker: &ModelPick
     draw_picker(frame, rows[1], &app.theme, &picker.picker, "Models");
 }
 
-/// Draws the session switcher: a status line above the list of prior conversations.
+/// Draws the conversations overlay: a "＋ New conversation" row plus the prior
+/// conversations, with inline name+description editing and a delete confirmation.
 pub(super) fn draw_sessions(app: &App, frame: &mut Frame, switcher: &SessionSwitcher) {
     let area = centered_rect(64, 60, frame.area());
-    let inner = framed(frame, area, " switch session ", app.theme.overlay_border);
+    let inner = framed(frame, area, " conversations ", app.theme.overlay_border);
+
+    // Edit mode replaces the list with a two-field editor.
+    if let Some(edit) = &switcher.edit {
+        draw_session_edit(app, frame, inner, edit);
+        return;
+    }
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
 
-    // In rename mode the status line becomes an inline title editor; otherwise it
-    // shows the usual hint (now including the rename key).
-    if let Some(rename) = &switcher.rename {
+    // The status line shows the delete confirmation, the loading/empty status, or
+    // the usual key hints.
+    if let Some(confirm) = &switcher.confirm_delete {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("  rename: ", app.theme.accent()),
-                Span::styled(format!("{}▏", rename.input), Style::default()),
-                Span::styled("  Enter to save · Esc to cancel", app.theme.muted()),
+                Span::styled("  Delete ", Style::default().fg(app.theme.error)),
+                Span::styled(format!("\"{}\"", confirm.label), app.theme.accent()),
+                Span::styled(" ?  y to delete · n / Esc to cancel", app.theme.muted()),
             ])),
             rows[0],
         );
     } else {
-        let status = switcher
-            .status
-            .clone()
-            .unwrap_or_else(|| "Enter to resume · F2 to rename · Esc to close".to_string());
+        let status = switcher.status.clone().unwrap_or_else(|| {
+            "↑/↓ to move · Enter to open · e edit · d delete · Esc to close".to_string()
+        });
         frame.render_widget(
             Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
             rows[0],
         );
     }
-    draw_picker(
-        frame,
-        rows[1],
-        &app.theme,
-        &switcher.sessions,
-        "Prior conversations",
+    draw_picker(frame, rows[1], &app.theme, &switcher.rows, "Conversations");
+}
+
+/// Draws the inline conversation editor (name + description), with the focused
+/// field highlighted — mirrors the create-agent form's two-field layout.
+fn draw_session_edit(
+    app: &App,
+    frame: &mut Frame,
+    inner: Rect,
+    edit: &super::super::overlay::SessionEdit,
+) {
+    use super::super::overlay::SessionEditField;
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // hint
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // name
+            Constraint::Length(1), // description
+            Constraint::Min(1),    // padding
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  Tab to switch field · Enter to save · Esc to cancel",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+
+    let field_line = |label: &str, value: &str, focused: bool| {
+        let marker = if focused { "› " } else { "  " };
+        let cursor = if focused { "▏" } else { "" };
+        Line::from(vec![
+            Span::styled(marker, Style::default().fg(app.theme.accent)),
+            Span::styled(format!("{label:<13}"), app.theme.muted()),
+            Span::styled(
+                format!("{value}{cursor}"),
+                if focused {
+                    app.theme.selection()
+                } else {
+                    Style::default()
+                },
+            ),
+        ])
+    };
+
+    frame.render_widget(
+        Paragraph::new(field_line(
+            "name:",
+            &edit.name,
+            edit.field == SessionEditField::Name,
+        )),
+        rows[2],
+    );
+    frame.render_widget(
+        Paragraph::new(field_line(
+            "description:",
+            &edit.description,
+            edit.field == SessionEditField::Description,
+        )),
+        rows[3],
     );
 }
 
-/// Draws the local-agent switcher (multi-agent personas, #13): the list of
-/// agents (default + registry) with the active one marked.
+/// Draws the agent overlay (multi-agent personas, #13): a "＋ New agent" row plus
+/// the local agents (default + registry) with the active one marked, and a delete
+/// confirmation prompt.
 pub(super) fn draw_agent_switcher(app: &App, frame: &mut Frame, switcher: &AgentSwitcher) {
     let area = centered_rect(60, 60, frame.area());
-    let inner = framed(frame, area, " switch agent ", app.theme.overlay_border);
+    let inner = framed(frame, area, " agents ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
-    let status = switcher
-        .status
-        .clone()
-        .unwrap_or_else(|| "Enter to switch (live) · Esc to close".to_string());
-    frame.render_widget(
-        Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
-        rows[0],
-    );
-    draw_picker(frame, rows[1], &app.theme, &switcher.agents, "Agents");
+
+    if let Some(confirm) = &switcher.confirm_delete {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  Delete agent ", Style::default().fg(app.theme.error)),
+                Span::styled(format!("“{}”", confirm.name), app.theme.accent()),
+                Span::styled(" ?  y to delete · n / Esc to cancel", app.theme.muted()),
+            ])),
+            rows[0],
+        );
+    } else {
+        let status = switcher.status.clone().unwrap_or_else(|| {
+            "↑/↓ to move · Enter to use/create · e edit · d delete · Esc to close".to_string()
+        });
+        frame.render_widget(
+            Paragraph::new(Span::styled(format!("  {status}"), app.theme.muted())),
+            rows[0],
+        );
+    }
+    draw_picker(frame, rows[1], &app.theme, &switcher.rows, "Agents");
 }
 
 /// Draws the create-agent form (multi-agent personas, #13): a required name and
@@ -325,14 +400,114 @@ pub(super) fn draw_agent_create(app: &App, frame: &mut Frame, form: &AgentCreate
     frame.render_widget(Paragraph::new(footer), rows[5]);
 }
 
-/// Draws the command palette: a filterable list of every CLI action.
-pub(super) fn draw_command(
+/// Draws the agent detail/edit overlay (multi-agent personas, #13): the agent's
+/// default provider+model, dispatch routes, persona, and description as editable
+/// fields, plus a read-only memory summary.
+pub(super) fn draw_agent_detail(
     app: &App,
     frame: &mut Frame,
-    palette: &super::super::overlay::CommandPalette,
+    detail: &super::super::overlay::AgentDetail,
 ) {
-    let area = centered_rect(60, 60, frame.area());
-    let inner = framed(frame, area, " command palette ", app.theme.overlay_border);
+    use super::super::overlay::AgentField;
+    let area = centered_rect(66, 60, frame.area());
+    let title = format!(" agent: {} ", detail.name);
+    let inner = framed(frame, area, &title, app.theme.overlay_border);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // hint
+            Constraint::Length(1), // spacer
+            Constraint::Min(1),    // fields
+            Constraint::Length(1), // memory summary
+        ])
+        .split(inner);
+
+    if !detail.loaded {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                format!("  {}", detail.status.as_deref().unwrap_or("Loading…")),
+                app.theme.muted(),
+            )),
+            rows[0],
+        );
+        return;
+    }
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "  ↑/↓ to move · type to edit · Enter to save · Esc to go back",
+            app.theme.muted(),
+        )),
+        rows[0],
+    );
+
+    let field_line = |label: &str, value: &str, focused: bool| {
+        let marker = if focused { "› " } else { "  " };
+        let cursor = if focused { "▏" } else { "" };
+        Line::from(vec![
+            Span::styled(marker, Style::default().fg(app.theme.accent)),
+            Span::styled(format!("{label:<13}"), app.theme.muted()),
+            Span::styled(
+                format!("{value}{cursor}"),
+                if focused {
+                    app.theme.selection()
+                } else {
+                    Style::default()
+                },
+            ),
+        ])
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+    if !detail.is_default {
+        lines.push(field_line(
+            "description:",
+            &detail.description,
+            detail.field == AgentField::Description,
+        ));
+    }
+    lines.push(field_line(
+        "provider:",
+        &detail.provider,
+        detail.field == AgentField::Provider,
+    ));
+    lines.push(field_line(
+        "model:",
+        &detail.model,
+        detail.field == AgentField::Model,
+    ));
+    lines.push(field_line(
+        "dispatch:",
+        &detail.dispatch,
+        detail.field == AgentField::Dispatch,
+    ));
+    lines.push(field_line(
+        "persona:",
+        &detail.persona,
+        detail.field == AgentField::Persona,
+    ));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  dispatch = comma-separated fallback provider:model routes",
+        app.theme.muted(),
+    )));
+    frame.render_widget(Paragraph::new(lines), rows[2]);
+
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            format!("  memory: {}", detail.memory_note),
+            app.theme.muted(),
+        )),
+        rows[3],
+    );
+}
+
+/// Draws the top-level Ctrl+P menu: the four focused sections that replaced the
+/// old flat action list.
+pub(super) fn draw_menu(app: &App, frame: &mut Frame, menu: &super::super::overlay::MainMenu) {
+    let area = centered_rect(50, 50, frame.area());
+    let inner = framed(frame, area, " menu ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -340,40 +515,45 @@ pub(super) fn draw_command(
         .split(inner);
     frame.render_widget(
         Paragraph::new(Span::styled(
-            "  type to filter · Enter to run · Esc to close",
+            "  ↑/↓ to move · Enter to open · type to filter · Esc to close",
             app.theme.muted(),
         )),
         rows[0],
     );
-    draw_picker(frame, rows[1], &app.theme, &palette.picker, "Commands");
+    draw_picker(frame, rows[1], &app.theme, &menu.picker, "Sections");
 }
 
 pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
-    let area = centered_rect(50, 40, frame.area());
+    let area = centered_rect(60, 56, frame.area());
     let inner = framed(frame, area, " settings ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
+
+    // The hint adapts to the API-key entry sub-mode.
+    let hint = if settings.api_key_entry.is_some() {
+        "  type the API key · Enter to save · Esc to cancel"
+    } else {
+        "  ↑/↓ move · Enter/Space act · ←/→ cycle · Esc close"
+    };
     frame.render_widget(
-        Paragraph::new(Span::styled(
-            "  ↑/↓ to move · Enter/Space to toggle · ←/→ to cycle profile · Esc to close",
-            app.theme.muted(),
-        )),
+        Paragraph::new(Span::styled(hint, app.theme.muted())),
         rows[0],
     );
 
     let selected = settings.selected;
+    let active_provider = app.options.provider.as_str();
     let items: Vec<ListItem> = SettingsRow::ORDER
         .iter()
         .enumerate()
         .map(|(index, row)| {
             let is_selected = index == selected;
             let prefix = if is_selected { "› " } else { "  " };
-            // Toggle rows render a checkbox; the profile row shows the active name
-            // in `‹ name ›` arrows; the "Advanced…" row renders a chevron since it
-            // opens a sub-overlay rather than toggling.
+            // Toggle rows render a checkbox; chooser rows show the active value in
+            // `‹ value ›` arrows; the read-only Account row shows the signed-in
+            // identity; the "Advanced…" row renders a chevron.
             let body = match row {
                 SettingsRow::Pref(pref) => {
                     let on = match pref {
@@ -383,9 +563,29 @@ pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOve
                     let checkbox = if on { "[x]" } else { "[ ]" };
                     format!("{checkbox} {}", pref.label())
                 }
+                SettingsRow::PermissionMode => {
+                    let mode = app.permission_mode.as_deref().unwrap_or("(default)");
+                    format!("‹ {mode} › {}", row.label())
+                }
                 SettingsRow::Profile => {
                     let active = app.active_profile.as_deref().unwrap_or("(none)");
                     format!("‹ {active} › {}", row.label())
+                }
+                SettingsRow::ApiKey => match &settings.api_key_entry {
+                    Some(buffer) => {
+                        let mask: String = "•".repeat(buffer.chars().count());
+                        format!("{} ({active_provider}): {mask}▏", row.label())
+                    }
+                    None => format!("{} ({active_provider})", row.label()),
+                },
+                SettingsRow::Account => {
+                    let who = app
+                        .cloud
+                        .viewer
+                        .as_ref()
+                        .and_then(|viewer| viewer.email())
+                        .unwrap_or("(not signed in)");
+                    format!("{}: {who}", row.label())
                 }
                 SettingsRow::Advanced => format!("›   {}", row.label()),
             };
