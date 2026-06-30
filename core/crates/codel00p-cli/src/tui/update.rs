@@ -1242,6 +1242,30 @@ mod tests {
     }
 
     #[test]
+    fn settings_theme_row_cycles_and_persists() {
+        use crate::tui::theme::ThemeKind;
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert_eq!(app.theme.kind, ThemeKind::Dark);
+            let mut settings = crate::tui::overlay::SettingsOverlay::new();
+            settings.selected = SettingsRow::ORDER
+                .iter()
+                .position(|row| matches!(row, SettingsRow::Theme))
+                .expect("theme row");
+            app.overlay = Overlay::Settings(settings);
+            // Right cycles Dark → Light, applied live + persisted.
+            update(&mut app, key(KeyCode::Right));
+            assert_eq!(app.theme.kind, ThemeKind::Light);
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(resolved.merged.tui.theme.as_deref(), Some("light"));
+            // Left wraps back to Dark.
+            update(&mut app, key(KeyCode::Left));
+            assert_eq!(app.theme.kind, ThemeKind::Dark);
+        });
+    }
+
+    #[test]
     fn settings_api_key_entry_emits_set_provider_key() {
         let mut app = test_app();
         let mut settings = crate::tui::overlay::SettingsOverlay::new();

@@ -73,6 +73,7 @@ const KEY_SPECS: &[(&str, ValueKind)] = &[
     ("memory.allow_external_ranking", ValueKind::Bool),
     ("tui.show_advanced", ValueKind::Bool),
     ("tui.check_updates", ValueKind::Bool),
+    ("tui.theme", ValueKind::Str),
 ];
 
 pub fn known_keys() -> Vec<&'static str> {
@@ -250,6 +251,7 @@ pub fn effective_value(settings: &Settings, key: &str) -> SettingsResult<Option<
             .map(|value| value.to_string()),
         "tui.show_advanced" => settings.tui.show_advanced.map(|value| value.to_string()),
         "tui.check_updates" => settings.tui.check_updates.map(|value| value.to_string()),
+        "tui.theme" => settings.tui.theme.clone(),
         _ => None,
     };
     Ok(value)

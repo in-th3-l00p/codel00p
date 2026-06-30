@@ -63,7 +63,7 @@ actually think about the tool and leaves room for richer per-section UX.
   a new `Effect::OpenUrl` (reusing `login::open_browser`). Org lifecycle stays
   Clerk's — codel00p does not create orgs itself.
 
-### Phase 5 — Settings section  🟡 (approvals + API keys + account shipped; theme deferred)
+### Phase 5 — Settings section  ✅
 - ✅ **Tool approvals**: a `‹ allow · ask · deny ›` cycler that persists
   `agent.permission_mode` (the key the harness reads next turn).
 - ✅ **Provider API key**: Enter opens a masked entry that stores the active
@@ -76,9 +76,11 @@ actually think about the tool and leaves room for richer per-section UX.
 - ✅ **Account** (read-only): shows the signed-in email; Enter surfaces email · org
   · role, or how to sign in when unauthenticated.
 - ✅ Display/advanced (existing), profile switcher (existing).
-- ⏳ **Deferred:** appearance/**theme** — genuinely net-new (needs a `tui.theme`
-  config key + a palette set + `Theme` load wiring); the one remaining Settings
-  item. Tracked as the next follow-up.
+- ✅ **Theme** (appearance): a `‹ Dark · Light · High contrast · Solarized ›`
+  cycler that applies live to `app.theme` and persists `tui.theme` (new `Str`
+  key + `TuiSettings.theme`). `ThemeKind` enum drives named palettes
+  (`Theme::named`); the active theme loads from config at startup
+  (`from_name`, falling back to Dark on unknown/unset).
 
 ### Phase 6 — help/keys + polish
 - Update the help overlay and key hints to the new structure; consistency pass.

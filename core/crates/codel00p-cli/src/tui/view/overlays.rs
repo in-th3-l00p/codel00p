@@ -571,6 +571,9 @@ pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOve
                     let active = app.active_profile.as_deref().unwrap_or("(none)");
                     format!("‹ {active} › {}", row.label())
                 }
+                SettingsRow::Theme => {
+                    format!("‹ {} › {}", app.theme.kind.label(), row.label())
+                }
                 SettingsRow::ApiKey => match &settings.api_key_entry {
                     Some(buffer) => {
                         let mask: String = "•".repeat(buffer.chars().count());

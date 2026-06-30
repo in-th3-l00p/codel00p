@@ -31,21 +31,25 @@ pub(super) fn handle_settings_key(
         KeyCode::Esc => return Vec::new(), // close
         KeyCode::Up => settings.up(),
         KeyCode::Down => settings.down(),
-        // Left/Right cycle the choosers (profile + permission mode); inert elsewhere.
+        // Left/Right cycle the choosers (profile, permission mode, theme); inert
+        // elsewhere.
         KeyCode::Right | KeyCode::Char('+') | KeyCode::Char('=') => match settings.current() {
             SettingsRow::Profile => cycle_profile(app, true),
             SettingsRow::PermissionMode => cycle_permission_mode(app, true),
+            SettingsRow::Theme => cycle_theme(app, true),
             _ => {}
         },
         KeyCode::Left | KeyCode::Char('-') | KeyCode::Char('_') => match settings.current() {
             SettingsRow::Profile => cycle_profile(app, false),
             SettingsRow::PermissionMode => cycle_permission_mode(app, false),
+            SettingsRow::Theme => cycle_theme(app, false),
             _ => {}
         },
         KeyCode::Enter | KeyCode::Char(' ') => match settings.current() {
             SettingsRow::Pref(pref) => toggle_setting(app, pref),
             SettingsRow::PermissionMode => cycle_permission_mode(app, true),
             SettingsRow::Profile => cycle_profile(app, true),
+            SettingsRow::Theme => cycle_theme(app, true),
             SettingsRow::ApiKey => {
                 // Begin capturing the key for the active provider.
                 settings.api_key_entry = Some(String::new());
@@ -133,6 +137,22 @@ fn cycle_permission_mode(app: &mut App, forward: bool) {
         &next,
         &format!("Tool approvals set to “{next}”. Takes effect next turn."),
         "tool approvals",
+    );
+}
+
+/// Cycles the color theme (`tui.theme`) to the next (or previous) named theme,
+/// applies it live to `app.theme`, and persists the token. The change is visible
+/// immediately — the next render uses the new palette.
+fn cycle_theme(app: &mut App, forward: bool) {
+    use crate::tui::theme::Theme;
+    let next = app.theme.kind.cycle(forward);
+    app.theme = Theme::named(next);
+    persist_setting(
+        app,
+        "tui.theme",
+        next.name(),
+        &format!("Theme set to {}.", next.label()),
+        "theme",
     );
 }
 

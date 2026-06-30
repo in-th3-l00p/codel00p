@@ -673,6 +673,9 @@ mod tests {
         assert!(rendered.contains("‹ ask ›"));
         assert!(rendered.contains("Provider API key"));
         assert!(rendered.contains("Account"));
+        // The theme row shows the active theme name.
+        assert!(rendered.contains("Theme"));
+        assert!(rendered.contains("‹ Dark ›"));
     }
 
     #[test]

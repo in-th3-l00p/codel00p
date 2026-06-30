@@ -735,6 +735,10 @@ pub struct TuiSettings {
     /// set to `false` to disable the check entirely.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub check_updates: Option<bool>,
+    /// The color theme: `dark` (default), `light`, `high-contrast`, or
+    /// `solarized`. Unset falls back to `dark`. Chosen in the Settings overlay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
 }
 
 impl TuiSettings {
@@ -745,6 +749,7 @@ impl TuiSettings {
     fn merge(&mut self, other: Self) {
         take(&mut self.show_advanced, other.show_advanced);
         take(&mut self.check_updates, other.check_updates);
+        take(&mut self.theme, other.theme);
     }
 }
 
