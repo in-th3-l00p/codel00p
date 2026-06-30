@@ -811,6 +811,8 @@ pub(crate) enum SettingsRow {
     /// Cycles the active agent profile among the built-in presets + any
     /// user-defined `[agent.profiles.*]`, persisting `agent.profile`.
     Profile,
+    /// Cycles the color theme (`tui.theme`): dark / light / high-contrast / solarized.
+    Theme,
     /// Enter sets the active provider's API key (stored in the home `.env`).
     ApiKey,
     /// Read-only: the signed-in account (email · org · role), when authenticated.
@@ -821,11 +823,12 @@ pub(crate) enum SettingsRow {
 
 impl SettingsRow {
     /// All rows, in display order.
-    pub(crate) const ORDER: [SettingsRow; 7] = [
+    pub(crate) const ORDER: [SettingsRow; 8] = [
         SettingsRow::Pref(SettingsPref::ShowAdvanced),
         SettingsRow::Pref(SettingsPref::CheckUpdates),
         SettingsRow::PermissionMode,
         SettingsRow::Profile,
+        SettingsRow::Theme,
         SettingsRow::ApiKey,
         SettingsRow::Account,
         SettingsRow::Advanced,
@@ -836,6 +839,7 @@ impl SettingsRow {
             SettingsRow::Pref(pref) => pref.label(),
             SettingsRow::PermissionMode => "Tool approvals",
             SettingsRow::Profile => "Agent profile",
+            SettingsRow::Theme => "Theme",
             SettingsRow::ApiKey => "Provider API key",
             SettingsRow::Account => "Account",
             SettingsRow::Advanced => "Advanced…",
@@ -847,6 +851,7 @@ impl SettingsRow {
             SettingsRow::Pref(pref) => pref.hint(),
             SettingsRow::PermissionMode => "Enter/→ cycle · allow · ask · deny",
             SettingsRow::Profile => "Enter/→ cycle · autonomous · careful · manual",
+            SettingsRow::Theme => "Enter/→ cycle · dark · light · high-contrast · solarized",
             SettingsRow::ApiKey => "Enter to set the active provider's key (~/.env)",
             SettingsRow::Account => "signed-in user · organization · role",
             SettingsRow::Advanced => "harness-loop knobs · iteration count",

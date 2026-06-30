@@ -136,6 +136,11 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
     );
     // The tool-approval mode (set post-construction to keep it off `App::new`).
     app.permission_mode = agent_settings.permission_mode.clone();
+    // The color theme: a persisted `tui.theme` token, defaulting to Dark. Set
+    // post-construction so it stays off `App::new`'s signature.
+    if let Some(name) = tui_settings.as_ref().and_then(|tui| tui.theme.as_deref()) {
+        app.theme = super::theme::Theme::named(super::theme::ThemeKind::from_name(name));
+    }
 
     let mut terminal =
         setup_terminal().map_err(|error| format!("terminal setup failed: {error}"))?;
