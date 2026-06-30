@@ -70,6 +70,9 @@ pub(crate) enum Effect {
     SwitchOrg(String),
     /// Open a URL in the system browser (e.g. the Clerk dashboard to create an org).
     OpenUrl(String),
+    /// Store a provider's API key in the active home's `.env` (the credential
+    /// source loaded at startup). Applies on the next launch.
+    SetProviderKey { provider: String, key: String },
     /// Read local state and surface it as a notice.
     Local(LocalQuery),
     /// Fetch the provider model catalog for the picker (blocking client, off the UI

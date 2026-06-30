@@ -56,18 +56,29 @@ actually think about the tool and leaves room for richer per-section UX.
 - Tests: session-crate round-trip/delete + TUI edit/delete/new-row flows. Green;
   clippy `-D warnings` + fmt clean.
 
-### Phase 4 — Organization section
-- List orgs with create-new first row; select (use) an org; detail = users,
-  metadata, role.
-- **Open decision:** org creation has no codel00p backend route (org lifecycle is
-  Clerk's). See "Open decisions" below.
+### Phase 4 — Organization section  ✅
+- Org tab already lists orgs, switches on Enter, and shows members + role/metadata
+  (Users tab).
+- ✅ Added the create affordance: `n` opens the Clerk dashboard in the browser via
+  a new `Effect::OpenUrl` (reusing `login::open_browser`). Org lifecycle stays
+  Clerk's — codel00p does not create orgs itself.
 
-### Phase 5 — Settings section
-- Permissions / approvals (set `agent.permission_mode` directly, not only via
-  profiles).
-- Providers + **API keys** (sensitive — see open decision).
-- Display / advanced (exists), appearance/theme (net-new), account settings
-  (Clerk-managed, mostly read-only), and the remaining behavior toggles.
+### Phase 5 — Settings section  🟡 (approvals + API keys + account shipped; theme deferred)
+- ✅ **Tool approvals**: a `‹ allow · ask · deny ›` cycler that persists
+  `agent.permission_mode` (the key the harness reads next turn).
+- ✅ **Provider API key**: Enter opens a masked entry that stores the active
+  provider's key in the home `.env` via `Effect::SetProviderKey` — the *real*
+  credential source (`load_env_file` reads it at startup), resolved to the
+  provider's standard env var (`ANTHROPIC_API_KEY`, …). Applies on next launch.
+  Note: this **supersedes the original "store in config.toml" decision** — nothing
+  reads an API key from `config.toml`; storing it there would be cosmetic, so the
+  key goes to `.env`, which is what the provider layer actually loads.
+- ✅ **Account** (read-only): shows the signed-in email; Enter surfaces email · org
+  · role, or how to sign in when unauthenticated.
+- ✅ Display/advanced (existing), profile switcher (existing).
+- ⏳ **Deferred:** appearance/**theme** — genuinely net-new (needs a `tui.theme`
+  config key + a palette set + `Theme` load wiring); the one remaining Settings
+  item. Tracked as the next follow-up.
 
 ### Phase 6 — help/keys + polish
 - Update the help overlay and key hints to the new structure; consistency pass.

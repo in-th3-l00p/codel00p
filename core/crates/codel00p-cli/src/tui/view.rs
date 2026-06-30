@@ -664,6 +664,18 @@ mod tests {
     }
 
     #[test]
+    fn renders_settings_with_new_rows() {
+        let mut app = test_app();
+        app.permission_mode = Some("ask".to_string());
+        app.overlay = Overlay::Settings(crate::tui::overlay::SettingsOverlay::new());
+        let rendered = render_to_string(&mut app, 90, 24);
+        assert!(rendered.contains("Tool approvals"));
+        assert!(rendered.contains("‹ ask ›"));
+        assert!(rendered.contains("Provider API key"));
+        assert!(rendered.contains("Account"));
+    }
+
+    #[test]
     fn renders_agent_detail_overlay() {
         use crate::tui::overlay::{AgentDetail, AgentDetailData};
         let mut detail = AgentDetail::loading("scout".to_string(), false);

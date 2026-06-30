@@ -1179,7 +1179,9 @@ mod tests {
             update(&mut app, ctrl(KeyCode::Char('p')));
             type_str(&mut app, "settings");
             update(&mut app, key(KeyCode::Enter));
-            // Move to the "Agent profile" row (third row) and cycle it forward.
+            // Move to the "Agent profile" row (4th: ShowAdvanced, CheckUpdates,
+            // PermissionMode, Profile) and cycle it forward.
+            update(&mut app, key(KeyCode::Down));
             update(&mut app, key(KeyCode::Down));
             update(&mut app, key(KeyCode::Down));
             match &app.overlay {
@@ -1211,6 +1213,58 @@ mod tests {
                 Some(app.profile_names[1].as_str())
             );
         });
+    }
+
+    #[test]
+    fn settings_permission_mode_cycles_and_persists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        crate::settings::test_env::with_home(dir.path(), || {
+            let mut app = test_app();
+            assert!(app.permission_mode.is_none());
+            app.overlay = Overlay::Settings(crate::tui::overlay::SettingsOverlay::new());
+            // Move to the PermissionMode row (3rd) and cycle forward → "allow".
+            update(&mut app, key(KeyCode::Down));
+            update(&mut app, key(KeyCode::Down));
+            match &app.overlay {
+                Overlay::Settings(settings) => {
+                    assert_eq!(settings.current(), SettingsRow::PermissionMode);
+                }
+                _ => panic!("expected settings overlay"),
+            }
+            update(&mut app, key(KeyCode::Right));
+            assert_eq!(app.permission_mode.as_deref(), Some("allow"));
+            let resolved = crate::settings::load_layered(dir.path()).expect("reload");
+            assert_eq!(
+                resolved.merged.agent.permission_mode.as_deref(),
+                Some("allow")
+            );
+        });
+    }
+
+    #[test]
+    fn settings_api_key_entry_emits_set_provider_key() {
+        let mut app = test_app();
+        let mut settings = crate::tui::overlay::SettingsOverlay::new();
+        // Highlight the API-key row, open entry, type a key, save.
+        settings.selected = SettingsRow::ORDER
+            .iter()
+            .position(|row| matches!(row, SettingsRow::ApiKey))
+            .expect("api key row");
+        app.overlay = Overlay::Settings(settings);
+        update(&mut app, key(KeyCode::Enter)); // begin entry
+        assert!(matches!(
+            &app.overlay,
+            Overlay::Settings(s) if s.api_key_entry.is_some()
+        ));
+        type_str(&mut app, "sk-test-123");
+        let effects = update(&mut app, key(KeyCode::Enter));
+        match effects.as_slice() {
+            [Effect::SetProviderKey { provider, key }] => {
+                assert_eq!(provider, &app.options.provider);
+                assert_eq!(key, "sk-test-123");
+            }
+            other => panic!("expected SetProviderKey, got {} effects", other.len()),
+        }
     }
 
     // ---- Multi-agent personas (#13) phase 3: switch / create from the menu ----

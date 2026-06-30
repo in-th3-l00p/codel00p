@@ -524,31 +524,36 @@ pub(super) fn draw_menu(app: &App, frame: &mut Frame, menu: &super::super::overl
 }
 
 pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOverlay) {
-    let area = centered_rect(50, 40, frame.area());
+    let area = centered_rect(60, 56, frame.area());
     let inner = framed(frame, area, " settings ", app.theme.overlay_border);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
+
+    // The hint adapts to the API-key entry sub-mode.
+    let hint = if settings.api_key_entry.is_some() {
+        "  type the API key · Enter to save · Esc to cancel"
+    } else {
+        "  ↑/↓ move · Enter/Space act · ←/→ cycle · Esc close"
+    };
     frame.render_widget(
-        Paragraph::new(Span::styled(
-            "  ↑/↓ to move · Enter/Space to toggle · ←/→ to cycle profile · Esc to close",
-            app.theme.muted(),
-        )),
+        Paragraph::new(Span::styled(hint, app.theme.muted())),
         rows[0],
     );
 
     let selected = settings.selected;
+    let active_provider = app.options.provider.as_str();
     let items: Vec<ListItem> = SettingsRow::ORDER
         .iter()
         .enumerate()
         .map(|(index, row)| {
             let is_selected = index == selected;
             let prefix = if is_selected { "› " } else { "  " };
-            // Toggle rows render a checkbox; the profile row shows the active name
-            // in `‹ name ›` arrows; the "Advanced…" row renders a chevron since it
-            // opens a sub-overlay rather than toggling.
+            // Toggle rows render a checkbox; chooser rows show the active value in
+            // `‹ value ›` arrows; the read-only Account row shows the signed-in
+            // identity; the "Advanced…" row renders a chevron.
             let body = match row {
                 SettingsRow::Pref(pref) => {
                     let on = match pref {
@@ -558,9 +563,29 @@ pub(super) fn draw_settings(app: &App, frame: &mut Frame, settings: &SettingsOve
                     let checkbox = if on { "[x]" } else { "[ ]" };
                     format!("{checkbox} {}", pref.label())
                 }
+                SettingsRow::PermissionMode => {
+                    let mode = app.permission_mode.as_deref().unwrap_or("(default)");
+                    format!("‹ {mode} › {}", row.label())
+                }
                 SettingsRow::Profile => {
                     let active = app.active_profile.as_deref().unwrap_or("(none)");
                     format!("‹ {active} › {}", row.label())
+                }
+                SettingsRow::ApiKey => match &settings.api_key_entry {
+                    Some(buffer) => {
+                        let mask: String = "•".repeat(buffer.chars().count());
+                        format!("{} ({active_provider}): {mask}▏", row.label())
+                    }
+                    None => format!("{} ({active_provider})", row.label()),
+                },
+                SettingsRow::Account => {
+                    let who = app
+                        .cloud
+                        .viewer
+                        .as_ref()
+                        .and_then(|viewer| viewer.email())
+                        .unwrap_or("(not signed in)");
+                    format!("{}: {who}", row.label())
                 }
                 SettingsRow::Advanced => format!("›   {}", row.label()),
             };

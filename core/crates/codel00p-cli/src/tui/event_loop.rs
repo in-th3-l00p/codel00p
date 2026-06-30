@@ -134,6 +134,8 @@ async fn run_async(config: CliConfig, options: AgentRunOptions) -> CliResult<Str
         active_agent,
         base_home,
     );
+    // The tool-approval mode (set post-construction to keep it off `App::new`).
+    app.permission_mode = agent_settings.permission_mode.clone();
 
     let mut terminal =
         setup_terminal().map_err(|error| format!("terminal setup failed: {error}"))?;
@@ -294,6 +296,15 @@ fn execute_effect(
             if let Err(error) = crate::login::open_browser(&url) {
                 let _ = tx.send(Msg::Notice(format!("{error} ({url})")));
             }
+        }
+        Effect::SetProviderKey { provider, key } => {
+            let notice = match store_provider_key(&provider, &key) {
+                Ok(env_var) => format!(
+                    "Saved {provider} API key to ~/.codel00p/.env ({env_var}). Applies on next launch."
+                ),
+                Err(error) => format!("Could not save the {provider} key: {error}"),
+            };
+            let _ = tx.send(Msg::Notice(notice));
         }
         Effect::CheckUpdates => spawn_update_check(tx.clone()),
     }
@@ -737,6 +748,44 @@ fn spawn_save_agent_detail(
         };
         let _ = tx.send(Msg::Notice(notice));
     });
+}
+
+/// Upserts a provider's API key into the active home's `.env` (the credential file
+/// loaded at startup). Resolves the provider's standard env var name, then replaces
+/// an existing `KEY=…` line or appends one. Returns the env var name on success.
+fn store_provider_key(provider: &str, key: &str) -> Result<&'static str, String> {
+    let env_var = codel00p_providers::default_registry()
+        .resolve(provider)
+        .and_then(|profile| profile.env_vars.last().copied())
+        .ok_or_else(|| format!("unknown provider `{provider}` (no known API-key env var)"))?;
+
+    let path = crate::settings::env_file_path();
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut lines: Vec<String> = Vec::new();
+    let mut replaced = false;
+    for line in existing.lines() {
+        let is_match = line
+            .split_once('=')
+            .map(|(k, _)| k.trim() == env_var)
+            .unwrap_or(false);
+        if is_match {
+            lines.push(format!("{env_var}={key}"));
+            replaced = true;
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    if !replaced {
+        lines.push(format!("{env_var}={key}"));
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+    let mut body = lines.join("\n");
+    body.push('\n');
+    std::fs::write(&path, body).map_err(|error| format!("failed to write .env: {error}"))?;
+    Ok(env_var)
 }
 
 fn setup_terminal() -> io::Result<Tui> {

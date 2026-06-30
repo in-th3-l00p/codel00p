@@ -806,27 +806,38 @@ impl SettingsPref {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsRow {
     Pref(SettingsPref),
+    /// Cycles the tool-approval mode (`agent.permission_mode`): allow / ask / deny.
+    PermissionMode,
     /// Cycles the active agent profile among the built-in presets + any
     /// user-defined `[agent.profiles.*]`, persisting `agent.profile`.
     Profile,
+    /// Enter sets the active provider's API key (stored in the home `.env`).
+    ApiKey,
+    /// Read-only: the signed-in account (email · org · role), when authenticated.
+    Account,
     /// Opens the Advanced settings sub-overlay (harness-loop internals).
     Advanced,
 }
 
 impl SettingsRow {
-    /// All rows, in display order. The toggle prefs first, then the profile
-    /// switcher, then "Advanced…".
-    pub(crate) const ORDER: [SettingsRow; 4] = [
+    /// All rows, in display order.
+    pub(crate) const ORDER: [SettingsRow; 7] = [
         SettingsRow::Pref(SettingsPref::ShowAdvanced),
         SettingsRow::Pref(SettingsPref::CheckUpdates),
+        SettingsRow::PermissionMode,
         SettingsRow::Profile,
+        SettingsRow::ApiKey,
+        SettingsRow::Account,
         SettingsRow::Advanced,
     ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             SettingsRow::Pref(pref) => pref.label(),
+            SettingsRow::PermissionMode => "Tool approvals",
             SettingsRow::Profile => "Agent profile",
+            SettingsRow::ApiKey => "Provider API key",
+            SettingsRow::Account => "Account",
             SettingsRow::Advanced => "Advanced…",
         }
     }
@@ -834,23 +845,31 @@ impl SettingsRow {
     pub(crate) fn hint(self) -> &'static str {
         match self {
             SettingsRow::Pref(pref) => pref.hint(),
+            SettingsRow::PermissionMode => "Enter/→ cycle · allow · ask · deny",
             SettingsRow::Profile => "Enter/→ cycle · autonomous · careful · manual",
+            SettingsRow::ApiKey => "Enter to set the active provider's key (~/.env)",
+            SettingsRow::Account => "signed-in user · organization · role",
             SettingsRow::Advanced => "harness-loop knobs · iteration count",
         }
     }
 }
 
-/// The Settings overlay: a small list of toggleable TUI preferences plus an
-/// "Advanced…" entry. Up/Down move the selection, Enter/Space toggle the
-/// highlighted preference (or open Advanced), Esc closes.
+/// The Settings overlay: a list of TUI/agent preferences. Up/Down move, Enter/Space
+/// act on the highlighted row, ←/→ cycle the choosers, Esc closes. When
+/// `api_key_entry` is `Some`, the overlay is capturing a (masked) API key.
 #[derive(Clone, Debug)]
 pub(crate) struct SettingsOverlay {
     pub(crate) selected: usize,
+    /// `Some(buffer)` while entering the active provider's API key.
+    pub(crate) api_key_entry: Option<String>,
 }
 
 impl SettingsOverlay {
     pub(crate) fn new() -> Self {
-        Self { selected: 0 }
+        Self {
+            selected: 0,
+            api_key_entry: None,
+        }
     }
 
     pub(crate) fn up(&mut self) {
